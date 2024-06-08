@@ -1,0 +1,12 @@
+llama-cpp-python
+langchain
+langchain-community
+langchain-groq
+pymongo
+tiktoken
+retry
+requests
+pydantic
+fastapi
+python-dotenv
+icecream
