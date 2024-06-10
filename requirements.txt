@@ -7,6 +7,8 @@ tiktoken
 retry
 requests
 pydantic
+feedparser
+python-dateutil
 fastapi
 python-dotenv
 icecream

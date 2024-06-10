@@ -1,0 +1,33 @@
+[2024-06-10 13:04] indexer - WARNING: Error code: 429 - {'error': {'message': 'Rate limit reached for model `mixtral-8x7b-32768` in organization `org_01hxfeb582f8rafbbt67v6f437` on tokens per minute (TPM): Limit 5000, Used 0, Requested ~8473. Please try again in 41.676s. Visit https://console.groq.com/docs/rate-limits for more information.', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+[2024-06-10 13:11] indexer - WARNING: Error code: 429 - {'error': {'message': 'Rate limit reached for model `mixtral-8x7b-32768` in organization `org_01hxfeb582f8rafbbt67v6f437` on tokens per minute (TPM): Limit 5000, Used 0, Requested ~7577. Please try again in 30.924s. Visit https://console.groq.com/docs/rate-limits for more information.', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+[2024-06-10 13:17] indexer - WARNING: Error code: 429 - {'error': {'message': 'Rate limit reached for model `mixtral-8x7b-32768` in organization `org_01hxfeb582f8rafbbt67v6f437` on tokens per minute (TPM): Limit 5000, Used 0, Requested ~5359. Please try again in 4.308s. Visit https://console.groq.com/docs/rate-limits for more information.', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+[2024-06-10 13:24] indexer - INFO: 3906 beans will go through rectification
+[2024-06-10 13:40] indexer - INFO: 10 beans will go through rectification
+[2024-06-10 13:41] indexer - INFO: '10 beans updated
+[2024-06-10 13:41] indexer - INFO: 10 nuggets will go through rectification
+[2024-06-10 13:42] indexer - INFO: '10 concepts updated
+[2024-06-10 13:42] indexer - WARNING: value must be of type array, full error: {'ok': 0.0, 'errmsg': 'value must be of type array', 'code': 2, 'codeName': 'BadValue'}
+[2024-06-10 13:43] indexer - INFO: 10 beans will go through rectification
+[2024-06-10 13:45] indexer - INFO: 10 beans updated
+[2024-06-10 13:45] indexer - INFO: 10 nuggets will go through rectification
+[2024-06-10 13:45] indexer - INFO: 8 concepts updated
+[2024-06-10 13:49] indexer - INFO: 10 beans will go through rectification
+[2024-06-10 13:50] indexer - INFO: 10 beans updated
+[2024-06-10 13:50] indexer - INFO: 10 nuggets will go through rectification
+[2024-06-10 13:50] indexer - INFO: 6 concepts updated
+[2024-06-10 14:08] indexer - INFO: 10 beans will go through rectification
+[2024-06-10 14:11] indexer - INFO: 10 beans will go through rectification
+[2024-06-10 14:17] indexer - INFO: 10 beans will go through rectification
+[2024-06-10 14:26] indexer - INFO: 10 nuggets will go through rectification
+[2024-06-10 14:27] indexer - INFO: 3 concepts updated
+[2024-06-10 14:29] indexer - INFO: 10 nuggets will go through rectification
+[2024-06-10 14:29] indexer - INFO: 4 concepts updated
+[2024-06-10 14:32] indexer - INFO: 10 nuggets will go through rectification
+[2024-06-10 14:32] indexer - INFO: 3 concepts updated
+[2024-06-10 14:38] indexer - INFO: 10 nuggets will go through rectification
+[2024-06-10 14:38] indexer - INFO: 3 concepts updated
+[2024-06-10 14:40] indexer - INFO: 10 nuggets will go through rectification
+[2024-06-10 14:40] indexer - INFO: 3 concepts updated
+[2024-06-10 14:41] indexer - INFO: 10 nuggets will go through rectification
+[2024-06-10 14:41] indexer - INFO: 3 concepts updated
+[2024-06-10 14:41] indexer - INFO: 10 concepts updated
