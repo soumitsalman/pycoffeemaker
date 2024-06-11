@@ -15,7 +15,8 @@ beansack = Beansack(os.getenv('DB_CONNECTION_STRING'), os.getenv('LLMSERVICE_API
 test_feeds = [
     "https://www.marktechpost.com/feed/"
 ]
-collect(sources_file="rssfeeds.txt", store_func=beansack.add)
+# collect(sources_file="rssfeeds.txt", store_func=beansack.add)
+beansack.rectify(10, True, True)
 
 
 

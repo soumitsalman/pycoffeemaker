@@ -17,9 +17,10 @@ BEANS = "beans"
 NUGGETS = "concepts"
 NOISES = "noises"
 
-BATCH_SIZE = 20
 DEFAULT_MIN_SEARCH_SCORE = 0.7
 DEFAULT_LIMIT = 50
+
+CLEANUP_WINDOW = 30
 
 logger = create_logger("beansack")
 
@@ -77,7 +78,20 @@ class Beansack:
         except Exception as err:
             logger.warning("Nugget extraction failed %s", str(err))
 
-    def rectify(self, last_ndays:int):
+    def rectify(self, last_ndays:int, cleanup:bool, remap_all: bool):
+        logger.info("Large rectification started")
+        if cleanup:
+            time_filter = {K_UPDATED: { "$lte": _get_time(CLEANUP_WINDOW) }}
+            # clean up beanstore (but retain the channels)
+            res = self.beanstore.delete_many(time_filter)
+            logger.info("%d old beans deleted", res.deleted_count)
+            # clean up nuggets
+            res = self.nuggetstore.delete_many(time_filter)
+            logger.info("%d old nuggets deleted", res.deleted_count)
+            # clean up beanstore
+            res = self.beanstore.delete_many(time_filter)
+            logger.info("%d old noises deleted", res.deleted_count)
+
         # get all the beans to rectify        
         beans = _deserialize_beans(self.beanstore.find(
             {
@@ -90,7 +104,7 @@ class Beansack:
         ).sort({K_UPDATED: -1}))  
         self.rectify_beans(beans)
 
-        # get all the beans to rectify        
+        # get all the nuggets to rectify        
         nuggets = _deserialize_nuggets(self.nuggetstore.find(
             {
                 K_EMBEDDING: { "$exists": False },
@@ -99,6 +113,11 @@ class Beansack:
         ).sort({K_UPDATED: -1}))
         nuggets = self.rectify_nuggets(nuggets)       
         
+        if remap_all:
+            # pull in all nuggets or else keep the ones in the rectify window
+            nuggets = _deserialize_nuggets(self.nuggetstore.find({ K_EMBEDDING: { "$exists": True }}))
+
+        # rectify the mappings
         self.rectify_mappings(nuggets) 
 
     def rectify_beans(self, beans: list[Bean]):
