@@ -275,12 +275,10 @@ def collect(feeds_file: str):
     for url in urls:
         try:
             beans = collect_from(url)
-            logger.info("%s: %d beans collected. max body length = %d", 
-                url, 
-                len(beans) if beans else 0, 
-                max([len(bean.text) for bean in beans if bean.text]) if beans else 0)
+            logger.info("%s: %d beans collected.", url, len(beans) if beans else 0)
             if beans:
-                with open(f"test {beans[0].source}.json", 'w') as file:        
+                # TODO: add to bean sack
+                with open(f"test/{beans[0].source}.json", 'w') as file:        
                     json.dump([bean.model_dump_json(indent = 2) for bean in beans], file, indent=2)                
         except Exception as err:
             logger.warning("%s: failed loading %s", url, str(err))
@@ -302,7 +300,7 @@ def collect_from(url):
     )    
     return [make_bean(entry) for entry in feed.entries]
 
-def sanitation_check(beans: list[Bean]):        
+def _sanitation_check(beans: list[Bean]):        
     for bean in beans:
         res = []
         if not bean.text:
@@ -331,11 +329,12 @@ def parse_description(entry):
         text = BeautifulSoup(html, "html.parser").get_text(strip=True)      
         if len(text) < MIN_PULL_LIMIT:
             # TODO: load the body
-            resp = requests.get(entry[T_LINK], headers={"User-Agent": USER_AGENT})
-            if resp.status_code == requests.codes["ok"]:
+            resp = ic(requests.get(entry[T_LINK], headers={"User-Agent": USER_AGENT}))
+            if ic(resp.status_code) == requests.codes["ok"]:
                 soup = BeautifulSoup(resp.text, "html.parser")
                 # TODO: main, article
-                text = "\n\n".join([section.get_text(separator="\n", strip=True) for section in soup.find_all("article")])
+                text = "\n\n".join([section.get_text(separator="\n", strip=True) for section in soup.find_all(["post", "content", "article", "main"])])
+
         return text      
 
 
@@ -355,7 +354,7 @@ logger = create_logger("indexer")
 #     "https://dev.to/feed"
 # ]
 
-collect("rssfeeds.txt")
+collect("debug_rssfeeds.txt")
 
 
 # beansack = Beansack(os.getenv('DB_CONNECTION_STRING'), os.getenv('LLMSERVICE_API_KEY'))

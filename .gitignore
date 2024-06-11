@@ -3,4 +3,6 @@
 models
 *.json
 __pycache__
+test
 debug_rssfeeds.txt
+app.log
