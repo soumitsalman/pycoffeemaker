@@ -7,6 +7,14 @@ POST = "social media post"
 COMMENT = "social media comment"
 ARTICLE = "news article/blog"
 
+# names of important fields of collections
+K_URL="url"
+K_KIND = "kind"
+K_TEXT = "text"
+K_EMBEDDING = "embedding"
+K_SUMMARY = "summary"
+K_UPDATED = "updated"
+
 class Bean(BaseModel):
     url: str
     updated: Optional[int] = None
@@ -25,6 +33,12 @@ class Bean(BaseModel):
     def digest(self):
         return f"{self.kind} from {self.source}\nTitle: {self.title}\nBody: {self.text}"
 
+K_KEYPHRASE = "keyphrase"
+K_EVENT="event"
+K_DESCRIPTION = "description"
+K_TRENDSCORE = "trend_score"
+K_URLS = "urls"
+
 class Nugget(BaseModel):
     keyphrase: str 
     event: str 
@@ -33,6 +47,8 @@ class Nugget(BaseModel):
     embedding: Optional[list[float]] = None
     urls: Optional[list[str]] = None
     trend_score: Optional[int] = None
+
+K_MAPPED_URL = "mapped_url"
 
 class Noise(BaseModel):
     mapped_url: Optional[str] = None
