@@ -4,6 +4,7 @@ import json
 import time
 
 from retry import retry
+import tldextract
 from embedder import LocalNomic
 from utils import create_logger
 from datamodels import Bean, Noise, Nugget, CHANNEL
@@ -249,34 +250,59 @@ def _get_time(last_ndays: int):
 
 ## RSS Reader
 import feedparser
-from langchain_community.document_loaders.html import UnstructuredHTMLLoader
 from datamodels import Bean, ARTICLE
 from datetime import datetime
+from bs4 import BeautifulSoup
+import requests
+
+logger = create_logger("news_collector")
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59"
+T_LINK = "link"
+T_TITLE = "title"
 T_TAGS = "tags"
-T_DESCRIPTION = "summary"
-T_PUBLISHED='published_parsed'
+T_SUMMARY = "summary"
+T_CONTENT = "content"
+T_PUBLISHED = 'published_parsed'
+T_AUTHOR = 'author'
 
-def collect_news(url):
-    feed = ic(feedparser.parse(url, agent=USER_AGENT))
-    
-    source = feed.feed['title']
+# reads the list of feeds from a file path and collects
+def collect(feeds_file: str):
+    with open(feeds_file, 'r') as file:
+        urls = file.readlines()
+
+    urls = [url.strip() for url in urls if url.strip()]
+    for url in urls:
+        try:
+            beans = collect_from(url)
+            logger.info("%s: %d beans collected. max body length = %d", 
+                url, 
+                len(beans) if beans else 0, 
+                max([len(bean.text) for bean in beans if bean.text]) if beans else 0)
+            if beans:
+                with open(f"test {beans[0].source}.json", 'w') as file:        
+                    json.dump([bean.model_dump_json(indent = 2) for bean in beans], file, indent=2)                
+        except Exception as err:
+            logger.warning("%s: failed loading %s", url, str(err))
+
+def collect_from(url):
+    feed = feedparser.parse(url, agent=USER_AGENT)   
+    source = tldextract.extract(url).domain
     updated = int(datetime.now().timestamp())
     make_bean = lambda entry: Bean(
-        url=entry['link'],
+        url=entry[T_LINK],
         updated = updated,
         source = source,
-        title=entry['title'],
+        title=entry[T_TITLE],
         kind = ARTICLE,
         text=parse_description(entry),
-        author=entry['author'],
+        author=entry.get(T_AUTHOR),
         created=int(time.mktime(entry[T_PUBLISHED])),
-        keywords=[tag.term for tag in entry.get(T_TAGS, [])]
+        tags=[tag.term for tag in entry.get(T_TAGS, [])]
     )    
     return [make_bean(entry) for entry in feed.entries]
 
-def sanitation_check(beans: list[Bean]):    
+def sanitation_check(beans: list[Bean]):        
     for bean in beans:
         res = []
         if not bean.text:
@@ -285,30 +311,32 @@ def sanitation_check(beans: list[Bean]):
             res.append("created")            
         if not bean.author:
             res.append("author")            
-        if not bean.keywords:
+        if not bean.tags:
             res.append("keywords")
         if res:
-            ic(bean.url, "lacks", res)
-
-
+            ic(bean.url, res)
 
 MIN_PULL_LIMIT = 1000
+# the main body usually lives in <description> or <content:encoded>
+# load the largest one, then check if this is above min_pull_limit. 
+# if not, load_html
 def parse_description(entry):
-    # the main body usually lives in <description> or <content:encoded>
-    # load the largest one, then check if this is above min_pull_limit. 
-    # if not, load_html
-    html = parse_tags(entry, [T_DESCRIPTION])
-
-    return html
-        
-# from the list of potential tags take the one with the largest content
-def parse_tags(entry, tags: list[str]):    
-    res = None
-    for tag in tags:
-        if tag in entry:
-            if not res or (len(res) < len(entry[tag])):
-                res = entry[tag]
-    return res        
+    
+    if T_CONTENT in entry:        
+        html = entry[T_CONTENT][0]['value']
+    else:
+        html = entry.get(T_SUMMARY)
+    
+    if html:  
+        text = BeautifulSoup(html, "html.parser").get_text(strip=True)      
+        if len(text) < MIN_PULL_LIMIT:
+            # TODO: load the body
+            resp = requests.get(entry[T_LINK], headers={"User-Agent": USER_AGENT})
+            if resp.status_code == requests.codes["ok"]:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                # TODO: main, article
+                text = "\n\n".join([section.get_text(separator="\n", strip=True) for section in soup.find_all("article")])
+        return text      
 
 
 ## MAIN FUNC ##
@@ -321,18 +349,13 @@ from datetime import datetime, timedelta
 
 logger = create_logger("indexer")
 
-rss_sources = [
-    # "https://www.darkreading.com/rss.xml",
-    # "https://www.phoronix.com/rss.php",
-    "https://dev.to/feed"
-]
+# rss_sources = [
+#     # "https://www.darkreading.com/rss.xml",
+#     "https://www.phoronix.com/rss.php",
+#     "https://dev.to/feed"
+# ]
 
-rss_counter = 1
-for source in rss_sources:
-    beans = collect_news(source)
-    sanitation_check(beans)
-    with open(f"rss_{rss_counter}.json", 'w') as file:        
-        json.dump([bean.model_dump_json(indent = 2) for bean in beans], file, indent=2)
+collect("rssfeeds.txt")
 
 
 # beansack = Beansack(os.getenv('DB_CONNECTION_STRING'), os.getenv('LLMSERVICE_API_KEY'))

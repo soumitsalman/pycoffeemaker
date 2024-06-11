@@ -2,3 +2,5 @@
 .env
 models
 *.json
+__pycache__
+debug_rssfeeds.txt

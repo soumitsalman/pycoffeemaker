@@ -16,7 +16,7 @@ class Bean(BaseModel):
     text: Optional[str] = None
     author: Optional[str] = None    
     created: Optional[int] = None    
-    keywords: Optional[list[str]] = None
+    tags: Optional[list[str]] = None
     summary: Optional[str] = None
     topic: Optional[str] = None
     embedding: Optional[list[float]] = None

@@ -8,7 +8,8 @@ retry
 requests
 pydantic
 feedparser
-python-dateutil
+tldextract
+beautifulsoup4
 fastapi
 python-dotenv
 icecream
