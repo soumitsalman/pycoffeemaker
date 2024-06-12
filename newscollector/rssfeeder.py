@@ -25,21 +25,22 @@ T_AUTHOR = 'author'
 logger = create_logger("newscollector")
 
 # reads the list of feeds from a file path and collects
-def collect(sources: list[str] = None, sources_file: str = None, store_func = None):
-    if not sources:
+# if sources is a string then it will be treated as a file path or else it will be a an array
+def collect(sources: str|list[str], store_func = None):
+    if isinstance(sources, str):
         # if sources are not provided, assume that there is sources_file provided
-        with open(sources_file, 'r') as file:
+        with open(sources, 'r') as file:
             sources = file.readlines()
     # santize the urls and start collecting
     sources = [url.strip() for url in sources if url.strip()]
     for url in sources:
-        # try:
-        beans = collect_from(url)
-        logger.info("%d beans collected: %s", len(beans) if beans else 0, url)
-        if beans and store_func:
-            store_func(beans)                          
-        # except Exception as err:
-        #     logger.warning("%s: failed loading %s", url, str(err))
+        try:
+            beans = collect_from(url)
+            logger.info("%d beans collected: %s", len(beans) if beans else 0, url)
+            if beans and store_func:
+                store_func(beans)                          
+        except Exception as err:
+            logger.warning("Failed storing beans from: %s. Error: %s", url, str(err))
 
 def collect_from(url):
     feed = feedparser.parse(url, agent=USER_AGENT)   

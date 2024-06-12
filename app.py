@@ -1,30 +1,39 @@
 ## MAIN FUNC ##
-from dotenv import load_dotenv
-load_dotenv()
-
 import os
-from icecream import ic
+from dotenv import load_dotenv
+from shared import utils
+
+# before doing anything else
+# 1. assign paths for all the files that gets accessed as part of the script
+# 2. load environment variables
+# 3. set log location
+
+if __name__ == "__main__":
+    curr_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = f"{curr_dir}/.env"
+    embedder_model_path = f"{curr_dir}/models/nomic.gguf"
+    feed_sources_path = f"{curr_dir}/newscollector/feedsources.txt"
+    logger_path = f"{curr_dir}/app.log"
+
+    load_dotenv(env_path)
+    utils.set_logger_path(logger_path)
+
 from newscollector.rssfeeder import collect
-from shared.utils import create_logger
 from beansack.beanops import Beansack
 
-logger = create_logger("indexer")
+def start_collector(embedder_model_path, feed_sources_path):
+    logger = utils.create_logger("indexer")
+    beansack = Beansack(os.getenv('DB_CONNECTION_STRING'), os.getenv('LLMSERVICE_API_KEY'), embedder_model_path)
+    
+    # collect news articles and then rectify
+    logger.info("Starting collection from rss feeds.")
+    collect(sources=feed_sources_path, store_func=beansack.store)
+    # TODO: add collection from reddit
+    # TODO: add collection from nextdoor
+    # TODO: add collection from linkedin
+    logger.info("Starting large rectification.")
+    beansack.rectify(7, True, True)
 
-beansack = Beansack(os.getenv('DB_CONNECTION_STRING'), os.getenv('LLMSERVICE_API_KEY'))
 
-test_feeds = [
-    "https://www.marktechpost.com/feed/"
-]
-# collect(sources_file="rssfeeds.txt", store_func=beansack.add)
-beansack.rectify(10, True, True)
-
-
-
-# beansack.rectify(10)
-# try:
-#     beansack.rectify(10)
-# except Exception as err:
-#     logger.warning(f"{err}")
-#     ic(err)
-
-# print(summarize("In this example, summarizer_chain would be an instance of a summarization model or object, and summarizer_chain.summarize(text_to_summarize) is a method call to generate a summary for the given input text. You can then use the summary variable to do whatever you need with the generated summary, such as printing it or saving it to a file."))
+if __name__ == "__main__":
+    start_collector(embedder_model_path, feed_sources_path)

@@ -34,8 +34,8 @@ SEARCH_QUERY = "search_query"
 encoding = tiktoken.get_encoding("cl100k_base")
 
 class LocalNomic(Embeddings):
-    def __init__(self):
-        self.model = Llama(model_path=EMBEDDER_MODEL_PATH, n_ctx=EMBEDDER_CTX, embedding=True, verbose=False)
+    def __init__(self, model_path: str = EMBEDDER_MODEL_PATH):        
+        self.model = Llama(model_path=model_path, n_ctx=EMBEDDER_CTX, embedding=True, verbose=False)
        
     def embed_documents(self, texts: list[str]):
         return self._embed(texts, SEARCH_DOCUMENT)

@@ -25,15 +25,16 @@ CLEANUP_WINDOW = 30
 logger = create_logger("beansack")
 
 class Beansack:
-    def __init__(self, conn_str: str, llm_api_key: str):        
+    def __init__(self, conn_str: str, llm_api_key: str, embedder_model_path: str = None):        
         client = MongoClient(conn_str)        
         self.beanstore: Collection = client[BEANSACK][BEANS]
         self.nuggetstore: Collection = client[BEANSACK][NUGGETS]
         self.noisestore: Collection = client[BEANSACK][NOISES]        
         self.llm_api_key = llm_api_key
+        self.embedder_model_path = embedder_model_path
         
-
-    def add(self, beans: list[Bean]):        
+    # stores beans and post-processes them for generating embeddings, summary and nuggets
+    def store(self, beans: list[Bean]):        
         # filter out the old ones        
         exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
         beans = [bean for bean in beans if (bean.url not in exists) and bean.text]
@@ -67,8 +68,7 @@ class Beansack:
         nuggetor = NuggetExtractor(self.llm_api_key)
         try:
             texts = [bean.text for bean in beans]
-            nuggets = [Nugget(keyphrase=n[K_KEYPHRASE], event=n[K_EVENT], description=n[K_DESCRIPTION]) for n in nuggetor.extract(texts)]
-            logger.info("%d nuggets extracted", len(nuggets) if nuggets else 0)    
+            nuggets = [Nugget(keyphrase=n.get(K_KEYPHRASE), event=n.get(K_EVENT), description=n.get(K_DESCRIPTION)) for n in nuggetor.extract(texts)]
             # add updated value to keep track of collection time and batch number
             for n in nuggets:
                 n.updated = batch_time
@@ -78,8 +78,7 @@ class Beansack:
         except Exception as err:
             logger.warning("Nugget extraction failed %s", str(err))
 
-    def rectify(self, last_ndays:int, cleanup:bool, remap_all: bool):
-        logger.info("Large rectification started")
+    def rectify(self, last_ndays:int, cleanup:bool, remap_all: bool):        
         if cleanup:
             time_filter = {K_UPDATED: { "$lte": _get_time(CLEANUP_WINDOW) }}
             # clean up beanstore (but retain the channels)
@@ -121,9 +120,8 @@ class Beansack:
         self.rectify_mappings(nuggets) 
 
     def rectify_beans(self, beans: list[Bean]):
-        logger.info(f"{len(beans)} beans will go through rectification")
         summarizer = Summarizer(self.llm_api_key)
-        embedder = LocalNomic()
+        embedder = LocalNomic(self.embedder_model_path)
         
         def _generate(bean: Bean):
             to_set = {}
@@ -133,17 +131,17 @@ class Beansack:
                 if not bean.summary:
                     bean.summary = to_set[K_SUMMARY] = summarizer.summarize(bean.text)
             except Exception as err:
-                logger.warning(f"{err}")
+                logger.warning(f"bean rectification error: {err}")
                 pass # do nothing, to set will be empty
             return UpdateOne({K_URL: bean.url}, {"$set": to_set}), bean
         
         updates, beans = zip(*[_generate(bean) for bean in beans])
-        _update_collection(self.beanstore, list(updates))
+        update_count = _update_collection(self.beanstore, list(updates))
+        logger.info(f"{update_count} beans rectified")
         return beans
 
     def rectify_nuggets(self, nuggets: list[Nugget]):
-        logger.info(f"{len(nuggets)} nuggets will go through rectification")
-        embedder = LocalNomic()
+        embedder = LocalNomic(self.embedder_model_path)
 
         def _generate(nugget: Nugget):
             to_set = {}
@@ -151,28 +149,28 @@ class Beansack:
                 if not nugget.embedding:                    
                     nugget.embedding = to_set[K_EMBEDDING] = embedder.embed_queries(nugget.description) # embedding as a search query towards the documents      
             except Exception as err:
-                logger.warning(f"{err}")
+                logger.warning(f"nugget rectification error: {err}")
             return UpdateOne({K_KEYPHRASE: nugget.keyphrase, K_DESCRIPTION: nugget.description}, {"$set": to_set}), nugget
         
         updates, nuggets = zip(*[_generate(nugget) for nugget in nuggets])
-        _update_collection(self.nuggetstore, list(updates))
+        update_count =_update_collection(self.nuggetstore, list(updates))
+        logger.info(f"{update_count} nuggets rectified")
         return nuggets
 
-    def rectify_mappings(self, nuggets: list[Nugget]):
-        logger.info(f"{len(nuggets)} nuggets will go through remapping")
+    def rectify_mappings(self, nuggets: list[Nugget]):        
         search = lambda embedding: [bean.url for bean in self.vector_search_beans(
             embedding = embedding, 
             filter = {K_KIND: {"$ne": CHANNEL }}, 
             min_score = DEFAULT_MIN_SEARCH_SCORE,
             limit = DEFAULT_LIMIT, 
-            projection = {K_URL: 1})]
-        
+            projection = {K_URL: 1})]        
         update_one = lambda nugget, urls: UpdateOne(
                 {K_KEYPHRASE: nugget.keyphrase, K_DESCRIPTION: nugget.description, K_UPDATED: nugget.updated}, 
                 {"$set": { K_TRENDSCORE: self.calculate_trend_score(urls), K_URLS: urls}})
         
-        _update_collection(self.nuggetstore, [update_one(nugget, search(nugget.embedding)) for nugget in nuggets if nugget.embedding])
-        
+        update_count = _update_collection(self.nuggetstore, [update_one(nugget, search(nugget.embedding)) for nugget in nuggets if nugget.embedding])
+        logger.info(f"{update_count} nuggets remapped")
+
     def vector_search_beans(self, 
             embedding: list[float], 
             min_score = DEFAULT_MIN_SEARCH_SCORE, 
@@ -292,7 +290,9 @@ def _deserialize_noises(cursor) -> list[Noise]:
 def _update_collection(collection: Collection, updates: list[UpdateOne]):
     BATCH_SIZE = 200 # otherwise ghetto mongo throws a fit
     modified_count = reduce(lambda a, b: a+b, [collection.bulk_write(updates[i:i+BATCH_SIZE]).modified_count for i in range(0, len(updates), BATCH_SIZE)], 0)
-    logger.info(f"{modified_count} {collection.name} updated")
+    # logger.info(f"{modified_count} {collection.name} updated")
+    return modified_count
+
 
 def _get_time(last_ndays: int):
     return int((datetime.now() - timedelta(days=last_ndays)).timestamp())
