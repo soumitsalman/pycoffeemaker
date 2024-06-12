@@ -43,13 +43,12 @@ def collect(sources: str|list[str], store_func = None):
             logger.warning("Failed storing beans from: %s. Error: %s", url, str(err))
 
 def collect_from(url):
-    feed = feedparser.parse(url, agent=USER_AGENT)   
-    source = tldextract.extract(url).domain
+    feed = feedparser.parse(url, agent=USER_AGENT)  
     updated = int(datetime.now().timestamp())
     make_bean = lambda entry: Bean(
         url=entry[T_LINK],
         updated = updated,
-        source = source,
+        source = tldextract.extract(entry[T_LINK]).domain,
         title=entry[T_TITLE],
         kind = ARTICLE,
         text=parse_description(entry),

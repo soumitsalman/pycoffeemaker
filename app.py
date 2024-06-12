@@ -20,6 +20,13 @@ if __name__ == "__main__":
 
 from newscollector.rssfeeder import collect
 from beansack.beanops import Beansack
+import json
+
+# this is for debug only
+def file_store(beans):
+    if beans:
+        with open(f"{curr_dir}/test/{beans[0].source}.json", 'w') as file:
+            json.dump([bean.model_dump(exclude_unset=True, exclude_none=True) for bean in beans], file)
 
 def start_collector(embedder_model_path, feed_sources_path):
     logger = utils.create_logger("indexer")
