@@ -1,4 +1,5 @@
 ## MAIN FUNC ##
+from icecream import ic
 import os
 from dotenv import load_dotenv
 from shared import utils
@@ -7,31 +8,44 @@ from shared import utils
 # 1. assign paths for all the files that gets accessed as part of the script
 # 2. load environment variables
 # 3. set log location
-
 if __name__ == "__main__":
     curr_dir = os.path.dirname(os.path.abspath(__file__))
     env_path = f"{curr_dir}/.env"
     embedder_model_path = f"{curr_dir}/models/nomic.gguf"
     feed_sources_path = f"{curr_dir}/newscollector/feedsources.txt"
     logger_path = f"{curr_dir}/app.log"
-
+    
     load_dotenv(env_path)
-    utils.set_logger_path(logger_path)
+    
+    instance_mode = ic(os.getenv("INSTANCE_MODE"))
+    llm_api_key = os.getenv('LLMSERVICE_API_KEY')
+    deepinfra_api_key = os.getenv('DEEPINFRA_API_KEY')
+    db_conn = os.getenv('DB_CONNECTION_STRING')
 
-from newscollector.rssfeeder import collect
-from beansack.beanops import Beansack
+    utils.set_logger_path(logger_path)  
+    logger = utils.create_logger(instance_mode)
+
+
 import json
 
 # this is for debug only
-def file_store(beans):
+def write_json(beans, file_name: str = None):
     if beans:
-        with open(f"{curr_dir}/test/{beans[0].source}.json", 'w') as file:
-            json.dump([bean.model_dump(exclude_unset=True, exclude_none=True) for bean in beans], file)
+        with open(f"{curr_dir}/test/{file_name or beans[0].source}.json", 'w') as file:
+            try:
+                json.dump([bean.model_dump(exclude_unset=True, exclude_none=True) for bean in beans], file)
+            except:
+                pass
 
-def start_collector(embedder_model_path, feed_sources_path):
-    logger = utils.create_logger("indexer")
-    beansack = Beansack(os.getenv('DB_CONNECTION_STRING'), os.getenv('LLMSERVICE_API_KEY'), embedder_model_path)
-    
+def write_text(text, file_name):
+    with open(f"{curr_dir}/test/{file_name}", 'w') as file:
+        file.write(text)
+
+from newscollector.rssfeeder import collect
+from beanops.beansack import Beansack
+
+def start_collector():
+    beansack = Beansack(db_conn, llm_api_key, embedder_model_path)
     # collect news articles and then rectify
     logger.info("Starting collection from rss feeds.")
     collect(sources=feed_sources_path, store_func=beansack.store)
@@ -39,8 +53,36 @@ def start_collector(embedder_model_path, feed_sources_path):
     # TODO: add collection from nextdoor
     # TODO: add collection from linkedin
     logger.info("Starting large rectification.")
-    beansack.rectify(7, True, True)
+    beansack.rectify_beansack(3, True, True)
 
 
+import chat
+
+def start_chat():
+    chat.initialize(
+        Beansack(os.getenv('DB_CONNECTION_STRING'), llm_api_key, embedder_model_path),
+        deepinfra_api_key)
+
+    try:
+        while True:
+            user_input = input("Enter something: ")
+            if user_input.lower() == "exit":
+                print("Exiting...")
+                break
+            else:
+                nwb, resp = chat.generate(user_input)
+                print(resp.markdown())
+                write_json(nwb, "RETRIEVED_NWB")
+                write_text(resp.markdown(), "GENERATED_BLOG.md")
+                
+    except KeyboardInterrupt:
+        print("\nExiting...")
+
+instance_mode = "COLLECTOR"
 if __name__ == "__main__":
-    start_collector(embedder_model_path, feed_sources_path)
+    if instance_mode in ["INDEXER", "COLLECTOR"]:
+        start_collector()
+    else:
+        start_chat()
+    # start_chat()
+    # ic(chat.ArticleSection(**{"title": "hello", "body": "hello body"}))

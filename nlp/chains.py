@@ -2,6 +2,7 @@ from icecream import ic
 from retry import retry
 from functools import reduce
 import tiktoken
+from shared.utils import create_logger
 
 def count_tokens(texts: list[str]) -> int:
     return reduce(lambda a,b: a+b, [len(enc) for enc in encoding.encode_batch(texts)])
@@ -46,17 +47,20 @@ class LocalNomic(Embeddings):
     def embed_queries(self, texts: list[str]):    
         return self._embed(texts, SEARCH_QUERY)
     
-    @retry(tries=5)
+    @retry(tries=5, logger=create_logger("local nomic"))
     def _embed(self, input: str|list[str], task_type: str):
-        texts = LocalNomic._prep_input(input, task_type)
-        result = [self.model.create_embedding(text)['data'][0]['embedding'] for text in texts]
-        if any(not res for res in result):
-            raise Exception("None value returned by embedder")
-        return result[0] if isinstance(input, str) else result 
+        if input:
+            texts = LocalNomic._prep_input(input, task_type)
+            result = [self.model.create_embedding(text)['data'][0]['embedding'] for text in texts]
+            if any(not res for res in result):
+                raise Exception("None value returned by embedder")
+            return result[0] if isinstance(input, str) else result 
     
     def _prep_input(input: str|list[str], task_type: str):
         texts = [input] if isinstance(input, str) else input
         return truncate([f"{task_type}: {t}" for t in texts])
+
+
 
 ################
 ## SUMMARIZER ##
@@ -74,7 +78,7 @@ class Summarizer:
     def __init__(self, api_key):
         self.chain = load_summarize_chain(ChatGroq(api_key=api_key, model=SUMMARIZER_MODEL, temperature=0.1), chain_type="refine", verbose=False)
 
-    @retry(tries=5, jitter=5, delay=10)
+    @retry(tries=5, jitter=5, delay=10, logger=create_logger("summarizer"))
     def summarize(self, text: str) -> str:
         res = self.chain.invoke({"input_documents": [Document(text)]})['output_text'] if len(text) > MIN_SUMMARIZER_LEN else text
         #  the regex is a hack for llama3
@@ -120,7 +124,60 @@ class NuggetExtractor:
         texts = combine_texts([texts] if isinstance(texts, str) else texts, NUGGETS_CTX)        
         return list(chain(*[self._extract(t) for t in texts]))
     
-    @retry(tries=5, jitter=5, delay=10)
+    @retry(tries=5, jitter=5, delay=10, logger=create_logger("nuggetor"))
     def _extract(self, text: str):        
         res = self.chain.invoke({"input":text})
         return res[K_MESSAGES] if (K_MESSAGES in res) else res
+
+######################################################
+## Generates a title and summary body from contents ##
+######################################################
+
+from langchain_community.llms.deepinfra import DeepInfra
+from langchain_core.output_parsers import JsonOutputParser
+from typing import Optional
+
+SECTION_GENERATOR_PROMPT = """You are a {content_type} writer.
+You are writing a section of a {content_type} on "{topic}". Your write using a {tone} tone.
+You are going to write the title and the body of the section. The body of the section will be within 300-400 words.
+The following CONTENTS (delimitered by ```) are the ONLY information you have on this task. 
+```
+{contents}
+```
+From the above contents you you will extract information that is relevant to "{topic}".
+Then based on the extracted contents you will write a "title" and "body" a section of the {content_type}.
+"title" should be less that 20 words. "body" should be in markdown format and between 250 - 400 words.
+{format_instruction}"""
+SECTION_GENERATOR_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
+SECTION_GENERATOR_CTX = 32000
+
+DEFAULT_TYPE = "blog"
+DEFAULT_TONE = "sarcastic/comical"
+
+class ArticleSection(BaseModel):
+    title: str = Field(description="Title of the section")
+    body: str = Field(description="Main content of the section in markdown format")
+    sources: Optional[tuple] = Field(default=None, exclude=True)
+
+class ArticleSectionGenerator:
+    def __init__(self, api_key: str):
+        parser = JsonOutputParser(pydantic_object=ArticleSection)
+        prompt = PromptTemplate(
+            template=SECTION_GENERATOR_PROMPT, 
+            input_variables=["content_type", "topic", "tone", "contents"], 
+            partial_variables={"format_instruction": parser.get_format_instructions()})
+        llm = DeepInfra(deepinfra_api_token=api_key, model_id=SECTION_GENERATOR_MODEL)
+        
+        self.chain = prompt | llm | parser
+
+    @retry(tries=3, jitter=10, delay=10, logger=create_logger("section generator"))
+    def generate(self, topic: str, contents: str|list[str], content_type = DEFAULT_TYPE, tone=DEFAULT_TONE):
+        return ArticleSection(**self.chain.invoke({
+            "content_type": content_type,
+            "topic": topic,
+            "tone": tone,
+            "contents": "```".join(contents if isinstance(contents, list) else [contents])
+        }))
+    
+    def __call__(self, topic: str, contents: str|list[str], content_type = DEFAULT_TYPE, tone=DEFAULT_TONE):
+        return self.generate(topic, contents, content_type, tone)

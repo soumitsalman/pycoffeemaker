@@ -11,6 +11,7 @@ ARTICLE = "news article/blog"
 K_URL="url"
 K_KIND = "kind"
 K_TEXT = "text"
+K_SOURCE = "source"
 K_EMBEDDING = "embedding"
 K_SUMMARY = "summary"
 K_UPDATED = "updated"
@@ -66,3 +67,10 @@ class Noise(BaseModel):
     
     def digest(self):
         return f"Title: {self.title}\nBody: {self.text}"
+    
+class Source(BaseModel):
+    url: str
+    kind: str
+    name: str
+    cid: Optional[str] = None
+    

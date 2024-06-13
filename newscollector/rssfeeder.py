@@ -3,7 +3,7 @@
 ################
 
 import feedparser
-from beansack.datamodels import Bean, ARTICLE
+from beanops.datamodels import Bean, ARTICLE
 from datetime import datetime
 from bs4 import BeautifulSoup
 import requests
@@ -12,7 +12,7 @@ import time
 import tldextract
 from icecream import ic
 
-
+FEED_SOURCES = "newscollector/feedsources.txt"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59"
 T_LINK = "link"
 T_TITLE = "title"
@@ -26,7 +26,7 @@ logger = create_logger("newscollector")
 
 # reads the list of feeds from a file path and collects
 # if sources is a string then it will be treated as a file path or else it will be a an array
-def collect(sources: str|list[str], store_func = None):
+def collect(sources: str|list[str] = FEED_SOURCES, store_func = None):
     if isinstance(sources, str):
         # if sources are not provided, assume that there is sources_file provided
         with open(sources, 'r') as file:

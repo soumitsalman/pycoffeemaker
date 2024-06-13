@@ -4,8 +4,8 @@
 
 from datetime import datetime, timedelta
 from functools import reduce
-from beansack.nlp import *
-from beansack.datamodels import *
+from nlp.chains import *
+from .datamodels import *
 from shared.utils import create_logger
 from pymongo import MongoClient, UpdateOne
 from pymongo.collection import Collection
@@ -16,9 +16,13 @@ BEANSACK = "beansack"
 BEANS = "beans"
 NUGGETS = "concepts"
 NOISES = "noises"
+SOURCES = "sources"
 
 DEFAULT_MIN_SEARCH_SCORE = 0.7
 DEFAULT_LIMIT = 50
+
+LATEST = {K_UPDATED: -1}
+TRENDING = {K_TRENDSCORE: -1}
 
 CLEANUP_WINDOW = 30
 
@@ -30,6 +34,7 @@ class Beansack:
         self.beanstore: Collection = client[BEANSACK][BEANS]
         self.nuggetstore: Collection = client[BEANSACK][NUGGETS]
         self.noisestore: Collection = client[BEANSACK][NOISES]        
+        self.sourcestore: Collection = client[BEANSACK][SOURCES]  
         self.llm_api_key = llm_api_key
         self.embedder_model_path = embedder_model_path
         
@@ -78,7 +83,7 @@ class Beansack:
         except Exception as err:
             logger.warning("Nugget extraction failed %s", str(err))
 
-    def rectify(self, last_ndays:int, cleanup:bool, remap_all: bool):        
+    def rectify_beansack(self, last_ndays:int, cleanup:bool, remap_all: bool):        
         if cleanup:
             time_filter = {K_UPDATED: { "$lte": _get_time(CLEANUP_WINDOW) }}
             # clean up beanstore (but retain the channels)
@@ -158,7 +163,7 @@ class Beansack:
         return nuggets
 
     def rectify_mappings(self, nuggets: list[Nugget]):        
-        search = lambda embedding: [bean.url for bean in self.vector_search_beans(
+        search = lambda embedding: [bean.url for bean in self.search_beans(
             embedding = embedding, 
             filter = {K_KIND: {"$ne": CHANNEL }}, 
             min_score = DEFAULT_MIN_SEARCH_SCORE,
@@ -166,24 +171,111 @@ class Beansack:
             projection = {K_URL: 1})]        
         update_one = lambda nugget, urls: UpdateOne(
                 {K_KEYPHRASE: nugget.keyphrase, K_DESCRIPTION: nugget.description, K_UPDATED: nugget.updated}, 
-                {"$set": { K_TRENDSCORE: self.calculate_trend_score(urls), K_URLS: urls}})
+                {"$set": { K_TRENDSCORE: self._calculate_trend_score(urls), K_URLS: urls}})
         
         update_count = _update_collection(self.nuggetstore, [update_one(nugget, search(nugget.embedding)) for nugget in nuggets if nugget.embedding])
         logger.info(f"{update_count} nuggets remapped")
 
-    def vector_search_beans(self, 
-            embedding: list[float], 
+    def get_beans(self,
+            filter, 
+            limit = None, 
+            sort_by = None, 
+            projection = None
+        ) -> list[Bean]:
+        cursor = self.beanstore.find(filter = filter, projection = projection)
+        if sort_by:
+            cursor = cursor.sort(sort_by)
+        if limit:
+            cursor = cursor.limit(limit)
+        return _deserialize_beans(cursor)
+
+    def get_nuggets(self,
+            filter, 
+            limit = None, 
+            sort_by = None, 
+            projection = None
+        ) -> list[Nugget]:
+        cursor = self.nuggetstore.find(filter = filter, projection = projection)
+        if sort_by:
+            cursor = cursor.sort(sort_by)
+        if limit:
+            cursor = cursor.limit(limit)
+        return _deserialize_nuggets(cursor)
+
+    def search_beans(self, 
+            query: str = None,
+            embedding: list[float] = None, 
             min_score = DEFAULT_MIN_SEARCH_SCORE, 
             filter = None, 
             limit = DEFAULT_LIMIT, 
             sort_by = None, 
             projection = None
         ) -> list[Bean]:
+        pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
+        return _deserialize_beans(self.beanstore.aggregate(pipeline=pipline))
+
+    def search_nuggets(self, 
+            query: str = None,
+            embedding: list[float] = None, 
+            min_score = DEFAULT_MIN_SEARCH_SCORE, 
+            filter = None, 
+            limit = DEFAULT_LIMIT, 
+            sort_by = None, 
+            projection = None
+        ) -> list[Nugget]:
+        pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
+        return _deserialize_nuggets(self.nuggetstore.aggregate(pipeline=pipline))
+    
+    def search_beans_with_nuggets(self, 
+            query: str = None,
+            embedding: list[float] = None, 
+            min_score = DEFAULT_MIN_SEARCH_SCORE, 
+            limit = DEFAULT_LIMIT,
+            filter = None,              
+            projection = None
+        ) -> list[dict]:
+        beans = self.search_beans(
+            query=query, 
+            embedding=embedding, 
+            min_score=min_score,
+            filter=filter,
+            limit=limit, 
+            sort_by=LATEST, 
+            projection=projection)
+
+        url_filter = lambda bean: { K_URLS: {"$in": [bean.url] }}
+        bwn = lambda bean: {"bean": bean, "nuggets": self.get_nuggets(filter = url_filter(bean), sort_by={**LATEST,**TRENDING}, projection={K_KEYPHRASE: 1, K_EVENT: 1, K_DESCRIPTION: 1, K_URLS: 1})}       
+        return [bwn(bean) for bean in beans]
+
+    def search_nuggets_with_beans(self, 
+            query: str = None,
+            embedding: list[float] = None, 
+            min_score = DEFAULT_MIN_SEARCH_SCORE, 
+            limit = DEFAULT_LIMIT,
+            bean_filter = None,              
+            bean_projection = None
+        ) -> list[dict]:
+        # search for the nuggets with that query/embedding
+        nuggets = self.search_nuggets(
+            query=query,
+            embedding=embedding,
+            min_score=min_score,
+            filter=None, # filter does not apply to nuggets
+            limit=limit, 
+            sort_by={**LATEST,**TRENDING}, # sort by latest and trending
+            projection={K_KEYPHRASE: 1, K_EVENT: 1, K_DESCRIPTION: 1, K_URLS: 1} # bean projection doesn't apply to nuggets
+        )   
+        filter = lambda nug: {**{K_URL: {"$in": nug.urls }}, **(bean_filter or {})}
+        nwb = lambda nug: {"nugget": nug, "beans": self.get_beans(filter = filter(nug), limit=limit, sort_by=LATEST, projection=bean_projection)}
+        # then get the beans for each of those nuggets
+        return [nwb(nug) for nug in nuggets]        
+
+    def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
         pipline = [
             {
                 "$search": {
                     "cosmosSearch": {
-                        "vector": embedding,
+                        "vector": embedding or LocalNomic(self.embedder_model_path).embed_query(text),
                         "path":   K_EMBEDDING,
                         "k":      limit,
                     },
@@ -203,10 +295,9 @@ class Beansack:
             pipline.append({"$sort": sort_by})
         if projection:
             pipline.append({"$project": projection})
-
-        return _deserialize_beans(self.beanstore.aggregate(pipeline=pipline))
+        return pipline
     
-    def get_latest_noisestats(self, urls: list[str]) -> list[Noise]:
+    def _get_latest_noisestats(self, urls: list[str]) -> list[Noise]:
         pipeline = [
             {
                 "$match": { "mapped_url": {"$in": urls} }
@@ -259,8 +350,8 @@ class Beansack:
         return _deserialize_noises(self.noisestore.aggregate(pipeline))
 
     # current arbitrary calculation score: 10 x number_of_unique_articles_or_posts + 3*num_comments + likes     
-    def calculate_trend_score(self, urls: list[str]) -> int:
-        noises = self.get_latest_noisestats(urls)       
+    def _calculate_trend_score(self, urls: list[str]) -> int:
+        noises = self._get_latest_noisestats(urls)       
         return reduce(lambda a, b: a + b, [n.score for n in noises if n.score], len(urls)*10) 
 
     
