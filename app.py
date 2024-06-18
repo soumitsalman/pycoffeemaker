@@ -12,13 +12,14 @@ if __name__ == "__main__":
     curr_dir = os.path.dirname(os.path.abspath(__file__))
     env_path = f"{curr_dir}/.env"
     embedder_model_path = f"{curr_dir}/models/nomic.gguf"
+    llm_model_path = f"{curr_dir}/models/phi-3-mini-4k.gguf"
     feed_sources_path = f"{curr_dir}/newscollector/feedsources.txt"
     logger_path = f"{curr_dir}/app.log"
     
     load_dotenv(env_path)
     
-    instance_mode = ic(os.getenv("INSTANCE_MODE"))
-    llm_api_key = os.getenv('LLMSERVICE_API_KEY')
+    instance_mode = os.getenv("INSTANCE_MODE")
+    llm_api_key = os.getenv('GROQ_API_KEY')
     deepinfra_api_key = os.getenv('DEEPINFRA_API_KEY')
     db_conn = os.getenv('DB_CONNECTION_STRING')
 
@@ -56,33 +57,31 @@ def start_collector():
     beansack.rectify_beansack(3, True, True)
 
 
-import chat
+import interact
 
 def start_chat():
-    chat.initialize(
-        Beansack(os.getenv('DB_CONNECTION_STRING'), llm_api_key, embedder_model_path),
-        deepinfra_api_key)
+    interact.initialize(
+        Beansack(db_conn, llm_api_key, embedder_model_path),
+        llm_model_path)
 
     try:
-        while True:
-            user_input = input("Enter something: ")
+        for user_input in ["generative ai", "Donald Trump"]:
+            # user_input = input("Enter something: ")
             if user_input.lower() == "exit":
                 print("Exiting...")
                 break
             else:
-                nwb, resp = chat.generate(user_input)
-                print(resp.markdown())
-                write_json(nwb, "RETRIEVED_NWB")
-                write_text(resp.markdown(), "GENERATED_BLOG.md")
+                resp = interact.generate(user_input)
+                print(resp)
+                # write_json(nwb, "RETRIEVED_NWB")
+                # write_text(resp.markdown(), "GENERATED_BLOG.md")
                 
     except KeyboardInterrupt:
         print("\nExiting...")
 
-instance_mode = "COLLECTOR"
+
 if __name__ == "__main__":
     if instance_mode in ["INDEXER", "COLLECTOR"]:
         start_collector()
     else:
         start_chat()
-    # start_chat()
-    # ic(chat.ArticleSection(**{"title": "hello", "body": "hello body"}))

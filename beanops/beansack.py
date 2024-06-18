@@ -5,11 +5,15 @@
 from datetime import datetime, timedelta
 from functools import reduce
 from nlp.chains import *
+from nlp.embedding import *
 from .datamodels import *
 from shared.utils import create_logger
 from pymongo import MongoClient, UpdateOne
 from pymongo.collection import Collection
 from bson import InvalidBSON
+from sklearn.metrics.pairwise import pairwise_distances
+from scipy.cluster.hierarchy import linkage, fcluster
+import numpy as np
 
 # names of db and collections
 BEANSACK = "beansack"
@@ -152,7 +156,7 @@ class Beansack:
             to_set = {}
             try:
                 if not nugget.embedding:                    
-                    nugget.embedding = to_set[K_EMBEDDING] = embedder.embed_queries(nugget.description) # embedding as a search query towards the documents      
+                    nugget.embedding = to_set[K_EMBEDDING] = embedder.embed_queries(nugget.digest()) # embedding as a search query towards the documents      
             except Exception as err:
                 logger.warning(f"nugget rectification error: {err}")
             return UpdateOne({K_KEYPHRASE: nugget.keyphrase, K_DESCRIPTION: nugget.description}, {"$set": to_set}), nugget
@@ -252,23 +256,32 @@ class Beansack:
             embedding: list[float] = None, 
             min_score = DEFAULT_MIN_SEARCH_SCORE, 
             limit = DEFAULT_LIMIT,
-            bean_filter = None,              
-            bean_projection = None
-        ) -> list[dict]:
+            filter = None
+        ) -> list:
         # search for the nuggets with that query/embedding
         nuggets = self.search_nuggets(
             query=query,
             embedding=embedding,
             min_score=min_score,
-            filter=None, # filter does not apply to nuggets
+            filter=filter, # filter does not apply to nuggets
             limit=limit, 
-            sort_by={**LATEST,**TRENDING}, # sort by latest and trending
-            projection={K_KEYPHRASE: 1, K_EVENT: 1, K_DESCRIPTION: 1, K_URLS: 1} # bean projection doesn't apply to nuggets
+            sort_by={**LATEST,**TRENDING}
         )   
-        filter = lambda nug: {**{K_URL: {"$in": nug.urls }}, **(bean_filter or {})}
-        nwb = lambda nug: {"nugget": nug, "beans": self.get_beans(filter = filter(nug), limit=limit, sort_by=LATEST, projection=bean_projection)}
-        # then get the beans for each of those nuggets
-        return [nwb(nug) for nug in nuggets]        
+        if nuggets:
+            CLUSTER_DISTANCE = 18  # 18 seems to work. I HAVE NO IDEA WHAT THIS MEANS
+            linkage_matrix = linkage(pairwise_distances([nugget.embedding for nugget in nuggets], metric='euclidean'), method='single')
+            clusters = fcluster(linkage_matrix, t=CLUSTER_DISTANCE, criterion='distance')
+            groups = {}
+            for nugget, label in zip(nuggets, clusters):
+                if label in groups:
+                    groups[label].urls.append(nugget.urls)
+                else:
+                    groups[label] = nugget
+            
+            bean_filter = lambda nug: {**{K_URL: {"$in": nug.urls }}, **(filter or {})}
+            getbeans = lambda nug: self.get_beans(filter = bean_filter(nug), limit=limit, sort_by=LATEST, projection={K_EMBEDDING: 0})
+            # then get the beans for each of those nuggets
+            return [(nug, getbeans(nug)) for nug in groups.values()]        
 
     def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
         pipline = [

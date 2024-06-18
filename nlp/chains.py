@@ -3,106 +3,72 @@ from retry import retry
 from functools import reduce
 import tiktoken
 from shared.utils import create_logger
-
-def count_tokens(texts: list[str]) -> int:
-    return reduce(lambda a,b: a+b, [len(enc) for enc in encoding.encode_batch(texts)])
-
-def truncate(input: str|list[str]) -> str|list[str]:
-    if isinstance(input, str):
-        return encoding.decode(encoding.encode(input)[:EMBEDDER_CTX])
-    else:
-        return [encoding.decode(enc[:EMBEDDER_CTX]) for enc in encoding.encode_batch(input)]
-    
-def combine_texts(texts: list[str], ctx: int, delimiter: str = "```") -> list[str]:
-    if count_tokens(texts) > ctx:
-        half = len(texts) // 2
-        return combine_texts(texts[:half], ctx, delimiter) + combine_texts(texts[half:], ctx, delimiter)
-    else:
-        return [delimiter.join(texts)]
- 
-####################
-## NOMIC EMBEDDER ##
-####################
-
-from llama_cpp import Llama
-from langchain_core.embeddings import Embeddings
-
-EMBEDDER_MODEL_PATH = "models/nomic.gguf"
-EMBEDDER_CTX = 2047
-SEARCH_DOCUMENT = "search_document"
-SEARCH_QUERY = "search_query"
+from langchain_groq import ChatGroq
+from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
+from langchain_core.prompts import PromptTemplate
 
 encoding = tiktoken.get_encoding("cl100k_base")
 
-class LocalNomic(Embeddings):
-    def __init__(self, model_path: str = EMBEDDER_MODEL_PATH):        
-        self.model = Llama(model_path=model_path, n_ctx=EMBEDDER_CTX, embedding=True, verbose=False)
-       
-    def embed_documents(self, texts: list[str]):
-        return self._embed(texts, SEARCH_DOCUMENT)
-    
-    def embed_query(self, text: str):    
-        return self._embed(text, SEARCH_QUERY)
-
-    def embed_queries(self, texts: list[str]):    
-        return self._embed(texts, SEARCH_QUERY)
-    
-    @retry(tries=5, logger=create_logger("local nomic"))
-    def _embed(self, input: str|list[str], task_type: str):
-        if input:
-            texts = LocalNomic._prep_input(input, task_type)
-            result = [self.model.create_embedding(text)['data'][0]['embedding'] for text in texts]
-            if any(not res for res in result):
-                raise Exception("None value returned by embedder")
-            return result[0] if isinstance(input, str) else result 
-    
-    def _prep_input(input: str|list[str], task_type: str):
-        texts = [input] if isinstance(input, str) else input
-        return truncate([f"{task_type}: {t}" for t in texts])
-
-
+def count_tokens(texts: list[str]) -> int:
+    return reduce(lambda a,b: a+b, [len(enc) for enc in encoding.encode_batch(texts)])
+   
+def combine_texts(texts: list[str], batch_size: int, delimiter: str = "```") -> list[str]:
+    if count_tokens(texts) > batch_size:
+        half = len(texts) // 2
+        return combine_texts(texts[:half], batch_size, delimiter) + combine_texts(texts[half:], batch_size, delimiter)
+    else:
+        return [delimiter.join(texts)]
+ 
 
 ################
 ## SUMMARIZER ##
 ################
 
 import re
-from langchain_groq import ChatGroq
-from langchain.chains.summarize import load_summarize_chain
-from langchain.schema import Document  
 
+SUMMARIZER_TEMPLATE = """<|start_header_id|>system<|end_header_id|>
+Your task is to write a concise summary of the content provided by user. The summary should be less than 150 words.
+Output MUST BE of markdown format like below:
+```markdown
+'summary'
+```
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+Summarize the content below:\n{content}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
 SUMMARIZER_MODEL = "llama3-8b-8192"
-SUMMARIZER_CTX = 6144
+SUMMARIZER_BATCH_SIZE = 6144
 MIN_SUMMARIZER_LEN = 1000
+
 class Summarizer:
     def __init__(self, api_key):
-        self.chain = load_summarize_chain(ChatGroq(api_key=api_key, model=SUMMARIZER_MODEL, temperature=0.1), chain_type="refine", verbose=False)
+        prompt = PromptTemplate.from_template(template=SUMMARIZER_TEMPLATE)
+        llm = ChatGroq(api_key=api_key, model=SUMMARIZER_MODEL, temperature=0.1, verbose=False, streaming=False, max_tokens=384)
+        self.chain = prompt | llm | StrOutputParser()
 
     @retry(tries=5, jitter=5, delay=10, logger=create_logger("summarizer"))
     def summarize(self, text: str) -> str:
-        res = self.chain.invoke({"input_documents": [Document(text)]})['output_text'] if len(text) > MIN_SUMMARIZER_LEN else text
+        res = self.chain.invoke({"content": text}) if len(text) > MIN_SUMMARIZER_LEN else text
         #  the regex is a hack for llama3
-        return re.sub(r'(?i)Here is a concise summary:', '', res).strip()
+        return re.sub(r'(?i)Here is a concise summary:', '', res.replace("```markdown", "").replace("```", "")).strip()
 
 ######################
 ## NUGGET EXTRACTOR ##
 ######################
 
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
 from itertools import chain
 from pydantic import BaseModel, Field
-    
-NUGGETS_MODEL = "llama3-8b-8192"
-NUGGETS_CTX = 4096
-NUGGETS_SYSTEM_MSG = """You are provided with one or more excerpts from news article or social media posts delimitered by ```
-For each input you will extract the main `message` represented by the excerpt.
-Each message will contain a `keyphrase`, an `event` and a `description` field.
-The final output MUST BE a list of `messages` represented by array of json objects representing the structure of each `message`.
-OUTPUT FORMAT: {format_instruction}"""
-NUGGET_USER_MSG = "```\n{input}\n```"
-RETRY_INSTRUCTION = "Format the INPUT content in JSON format"
 
+NUGGETS_TEMPLATE = """<|start_header_id|>system<|end_header_id|>
+Your task is to extract important points and messages from news articles, blogs and social media posts.
+The user will provide you one or more news articles, blogs or social media posts delimitered by ```. For each input extract the key points and messages.
+Each key point or message will contain a `keyphrase`, an `event` and a `description` field.
+The final output MUST BE a list of `messages` represented by array of json objects representing the structure of each `message`.
+OUTPUT FORMAT: {format_instruction}
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+Extract the key points and messages from the inputs below:\n```\n{input}\n```
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
+NUGGETS_MODEL = "llama3-8b-8192"
+NUGGETS_BATCH_SIZE = 4096
 K_MESSAGES = "messages"
 
 class NuggetData(BaseModel):
@@ -111,17 +77,19 @@ class NuggetData(BaseModel):
     description: str = Field(description="An event description is the concise summary of the 'event' associated to the 'keyphrase'")
 
 class NuggetList(BaseModel):
-    messages: list[NuggetData] = Field(description="list of messages in the excerpts. Each message has keyphrase, event and description field")
+    messages: list[NuggetData] = Field(description="list of key points and messages. Each message has keyphrase, event and description field")
 
 class NuggetExtractor:
     def __init__(self, api_key):
         parser = JsonOutputParser(name = "nugget parser", pydantic_object=NuggetList)
-        prompt = PromptTemplate(template=NUGGETS_SYSTEM_MSG+"\n"+NUGGET_USER_MSG, input_variables=["input"], partial_variables={"format_instruction": parser.get_format_instructions()})
-        llm = ChatGroq(api_key=api_key, model=NUGGETS_MODEL, temperature=0.1)
+        prompt = PromptTemplate.from_template(
+            template=NUGGETS_TEMPLATE, 
+            partial_variables={"format_instruction": parser.get_format_instructions()})
+        llm = ChatGroq(api_key=api_key, model=NUGGETS_MODEL, temperature=0.1, verbose=False, streaming=False)
         self.chain = prompt | llm | parser
     
     def extract(self, texts: str|list[str]):
-        texts = combine_texts([texts] if isinstance(texts, str) else texts, NUGGETS_CTX)        
+        texts = combine_texts([texts] if isinstance(texts, str) else texts, NUGGETS_BATCH_SIZE)        
         return list(chain(*[self._extract(t) for t in texts]))
     
     @retry(tries=5, jitter=5, delay=10, logger=create_logger("nuggetor"))
@@ -129,55 +97,49 @@ class NuggetExtractor:
         res = self.chain.invoke({"input":text})
         return res[K_MESSAGES] if (K_MESSAGES in res) else res
 
-######################################################
-## Generates a title and summary body from contents ##
-######################################################
+####################
+## ARTICLE WRITER ##
+####################
 
-from langchain_community.llms.deepinfra import DeepInfra
-from langchain_core.output_parsers import JsonOutputParser
-from typing import Optional
+# A section contains ONLY a 'title' and a 'body'. 
+# - The 'title' is less 20 words
+# - The 'body' is around 250 - 400 words
 
-SECTION_GENERATOR_PROMPT = """You are a {content_type} writer.
-You are writing a section of a {content_type} on "{topic}". Your write using a {tone} tone.
-You are going to write the title and the body of the section. The body of the section will be within 300-400 words.
-The following CONTENTS (delimitered by ```) are the ONLY information you have on this task. 
-```
-{contents}
-```
-From the above contents you you will extract information that is relevant to "{topic}".
-Then based on the extracted contents you will write a "title" and "body" a section of the {content_type}.
-"title" should be less that 20 words. "body" should be in markdown format and between 250 - 400 words.
-{format_instruction}"""
-SECTION_GENERATOR_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
-SECTION_GENERATOR_CTX = 32000
 
-DEFAULT_TYPE = "blog"
-DEFAULT_TONE = "sarcastic/comical"
+WRITER_TEMPLATE = """<|start_header_id|>system<|end_header_id|>
+You are a {content_type} writer. Your task is to rewrite one section of a {content_type} on a given topic from the drafts provided by the user. 
+From the drafts extract ONLY the contents that are strictly relevant to the topic and write the section based on ONLY that. You MUST NOT use your own knowledge for this. 
+The section should have a title and body. The section should be less that 350 words. Output MUST be in markdown format.
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+Rewrite a section on topic '{topic}' ONLY based on the following drafts:\n{drafts}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
+WRITER_MODEL = "llama3-8b-8192"
+WRITER_BATCH_SIZE = 6144
+DEFAULT_CONTENT_TYPE = "blog"
 
-class ArticleSection(BaseModel):
-    title: str = Field(description="Title of the section")
-    body: str = Field(description="Main content of the section in markdown format")
-    sources: Optional[tuple] = Field(default=None, exclude=True)
-
-class ArticleSectionGenerator:
+class ArticleWriter:
     def __init__(self, api_key: str):
-        parser = JsonOutputParser(pydantic_object=ArticleSection)
-        prompt = PromptTemplate(
-            template=SECTION_GENERATOR_PROMPT, 
-            input_variables=["content_type", "topic", "tone", "contents"], 
-            partial_variables={"format_instruction": parser.get_format_instructions()})
-        llm = DeepInfra(deepinfra_api_token=api_key, model_id=SECTION_GENERATOR_MODEL)
-        
-        self.chain = prompt | llm | parser
+        prompt = PromptTemplate.from_template(template=WRITER_TEMPLATE)
+        llm = ChatGroq(api_key=api_key, model=WRITER_MODEL, temperature=0.1, verbose=False, streaming=False, max_tokens=512)
+        self.chain = prompt | llm | StrOutputParser()
 
-    @retry(tries=3, jitter=10, delay=10, logger=create_logger("section generator"))
-    def generate(self, topic: str, contents: str|list[str], content_type = DEFAULT_TYPE, tone=DEFAULT_TONE):
-        return ArticleSection(**self.chain.invoke({
-            "content_type": content_type,
-            "topic": topic,
-            "tone": tone,
-            "contents": "```".join(contents if isinstance(contents, list) else [contents])
-        }))
-    
-    def __call__(self, topic: str, contents: str|list[str], content_type = DEFAULT_TYPE, tone=DEFAULT_TONE):
-        return self.generate(topic, contents, content_type, tone)
+    # highlights, coontents and sources should havethe same number of items
+    def writer_article(self, highlights: list, contents:list, sources: list, content_type: str = DEFAULT_CONTENT_TYPE):                  
+        article = "## Trending Highlights\n"+"\n".join(['- '+item for item in highlights])+"\n\n"
+        for i in range(len(contents)):                                         
+            article += (
+                self.write_section(highlights[i], contents[i], content_type) +
+                "\n**Sources:** "+ 
+                ", ".join({src[0]:f"[{src[0]}]({src[1]})" for src in sources[i]}.values()) + 
+                "\n\n")   
+        return article
+
+    @retry(tries=3, jitter=10, delay=10, logger=create_logger("article writer"))
+    def write_section(self, topic: str, drafts: list[str], content_type: str = DEFAULT_CONTENT_TYPE) -> str:        
+        while True:         
+            # run it once at least   
+            texts = combine_texts(drafts, WRITER_BATCH_SIZE, "\n\n\n")
+            # these are the new drafts
+            drafts = [self.chain.invoke({"content_type": content_type, "topic": topic, "drafts": text}) for text in texts]                           
+            if len(drafts) <= 1:
+                return drafts[0]

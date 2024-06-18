@@ -10,6 +10,7 @@ ARTICLE = "news article/blog"
 # names of important fields of collections
 K_URL="url"
 K_KIND = "kind"
+K_TITLE = "title"
 K_TEXT = "text"
 K_SOURCE = "source"
 K_EMBEDDING = "embedding"
@@ -48,6 +49,9 @@ class Nugget(BaseModel):
     embedding: Optional[list[float]] = None
     urls: Optional[list[str]] = None
     trend_score: Optional[int] = None
+
+    def digest(self) -> str:
+        return f"{self.keyphrase}: {self.description}"
 
 K_MAPPED_URL = "mapped_url"
 

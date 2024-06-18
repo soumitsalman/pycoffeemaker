@@ -2,6 +2,10 @@ llama-cpp-python
 langchain
 langchain-community
 langchain-groq
+langchain-text-splitters
+numpy
+scipy
+scikit-learn
 pymongo
 tiktoken
 retry
