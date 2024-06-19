@@ -16,7 +16,7 @@ def collect(store_func):
     beans = [collect_from(item) for item in items]
     beans = [bean for bean in beans if bean and bean.text]
     logger.info("%d items collected from %s", len(beans), SOURCE)
-    store_func(beans[:10])
+    store_func(beans)
 
 def collect_from(id: int):
     try:
