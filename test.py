@@ -24,11 +24,11 @@ def write_text(text, file_name):
 
 from beanops.beansack import *
 from beanops.datamodels import *
-from newscollector import rssfeeder
+from newscollector import rssfeed, ychackernews
 
 def test_nlp():
     beansack = Beansack(db_conn, llm_api_key, embedder_path)
-    beans = rssfeeder.collect_from("https://www.marktechpost.com/feed/")    
+    beans = rssfeed.collect_from("https://www.marktechpost.com/feed/")    
 
     def _rectify_beans(beans: list[Bean]):
         summarizer = Summarizer(llm_api_key)
@@ -42,11 +42,18 @@ def test_nlp():
     write_datamodels(beansack.extract_nuggets(beans, 20241806), "EXTRACTED-NUGGETS")
 
 def test_collection_local():
-    rssfeeder.collect(sources=feed_source, store_func=write_datamodels)
+    # rssfeed.collect(store_func=write_datamodels)
+    ychackernews.collect(store_func=write_datamodels)
 
 def test_collection_live():
     beansack = Beansack(db_conn, llm_api_key, embedder_path)
-    rssfeeder.collect(sources=feed_source, store_func=beansack.store)
+    # rssfeed.collect(store_func=beansack.store)
+    ychackernews.collect(store_func=beansack.store)
+    
+def test_rectify_beansack():
+    beansack = Beansack(db_conn, llm_api_key, embedder_path)
+    beansack.rectify_beansack(1, False, True)
+
 
 import interact
 
@@ -70,3 +77,4 @@ def test_writing():
 # test_nlp()
 # test_collection_local()
 test_collection_live()
+# test_rectify_beansack()

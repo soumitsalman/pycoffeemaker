@@ -24,14 +24,16 @@ if __name__ == "__main__":
     utils.set_logger_path(logger_path)  
     logger = utils.create_logger(instance_mode)
 
-from newscollector.rssfeeder import collect
+from newscollector import rssfeed, ychackernews
 from beanops.beansack import Beansack
 
 def start_collector():
     beansack = Beansack(db_conn, llm_api_key, embedder_model_path)
     # collect news articles and then rectify
     logger.info("Starting collection from rss feeds.")
-    collect(sources=feed_sources_path, store_func=beansack.store)
+    rssfeed.collect(sources=feed_sources_path, store_func=beansack.store)
+    logger.info("Starting collection from YC hackernews.")
+    ychackernews.collect(store_func=beansack.store)
     # TODO: add collection from reddit
     # TODO: add collection from nextdoor
     # TODO: add collection from linkedin
@@ -49,7 +51,8 @@ def start_chat():
         ))
     
 if __name__ == "__main__":
-    if instance_mode in ["INDEXER", "COLLECTOR"]:
-        start_collector()
+    if instance_mode == "CHAT":
+        start_chat()        
     else:
-        start_chat()
+        start_collector()
+        

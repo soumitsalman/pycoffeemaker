@@ -4,6 +4,7 @@
 
 from datetime import datetime, timedelta
 from functools import reduce
+import operator
 from nlp.chains import *
 from nlp.embedding import *
 from .datamodels import *
@@ -50,13 +51,21 @@ class Beansack:
         exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
         beans = [bean for bean in beans if (bean.url not in exists) and bean.text]
         current_time = int(datetime.now().timestamp())
+        
+        # removing the media noises into separate item        
+        noises = []
+        for bean in beans:
+            if bean.noise:
+                bean.noise.url = bean.url                
+                bean.noise.updated = current_time
+                bean.noise.text = truncate(bean.noise.text) if bean.noise.text else None
+                noises.append(bean.noise)
+                bean.noise = None    
+        self.noisestore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in noises])
 
-        ############
-        # TODO: remove the media noises into separate item
-        ############
-
+        # process items with text body. if the body is empty just scrap it
         # process the articles, posts, comments differently from the channels
-        chatters = [bean for bean in beans if bean.kind != CHANNEL ] 
+        chatters = [bean for bean in beans if bean.kind != CHANNEL and bean.text ] 
         for bean in chatters:
             bean.updated = current_time
             bean.text = truncate(bean.text)
@@ -65,10 +74,9 @@ class Beansack:
             res = self.beanstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in chatters])
             logger.info("%d beans inserted", len(res.inserted_ids))            
             self.rectify_beans(chatters)   
-            nuggets = self.extract_nuggets(chatters, current_time)
-            if nuggets:         
-                self.rectify_nuggets(nuggets)
-                self.rectify_trendscore_and_mapping(nuggets)
+            nuggets = self.extract_nuggets(chatters, current_time)            
+            self.rectify_nuggets(nuggets)            
+            self.rectify_trendscore_and_mapping(beans, nuggets)
 
         #############        
         # TODO: process channels differently
@@ -111,7 +119,7 @@ class Beansack:
                 ],
                 K_UPDATED: { "$gte": get_timevalue(last_ndays) }
             }
-        ).sort({K_UPDATED: -1}))  
+        ))  
         self.rectify_beans(beans)
 
         # get all the nuggets to rectify        
@@ -120,15 +128,16 @@ class Beansack:
                 K_EMBEDDING: { "$exists": False },
                 K_UPDATED: { "$gte": get_timevalue(last_ndays) }
             }
-        ).sort({K_UPDATED: -1}))
+        ))
         nuggets = self.rectify_nuggets(nuggets)       
         
         if remap_all:
             # pull in all nuggets or else keep the ones in the rectify window
-            nuggets = _deserialize_nuggets(self.nuggetstore.find({ K_EMBEDDING: { "$exists": True }}))
+            beans = _deserialize_beans(self.beanstore.find(filter = { K_EMBEDDING: { "$exists": True }, K_UPDATED: { "$gte": get_timevalue(last_ndays)}}, projection = { K_URL: 1 }))
+            nuggets = _deserialize_nuggets(self.nuggetstore.find({ K_EMBEDDING: { "$exists": True }, K_UPDATED: { "$gte": get_timevalue(last_ndays)}}))
 
         # rectify the mappings
-        self.rectify_trendscore_and_mapping(nuggets) 
+        self.rectify_trendscore_and_mapping(beans, nuggets) 
 
     def rectify_beans(self, beans: list[Bean]):
         summarizer = Summarizer(self.llm_api_key)
@@ -146,9 +155,10 @@ class Beansack:
                 pass # do nothing, to set will be empty
             return UpdateOne({K_URL: bean.url}, {"$set": to_set}), bean
         
-        updates, beans = zip(*[_generate(bean) for bean in beans])
-        update_count = _update_collection(self.beanstore, list(updates))
-        logger.info(f"{update_count} beans rectified")
+        if beans:
+            updates, beans = zip(*[_generate(bean) for bean in beans])
+            update_count = _update_collection(self.beanstore, list(updates))
+            logger.info(f"{update_count} beans rectified")
         return beans
 
     def rectify_nuggets(self, nuggets: list[Nugget]):
@@ -163,25 +173,37 @@ class Beansack:
                 logger.warning(f"nugget rectification error: {err}")
             return UpdateOne({K_KEYPHRASE: nugget.keyphrase, K_DESCRIPTION: nugget.description}, {"$set": to_set}), nugget
         
-        updates, nuggets = zip(*[_generate(nugget) for nugget in nuggets])
-        update_count =_update_collection(self.nuggetstore, list(updates))
-        logger.info(f"{update_count} nuggets rectified")
+        if nuggets:
+            updates, nuggets = zip(*[_generate(nugget) for nugget in nuggets])
+            update_count =_update_collection(self.nuggetstore, list(updates))
+            logger.info(f"{update_count} nuggets rectified")
         return nuggets
 
-    def rectify_trendscore_and_mapping(self, nuggets: list[Nugget]):        
-        search = lambda embedding: [bean.url for bean in self.search_beans(
-            embedding = embedding, 
-            filter = {K_KIND: {"$ne": CHANNEL }}, 
-            min_score = DEFAULT_MAPPING_SCORE,
-            limit = DEFAULT_LIMIT, 
-            projection = {K_URL: 1})]        
-        update_one = lambda nugget, urls: UpdateOne(
-                {K_KEYPHRASE: nugget.keyphrase, K_DESCRIPTION: nugget.description, K_UPDATED: nugget.updated}, 
-                {"$set": { K_TRENDSCORE: self._calculate_trend_score(urls), K_URLS: urls}})
-        
-        update_count = _update_collection(self.nuggetstore, [update_one(nugget, search(nugget.embedding)) for nugget in nuggets if nugget.embedding])
+    def rectify_trendscore_and_mapping(self, beans: list[Bean], nuggets: list[Nugget]):    
+        # rectify beans trend score
+        if beans:
+            noises = {noise.url: noise for noise in self._get_latest_noisestats([bean.url for bean in beans])}
+            update_one = lambda bean: UpdateOne({K_URL: bean.url}, {"$set": { K_TRENDSCORE: noises[bean.url].score}})
+            update_count = _update_collection(self.beanstore, [update_one(bean) for bean in beans if bean.url in noises])
+            logger.info(f"{update_count} beans updated with trendscore")
 
-        logger.info(f"{update_count} nuggets remapped")
+        if nuggets:
+            # rectify nuggets trend score and mapping 
+            # beans are already rectified with trendscore. so just leverage that  
+            getbeans = lambda urls: self.beanstore.find(filter = {K_URL: {"$in": urls}}, projection={K_TRENDSCORE:1})
+            nugget_trend_score = lambda urls: reduce(operator.add, [(bean[K_TRENDSCORE] or 0) for bean in getbeans(urls) if K_TRENDSCORE in bean], len(urls)*10)   
+            search = lambda embedding: [bean.url for bean in self.search_beans(
+                embedding = embedding, 
+                filter = {K_KIND: {"$ne": CHANNEL }}, 
+                min_score = DEFAULT_MAPPING_SCORE,
+                limit = DEFAULT_LIMIT, 
+                projection = {K_URL: 1})]        
+            update_one = lambda nugget, urls: UpdateOne(
+                    {K_KEYPHRASE: nugget.keyphrase, K_DESCRIPTION: nugget.description, K_UPDATED: nugget.updated}, 
+                    {"$set": { K_TRENDSCORE: nugget_trend_score(urls), K_URLS: urls}})
+            
+            update_count = _update_collection(self.nuggetstore, [update_one(nugget, search(nugget.embedding)) for nugget in nuggets if nugget.embedding])
+            logger.info(f"{update_count} nuggets remapped")
 
     def get_beans(self,
             filter, 
@@ -320,7 +342,7 @@ class Beansack:
     def _get_latest_noisestats(self, urls: list[str]) -> list[Noise]:
         pipeline = [
             {
-                "$match": { "mapped_url": {"$in": urls} }
+                "$match": { "url": {"$in": urls} }
             },
             {
                 "$sort": {"updated": -1}
@@ -328,12 +350,12 @@ class Beansack:
             {
                 "$group": {
                     "_id": {
-                        "mapped_url": "$mapped_url",
+                        "url": "$url",
                         "source":     "$source",
                         "channel":    "$channel",
                     },
                     "updated":       {"$first": "$updated"},
-                    "mapped_url":    {"$first": "$mapped_url"},
+                    "url":           {"$first": "$url"},
                     "channel":       {"$first": "$channel"},
                     "container_url": {"$first": "$container_url"},
                     "likes":         {"$first": "$likes"},
@@ -342,9 +364,8 @@ class Beansack:
             },
             {
                 "$group": {
-                    "_id":           "$mapped_url",
-                    "updated":       {"$first": "$updated"},
-                    "mapped_url":    {"$first": "$mapped_url"},
+                    "_id":           "$url",
+                    "url":           {"$first": "$url"},
                     "channel":       {"$first": "$channel"},
                     "container_url": {"$first": "$container_url"},
                     "likes":         {"$sum": "$likes"},
@@ -353,7 +374,7 @@ class Beansack:
             },
             {
                 "$project": {
-                    "mapped_url":    1,
+                    "url":    1,
                     "channel":       1,
                     "container_url": 1,
                     "likes":         1,
@@ -373,7 +394,6 @@ class Beansack:
     def _calculate_trend_score(self, urls: list[str]) -> int:
         noises = self._get_latest_noisestats(urls)       
         return reduce(lambda a, b: a + b, [n.score for n in noises if n.score], len(urls)*10) 
-
 
 def _deduplicate_nuggets(nuggets):
     if not nuggets:
