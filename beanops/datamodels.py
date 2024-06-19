@@ -31,6 +31,7 @@ class Bean(BaseModel):
     topic: Optional[str] = None
     embedding: Optional[list[float]] = None
     search_score: Optional[float|int] = None
+    trend_score: Optional[int] = None
 
     def digest(self):
         return f"{self.kind} from {self.source}\nTitle: {self.title}\nBody: {self.text}"
@@ -51,7 +52,7 @@ class Nugget(BaseModel):
     trend_score: Optional[int] = None
 
     def digest(self) -> str:
-        return f"{self.keyphrase}: {self.description}"
+        return (self.keyphrase or "" )+((": "+self.description) if self.description else "")
 
 K_MAPPED_URL = "mapped_url"
 

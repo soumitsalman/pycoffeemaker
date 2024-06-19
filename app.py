@@ -12,7 +12,6 @@ if __name__ == "__main__":
     curr_dir = os.path.dirname(os.path.abspath(__file__))
     env_path = f"{curr_dir}/.env"
     embedder_model_path = f"{curr_dir}/models/nomic.gguf"
-    llm_model_path = f"{curr_dir}/models/phi-3-mini-4k.gguf"
     feed_sources_path = f"{curr_dir}/newscollector/feedsources.txt"
     logger_path = f"{curr_dir}/app.log"
     
@@ -20,27 +19,10 @@ if __name__ == "__main__":
     
     instance_mode = os.getenv("INSTANCE_MODE")
     llm_api_key = os.getenv('GROQ_API_KEY')
-    deepinfra_api_key = os.getenv('DEEPINFRA_API_KEY')
     db_conn = os.getenv('DB_CONNECTION_STRING')
 
     utils.set_logger_path(logger_path)  
     logger = utils.create_logger(instance_mode)
-
-
-import json
-
-# this is for debug only
-def write_json(beans, file_name: str = None):
-    if beans:
-        with open(f"{curr_dir}/test/{file_name or beans[0].source}.json", 'w') as file:
-            try:
-                json.dump([bean.model_dump(exclude_unset=True, exclude_none=True) for bean in beans], file)
-            except:
-                pass
-
-def write_text(text, file_name):
-    with open(f"{curr_dir}/test/{file_name}", 'w') as file:
-        file.write(text)
 
 from newscollector.rssfeeder import collect
 from beanops.beansack import Beansack
@@ -60,26 +42,12 @@ def start_collector():
 import interact
 
 def start_chat():
-    interact.initialize(
-        Beansack(db_conn, llm_api_key, embedder_model_path),
-        llm_model_path)
-
-    try:
-        for user_input in ["generative ai", "Donald Trump"]:
-            # user_input = input("Enter something: ")
-            if user_input.lower() == "exit":
-                print("Exiting...")
-                break
-            else:
-                resp = interact.generate(user_input)
-                print(resp)
-                # write_json(nwb, "RETRIEVED_NWB")
-                # write_text(resp.markdown(), "GENERATED_BLOG.md")
-                
-    except KeyboardInterrupt:
-        print("\nExiting...")
-
-
+    interact._run_console(
+        interact.InteractSession(
+            Beansack(db_conn, llm_api_key, embedder_model_path),
+            llm_api_key
+        ))
+    
 if __name__ == "__main__":
     if instance_mode in ["INDEXER", "COLLECTOR"]:
         start_collector()

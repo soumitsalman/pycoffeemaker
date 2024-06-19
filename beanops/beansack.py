@@ -22,11 +22,13 @@ NUGGETS = "concepts"
 NOISES = "noises"
 SOURCES = "sources"
 
-DEFAULT_MIN_SEARCH_SCORE = 0.7
-DEFAULT_LIMIT = 50
+DEFAULT_SEARCH_SCORE = 0.65
+DEFAULT_MAPPING_SCORE = 0.65
+DEFAULT_LIMIT = 100
 
-LATEST = {K_UPDATED: -1}
+LATEST = {K_TRENDSCORE: -1}
 TRENDING = {K_TRENDSCORE: -1}
+TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_TRENDSCORE: -1}
 
 CLEANUP_WINDOW = 30
 
@@ -66,7 +68,7 @@ class Beansack:
             nuggets = self.extract_nuggets(chatters, current_time)
             if nuggets:         
                 self.rectify_nuggets(nuggets)
-                self.rectify_mappings(nuggets)
+                self.rectify_trendscore_and_mapping(nuggets)
 
         #############        
         # TODO: process channels differently
@@ -89,7 +91,7 @@ class Beansack:
 
     def rectify_beansack(self, last_ndays:int, cleanup:bool, remap_all: bool):        
         if cleanup:
-            time_filter = {K_UPDATED: { "$lte": _get_time(CLEANUP_WINDOW) }}
+            time_filter = {K_UPDATED: { "$lte": get_timevalue(CLEANUP_WINDOW) }}
             # clean up beanstore (but retain the channels)
             res = self.beanstore.delete_many(time_filter)
             logger.info("%d old beans deleted", res.deleted_count)
@@ -107,7 +109,7 @@ class Beansack:
                     { K_EMBEDDING: { "$exists": False } },
                     { K_SUMMARY: { "$exists": False } }
                 ],
-                K_UPDATED: { "$gte": _get_time(last_ndays) }
+                K_UPDATED: { "$gte": get_timevalue(last_ndays) }
             }
         ).sort({K_UPDATED: -1}))  
         self.rectify_beans(beans)
@@ -116,7 +118,7 @@ class Beansack:
         nuggets = _deserialize_nuggets(self.nuggetstore.find(
             {
                 K_EMBEDDING: { "$exists": False },
-                K_UPDATED: { "$gte": _get_time(last_ndays) }
+                K_UPDATED: { "$gte": get_timevalue(last_ndays) }
             }
         ).sort({K_UPDATED: -1}))
         nuggets = self.rectify_nuggets(nuggets)       
@@ -126,7 +128,7 @@ class Beansack:
             nuggets = _deserialize_nuggets(self.nuggetstore.find({ K_EMBEDDING: { "$exists": True }}))
 
         # rectify the mappings
-        self.rectify_mappings(nuggets) 
+        self.rectify_trendscore_and_mapping(nuggets) 
 
     def rectify_beans(self, beans: list[Bean]):
         summarizer = Summarizer(self.llm_api_key)
@@ -151,7 +153,7 @@ class Beansack:
 
     def rectify_nuggets(self, nuggets: list[Nugget]):
         embedder = LocalNomic(self.embedder_model_path)
-
+        
         def _generate(nugget: Nugget):
             to_set = {}
             try:
@@ -166,11 +168,11 @@ class Beansack:
         logger.info(f"{update_count} nuggets rectified")
         return nuggets
 
-    def rectify_mappings(self, nuggets: list[Nugget]):        
+    def rectify_trendscore_and_mapping(self, nuggets: list[Nugget]):        
         search = lambda embedding: [bean.url for bean in self.search_beans(
             embedding = embedding, 
             filter = {K_KIND: {"$ne": CHANNEL }}, 
-            min_score = DEFAULT_MIN_SEARCH_SCORE,
+            min_score = DEFAULT_MAPPING_SCORE,
             limit = DEFAULT_LIMIT, 
             projection = {K_URL: 1})]        
         update_one = lambda nugget, urls: UpdateOne(
@@ -178,6 +180,7 @@ class Beansack:
                 {"$set": { K_TRENDSCORE: self._calculate_trend_score(urls), K_URLS: urls}})
         
         update_count = _update_collection(self.nuggetstore, [update_one(nugget, search(nugget.embedding)) for nugget in nuggets if nugget.embedding])
+
         logger.info(f"{update_count} nuggets remapped")
 
     def get_beans(self,
@@ -194,22 +197,26 @@ class Beansack:
         return _deserialize_beans(cursor)
 
     def get_nuggets(self,
-            filter, 
+            filter = None, 
             limit = None, 
-            sort_by = None, 
-            projection = None
-        ) -> list[Nugget]:
-        cursor = self.nuggetstore.find(filter = filter, projection = projection)
+            sort_by = None
+        ) -> list[Nugget]:        
+        # append the embeddings filter so that it takes into account only the indexed items
+        filter = {
+            **{K_EMBEDDING: {"$exists": True}}, 
+            **(filter or {})
+        }        
+        cursor = self.nuggetstore.find(filter=filter)
         if sort_by:
             cursor = cursor.sort(sort_by)
         if limit:
             cursor = cursor.limit(limit)
-        return _deserialize_nuggets(cursor)
+        return _deduplicate_nuggets(_deserialize_nuggets(cursor))
 
     def search_beans(self, 
             query: str = None,
             embedding: list[float] = None, 
-            min_score = DEFAULT_MIN_SEARCH_SCORE, 
+            min_score = DEFAULT_SEARCH_SCORE, 
             filter = None, 
             limit = DEFAULT_LIMIT, 
             sort_by = None, 
@@ -221,67 +228,67 @@ class Beansack:
     def search_nuggets(self, 
             query: str = None,
             embedding: list[float] = None, 
-            min_score = DEFAULT_MIN_SEARCH_SCORE, 
+            min_score = DEFAULT_SEARCH_SCORE, 
             filter = None, 
             limit = DEFAULT_LIMIT, 
             sort_by = None, 
             projection = None
         ) -> list[Nugget]:
         pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
-        return _deserialize_nuggets(self.nuggetstore.aggregate(pipeline=pipline))
+        return _deduplicate_nuggets(_deserialize_nuggets(self.nuggetstore.aggregate(pipeline=pipline)))
     
-    def search_beans_with_nuggets(self, 
+    def trending_beans(self, 
             query: str = None,
             embedding: list[float] = None, 
-            min_score = DEFAULT_MIN_SEARCH_SCORE, 
-            limit = DEFAULT_LIMIT,
-            filter = None,              
+            min_score = DEFAULT_SEARCH_SCORE, 
+            filter = None, 
+            limit = DEFAULT_LIMIT, 
             projection = None
-        ) -> list[dict]:
-        beans = self.search_beans(
-            query=query, 
-            embedding=embedding, 
-            min_score=min_score,
-            filter=filter,
-            limit=limit, 
-            sort_by=LATEST, 
-            projection=projection)
+        ) -> list[Bean]:        
+        # TODO: calculate the trend score from the social media
+        if not (query or embedding):
+            # if query or embedding is not given, then this is scalar query
+            return self.get_beans(filter=filter, limit=limit, sort_by=TRENDING_AND_LATEST, projection=projection)
+        else:
+            # else run the vector query
+            return self.search_beans(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=TRENDING_AND_LATEST, projection=projection)
 
-        url_filter = lambda bean: { K_URLS: {"$in": [bean.url] }}
-        bwn = lambda bean: {"bean": bean, "nuggets": self.get_nuggets(filter = url_filter(bean), sort_by={**LATEST,**TRENDING}, projection={K_KEYPHRASE: 1, K_EVENT: 1, K_DESCRIPTION: 1, K_URLS: 1})}       
-        return [bwn(bean) for bean in beans]
-
+    def trending_nuggets(self, 
+            query: str = None,
+            embedding: list[float] = None, 
+            min_score = DEFAULT_SEARCH_SCORE,             
+            filter = None,
+            limit = DEFAULT_LIMIT            
+        ) -> list:
+        # HACK: limit value multiplication is a to make sure that we retrieve enough elements to dedupe this
+        if not (query or embedding):
+            # if query or embedding is not given, then this is scalar query            
+            result = self.get_nuggets(filter = filter, limit = limit * 10, sort_by=TRENDING_AND_LATEST)
+        else:
+            # else run the vector query
+            result = self.search_nuggets(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit*10, sort_by=TRENDING_AND_LATEST)
+        return result[:limit]
+    
     def search_nuggets_with_beans(self, 
             query: str = None,
             embedding: list[float] = None, 
-            min_score = DEFAULT_MIN_SEARCH_SCORE, 
+            min_score = DEFAULT_SEARCH_SCORE, 
             limit = DEFAULT_LIMIT,
             filter = None
         ) -> list:
         # search for the nuggets with that query/embedding
-        nuggets = self.search_nuggets(
+        nuggets = _deduplicate_nuggets(self.search_nuggets(
             query=query,
             embedding=embedding,
             min_score=min_score,
-            filter=filter, # filter does not apply to nuggets
-            limit=limit, 
+            filter=filter, 
+            limit=limit*5, # HACK: to make sure that we retrieve enough elements to dedupe this
             sort_by={**LATEST,**TRENDING}
-        )   
-        if nuggets:
-            CLUSTER_DISTANCE = 18  # 18 seems to work. I HAVE NO IDEA WHAT THIS MEANS
-            linkage_matrix = linkage(pairwise_distances([nugget.embedding for nugget in nuggets], metric='euclidean'), method='single')
-            clusters = fcluster(linkage_matrix, t=CLUSTER_DISTANCE, criterion='distance')
-            groups = {}
-            for nugget, label in zip(nuggets, clusters):
-                if label in groups:
-                    groups[label].urls.append(nugget.urls)
-                else:
-                    groups[label] = nugget
-            
-            bean_filter = lambda nug: {**{K_URL: {"$in": nug.urls }}, **(filter or {})}
-            getbeans = lambda nug: self.get_beans(filter = bean_filter(nug), limit=limit, sort_by=LATEST, projection={K_EMBEDDING: 0})
-            # then get the beans for each of those nuggets
-            return [(nug, getbeans(nug)) for nug in groups.values()]        
+        ))  
+        bean_filter = lambda nug: {**{K_URL: {"$in": nug.urls }}, **(filter or {})}
+        getbeans = lambda nug: self.get_beans(filter = bean_filter(nug), limit=limit, sort_by=LATEST, projection={K_EMBEDDING: 0})
+        # then get the beans for each of those nuggets
+        return [(nug, getbeans(nug)) for nug in nuggets[:limit]] 
 
     def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
         pipline = [
@@ -367,7 +374,23 @@ class Beansack:
         noises = self._get_latest_noisestats(urls)       
         return reduce(lambda a, b: a + b, [n.score for n in noises if n.score], len(urls)*10) 
 
-    
+
+def _deduplicate_nuggets(nuggets):
+    if not nuggets:
+        return []
+    # TODO: this line is to make sure that we don't take into account things that have not yet been indexed
+    nuggets = [nugget for nugget in nuggets if nugget.embedding]
+
+    CLUSTER_DISTANCE = 18  # 18 seems to work. I HAVE NO IDEA WHAT THIS MEANS
+    linkage_matrix = linkage(pairwise_distances([nugget.embedding for nugget in nuggets], metric='euclidean'), method='single')
+    clusters = fcluster(linkage_matrix, t=CLUSTER_DISTANCE, criterion='distance')
+    groups = {}
+    for nugget, label in zip(nuggets, clusters):
+        if label in groups:
+            groups[label].urls.append(nugget.urls)
+        else:
+            groups[label] = nugget
+    return list(groups.values())
 
 ## local utilities for pymongo
 def _deserialize_beans(cursor) -> list[Bean]:
@@ -398,5 +421,7 @@ def _update_collection(collection: Collection, updates: list[UpdateOne]):
     return modified_count
 
 
-def _get_time(last_ndays: int):
+def get_timevalue(last_ndays: int):
     return int((datetime.now() - timedelta(days=last_ndays)).timestamp())
+
+

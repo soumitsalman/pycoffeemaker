@@ -48,10 +48,10 @@ def test_collection_live():
     beansack = Beansack(db_conn, llm_api_key, embedder_path)
     rssfeeder.collect(sources=feed_source, store_func=beansack.store)
 
-from interact import InteractSession
+import interact
 
 def test_writing():
-    session = InteractSession(Beansack(db_conn, llm_api_key, embedder_path), llm_api_key)
+    session = interact.InteractSession(Beansack(db_conn, llm_api_key, embedder_path), llm_api_key)
     try:
         for user_input in ["generative ai", "Donald Trump"]:
             # user_input = input("Enter something: ")
@@ -59,10 +59,8 @@ def test_writing():
                 print("Exiting...")
                 break
             else:
-                resp = session.write(user_input)
+                resp = interact.write(session, user_input)
                 write_text(resp, f"{user_input}.md")
-                # write_json(nwb, "RETRIEVED_NWB")
-                # write_text(resp.markdown(), "GENERATED_BLOG.md")
                 
     except KeyboardInterrupt:
         print("\nExiting...")

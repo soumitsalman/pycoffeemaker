@@ -124,7 +124,7 @@ class ArticleWriter:
         self.chain = prompt | llm | StrOutputParser()
 
     # highlights, coontents and sources should havethe same number of items
-    def writer_article(self, highlights: list, contents:list, sources: list, content_type: str = DEFAULT_CONTENT_TYPE):                  
+    def write_article(self, highlights: list, contents:list, sources: list, content_type: str = DEFAULT_CONTENT_TYPE):                  
         article = "## Trending Highlights\n"+"\n".join(['- '+item for item in highlights])+"\n\n"
         for i in range(len(contents)):                                         
             article += (
@@ -133,6 +133,13 @@ class ArticleWriter:
                 ", ".join({src[0]:f"[{src[0]}]({src[1]})" for src in sources[i]}.values()) + 
                 "\n\n")   
         return article
+
+    # highlights, coontents and sources should havethe same number of items
+    def stream_article(self, highlights: list, contents:list, sources: list, content_type: str = DEFAULT_CONTENT_TYPE):                  
+        yield "## Trending Highlights\n"+"\n".join(['- '+item for item in highlights])
+        for i in range(len(contents)):                                         
+           yield self.write_section(highlights[i], contents[i], content_type)
+           yield "**Sources:** "+ ", ".join({src[0]:f"[{src[0]}]({src[1]})" for src in sources[i]}.values())
 
     @retry(tries=3, jitter=10, delay=10, logger=create_logger("article writer"))
     def write_section(self, topic: str, drafts: list[str], content_type: str = DEFAULT_CONTENT_TYPE) -> str:        
