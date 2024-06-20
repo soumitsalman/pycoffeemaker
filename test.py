@@ -55,10 +55,10 @@ def test_rectify_beansack():
     beansack.rectify_beansack(1, False, True)
 
 
-import interact
+import interactives.console as console
 
 def test_writing():
-    session = interact.InteractSession(Beansack(db_conn, llm_api_key, embedder_path), llm_api_key)
+    session = console.InteractSession(Beansack(db_conn, llm_api_key, embedder_path), llm_api_key)
     try:
         for user_input in ["generative ai", "Donald Trump"]:
             # user_input = input("Enter something: ")
@@ -66,7 +66,7 @@ def test_writing():
                 print("Exiting...")
                 break
             else:
-                resp = interact.write(session, user_input)
+                resp = console.write(session, user_input)
                 write_text(resp, f"{user_input}.md")
                 
     except KeyboardInterrupt:

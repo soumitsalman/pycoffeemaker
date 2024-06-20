@@ -41,13 +41,13 @@ def start_collector():
     beansack.rectify_beansack(3, True, True)
 
 
-import interact
+import interactives.console as console
 
 def start_chat():
-    interact._run_console(
-        interact.InteractSession(
-            Beansack(db_conn, llm_api_key, embedder_model_path),
-            llm_api_key
+    console.run_console(
+        console.InteractSession(
+            Beansack(conn_str=db_conn, embedder_model_path=embedder_model_path),
+            os.getenv("DEEPINFRA_API_KEY")
         ))
     
 if __name__ == "__main__":

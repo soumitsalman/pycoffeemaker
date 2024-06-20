@@ -303,13 +303,14 @@ class Beansack:
             embedding=embedding,
             min_score=min_score,
             filter=filter, 
-            limit=limit*5, # HACK: to make sure that we retrieve enough elements to dedupe this
+            limit=limit*10, # HACK: to make sure that we retrieve enough elements to dedupe this
             sort_by={**LATEST,**TRENDING}
         ))  
         bean_filter = lambda nug: {**{K_URL: {"$in": nug.urls }}, **(filter or {})}
         getbeans = lambda nug: self.get_beans(filter = bean_filter(nug), limit=limit, sort_by=LATEST, projection={K_EMBEDDING: 0})
         # then get the beans for each of those nuggets
-        return [(nug, getbeans(nug)) for nug in nuggets[:limit]] 
+        if nuggets:
+            return [(nug, getbeans(nug)) for nug in nuggets[:limit]] 
 
     def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
         pipline = [
@@ -380,22 +381,23 @@ class Beansack:
         noises = self._get_latest_noisestats(urls)       
         return reduce(lambda a, b: a + b, [n.score for n in noises if n.score], len(urls)*10) 
 
-def _deduplicate_nuggets(nuggets):
-    if not nuggets:
-        return []
+def _deduplicate_nuggets(nuggets: list[Nugget]):
     # TODO: this line is to make sure that we don't take into account things that have not yet been indexed
     nuggets = [nugget for nugget in nuggets if nugget.embedding]
-
-    CLUSTER_DISTANCE = 18  # 18 seems to work. I HAVE NO IDEA WHAT THIS MEANS
-    linkage_matrix = linkage(pairwise_distances([nugget.embedding for nugget in nuggets], metric='euclidean'), method='single')
-    clusters = fcluster(linkage_matrix, t=CLUSTER_DISTANCE, criterion='distance')
-    groups = {}
-    for nugget, label in zip(nuggets, clusters):
-        if label in groups:
-            groups[label].urls.append(nugget.urls)
-        else:
-            groups[label] = nugget
-    return list(groups.values())
+    if nuggets and len(nuggets)>1:
+        # do the comparison ONLY if there are 2 or more items
+        CLUSTER_DISTANCE = 18  # 18 seems to work. I HAVE NO IDEA WHAT THIS MEANS
+        linkage_matrix = linkage(pairwise_distances([nugget.embedding for nugget in nuggets], metric='euclidean'), method='single')
+        clusters = fcluster(linkage_matrix, t=CLUSTER_DISTANCE, criterion='distance')
+        groups = {}
+        for nugget, label in zip(nuggets, clusters):
+            if label in groups:
+                groups[label].urls.append(nugget.urls)
+            else:
+                groups[label] = nugget
+        return list(groups.values())
+    else:
+        return nuggets
 
 ## local utilities for pymongo
 def _deserialize_beans(cursor) -> list[Bean]:

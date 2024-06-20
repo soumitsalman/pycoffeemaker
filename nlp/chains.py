@@ -27,11 +27,8 @@ def combine_texts(texts: list[str], batch_size: int, delimiter: str = "```") -> 
 import re
 
 SUMMARIZER_TEMPLATE = """<|start_header_id|>system<|end_header_id|>
-Your task is to write a concise summary of the content provided by user. The summary should be less than 150 words.
-Output MUST BE of markdown format like below:
-```markdown
-'summary'
-```
+Your task is to write a concise summary of the content provided by user. The summary should be less than 200 words.
+Output MUST BE in markdown format.
 <|eot_id|><|start_header_id|>user<|end_header_id|>
 Summarize the content below:\n{content}
 <|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
@@ -92,57 +89,3 @@ class NuggetExtractor:
     def _extract(self, text: str):        
         res = self.chain.invoke({"input":text})
         return res[K_MESSAGES] if (K_MESSAGES in res) else res
-
-####################
-## ARTICLE WRITER ##
-####################
-
-# A section contains ONLY a 'title' and a 'body'. 
-# - The 'title' is less 20 words
-# - The 'body' is around 250 - 400 words
-
-
-WRITER_TEMPLATE = """<|start_header_id|>system<|end_header_id|>
-You are a {content_type} writer. Your task is to rewrite one section of a {content_type} on a given topic from the drafts provided by the user. 
-From the drafts extract ONLY the contents that are strictly relevant to the topic and write the section based on ONLY that. You MUST NOT use your own knowledge for this. 
-The section should have a title and body. The section should be less that 350 words. Output MUST be in markdown format.
-<|eot_id|><|start_header_id|>user<|end_header_id|>
-Rewrite a section on topic '{topic}' ONLY based on the following drafts:\n{drafts}
-<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
-WRITER_MODEL = "llama3-8b-8192"
-WRITER_BATCH_SIZE = 6144
-DEFAULT_CONTENT_TYPE = "blog"
-
-class ArticleWriter:
-    def __init__(self, api_key: str):
-        prompt = PromptTemplate.from_template(template=WRITER_TEMPLATE)
-        llm = ChatGroq(api_key=api_key, model=WRITER_MODEL, temperature=0.1, verbose=False, streaming=False, max_tokens=512)
-        self.chain = prompt | llm | StrOutputParser()
-
-    # highlights, coontents and sources should havethe same number of items
-    def write_article(self, highlights: list, contents:list, sources: list, content_type: str = DEFAULT_CONTENT_TYPE):                  
-        article = "## Trending Highlights\n"+"\n".join(['- '+item for item in highlights])+"\n\n"
-        for i in range(len(contents)):                                         
-            article += (
-                self.write_section(highlights[i], contents[i], content_type) +
-                "\n**Sources:** "+ 
-                ", ".join({src[0]:f"[{src[0]}]({src[1]})" for src in sources[i]}.values()) + 
-                "\n\n")   
-        return article
-
-    # highlights, coontents and sources should havethe same number of items
-    def stream_article(self, highlights: list, contents:list, sources: list, content_type: str = DEFAULT_CONTENT_TYPE):                  
-        yield "## Trending Highlights\n"+"\n".join(['- '+item for item in highlights])
-        for i in range(len(contents)):                                         
-           yield self.write_section(highlights[i], contents[i], content_type)
-           yield "**Sources:** "+ ", ".join({src[0]:f"[{src[0]}]({src[1]})" for src in sources[i]}.values())
-
-    @retry(tries=3, jitter=10, delay=10, logger=create_logger("article writer"))
-    def write_section(self, topic: str, drafts: list[str], content_type: str = DEFAULT_CONTENT_TYPE) -> str:        
-        while True:         
-            # run it once at least   
-            texts = combine_texts(drafts, WRITER_BATCH_SIZE, "\n\n\n")
-            # these are the new drafts
-            drafts = [self.chain.invoke({"content_type": content_type, "topic": topic, "drafts": text}) for text in texts]                           
-            if len(drafts) <= 1:
-                return drafts[0]
