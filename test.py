@@ -76,5 +76,5 @@ def test_writing():
 # test_writing()
 # test_nlp()
 # test_collection_local()
-test_collection_live()
-# test_rectify_beansack()
+# test_collection_live()
+test_rectify_beansack()

@@ -14,7 +14,7 @@ logger = create_logger("ychackernews collector")
 def collect(store_func):
     items = requests.get(TOP_STORIES_URL).json()
     beans = [collect_from(item) for item in items]
-    beans = [bean for bean in beans if bean and bean.text]
+    beans = [bean for bean in beans if (bean and bean.text)]
     logger.info("%d items collected from %s", len(beans), SOURCE)
     store_func(beans)
 
@@ -30,7 +30,7 @@ def collect_from(id: int):
         bean.noise=Noise(
             container_url=STORY_URL_TEMPLATE % id,
             likes=body.get('score'),
-            comments=len(body.get('kids', [])),
+            comments=len(body.get('kids') or []),
             source=SOURCE)   
         return bean     
     except Exception as err:

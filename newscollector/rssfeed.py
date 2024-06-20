@@ -34,6 +34,7 @@ def collect(sources: str|list[str] = DEFAULT_FEED_SOURCES, store_func = None):
     for url in sources:
         try:
             beans = collect_from(url)
+            beans = [bean for bean in beans if (bean and bean.text)]
             logger.info("%d beans collected: %s", len(beans) if beans else 0, url)
             if beans and store_func:
                 store_func(beans)                          

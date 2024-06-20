@@ -36,14 +36,16 @@ CLEANUP_WINDOW = 30
 logger = create_logger("beansack")
 
 class Beansack:
-    def __init__(self, conn_str: str, llm_api_key: str, embedder_model_path: str = None):        
+    def __init__(self, conn_str: str, llm_api_key: str = None, embedder_model_path: str = None):        
         client = MongoClient(conn_str)        
         self.beanstore: Collection = client[BEANSACK][BEANS]
         self.nuggetstore: Collection = client[BEANSACK][NUGGETS]
         self.noisestore: Collection = client[BEANSACK][NOISES]        
         self.sourcestore: Collection = client[BEANSACK][SOURCES]  
-        self.llm_api_key = llm_api_key
-        self.embedder_model_path = embedder_model_path
+        if llm_api_key:
+            self.nuggetor = NuggetExtractor(llm_api_key)
+            self.summarizer = Summarizer(llm_api_key)        
+        self.embedder = LocalNomic(embedder_model_path) if embedder_model_path else LocalNomic()
         
     # stores beans and post-processes them for generating embeddings, summary and nuggets
     def store(self, beans: list[Bean]):        
@@ -59,13 +61,15 @@ class Beansack:
                 bean.noise.url = bean.url                
                 bean.noise.updated = current_time
                 bean.noise.text = truncate(bean.noise.text) if bean.noise.text else None
+                bean.noise.score = (bean.noise.comments or 0)*3 + (bean.noise.likes or 0)
                 noises.append(bean.noise)
                 bean.noise = None    
-        self.noisestore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in noises])
+        if noises:
+            self.noisestore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in noises])
 
         # process items with text body. if the body is empty just scrap it
         # process the articles, posts, comments differently from the channels
-        chatters = [bean for bean in beans if bean.kind != CHANNEL and bean.text ] 
+        chatters = [bean for bean in beans if bean.kind != CHANNEL ] 
         for bean in chatters:
             bean.updated = current_time
             bean.text = truncate(bean.text)
@@ -83,11 +87,10 @@ class Beansack:
         #############
         # channels = [bean for bean in beans if bean.kind == CHANNEL ] 
 
-    def extract_nuggets(self, beans: list[Bean], batch_time: int) -> list[Nugget]:
-        nuggetor = NuggetExtractor(self.llm_api_key)
+    def extract_nuggets(self, beans: list[Bean], batch_time: int) -> list[Nugget]:         
         try:
             texts = [bean.text for bean in beans]
-            nuggets = [Nugget(keyphrase=n.get(K_KEYPHRASE), event=n.get(K_EVENT), description=n.get(K_DESCRIPTION)) for n in nuggetor.extract(texts)]
+            nuggets = [Nugget(keyphrase=n.get(K_KEYPHRASE), event=n.get(K_EVENT), description=n.get(K_DESCRIPTION)) for n in self.nuggetor.extract(texts)]
             # add updated value to keep track of collection time and batch number
             for n in nuggets:
                 n.updated = batch_time
@@ -97,7 +100,7 @@ class Beansack:
         except Exception as err:
             logger.warning("Nugget extraction failed %s", str(err))
 
-    def rectify_beansack(self, last_ndays:int, cleanup:bool, remap_all: bool):        
+    def rectify_beansack(self, last_ndays:int, cleanup:bool, rerank_all: bool):        
         if cleanup:
             time_filter = {K_UPDATED: { "$lte": get_timevalue(CLEANUP_WINDOW) }}
             # clean up beanstore (but retain the channels)
@@ -131,25 +134,22 @@ class Beansack:
         ))
         nuggets = self.rectify_nuggets(nuggets)       
         
-        if remap_all:
+        if rerank_all:
             # pull in all nuggets or else keep the ones in the rectify window
-            beans = _deserialize_beans(self.beanstore.find(filter = { K_EMBEDDING: { "$exists": True }, K_UPDATED: { "$gte": get_timevalue(last_ndays)}}, projection = { K_URL: 1 }))
-            nuggets = _deserialize_nuggets(self.nuggetstore.find({ K_EMBEDDING: { "$exists": True }, K_UPDATED: { "$gte": get_timevalue(last_ndays)}}))
+            beans = _deserialize_beans(self.beanstore.find(filter = { K_EMBEDDING: { "$exists": True }}, projection = { K_URL: 1 }))
+            nuggets = _deserialize_nuggets(self.nuggetstore.find({ K_EMBEDDING: { "$exists": True }}))
 
         # rectify the mappings
         self.rectify_trendscore_and_mapping(beans, nuggets) 
 
     def rectify_beans(self, beans: list[Bean]):
-        summarizer = Summarizer(self.llm_api_key)
-        embedder = LocalNomic(self.embedder_model_path)
-        
         def _generate(bean: Bean):
             to_set = {}
             try:
                 if not bean.embedding:
-                    bean.embedding = to_set[K_EMBEDDING] = embedder.embed_documents(bean.digest())
+                    bean.embedding = to_set[K_EMBEDDING] = self.embedder.embed_documents(bean.digest())
                 if not bean.summary:
-                    bean.summary = to_set[K_SUMMARY] = summarizer.summarize(bean.text)
+                    bean.summary = to_set[K_SUMMARY] = self.summarizer.summarize(bean.text)
             except Exception as err:
                 logger.warning(f"bean rectification error: {err}")
                 pass # do nothing, to set will be empty
@@ -162,13 +162,11 @@ class Beansack:
         return beans
 
     def rectify_nuggets(self, nuggets: list[Nugget]):
-        embedder = LocalNomic(self.embedder_model_path)
-        
         def _generate(nugget: Nugget):
             to_set = {}
             try:
                 if not nugget.embedding:                    
-                    nugget.embedding = to_set[K_EMBEDDING] = embedder.embed_queries(nugget.digest()) # embedding as a search query towards the documents      
+                    nugget.embedding = to_set[K_EMBEDDING] = self.embedder.embed_queries(nugget.digest()) # embedding as a search query towards the documents      
             except Exception as err:
                 logger.warning(f"nugget rectification error: {err}")
             return UpdateOne({K_KEYPHRASE: nugget.keyphrase, K_DESCRIPTION: nugget.description}, {"$set": to_set}), nugget
@@ -180,6 +178,7 @@ class Beansack:
         return nuggets
 
     def rectify_trendscore_and_mapping(self, beans: list[Bean], nuggets: list[Nugget]):    
+        # BUG: currently trend_score is calculated for the entire database. That should NOT be the case. There should be a different trend score per time segment
         # rectify beans trend score
         if beans:
             noises = {noise.url: noise for noise in self._get_latest_noisestats([bean.url for bean in beans])}
@@ -317,7 +316,7 @@ class Beansack:
             {
                 "$search": {
                     "cosmosSearch": {
-                        "vector": embedding or LocalNomic(self.embedder_model_path).embed_query(text),
+                        "vector": embedding or self.embedder.embed_query(text),
                         "path":   K_EMBEDDING,
                         "k":      limit,
                     },
@@ -351,15 +350,15 @@ class Beansack:
                 "$group": {
                     "_id": {
                         "url": "$url",
-                        "source":     "$source",
-                        "channel":    "$channel",
+                        "container_url": "$container_url"
                     },
                     "updated":       {"$first": "$updated"},
                     "url":           {"$first": "$url"},
                     "channel":       {"$first": "$channel"},
                     "container_url": {"$first": "$container_url"},
                     "likes":         {"$first": "$likes"},
-                    "comments":      {"$first": "$comments"}
+                    "comments":      {"$first": "$comments"},
+                    "score":         {"$first": "$score"}
                 }
             },
             {
@@ -369,22 +368,8 @@ class Beansack:
                     "channel":       {"$first": "$channel"},
                     "container_url": {"$first": "$container_url"},
                     "likes":         {"$sum": "$likes"},
-                    "comments":      {"$sum": "$comments"}
-                }
-            },
-            {
-                "$project": {
-                    "url":    1,
-                    "channel":       1,
-                    "container_url": 1,
-                    "likes":         1,
-                    "comments":      1,
-                    "score": {
-                        "$add": [                            
-                            {"$multiply": ["$comments", 3]},
-                            "$likes"
-                        ]
-                    }
+                    "comments":      {"$sum": "$comments"},
+                    "score":         {"$sum": "$score"}
                 }
             }
         ]

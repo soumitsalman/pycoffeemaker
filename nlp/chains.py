@@ -58,17 +58,13 @@ class Summarizer:
 from itertools import chain
 from pydantic import BaseModel, Field
 
-NUGGETS_TEMPLATE = """<|start_header_id|>system<|end_header_id|>
-Your task is to extract important points and messages from news articles, blogs and social media posts.
-The user will provide you one or more news articles, blogs or social media posts delimitered by ```. For each input extract the key points and messages.
-Each key point or message will contain a `keyphrase`, an `event` and a `description` field.
-The final output MUST BE a list of `messages` represented by array of json objects representing the structure of each `message`.
+NUGGETS_TEMPLATE = """Your task is to extract important key points and messages from news articles, blogs and social media posts provided as inputs.
+For each input (delimitered by ```) extract the key points and messages. Each key point or message will contain a `keyphrase`, an `event` and a `description` field.
+The final output MUST BE a list of `messages`.
 OUTPUT FORMAT: {format_instruction}
-<|eot_id|><|start_header_id|>user<|end_header_id|>
-Extract the key points and messages from the inputs below:\n```\n{input}\n```
-<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
+Extract the key points and messages from the inputs below:\n```\n{input}\n```"""
 NUGGETS_MODEL = "llama3-8b-8192"
-NUGGETS_BATCH_SIZE = 4096
+NUGGETS_BATCH_SIZE = 5120
 K_MESSAGES = "messages"
 
 class NuggetData(BaseModel):
