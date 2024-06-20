@@ -67,7 +67,7 @@ class InteractSession:
         trend_func = self.beansack.trending_nuggets if is_highlight(content_type) else self.beansack.trending_beans
         filter = self._create_time_filter(last_n_days) if is_highlight(content_type) else self._create_filters(content_type, last_n_days)
         if (not query) or isinstance(query, str):
-            return trend_func(query=query, filter=ic(filter), limit=self.limit)               
+            return trend_func(query=query, filter=filter, limit=self.limit)               
         else:
             # run multiple queries
             return {item: trend_func(query=item, filter=filter, limit=self.limit) for item in query}
@@ -92,11 +92,12 @@ class InteractSession:
             makesources = lambda beans: [(bean.source, bean.url) for bean in beans]
             sources = [makesources(item[1]) for item in nuggets_and_beans]
 
-            if stream:
-                for segment in self.article_writer.stream_article(highlights, initial_content, sources, content_type):
-                    yield segment
-            else:
-                return self.article_writer.write_article(highlights, initial_content, sources, content_type)        
+            # if stream:
+            #     for segment in self.article_writer.stream_article(highlights, initial_content, sources, content_type):
+            #         yield segment
+            # else:
+            #     return self.article_writer.write_article(highlights, initial_content, sources, content_type)        
+            return self.article_writer.write_article(highlights, initial_content, sources, content_type)  
     
     # @tool("configure_settings", args_schema=Settings)
     def configure(self, topics: str|list[str]=None, content_types: ContentType|list[ContentType] = None, last_n_days: int = None, top_n: int = None):
@@ -226,7 +227,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_community.llms.deepinfra import DeepInfra
 
-WRITER_TEMPLATE = """<|start_header_id|>system<|end_header_id|>
+WRITER_TEMPLATE = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 You are a {content_type} writer. Your task is to rewrite one section of a {content_type} on a given topic from the drafts provided by the user. 
 From the drafts extract ONLY the contents that are strictly relevant to the topic and write the section based on ONLY that. You MUST NOT use your own knowledge for this. 
 The section should have a title and body. The section should be less that 400 words. Output MUST be in markdown format.

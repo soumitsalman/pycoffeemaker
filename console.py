@@ -1,6 +1,17 @@
-import json
+## THIS IS MOSTLY AN EXAMPLE OF HOW TO USE INTERACTIVE ##
 from icecream import ic
-from .tools import InteractSession, InteractiveInputParser
+import os
+from dotenv import load_dotenv
+
+if __name__ == "__main__":
+    load_dotenv()
+    instance_mode = os.getenv("INSTANCE_MODE")
+    db_conn = os.getenv('DB_CONNECTION_STRING')
+    llm_api_key = os.getenv("DEEPINFRA_API_KEY")   
+
+
+from beanops.beansack import Beansack
+from interactives.tools import InteractSession, InteractiveInputParser
 from beanops.datamodels import *
 
 DEFAULT_CTYPE_TO_WRITE="newsletter"
@@ -26,7 +37,8 @@ def render(content, prefix: str = None):
             print("[", dt.fromtimestamp(bean.updated).strftime('%Y-%m-%d'), "] ", bean.source, ":", bean.title)
             print(bean.summary, "\n")
 
-def run_console(session: InteractSession):    
+def run_console(db_conn, llm_api_key):    
+    session = InteractSession(Beansack(conn_str=db_conn), llm_api_key)
     parser = InteractiveInputParser()
     try:
         # for user_input in ["generative ai", "Donald Trump"]:
@@ -52,3 +64,6 @@ def run_console(session: InteractSession):
                 
     except KeyboardInterrupt:
         print("\nExiting...")
+
+if __name__ == "__main__":
+    run_console(db_conn, llm_api_key)

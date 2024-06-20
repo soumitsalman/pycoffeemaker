@@ -1,4 +1,5 @@
-## MAIN FUNC ##
+## THIS IS USED IF THE PACKAGE IS DEPLOYED AS A COLLECTOR APPLICATION ##
+
 from icecream import ic
 import os
 from dotenv import load_dotenv
@@ -39,20 +40,7 @@ def start_collector():
     # TODO: add collection from linkedin
     logger.info("Starting large rectification.")
     beansack.rectify_beansack(3, True, True)
-
-
-import interactives.console as console
-
-def start_chat():
-    console.run_console(
-        console.InteractSession(
-            Beansack(conn_str=db_conn, embedder_model_path=embedder_model_path),
-            os.getenv("DEEPINFRA_API_KEY")
-        ))
-    
+   
 if __name__ == "__main__":
-    if instance_mode == "CHAT":
-        start_chat()        
-    else:
-        start_collector()
+    start_collector()
         

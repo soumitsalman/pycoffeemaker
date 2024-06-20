@@ -55,7 +55,7 @@ def test_rectify_beansack():
     beansack.rectify_beansack(1, False, True)
 
 
-import interactives.console as console
+import console as console
 
 def test_writing():
     session = console.InteractSession(Beansack(db_conn, llm_api_key, embedder_path), llm_api_key)
