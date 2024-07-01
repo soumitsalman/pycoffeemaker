@@ -38,6 +38,7 @@ class Settings(BaseModel):
     topics: Optional[str|list[str]] = Field(description="Users topics, domains, areas of interest/preference.", default = None)
     content_types: Optional[str|list[ContentType]] = Field(description="The list of content types the user is interested in such as social media posts, news articles, blogs etc.", default = None)
     last_n_days: Optional[int] = Field(description="The last N number of days of content user is interested in.", default = None)
+    limit: Optional[int] = Field(description="The top N items to return in the search result", default=None)
     # sources: Optional[list[str]] = Field(description="The list of news or social media sources the user is interested in such as Hackernews, Verge, Reddit.", default = None)
 
 def _translate_ctype(ctype: ContentType):
@@ -52,30 +53,33 @@ def _translate_ctype(ctype: ContentType):
 ## Session ##
 #############
 
+import copy
+
 class InteractSession:
     def __init__(self, bsack: Beansack, llm_api_key: str, default_limit = DEFAULT_LIMIT, default_ndays = DEFAULT_LAST_N_DAYS, default_topics = None, default_content_types = None):
         self.beansack = bsack
-        self.article_writer = ArticleWriter(llm_api_key)
-        self.limit = default_limit
-        self.settings = Settings(last_n_days = default_ndays, content_types = default_content_types, topics = default_topics)
+        self.llm_api_key = llm_api_key
+        self.settings = Settings(last_n_days = default_ndays, content_types = default_content_types, topics = default_topics, limit = default_limit)
 
     # @tool("trending", args_schema=TrendingInputs)
-    def trending(self, topics: None, content_type: ContentType = None, last_n_days: int = None):
+    def trending(self, topics: None, content_type: ContentType = None, last_n_days: int = None, topn: int = None):
         """Retrieves the trending news articles, social media posts, blog articles or news highlights that match user interest, topic or query."""
+        topn = topn or self.settings.limit
         query = topics or self.settings.topics
         is_highlight = lambda content_type: (not content_type) or (content_type == ContentType.HIGHLIGHTS)
         trend_func = self.beansack.trending_nuggets if is_highlight(content_type) else self.beansack.trending_beans
         filter = self._create_time_filter(last_n_days) if is_highlight(content_type) else self._create_filters(content_type, last_n_days)
         if (not query) or isinstance(query, str):
-            return trend_func(query=query, filter=filter, limit=self.limit)               
+            return trend_func(query=query, filter=filter, limit=topn)               
         else:
             # run multiple queries
-            return {item: trend_func(query=item, filter=filter, limit=self.limit) for item in query}
+            return {item: trend_func(query=item, filter=filter, limit=topn) for item in query}
 
     # @tool("search", args_schema=TrendingInputs)     
-    def search(self, topic: str, content_type: ContentType = None, last_n_days: int = None):
+    def search(self, topic: str, content_type: ContentType = None, last_n_days: int = None, topn: int = None):
         """Searches and looks for news articles, social media posts, blog articles that match user interest, topic or query represented by `topic`."""
-        return self.beansack.search_beans(query=topic, filter=self._create_filters(content_type, last_n_days), limit=self.limit)
+        topn = topn or self.settings.limit
+        return self.beansack.search_beans(query=topic, filter=self._create_filters(content_type, last_n_days), limit=topn)
     
     # vector search beans
     # get nuggets that map to the urls
@@ -96,11 +100,12 @@ class InteractSession:
             #     for segment in self.article_writer.stream_article(highlights, initial_content, sources, content_type):
             #         yield segment
             # else:
-            #     return self.article_writer.write_article(highlights, initial_content, sources, content_type)        
-            return self.article_writer.write_article(highlights, initial_content, sources, content_type)  
+            #     return self.article_writer.write_article(highlights, initial_content, sources, content_type)  
+            article_writer = ArticleWriter(self.llm_api_key)      
+            return article_writer.write_article(highlights, initial_content, sources, content_type)  
     
     # @tool("configure_settings", args_schema=Settings)
-    def configure(self, topics: str|list[str]=None, content_types: ContentType|list[ContentType] = None, last_n_days: int = None, top_n: int = None):
+    def configure(self, topics: str|list[str]=None, content_types: ContentType|list[ContentType] = None, last_n_days: int = None, topn: int = None):
         """Changes/updates application settings settings so that by default all future contents follow the change directive."""
         if topics:
             self.settings.topics=topics
@@ -108,8 +113,8 @@ class InteractSession:
             self.settings.content_types=content_types
         if last_n_days:
             self.settings.last_n_days=last_n_days    
-        if top_n:
-            self.limit=top_n        
+        if topn:
+            self.settings.limit=topn        
         return self.settings.json(indent=2)
     
     def _create_filters(self, content_types: ContentType|list[ContentType], last_n_days: int):
@@ -127,6 +132,14 @@ class InteractSession:
         last_n_days = last_n_days or self.settings.last_n_days
         if last_n_days:
             return { K_UPDATED: { "$gte": get_timevalue(last_n_days) } }
+        
+    def __deepcopy__(self, memo):
+        return InteractSession(bsack=self.beansack, llm_api_key=self.llm_api_key, 
+            default_limit=self.settings.limit, 
+            default_ndays=self.settings.last_n_days, 
+            default_topics=copy.deepcopy(self.settings.topics, memo),
+            default_content_types=copy.deepcopy(self.settings.content_types, memo))
+
 
 ############################################
 ## USER INPUT PARSER FOR STRUCTURED INPUT ##
@@ -144,10 +157,11 @@ class InteractiveInputParser:
         self.parser.add_argument('-d', '--ndays', help='The last N days of data to retrieve. N should be between 1 - 30')
         self.parser.add_argument('-n', '--topn', help='The top N items to retrieve. Must be a positive int')
         self.parser.add_argument('-s', '--source', help='Data source to pull from')
+
+        self.parser.format_help()
         
-    def parse(self, params: str, known_task = None):
+    def parse(self, params: str):
         try:
-            params = params if not known_task else f"{known_task} {params}"
             args = self.parser.parse_args(shlex.split(params.lower()))            
             ndays = int(args.ndays) if args.ndays else None
             topn = int(args.topn) if args.topn else None

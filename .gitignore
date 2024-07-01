@@ -4,3 +4,4 @@ models
 __pycache__
 test
 *.log
+flagged

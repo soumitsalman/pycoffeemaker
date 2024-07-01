@@ -32,7 +32,7 @@ def test_nlp():
 
     def _rectify_beans(beans: list[Bean]):
         summarizer = Summarizer(llm_api_key)
-        embedder = LocalNomic(embedder_path)        
+        embedder = LocalEmbedder(embedder_path)        
         for bean in beans:
             bean.summary = summarizer.summarize(bean.text)       
             bean.embedding = embedder.embed_documents(bean.digest())     
@@ -74,7 +74,7 @@ def test_writing():
 
 ### TEST CALLS
 # test_writing()
-# test_nlp()
+test_nlp()
 # test_collection_local()
 # test_collection_live()
-test_rectify_beansack()
+# test_rectify_beansack()

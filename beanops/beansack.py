@@ -45,7 +45,7 @@ class Beansack:
         if llm_api_key:
             self.nuggetor = NuggetExtractor(llm_api_key)
             self.summarizer = Summarizer(llm_api_key)        
-        self.embedder = LocalNomic(embedder_model_path) if embedder_model_path else LocalNomic()
+        self.embedder = LocalEmbedder(embedder_model_path) if embedder_model_path else LocalEmbedder()
         
     # stores beans and post-processes them for generating embeddings, summary and nuggets
     def store(self, beans: list[Bean]):        

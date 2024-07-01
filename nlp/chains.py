@@ -4,8 +4,10 @@ from functools import reduce
 import tiktoken
 from shared.utils import create_logger
 from langchain_groq import ChatGroq
+from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_core.prompts import PromptTemplate
+from langchain.chains.summarize import load_summarize_chain
 
 encoding = tiktoken.get_encoding("cl100k_base")
 
@@ -26,27 +28,20 @@ def combine_texts(texts: list[str], batch_size: int, delimiter: str = "```") -> 
 
 import re
 
-SUMMARIZER_TEMPLATE = """<|start_header_id|>system<|end_header_id|>
-Your task is to write a concise summary of the content provided by user. The summary should be less than 200 words.
-Output MUST BE in markdown format.
-<|eot_id|><|start_header_id|>user<|end_header_id|>
-Summarize the content below:\n{content}
-<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
 SUMMARIZER_MODEL = "llama3-8b-8192"
 SUMMARIZER_BATCH_SIZE = 6144
 MIN_SUMMARIZER_LEN = 1000
 
 class Summarizer:
-    def __init__(self, api_key):
-        prompt = PromptTemplate.from_template(template=SUMMARIZER_TEMPLATE)
+    def __init__(self, api_key):        
         llm = ChatGroq(api_key=api_key, model=SUMMARIZER_MODEL, temperature=0.1, verbose=False, streaming=False, max_tokens=384)
-        self.chain = prompt | llm | StrOutputParser()
+        self.chain = load_summarize_chain(llm=llm, chain_type="stuff", verbose=False)
 
     @retry(tries=5, jitter=5, delay=10, logger=create_logger("summarizer"))
     def summarize(self, text: str) -> str:
-        res = self.chain.invoke({"content": text}) if len(text) > MIN_SUMMARIZER_LEN else text
+        res = self.chain.invoke({"input_documents": [Document(page_content=text)]}) if len(text) > MIN_SUMMARIZER_LEN else text
         #  the regex is a hack for llama3
-        return re.sub(r'(?i)Here is a concise summary:', '', res.replace("```markdown", "").replace("```", "")).strip()
+        return re.sub(r'(?i)Here is a concise summary:', '', res['output_text']).strip()
 
 ######################
 ## NUGGET EXTRACTOR ##
@@ -55,11 +50,12 @@ class Summarizer:
 from itertools import chain
 from pydantic import BaseModel, Field
 
-NUGGETS_TEMPLATE = """Your task is to extract important key points and messages from news articles, blogs and social media posts provided as inputs.
-For each input (delimitered by ```) extract the key points and messages. Each key point or message will contain a `keyphrase`, an `event` and a `description` field.
-The final output MUST BE a list of `messages`.
+NUGGETS_TEMPLATE = """You are provided with one or more excerpts from news article or social media posts delimitered by ```
+For each input you will extract the main `message` represented by the excerpt.
+Each message will contain a `keyphrase`, an `event` and a `description` field.
+The final output MUST BE a list of `messages` represented by array of json objects representing the structure of each `message`.
 OUTPUT FORMAT: {format_instruction}
-Extract the key points and messages from the inputs below:\n```\n{input}\n```"""
+```\n{input}\n```"""
 NUGGETS_MODEL = "llama3-8b-8192"
 NUGGETS_BATCH_SIZE = 5120
 K_MESSAGES = "messages"
