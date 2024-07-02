@@ -1,5 +1,6 @@
 ## DATA MODELS ##
-from pydantic import BaseModel
+from bson import ObjectId
+from pydantic import BaseModel, Field
 from typing import Optional
 
 CHANNEL = "social media group/forum"
@@ -59,6 +60,7 @@ class Bean(BaseModel):
     def digest(self):
         return f"{self.kind} from {self.source}\nTitle: {self.title}\nBody: {self.text}"
 
+K_ID = "_id"
 K_KEYPHRASE = "keyphrase"
 K_EVENT="event"
 K_DESCRIPTION = "description"
@@ -66,6 +68,7 @@ K_TRENDSCORE = "trend_score"
 K_URLS = "urls"
 
 class Nugget(BaseModel):
+    id: str|ObjectId = Field(default=None, alias="_id")
     keyphrase: str 
     event: str 
     description: str 
@@ -76,7 +79,10 @@ class Nugget(BaseModel):
 
     def digest(self) -> str:
         return (self.keyphrase or "" )+((": "+self.description) if self.description else "")
-
+    
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed=True
 
     
 class Source(BaseModel):

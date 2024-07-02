@@ -41,7 +41,7 @@ class Summarizer:
     def summarize(self, text: str) -> str:
         res = self.chain.invoke({"input_documents": [Document(page_content=text)]}) if len(text) > MIN_SUMMARIZER_LEN else text
         #  the regex is a hack for llama3
-        return re.sub(r'(?i)Here is a concise summary:', '', res['output_text']).strip()
+        return re.sub(r'(?i)Here is a concise summary:', '', ic(res['output_text']))
 
 ######################
 ## NUGGET EXTRACTOR ##
@@ -84,4 +84,8 @@ class NuggetExtractor:
     @retry(tries=5, jitter=5, delay=10, logger=create_logger("nuggetor"))
     def _extract(self, text: str):        
         res = self.chain.invoke({"input":text})
-        return res[K_MESSAGES] if (K_MESSAGES in res) else res
+        # this is some voodoo magic because LLM can return dumb shits
+        if isinstance(res, dict):
+            return res[K_MESSAGES] if (K_MESSAGES in res) else res
+        elif isinstance(res, list):
+            return list(chain(*(res_item[K_MESSAGES] for res_item in res))) if (K_MESSAGES in res[0]) else res

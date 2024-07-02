@@ -3,6 +3,7 @@ from icecream import ic
 import os
 from dotenv import load_dotenv
 import json
+from datetime import datetime as dt
     
 load_dotenv()
 llm_api_key = os.getenv('GROQ_API_KEY')
@@ -52,7 +53,15 @@ def test_collection_live():
     
 def test_rectify_beansack():
     beansack = Beansack(db_conn, llm_api_key, embedder_path)
-    beansack.rectify_beansack(1, False, True)
+    beansack.rectify_beansack(2, False, True)
+
+def test_retrieval():
+    show_bean = lambda beans: "\n".join(f"[{dt.fromtimestamp(bean.updated).strftime('%y-%m-%d')}] {bean.title}" for bean in beans)
+
+    beansack = Beansack(db_conn, llm_api_key, embedder_path)
+    nuggets = beansack.get_nuggets(sort_by=TRENDING_AND_LATEST, limit=5)
+    [print(nugget.keyphrase+"\n", show_bean(beans)) for nugget, beans in beansack.get_beans_by_nuggets(filter=timewindow_filter(3), nuggets=nuggets, limit=5)]
+    [print(nugget.keyphrase+"\n", show_bean(beans)) for nugget, beans in beansack.get_beans_by_nuggets(filter=timewindow_filter(1), nugget_ids=[nug.id for nug in nuggets], limit=5)]
 
 
 import console as console
@@ -74,7 +83,8 @@ def test_writing():
 
 ### TEST CALLS
 # test_writing()
-test_nlp()
+# test_nlp()
 # test_collection_local()
 # test_collection_live()
-# test_rectify_beansack()
+test_rectify_beansack()
+# test_retrieval()
