@@ -14,9 +14,8 @@ pydantic
 feedparser
 tldextract
 beautifulsoup4
-schedule
-gradio
 fastapi
 python-dotenv
 icecream
+nicegui
 setuptools

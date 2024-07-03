@@ -24,8 +24,8 @@ NUGGETS = "concepts"
 NOISES = "noises"
 SOURCES = "sources"
 
-DEFAULT_SEARCH_SCORE = 0.65
-DEFAULT_MAPPING_SCORE = 0.65
+DEFAULT_SEARCH_SCORE = 0.68
+DEFAULT_MAPPING_SCORE = 0.75
 DEFAULT_LIMIT = 100
 
 LATEST = {K_UPDATED: -1}
@@ -223,7 +223,7 @@ class Beansack:
             # beans are already rectified with trendscore. so just leverage that  
             getbeans = lambda urls: self.beanstore.find(filter = {K_URL: {"$in": urls}}, projection={K_TRENDSCORE:1})
             nugget_trend_score = lambda urls: reduce(operator.add, [(bean[K_TRENDSCORE] or 0) for bean in getbeans(urls) if K_TRENDSCORE in bean], len(urls)*10)   
-            search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = DEFAULT_LIMIT, projection = {K_URL: 1})]
+            search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = 100, projection = {K_URL: 1})]
 
             update_one = lambda nugget, urls: UpdateOne(
                     {K_ID: nugget.id}, 
@@ -334,7 +334,8 @@ class Beansack:
             embedding: list[float] = None, 
             min_score = DEFAULT_SEARCH_SCORE,             
             filter = None,
-            limit = DEFAULT_LIMIT            
+            limit = DEFAULT_LIMIT,
+            projection = None            
         ) -> list:
         # HACK: limit value multiplication is a to make sure that we retrieve enough elements to dedupe this
         if not (query or embedding):
@@ -342,7 +343,7 @@ class Beansack:
             result = self.get_nuggets(filter = filter, limit = limit, sort_by=TRENDING_AND_LATEST)
         else:
             # else run the vector query
-            result = self.search_nuggets(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=TRENDING_AND_LATEST)
+            result = self.search_nuggets(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=TRENDING_AND_LATEST, projection=projection)
         return result
     
     def search_nuggets_with_beans(self, 

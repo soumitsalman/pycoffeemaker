@@ -64,7 +64,7 @@ def test_retrieval():
     [print(nugget.keyphrase+"\n", show_bean(beans)) for nugget, beans in beansack.get_beans_by_nuggets(filter=timewindow_filter(1), nugget_ids=[nug.id for nug in nuggets], limit=5)]
 
 
-import console as console
+from espresso import console
 
 def test_writing():
     session = console.InteractSession(Beansack(db_conn, llm_api_key, embedder_path), llm_api_key)

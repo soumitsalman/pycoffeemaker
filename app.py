@@ -9,7 +9,7 @@ from shared import utils
 # 1. assign paths for all the files that gets accessed as part of the script
 # 2. load environment variables
 # 3. set log location
-if __name__ == "__main__":
+if __name__ in {"__main__", "__mp_main__"}:
     curr_dir = os.path.dirname(os.path.abspath(__file__))
     env_path = f"{curr_dir}/.env"
     embedder_model_path = f"{curr_dir}/models/nomic.gguf"
@@ -40,7 +40,11 @@ def start_collector():
     # TODO: add collection from linkedin
     logger.info("Starting large rectification.")
     beansack.rectify_beansack(3, True, True)
+
+from espresso import console, web
    
-if __name__ == "__main__":
-    start_collector()
+if __name__ in {"__main__", "__mp_main__"}:
+    # start_collector()
+    # console.run_console(db_conn, llm_api_key, embedder_model_path)
+    web.run_web(db_conn, llm_api_key, embedder_model_path)
         
