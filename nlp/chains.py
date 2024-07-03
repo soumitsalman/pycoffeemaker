@@ -39,9 +39,11 @@ class Summarizer:
 
     @retry(tries=5, jitter=5, delay=10, logger=create_logger("summarizer"))
     def summarize(self, text: str) -> str:
-        res = self.chain.invoke({"input_documents": [Document(page_content=text)]}) if len(text) > MIN_SUMMARIZER_LEN else text
+        if len(text) <= MIN_SUMMARIZER_LEN:
+            return text
+        res = self.chain.invoke({"input_documents": [Document(page_content=text)]})
         #  the regex is a hack for llama3
-        return re.sub(r'(?i)Here is a concise summary:', '', ic(res['output_text']))
+        return re.sub(r'(?i)Here is a concise summary:', '', res['output_text']).strip()
 
 ######################
 ## NUGGET EXTRACTOR ##

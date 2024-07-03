@@ -29,7 +29,7 @@ from newscollector import rssfeed, ychackernews
 
 def test_nlp():
     beansack = Beansack(db_conn, llm_api_key, embedder_path)
-    beans = rssfeed.collect_from("https://www.marktechpost.com/feed/")    
+    beans = rssfeed.collect_from("https://feeds.feedburner.com/fastcompany/headlines")    
 
     def _rectify_beans(beans: list[Bean]):
         summarizer = Summarizer(llm_api_key)
@@ -48,8 +48,8 @@ def test_collection_local():
 
 def test_collection_live():
     beansack = Beansack(db_conn, llm_api_key, embedder_path)
-    # rssfeed.collect(store_func=beansack.store)
-    ychackernews.collect(store_func=beansack.store)
+    rssfeed.collect(store_func=beansack.store)
+    # ychackernews.collect(store_func=beansack.store)
     
 def test_rectify_beansack():
     beansack = Beansack(db_conn, llm_api_key, embedder_path)

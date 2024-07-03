@@ -80,12 +80,20 @@ class Beansack:
             bean.text = truncate(bean.text)
 
         if chatters:
+            # insert the beans
             res = self.beanstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in chatters])
-            logger.info("%d beans inserted", len(res.inserted_ids))            
-            self.rectify_beans(chatters)   
-            nuggets = self.extract_nuggets(chatters, current_time)            
-            self.rectify_nuggets(nuggets)            
-            self._dedup_and_relink(beans, nuggets)
+            logger.info("%d beans inserted", len(res.inserted_ids))    
+            self.rectify_beans(chatters)        
+               
+            # extract and insert nuggets
+            nuggets = self.extract_nuggets(chatters, current_time)  
+            if nuggets:   
+                res = self.nuggetstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in nuggets])
+                logger.info("%d nuggets inserted", len(res.inserted_ids))    
+                self.rectify_nuggets(nuggets)     
+            
+            # now relink
+            self._dedup_and_relink(chatters, nuggets)
 
         #############        
         # TODO: process channels differently
@@ -99,9 +107,7 @@ class Beansack:
             # add updated value to keep track of collection time and batch number
             for i, n in enumerate(nuggets):
                 n.updated = batch_time
-                n.id = f"{batch_time}-{i}"
-            res = self.nuggetstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in nuggets])
-            logger.info("%d nuggets inserted", len(res.inserted_ids))
+                n.id = f"{batch_time}-{i}"            
             return nuggets
         except Exception as err:
             logger.warning("Nugget extraction failed.")
@@ -186,8 +192,13 @@ class Beansack:
     def _deduplicate_nuggets(self, nuggets: list[Nugget]):        
         # using .92 for similarity score calculation
         # and pulling in 10000 as a rough limit
-        to_delete = (self.search_nuggets(embedding=nug.embedding, min_score=0.92, limit=10000, sort_by=LATEST, projection={K_EMBEDDING:0, K_URLS:0})[1:] for nug in nuggets)
-        to_delete = [item.id for item in chain(*to_delete)]
+        search = lambda nug: list(
+            self.nuggetstore.aggregate(
+                self._vector_search_pipeline(text=None, embedding=nug.embedding, min_score=0.92, filter = None, limit=10000, sort_by=LATEST, projection={K_ID:1})
+            )
+        )
+        to_delete = (search(nug)[1:] for nug in nuggets)
+        to_delete = [item[K_ID] for item in chain(*to_delete)]
         if to_delete:
             logger.info("%d duplicate nuggets deleted", self.nuggetstore.delete_many({K_ID: {"$in": to_delete}}).deleted_count)
         # send the remaining nuggets
@@ -202,8 +213,11 @@ class Beansack:
             update_count = _update_collection(self.beanstore, [update_one(bean) for bean in beans if bean.url in noises])
             logger.info(f"{update_count} beans updated with trendscore")
 
-        nuggets = self._deduplicate_nuggets(nuggets)
+        # deduplicate the nuggets
+        if nuggets:
+            nuggets = self._deduplicate_nuggets(nuggets)
 
+        # calculate and relink the unique nuggets
         if nuggets:
             # rectify nuggets trend score and mapping 
             # beans are already rectified with trendscore. so just leverage that  
