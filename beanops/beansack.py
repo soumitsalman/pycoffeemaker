@@ -238,32 +238,33 @@ class Beansack:
 
     def get_beans(self,
             filter, 
-            limit = None, 
+            limit = 0, 
             sort_by = None, 
             projection = None
         ) -> list[Bean]:
-        cursor = self.beanstore.find(filter = filter, projection = projection)
-        if sort_by:
-            cursor = cursor.sort(sort_by)
-        if limit:
-            cursor = cursor.limit(limit)
+        cursor = self.beanstore.find(filter = filter, projection = projection, sort=sort_by, limit=limit)
+        # if sort_by:
+        #     cursor = cursor.sort(sort_by)
+        # if limit:
+        #     cursor = cursor.limit(limit)
         return _deserialize_beans(cursor)
 
     def get_nuggets(self,
             filter = None, 
-            limit = None, 
-            sort_by = None
+            limit = 0, 
+            sort_by = None,
+            projection = None
         ) -> list[Nugget]:        
         # append the embeddings filter so that it takes into account only the indexed items
         filter = {
             **{K_EMBEDDING: {"$exists": True}}, 
             **(filter or {})
         }        
-        cursor = self.nuggetstore.find(filter=filter)
-        if sort_by:
-            cursor = cursor.sort(sort_by)
-        if limit:
-            cursor = cursor.limit(limit)
+        cursor = self.nuggetstore.find(filter=filter, projection=projection, sort=sort_by, limit=limit)
+        # if sort_by:
+        #     cursor = cursor.sort(sort_by)
+        # if limit:
+        #     cursor = cursor.limit(limit)
         return _deserialize_nuggets(cursor)
     
     def get_beans_by_nuggets(self, 
@@ -363,6 +364,9 @@ class Beansack:
             sort_by=TRENDING_AND_LATEST
         )
         return self.get_beans_by_nuggets(nuggets=nuggets, filter=filter, limit=limit)
+
+    def get_sources(self):
+        return self.beanstore.distinct('source')
 
     def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
         pipline = [

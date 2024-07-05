@@ -1,7 +1,9 @@
+import json
+import os
 from beanops.datamodels import *
 from espresso.custom_ui import *
-from .interactives import tools, settings
-from nicegui import ui
+from .interactives import tools, prompt_parser
+from nicegui import ui, app
 from icecream import ic
 from datetime import datetime as dt
 
@@ -27,17 +29,18 @@ NOTHING_TRENDING = "Nothing Trending."
 DEFAULT_LIMIT=10
 DEFAULT_LAST_NDAYS=15
 
-session_settings: settings.Settings = None
+# session_settings: settings.Settings = None
 
 latest = lambda item: -item.updated
 nugget_markdown = lambda nugget: f"**{nugget.keyphrase}**: {nugget.description}" if nugget else None
+counter_markdown = lambda counter: counter if counter < 100 else str(99)+'+'
 
 
 def get_editor_categories():
     return ["Cybersecurity", "Generative AI", "Robotics", "Space and Rockets", "Politics", "Yo Momma"]
 
 def get_user_categories(user_id):
-    return session_settings.topics or []
+    return ["Space and Rocket Launch", "Generative AI", "Tesla & Cybertruck", "Miami Events"]
 
 F_NAME = "header"
 F_NUGGETS = "nuggets"
@@ -72,17 +75,19 @@ def render_nugget_as_card(nugget: Nugget):
     if nugget:
         with ui.card() as card:
             if nugget.urls:
-                ui.markdown(f"🗞️ {len(nugget.urls)}").classes('text-caption')
+                ui.markdown(f"🗞️ {counter_markdown(len(nugget.urls))}").classes('text-caption')
             ui.markdown(nugget.digest())
             if "keywords" in nugget:
                 with ui.row().classes("gap-0"):
                     [ui.chip(word, on_click=lambda : ui.notify(NO_ACTION)).props('outline square') for word in (nugget['keywords'] or [])[:3]]
         return card
 
-def render_nuggets(category: dict):
+def render_nuggets(category: dict, settings: dict):
     def on_select_nugget(nugget):
         category[F_SELECTED] = nugget
-        category[F_BEANS] = sorted(tools.get_beans_for_nugget(session_settings, nugget_id=nugget['data'].id, content_type=settings.ContentType.NEWS), key = latest)
+        category[F_BEANS] = sorted(
+            tools.get_beans_for_nugget(nugget['data'].id, settings['content_types'], settings['last_ndays'], settings['topn']), 
+            key = latest)
         # clear the other nuggets
         for nug in category.get(F_NUGGETS) or []:
             nug[F_SELECTED] = (nug == nugget)
@@ -95,39 +100,37 @@ def render_nuggets(category: dict):
     return BindableTimeline(date_field=lambda nug: nug['data'].updated, header_field=lambda nug: nug['data'].keyphrase, item_render_func=render_nugget_as_timeline_item).props("side=right").bind_items_from(category, "nuggets")
 
 def render_beans(category: dict):    
-    return BindableList(category.get(F_BEANS, []), render_bean_as_card).bind_items_from(category, F_BEANS)
+    return BindableList(render_bean_as_card).bind_items_from(category, F_BEANS)
 
-def category_tab(category: dict):
+def category_tab(category: dict, settings: dict):
     with ui.tab(category[F_NAME], label=category[F_NAME]) as tab:                
         if "nuggets" not in category:
-            nuggets = sorted(tools.trending(
-                session_settings=session_settings, 
-                topics=category["header"], 
-                content_type=settings.ContentType.HIGHLIGHTS), key = latest)         
+            nuggets = sorted(tools.highlights(category["header"], settings['last_ndays'], settings['topn']), key = latest)         
             category[F_NUGGETS] = [{'data': item} for item in nuggets]
         n_count = len(category.get(F_NUGGETS))       
         if n_count:
             ui.badge(str(n_count)).props("floating transparent")
     return tab
 
-def category_panel(category: dict):
+def category_panel(category: dict, settings: dict):
     with ui.tab_panel(category[F_NAME]) as panel:
         with ui.row().style('display: noflex; flex-wrap: nowrap;'):
-            render_nuggets(category).classes("w-full").style('flex: 1;')           
+            render_nuggets(category, settings).classes("w-full").style('flex: 1;')           
             render_beans(category).classes("w-full").style('flex: 1;')
     return panel
 
-def trending_page(viewmodel: dict):
+@ui.page("/trending")
+def trending_page(viewmodel: dict, settings: dict):
     if not viewmodel.get("categories"):
-        viewmodel["categories"] = {cat: {F_NAME:cat} for cat in get_user_categories(None)+get_editor_categories()}.values()
+        viewmodel["categories"] = {cat: {F_NAME:cat} for cat in settings.get("topics", [])+get_editor_categories()}.values()
 
     with ui.tabs().bind_value(viewmodel, "selected") as tabs:    
         for category in viewmodel["categories"]:
-            category_tab(category)
+            category_tab(category, settings)
 
     with ui.tab_panels(tabs):
         for category in viewmodel["categories"]:
-            category_panel(category)
+            category_panel(category, settings)
         
 
 EXAMPLE_OPTIONS = ["trending -t posts -q \"cyber security breches\"", "lookfor -q \"GPU vs LPU\"", "settings -d 7 -n 20"]   
@@ -141,49 +144,66 @@ def render_prompt_response(resp):
     elif isinstance(resp, Nugget):
         render_nugget_as_card(resp)
     
-def console_page(viewmodel):
+def settings_markdown(settings: dict):
+    return "Topics of Interest: %s\n\nDefault Content Types: %s\n\nPulling top **%d** items from last **%d** days." % \
+        (", ".join([f"**{topic}**" for topic in settings['topics']]), ", ".join([f"**{ctype}**" for ctype in settings['content_types']]), settings['topn'], settings['last_ndays'])      
+
+ui.page("/console")
+def console_page(viewmodel, settings: dict):
+    parser = prompt_parser.InteractiveInputParser(settings)
+
+    viewmodel['processing'] = False
+    viewmodel['text_response'] = None
+    viewmodel['list_response'] = None
+   
     def process_prompt():
         if viewmodel['prompt']:  
-                    
-            task, query, ctype, ndays, topn = tools.parse_prompt(viewmodel['prompt'])
-            if task == "trending":
-                resp = tools.trending(session_settings, query, ctype, ndays)                
-            elif task == "lookfor":
-                resp = tools.search(session_settings, query, ctype, ndays)
-            elif task == "write":
-                resp = tools.write(session_settings, query, ctype, ndays)
-            elif task == "settings":
-                resp = [session_settings.update(query, ctype, ndays, topn)]             
-            else:
-                # make it search all
-                resp = tools.search_all(session_settings, viewmodel['prompt'])
+            viewmodel['text_response'] = None
+            viewmodel['list_response'] = None
 
-            viewmodel['response_banner'] = f"{len(resp)} results found" if resp else NOTHING_FOUND
-            viewmodel["last_response"] = resp 
-            # viewmodel["prompt"] = None
+            task, query, ctype, ndays, topn = parser.parse(viewmodel['prompt'])
+            if task == "trending":
+                viewmodel['list_response'] = tools.trending(query, ctype, ndays, topn) if ctype != "highlights" else tools.highlights(query, ndays, topn)
+                viewmodel['response_banner'] = f"{len(viewmodel['list_response'])} results found" if viewmodel['list_response'] else NOTHING_FOUND         
+            elif task in ["lookfor", "search"]:
+                viewmodel['list_response'] = tools.search(query, ctype, ndays, topn)
+                viewmodel['response_banner'] = f"{len(viewmodel['list_response'])} results found" if viewmodel['list_response'] else NOTHING_FOUND
+            elif task == "write":
+                viewmodel['text_response'] = tools.write(query, ctype, ndays, topn)
+                viewmodel['response_banner'] = f"{ctype} on {query}" if viewmodel['text_response'] else NOTHING_FOUND
+            elif task == "settings":
+                settings = parser.update_defaults(query, ctype, ndays, topn)
+                viewmodel['text_response'] = settings_markdown(settings)
+                viewmodel['response_banner'] = "Updated settings"
+            else:
+                beans, nuggets = tools.search_all(viewmodel['prompt'], ndays, topn)
+                viewmodel['list_response'] = beans + nuggets
+                viewmodel['response_banner'] = f"{len(viewmodel['list_response'])} results found" if viewmodel['list_response'] else NOTHING_FOUND
         
     with ui.input(placeholder=PLACEHOLDER, autocomplete=EXAMPLE_OPTIONS).bind_value(viewmodel, "prompt") \
         .props('rounded outlined input-class=mx-3').classes('w-full self-center').on('keydown.enter', process_prompt) as prompt_input:
         ui.button(icon="send", on_click=process_prompt).bind_visibility_from(prompt_input, 'value').props("flat dense")
     ui.label("Examples: "+", ".join(EXAMPLE_OPTIONS)).classes('text-caption self-center')
     ui.label().bind_text_from(viewmodel, "response_banner").classes("text-bold")
-    BindableGrid(render_prompt_response, columns=3).bind_items_from(viewmodel, "last_response")
+    BindableGrid(render_prompt_response, columns=3).bind_items_from(viewmodel, "list_response").bind_visibility_from(viewmodel, "list_response")
+    ui.markdown().bind_content_from(viewmodel, "text_response", lambda x: x or "").bind_visibility_from(viewmodel, "text_response")
+    
 
 def settings_panel(viewmodel):    
     with ui.list():
         ui.item_label('Search Settings').classes("text-subtitle1")
         with ui.item():
-            with ui.item_section().bind_text_from(viewmodel, "last_ndays", lambda x: f"Last {x} days"):
-                ui.slider(min=1, max=30, step=1).bind_value(viewmodel, "last_ndays")
+            with ui.item_section().bind_text_from(viewmodel['search'], "last_ndays", lambda x: f"Last {x} days"):
+                ui.slider(min=1, max=30, step=1).bind_value(viewmodel['search'], "last_ndays")
         with ui.item():
-            with ui.item_section().bind_text_from(viewmodel, "topn", lambda x: f"Top {x} results"):
-                ui.slider(min=1, max=50, step=1).bind_value(viewmodel, "topn")
+            with ui.item_section().bind_text_from(viewmodel['search'], "topn", lambda x: f"Top {x} results"):
+                ui.slider(min=1, max=50, step=1).bind_value(viewmodel['search'], "topn")
         with ui.item():
-            with ui.item_section("Content Types"):
-                ui.select(options=viewmodel['content_types'], multiple=True).bind_value(viewmodel, 'content_types').props("use-chips")
+            with ui.expansion("Content Types", caption="Select content types to filter on"):
+                ui.select(options=viewmodel['search']['content_types'], multiple=True).bind_value(viewmodel['search'], 'content_types').props("use-chips")
         with ui.item():
-            with ui.item_section("Sources"):
-                ui.select(options=viewmodel['sources'], with_input=True, multiple=True).bind_value(viewmodel, 'sources').props("use-chips")
+            with ui.expansion("Sources", caption="Select news and post sources to filter on"):
+                ui.select(options=viewmodel['search']['sources'], with_input=True, multiple=True).bind_value(viewmodel['search'], 'sources').props("use-chips")
     
     ui.separator()
 
@@ -193,11 +213,21 @@ def settings_panel(viewmodel):
         ui.switch(text="Reddit")
         ui.switch(text="LinkedIn")
 
+@ui.page("/")
+def home():
+    default_settings = {
+        "search": {
+            "topics": get_user_categories(None),
+            "last_ndays": DEFAULT_LAST_NDAYS, 
+            "topn": DEFAULT_LIMIT, 
+            "content_types": [ARTICLE, POST, COMMENT], 
+            "sources": tools.get_sources()
+        }
+    }
+    app.storage.user['settings'] = user_settings = app.storage.user.get('settings', default_settings)
 
-def run_web(db_conn, llm_api_key, embedder_path):
-    tools.initiatize_tools(db_conn, llm_api_key, embedder_path)
-    global session_settings
-    session_settings = settings.Settings(topics=["Space and Rocket Launch", "Generative AI", "Tesla & Cybertruck", "Miami Events"], last_ndays=7, limit=5)
+    # global session_settings
+    # session_settings = settings.Settings(topics=["Space and Rocket Launch", "Generative AI", "Tesla & Cybertruck", "Miami Events"], last_ndays=7, limit=5)
 
     ui.add_css(content="""
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap');
@@ -221,11 +251,13 @@ def run_web(db_conn, llm_api_key, embedder_path):
 
     with ui.tab_panels(page_tabs, value = trending_news_tab).classes("w-full"):
         with ui.tab_panel(trending_news_tab):
-            trending_page({"selected": None, "categories": None})
+            trending_page({"selected": None, "categories": None}, user_settings['search'])
         with ui.tab_panel(console_tab):
-            console_page({"prompt": None})
+            console_page({"prompt": None}, user_settings['search'])
 
     with ui.right_drawer(elevated=True, value=False) as settings_drawer:
-        settings_panel({"last_ndays": session_settings.last_ndays, "topn": session_settings.limit, "content_types": ["news", "posts", "comments", "highlights"], "sources": ["All"]})
+        settings_panel(user_settings)
 
-    ui.run(title=APP_NAME, favicon="espresso/images/cafecito-ico.png")
+def run_web(db_conn, llm_api_key, embedder_path):
+    tools.initiatize_tools(db_conn, llm_api_key, embedder_path)
+    ui.run(title=APP_NAME, favicon="espresso/images/cafecito-ico.png", storage_secret=os.getenv('INTERNAL_AUTH_TOKEN'))

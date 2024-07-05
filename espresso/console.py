@@ -37,7 +37,7 @@ def run_console(db_conn, llm_api_key, embedder_path):
                 print("Exiting...")
                 break
             elif args[0] == "trending":
-                resp = tools.trending(args[1], args[2], args[3])
+                resp = tools.highlights(args[1], args[2], args[3])
                 render(resp)
             elif args[0] == "lookfor":
                 resp = tools.search(args[1], args[2], args[3])

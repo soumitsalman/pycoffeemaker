@@ -4,6 +4,7 @@ from nicegui.binding import BindableProperty, bind_from
 from typing import cast
 from datetime import datetime as dt
 from itertools import groupby
+from icecream import ic
 
 date_to_str = lambda date: dt.fromtimestamp(date).strftime('%a, %b %d')
 
@@ -41,26 +42,28 @@ class BindableTimeline(ui.timeline):
                         subtitle=(date_to_str(date) if isinstance(date, (int, float)) else date)):
                         for item in group:
                             self.render_item(item)
+        self.update()
 
     def bind_items_from(self, target_object, target_name: str = 'items', backward = lambda x: x) -> Self:
         bind_from(self, "items", target_object, target_name, backward)
         return self
 
 class BindableList(ui.list):
-    items = BindableProperty(on_change=lambda sender, value: cast(Self, sender)._render())
+    items = BindableProperty(on_change=lambda sender, value: cast(Self, sender)._render(value))
 
-    def __init__(self, items: list = None, item_render_func = lambda x:x):
+    def __init__(self, item_render_func, items: list = None):
         super().__init__()
         self.items = items or []
         self.render_item = item_render_func
-        self._render()
+        self._render(self.items)
     
-    def _render(self):    
+    def _render(self, value):    
         self.clear()    
         with self:
-            for item in (self.items or []):                    
+            for item in (value or []):                    
                 with ui.item():
                     self.render_item(item)
+        self.update()
 
     def bind_items_from(self, target_object, target_name: str = 'items', backward = lambda x: x) -> Self:
         bind_from(self, "items", target_object, target_name, backward)
@@ -68,20 +71,21 @@ class BindableList(ui.list):
     
 class BindableGrid(ui.grid):
     items = BindableProperty(
-        on_change=lambda sender, value: cast(Self, sender)._render()
+        on_change=lambda sender, value: cast(Self, sender)._render(value)
     )
 
-    def __init__(self, item_render_func, items: list = None, rows: int = None, columns: int = None):               
+    def __init__(self, item_render_func, items: list = None, rows: int = None, columns: int = None):     
+        super().__init__(rows = rows, columns = columns)             
         self.items = items
-        self.render_item = item_render_func     
-        super().__init__(rows = rows, columns = columns)        
-        self._render()
+        self.render_item = item_render_func    
+        self._render(self.items)
    
-    def _render(self):  
-        self.clear()  
-        with self:
-            for item in (self.items or []):
+    def _render(self, value):  
+        self.clear() 
+        with self:            
+            for item in (value or []):
                 self.render_item(item)
+        self.update()
 
     def bind_items_from(self, target_object, target_name: str = 'items', backward = lambda x: x) -> Self:
         bind_from(self, "items", target_object, target_name, backward)
