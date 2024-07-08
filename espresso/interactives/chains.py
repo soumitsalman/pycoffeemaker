@@ -2,7 +2,7 @@
 ## ARTICLE WRITER ##
 ####################
 from retry import retry
-from nlp.chains import combine_texts
+from beanops.chains import combine_texts
 from shared.utils import create_logger
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate

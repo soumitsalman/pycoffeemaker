@@ -5,7 +5,7 @@ import tiktoken
 from shared.utils import create_logger
 from langchain_groq import ChatGroq
 from langchain_core.documents import Document
-from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
+from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain.chains.summarize import load_summarize_chain
 
@@ -28,13 +28,12 @@ def combine_texts(texts: list[str], batch_size: int, delimiter: str = "```") -> 
 
 import re
 
-SUMMARIZER_MODEL = "llama3-8b-8192"
+# SUMMARIZER_MODEL = "llama3-8b-8192"
 SUMMARIZER_BATCH_SIZE = 6144
 MIN_SUMMARIZER_LEN = 1000
 
 class Summarizer:
-    def __init__(self, api_key):        
-        llm = ChatGroq(api_key=api_key, model=SUMMARIZER_MODEL, temperature=0.1, verbose=False, streaming=False, max_tokens=384)
+    def __init__(self, llm):                
         self.chain = load_summarize_chain(llm=llm, chain_type="stuff", verbose=False)
 
     @retry(tries=5, jitter=5, delay=10, logger=create_logger("summarizer"))
@@ -58,7 +57,7 @@ Each message will contain a `keyphrase`, an `event` and a `description` field.
 The final output MUST BE a list of `messages` represented by array of json objects representing the structure of each `message`.
 OUTPUT FORMAT: {format_instruction}
 ```\n{input}\n```"""
-NUGGETS_MODEL = "llama3-8b-8192"
+# NUGGETS_MODEL = "llama3-8b-8192"
 NUGGETS_BATCH_SIZE = 5120
 K_MESSAGES = "messages"
 
@@ -71,12 +70,11 @@ class NuggetList(BaseModel):
     messages: list[NuggetData] = Field(description="list of key points and messages. Each message has keyphrase, event and description field")
 
 class NuggetExtractor:
-    def __init__(self, api_key):
+    def __init__(self, llm):
         parser = JsonOutputParser(name = "nugget parser", pydantic_object=NuggetList)
         prompt = PromptTemplate.from_template(
             template=NUGGETS_TEMPLATE, 
             partial_variables={"format_instruction": parser.get_format_instructions()})
-        llm = ChatGroq(api_key=api_key, model=NUGGETS_MODEL, temperature=0.1, verbose=False, streaming=False)
         self.chain = prompt | llm | parser
     
     def extract(self, texts: str|list[str]):

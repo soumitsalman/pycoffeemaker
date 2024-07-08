@@ -11,10 +11,12 @@ beansack: Beansack = None
 article_writer = None
 prompt_parser = None
 
-def initiatize_tools(db_conn, llm_api_key, embedder_path):
+def initiatize_tools(db_conn, embedder, llm):
     global beansack, article_writer, prompt_parser
-    beansack=Beansack(db_conn, llm_api_key, embedder_model_path=embedder_path)
-    article_writer = ArticleWriter(llm_api_key)
+    # this is content retrieval (not processing). This does not need an llm in the beansack
+    beansack=Beansack(db_conn, embedder, None)
+    if llm:
+        article_writer = ArticleWriter(llm)
 
 def get_sources():
     return beansack.get_sources()

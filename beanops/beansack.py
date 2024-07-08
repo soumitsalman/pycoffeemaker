@@ -4,18 +4,15 @@
 
 from datetime import datetime, timedelta
 from functools import reduce
-from itertools import groupby
 import operator
-from nlp.chains import *
-from nlp.embedding import *
+from .chains import *
+from .embedding import *
 from .datamodels import *
 from shared.utils import create_logger
 from pymongo import MongoClient, UpdateOne
 from pymongo.collection import Collection
 from bson import InvalidBSON
-from sklearn.metrics.pairwise import pairwise_distances
-from scipy.cluster.hierarchy import linkage, fcluster
-import numpy as np
+
 
 # names of db and collections
 BEANSACK = "beansack"
@@ -37,16 +34,16 @@ CLEANUP_WINDOW = 30
 logger = create_logger("beansack")
 
 class Beansack:
-    def __init__(self, conn_str: str, llm_api_key: str = None, embedder_model_path: str = None):        
+    def __init__(self, conn_str: str, embedder = None, llm = None):        
         client = MongoClient(conn_str)        
         self.beanstore: Collection = client[BEANSACK][BEANS]
         self.nuggetstore: Collection = client[BEANSACK][NUGGETS]
         self.noisestore: Collection = client[BEANSACK][NOISES]        
         self.sourcestore: Collection = client[BEANSACK][SOURCES]  
-        if llm_api_key:
-            self.nuggetor = NuggetExtractor(llm_api_key)
-            self.summarizer = Summarizer(llm_api_key)        
-        self.embedder = LocalEmbedder(embedder_model_path) if embedder_model_path else LocalEmbedder()
+        self.embedder = embedder
+        if llm:
+            self.nuggetor = NuggetExtractor(llm)
+            self.summarizer = Summarizer(llm)   
 
     ##########################
     ## STORING AND INDEXING ##

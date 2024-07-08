@@ -32,7 +32,7 @@ DEFAULT_LAST_NDAYS=15
 # session_settings: settings.Settings = None
 
 latest = lambda item: -item.updated
-nugget_markdown = lambda nugget: f"**{nugget.keyphrase}**: {nugget.description}" if nugget else None
+nugget_markdown = lambda nugget: (f"**{nugget.keyphrase}**"+((": "+nugget.description) if nugget.description else "")) if nugget else None
 counter_markdown = lambda counter: counter if counter < 100 else str(99)+'+'
 
 
@@ -76,7 +76,7 @@ def render_nugget_as_card(nugget: Nugget):
         with ui.card() as card:
             if nugget.urls:
                 ui.markdown(f"🗞️ {counter_markdown(len(nugget.urls))}").classes('text-caption')
-            ui.markdown(nugget.digest())
+            ui.markdown(nugget_markdown(nugget))
             if "keywords" in nugget:
                 with ui.row().classes("gap-0"):
                     [ui.chip(word, on_click=lambda : ui.notify(NO_ACTION)).props('outline square') for word in (nugget['keywords'] or [])[:3]]
@@ -258,6 +258,6 @@ def home():
     with ui.right_drawer(elevated=True, value=False) as settings_drawer:
         settings_panel(user_settings)
 
-def run_web(db_conn, llm_api_key, embedder_path):
-    tools.initiatize_tools(db_conn, llm_api_key, embedder_path)
+def run_web(db_conn, embedder, llm):
+    tools.initiatize_tools(db_conn, embedder, llm)
     ui.run(title=APP_NAME, favicon="espresso/images/cafecito-ico.png", storage_secret=os.getenv('INTERNAL_AUTH_TOKEN'))

@@ -3,6 +3,8 @@
 from icecream import ic
 import os
 from dotenv import load_dotenv
+from langchain_groq import ChatGroq
+from beanops.embedding import LocalEmbedder
 from shared import utils
 
 # before doing anything else
@@ -13,7 +15,7 @@ if __name__ in {"__main__", "__mp_main__"}:
     curr_dir = os.path.dirname(os.path.abspath(__file__))
     env_path = f"{curr_dir}/.env"
     embedder_model_path = f"{curr_dir}/models/nomic.gguf"
-    feed_sources_path = f"{curr_dir}/newscollector/feedsources.txt"
+    feed_sources_path = f"{curr_dir}/collectors/feedsources.txt"
     logger_path = f"{curr_dir}/app.log"
     
     load_dotenv(env_path)
@@ -25,11 +27,14 @@ if __name__ in {"__main__", "__mp_main__"}:
     utils.set_logger_path(logger_path)  
     logger = utils.create_logger(instance_mode)
 
-from newscollector import rssfeed, ychackernews
+    embedder = LocalEmbedder(embedder_model_path)
+
+from collectors import rssfeed, ychackernews
 from beanops.beansack import Beansack
 
 def start_collector():
-    beansack = Beansack(db_conn, llm_api_key, embedder_model_path)
+    llm = ChatGroq(api_key=llm_api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
+    beansack = Beansack(db_conn, embedder, llm)
     # collect news articles and then rectify
     logger.info("Starting collection from rss feeds.")
     rssfeed.collect(sources=feed_sources_path, store_func=beansack.store)
@@ -46,5 +51,8 @@ from espresso import console, web
 if __name__ in {"__main__", "__mp_main__"}:
     # start_collector()
     # console.run_console(db_conn, llm_api_key, embedder_model_path)
-    web.run_web(db_conn, llm_api_key, embedder_model_path)
+    if instance_mode == "WEB":
+        web.run_web(db_conn, embedder, None)
+    else:
+        start_collector()
         
