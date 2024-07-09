@@ -28,12 +28,13 @@ if __name__ in {"__main__", "__mp_main__"}:
     logger = utils.create_logger(instance_mode)
 
     embedder = LocalEmbedder(embedder_model_path)
+    llm = ChatGroq(api_key=llm_api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
 
 from collectors import rssfeed, ychackernews
 from beanops.beansack import Beansack
 
 def start_collector():
-    llm = ChatGroq(api_key=llm_api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
+    
     beansack = Beansack(db_conn, embedder, llm)
     # collect news articles and then rectify
     logger.info("Starting collection from rss feeds.")
@@ -44,7 +45,7 @@ def start_collector():
     # TODO: add collection from nextdoor
     # TODO: add collection from linkedin
     logger.info("Starting large rectification.")
-    beansack.rectify_beansack(3, True, True)
+    beansack.rectify_beansack(7, True, True)
 
 from espresso import console, web
    
@@ -52,7 +53,7 @@ if __name__ in {"__main__", "__mp_main__"}:
     # start_collector()
     # console.run_console(db_conn, llm_api_key, embedder_model_path)
     if instance_mode == "WEB":
-        web.run_web(db_conn, embedder, None)
+        web.run_web(db_conn, embedder, llm)
     else:
         start_collector()
         

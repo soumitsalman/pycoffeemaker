@@ -11,7 +11,7 @@ import time
 import tldextract
 from icecream import ic
 
-DEFAULT_FEED_SOURCES = "newscollector/feedsources.txt"
+DEFAULT_FEED_SOURCES = "collectors/feedsources.txt"
 T_LINK = "link"
 T_TITLE = "title"
 T_TAGS = "tags"

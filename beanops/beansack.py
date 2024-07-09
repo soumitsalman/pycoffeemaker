@@ -87,10 +87,14 @@ class Beansack:
             if nuggets:   
                 res = self.nuggetstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in nuggets])
                 logger.info("%d nuggets inserted", len(res.inserted_ids))    
-                self.rectify_nuggets(nuggets)     
+                nuggets = self.rectify_nuggets(nuggets) 
+                # delete the old duplicate ones the nuggets
+                total = len(nuggets)          
+                nuggets = self._deduplicate_nuggets(nuggets)
+                logger.info("%d duplicate nuggets deleted", total - len(nuggets))    
             
             # now relink
-            self._dedup_and_relink(chatters, nuggets)
+            self._rerank(chatters, nuggets)
 
         #############        
         # TODO: process channels differently
@@ -100,16 +104,13 @@ class Beansack:
     def extract_nuggets(self, beans: list[Bean], batch_time: int) -> list[Nugget]:         
         try:
             texts = [bean.text for bean in beans]
-            nuggets = [Nugget(keyphrase=n.get(K_KEYPHRASE), event=n.get(K_EVENT), description=n.get(K_DESCRIPTION)) for n in self.nuggetor.extract(texts) if n]
-            # add updated value to keep track of collection time and batch number
-            for i, n in enumerate(nuggets):
-                n.updated = batch_time
-                n.id = f"{batch_time}-{i}"            
+            is_valid_nugget = lambda nug: nug and (K_DESCRIPTION in nug) and (K_KEYPHRASE in nug) and (len(nug[K_DESCRIPTION]) > len(nug[K_KEYPHRASE]))
+            nuggets = [Nugget(id=f"{batch_time}-{i}", keyphrase=n[K_KEYPHRASE], event=n.get(K_EVENT), description=n[K_DESCRIPTION], updated=batch_time) for i, n in enumerate(self.nuggetor.extract(texts)) if is_valid_nugget(n)]           
             return nuggets
         except Exception as err:
-            logger.warning("Nugget extraction failed.")
+            logger.warning("Nugget extraction failed. %s", str(err))
 
-    def rectify_beansack(self, last_ndays:int, cleanup:bool, rerank_all: bool):        
+    def rectify_beansack(self, last_ndays:int, cleanup:bool, rerank: bool):        
         if cleanup:
             time_filter = {K_UPDATED: { "$lte": get_timevalue(CLEANUP_WINDOW) }}
             # clean up beanstore (but retain the channels)
@@ -143,13 +144,17 @@ class Beansack:
         ))
         nuggets = self.rectify_nuggets(nuggets)   
         
-        if rerank_all:
+        if rerank:
             # pull in all nuggets or else keep the ones in the rectify window
-            beans = _deserialize_beans(self.beanstore.find(filter = { K_EMBEDDING: { "$exists": True }}, projection = { K_URL: 1 }))
-            nuggets = _deserialize_nuggets(self.nuggetstore.find({ K_EMBEDDING: { "$exists": True }}).sort(LATEST))
+            filter = {
+                K_UPDATED: { "$gte": get_timevalue(last_ndays) },
+                K_EMBEDDING: { "$exists": True }
+            }
+            beans = _deserialize_beans(self.beanstore.find(filter = filter, projection = { K_URL: 1 }))
+            nuggets = _deserialize_nuggets(self.nuggetstore.find(filter=filter, sort=LATEST))
        
         # rectify the mappings
-        self._dedup_and_relink(beans, nuggets) 
+        self._rerank(beans, nuggets) 
 
     def rectify_beans(self, beans: list[Bean]):
         def _generate(bean: Bean):
@@ -158,7 +163,9 @@ class Beansack:
                 if not bean.embedding:
                     bean.embedding = to_set[K_EMBEDDING] = self.embedder.embed_documents(bean.digest())
                 if not bean.summary:
-                    bean.summary = to_set[K_SUMMARY] = self.summarizer.summarize(bean.text)
+                    summary = self.summarizer.summarize(bean.text)
+                    # this is heuristic to weed out bad summaries
+                    bean.summary = to_set[K_SUMMARY] = summary if len(summary) > len(bean.title) else f"{bean.text[:500]}..."
             except Exception as err:
                 logger.warning(f"bean rectification error: {err}")
                 pass # do nothing, to set will be empty
@@ -184,35 +191,31 @@ class Beansack:
             updates, nuggets = zip(*[_generate(nugget) for nugget in nuggets])
             update_count =_update_collection(self.nuggetstore, list(updates))
             logger.info(f"{update_count} nuggets rectified")
-        return nuggets
+            return [nugget for nugget in nuggets if nugget.embedding]
+        else:
+            return nuggets
     
     def _deduplicate_nuggets(self, nuggets: list[Nugget]):        
         # using .92 for similarity score calculation
         # and pulling in 10000 as a rough limit
-        search = lambda nug: list(
-            self.nuggetstore.aggregate(
+        total = 0
+        for nug in nuggets:
+            to_delete = list(self.nuggetstore.aggregate(
                 self._vector_search_pipeline(text=None, embedding=nug.embedding, min_score=0.92, filter = None, limit=10000, sort_by=LATEST, projection={K_ID:1})
-            )
-        )
-        to_delete = (search(nug)[1:] for nug in nuggets)
-        to_delete = [item[K_ID] for item in chain(*to_delete)]
-        if to_delete:
-            logger.info("%d duplicate nuggets deleted", self.nuggetstore.delete_many({K_ID: {"$in": to_delete}}).deleted_count)
-        # send the remaining nuggets
+            ))[1:]
+            to_delete = [item[K_ID] for item in to_delete]
+            total += self.nuggetstore.delete_many({K_ID: {"$in": to_delete}}).deleted_count
+                
         return self.get_nuggets(filter={K_ID: {"$in": [n.id for n in nuggets]}}) 
 
-    def _dedup_and_relink(self, beans: list[Bean], nuggets: list[Nugget]):    
+    def _rerank(self, beans: list[Bean], nuggets: list[Nugget]):    
         # BUG: currently trend_score is calculated for the entire database. That should NOT be the case. There should be a different trend score per time segment
         # rectify beans trend score
         if beans:
             noises = {noise.url: noise for noise in self._get_latest_noisestats([bean.url for bean in beans])}
             update_one = lambda bean: UpdateOne({K_URL: bean.url}, {"$set": { K_TRENDSCORE: noises[bean.url].score}})
             update_count = _update_collection(self.beanstore, [update_one(bean) for bean in beans if bean.url in noises])
-            logger.info(f"{update_count} beans updated with trendscore")
-
-        # deduplicate the nuggets
-        if nuggets:
-            nuggets = self._deduplicate_nuggets(nuggets)
+            logger.info(f"{update_count} beans reranked")        
 
         # calculate and relink the unique nuggets
         if nuggets:
@@ -220,15 +223,15 @@ class Beansack:
             # beans are already rectified with trendscore. so just leverage that  
             getbeans = lambda urls: self.beanstore.find(filter = {K_URL: {"$in": urls}}, projection={K_TRENDSCORE:1})
             nugget_trend_score = lambda urls: reduce(operator.add, [(bean[K_TRENDSCORE] or 0) for bean in getbeans(urls) if K_TRENDSCORE in bean], len(urls)*10)   
-            search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = 100, projection = {K_URL: 1})]
+            search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = 500, projection = {K_URL: 1})]
 
             update_one = lambda nugget, urls: UpdateOne(
-                    {K_ID: nugget.id}, 
-                    {"$set": { K_TRENDSCORE: nugget_trend_score(urls), K_URLS: urls}})
-            
-            update_count = _update_collection(self.nuggetstore, [update_one(nugget, search(nugget.embedding)) for nugget in nuggets if nugget.embedding])
-            logger.info(f"{update_count} nuggets remapped")
+                        {K_ID: nugget.id}, 
+                        {"$set": { K_TRENDSCORE: nugget_trend_score(urls), K_URLS: urls}})
+            total = _update_collection(self.nuggetstore, [update_one(nugget, search(nugget.embedding)) for nugget in nuggets])
+            logger.info("%d nuggets reranked", total)
 
+    
     ####################
     ## GET AND SEARCH ##
     ####################
