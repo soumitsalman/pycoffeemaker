@@ -3,7 +3,6 @@ from retry import retry
 from functools import reduce
 import tiktoken
 from .utils import create_logger
-from langchain_groq import ChatGroq
 from langchain_core.documents import Document
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
