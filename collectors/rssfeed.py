@@ -3,10 +3,11 @@
 ################
 
 import feedparser
-from beanops.datamodels import Bean, ARTICLE
+from pybeansack.datamodels import Bean, ARTICLE
 from datetime import datetime
 from bs4 import BeautifulSoup
-from shared.utils import create_logger, load_text_from_url
+from .utils import load_text_from_url
+from pybeansack.utils import create_logger
 import time
 import tldextract
 from icecream import ic

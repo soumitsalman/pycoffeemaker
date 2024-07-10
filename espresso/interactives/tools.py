@@ -1,6 +1,6 @@
 from itertools import chain
 from icecream import ic
-from shared.utils import create_logger
+from collectors.utils import create_logger
 from beanops.beansack import *
 from beanops.datamodels import *
 from .chains import *

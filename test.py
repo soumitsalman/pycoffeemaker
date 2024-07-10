@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import json
 from datetime import datetime as dt
 from langchain_groq import ChatGroq
-from beanops.embedding import LocalEmbedder
+from pybeansack.embedding import LocalEmbedder
     
 load_dotenv()
 llm_api_key = os.getenv('GROQ_API_KEY')
@@ -15,7 +15,7 @@ feed_source = "collectors/feedsources.txt"
 llm = ChatGroq(api_key=llm_api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
 embedder = LocalEmbedder(embedder_path)
 
-from shared import utils
+from pybeansack import utils
 logger = utils.create_logger("tester")
 
 def write_datamodels(items, file_name: str = None):
@@ -27,8 +27,8 @@ def write_text(text, file_name):
     with open(f"test/{file_name}", 'w') as file:
         file.write(text)
 
-from beanops.beansack import *
-from beanops.datamodels import *
+from pybeansack.beansack import *
+from pybeansack.datamodels import *
 from collectors import rssfeed, ychackernews
 
 def test_nlp():

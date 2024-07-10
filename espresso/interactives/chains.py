@@ -2,8 +2,8 @@
 ## ARTICLE WRITER ##
 ####################
 from retry import retry
-from beanops.chains import combine_texts
-from shared.utils import create_logger
+from pybeansack.chains import combine_texts
+from collectors.utils import create_logger
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_community.llms.deepinfra import DeepInfra

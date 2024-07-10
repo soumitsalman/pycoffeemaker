@@ -4,8 +4,8 @@ from icecream import ic
 import os
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
-from beanops.embedding import LocalEmbedder
-from shared import utils
+from pybeansack.embedding import LocalEmbedder
+from pybeansack import utils
 
 # before doing anything else
 # 1. assign paths for all the files that gets accessed as part of the script
@@ -31,7 +31,7 @@ if __name__ in {"__main__", "__mp_main__"}:
     llm = ChatGroq(api_key=llm_api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
 
 from collectors import rssfeed, ychackernews
-from beanops.beansack import Beansack
+from pybeansack.beansack import Beansack
 
 def start_collector():
     
@@ -47,13 +47,7 @@ def start_collector():
     logger.info("Starting large rectification.")
     beansack.rectify_beansack(7, True, True)
 
-from espresso import console, web
    
 if __name__ in {"__main__", "__mp_main__"}:
-    # start_collector()
-    # console.run_console(db_conn, llm_api_key, embedder_model_path)
-    if instance_mode == "WEB":
-        web.run_web(db_conn, embedder, llm)
-    else:
-        start_collector()
-        
+    start_collector()
+

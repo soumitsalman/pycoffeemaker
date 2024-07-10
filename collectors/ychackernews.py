@@ -1,7 +1,8 @@
 from bs4 import BeautifulSoup
 import requests
-from shared.utils import create_logger, load_text_from_url
-from beanops.datamodels import *
+from .utils import load_text_from_url
+from pybeansack.utils import create_logger
+from pybeansack.datamodels import *
 from icecream import ic
 
 TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
