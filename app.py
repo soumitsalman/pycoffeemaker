@@ -20,12 +20,11 @@ if __name__ in {"__main__", "__mp_main__"}:
     
     load_dotenv(env_path)
     
-    instance_mode = os.getenv("INSTANCE_MODE")
     llm_api_key = os.getenv('GROQ_API_KEY')
     db_conn = os.getenv('DB_CONNECTION_STRING')
 
     utils.set_logger_path(logger_path)  
-    logger = utils.create_logger(instance_mode)
+    logger = utils.create_logger("COLLECTOR/INDEXER")
 
     embedder = LocalEmbedder(embedder_model_path)
     llm = ChatGroq(api_key=llm_api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)

@@ -12,8 +12,5 @@ pydantic
 feedparser
 tldextract
 beautifulsoup4
-fastapi
 python-dotenv
 icecream
-nicegui
-setuptools
