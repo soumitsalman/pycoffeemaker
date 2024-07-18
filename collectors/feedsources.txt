@@ -41,3 +41,6 @@ https://www.prnewswire.com/rss/business-technology-latest-news/business-technolo
 https://www.prnewswire.com/rss/financial-services-latest-news-list.rss
 https://www.prnewswire.com/rss/energy-latest-news/energy-latest-news-list.rss
 https://www.marktechpost.com/feed/
+https://www.nextplatform.com/feed/
+https://blocksandfiles.com/feed/
+https://devclass.com/feed/

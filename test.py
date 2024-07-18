@@ -51,7 +51,7 @@ def test_collection_local():
 
 def test_collection_live():
     beansack = Beansack(db_conn, embedder, llm)
-    rssfeed.collect(store_func=beansack.store)
+    rssfeed.collect(sources=["https://investorplace.com/content-feed/"], store_func=beansack.store)
     # ychackernews.collect(store_func=beansack.store)
     
 def test_rectify_beansack():
