@@ -39,6 +39,8 @@ K_SOURCE = "source"
 K_EMBEDDING = "embedding"
 K_SUMMARY = "summary"
 K_UPDATED = "updated"
+K_TOTALLIKES = "total_likes"
+K_TOTALCOMMENTS = "total_comments"
 
 class Bean(BaseModel):
     url: str
@@ -54,6 +56,8 @@ class Bean(BaseModel):
     topic: Optional[str] = None
     embedding: Optional[list[float]] = None
     search_score: Optional[float|int] = None
+    total_likes: Optional[int] = None,
+    total_comments: Optional[int] = None
     trend_score: Optional[int] = None
     noise: Optional[Noise] = None
 

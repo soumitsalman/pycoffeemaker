@@ -13,14 +13,14 @@ class LocalEmbedder(Embeddings):
     def __init__(self, model_path: str = EMBEDDER_MODEL_PATH):        
         self.model = Llama(model_path=model_path, n_ctx=EMBEDDER_CTX, embedding=True, verbose=False)
        
-    def embed_documents(self, texts: list[str]):
+    def embed_documents(self, texts):
         return self._embed(texts, SEARCH_DOCUMENT)
     
-    def embed_query(self, text: str):    
+    def embed_query(self, text):    
         return self._embed(text, SEARCH_QUERY)
 
-    def embed_queries(self, texts: list[str]):    
-        return self._embed(texts, SEARCH_QUERY)
+    # def embed_queries(self, texts: list[str]):    
+    #     return self._embed(texts, SEARCH_QUERY)
     
     @retry(tries=5, logger=create_logger("local embedder"))
     def _embed(self, input: str|list[str], task_type: str):
@@ -33,12 +33,5 @@ class LocalEmbedder(Embeddings):
     
     def _prep_input(input: str|list[str], task_type: str):
         texts = [input] if isinstance(input, str) else input
-        return truncate([f"{task_type}: {t}" for t in texts])
+        return [f"{task_type}: {t}" for t in texts]
     
-encoding = tiktoken.get_encoding("cl100k_base")
-
-def truncate(input: str|list[str]) -> str|list[str]:
-    if isinstance(input, str):
-        return encoding.decode(encoding.encode(input)[:EMBEDDER_CTX])
-    else:
-        return [encoding.decode(enc[:EMBEDDER_CTX]) for enc in encoding.encode_batch(input)]
