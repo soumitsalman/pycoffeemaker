@@ -239,19 +239,17 @@ class Beansack:
 
     def get_beans(self,
             filter, 
+            skip = 0,
             limit = 0, 
             sort_by = None, 
             projection = None
         ) -> list[Bean]:
-        cursor = self.beanstore.find(filter = filter, projection = projection, sort=sort_by, limit=limit)
-        # if sort_by:
-        #     cursor = cursor.sort(sort_by)
-        # if limit:
-        #     cursor = cursor.limit(limit)
+        cursor = self.beanstore.find(filter = filter, projection = projection, sort=sort_by, skip = skip, limit=limit)
         return _deserialize_beans(cursor)
 
     def get_nuggets(self,
             filter = None, 
+            skip = 0,
             limit = 0, 
             sort_by = None,
             projection = None
@@ -261,35 +259,29 @@ class Beansack:
             **{K_EMBEDDING: {"$exists": True}}, 
             **(filter or {})
         }        
-        cursor = self.nuggetstore.find(filter=filter, projection=projection, sort=sort_by, limit=limit)
-        # if sort_by:
-        #     cursor = cursor.sort(sort_by)
-        # if limit:
-        #     cursor = cursor.limit(limit)
+        cursor = self.nuggetstore.find(filter=filter, projection=projection, sort=sort_by, skip=skip, limit=limit)
         return _deserialize_nuggets(cursor)
     
-    def get_beans_by_nuggets(self, 
-            nugget_ids = None,
-            nuggets = None,
+    def get_beans_by_nugget(self, 
+            nugget_id = None,
+            nugget: Nugget = None,
+            filter = None,
+            limit = DEFAULT_LIMIT,
+            projection=None          
+        ) -> list:
+        urls = nugget.urls if nugget else self.nuggetstore.find_one({K_ID: nugget_id, K_URLS: {"$exists": True}}, {K_URLS: 1})[K_URLS]
+        bean_filter = {**{K_URL: {"$in": urls }}, **(filter or {})}
+        return self.get_beans(filter = bean_filter, limit=limit, sort_by=LATEST, projection=projection)
+    
+    def count_beans_by_nugget(self, 
+            nugget_id = None,
+            nugget: Nugget = None,
             filter = None,
             limit = DEFAULT_LIMIT            
         ) -> list:
-        # search for the nuggets with that query/embedding
-        if not nuggets:
-            nuggets = _deserialize_nuggets(self.nuggetstore.find(
-                {
-                    K_ID: {"$in": nugget_ids if isinstance(nugget_ids, list) else [nugget_ids]},
-                    K_URLS: {"$exists": True}
-                }, 
-                {K_EMBEDDING: 0}))
-        elif isinstance(nuggets, Nugget):
-            nuggets = [nuggets]
-
-        bean_filter = lambda nug: {**{K_URL: {"$in": nug.urls }}, **(filter or {})}
-        getbeans = lambda nug: self.get_beans(filter = bean_filter(nug), limit=limit, sort_by=LATEST, projection={K_EMBEDDING: 0})
-        # then get the beans for each of those nuggets
-        if nuggets:
-            return [(nug, getbeans(nug)) for nug in nuggets] 
+        urls = nugget.urls if nugget else self.nuggetstore.find_one({K_ID: nugget_id, K_URLS: {"$exists": True}}, {K_URLS: 1})[K_URLS]
+        bean_filter = {**{K_URL: {"$in": urls }}, **(filter or {})}
+        return self.beanstore.count_documents(filter = bean_filter, limit=limit)
 
     def search_beans(self, 
             query: str = None,
