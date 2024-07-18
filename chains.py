@@ -8,10 +8,10 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain.chains.summarize import load_summarize_chain
 
-encoding = tiktoken.get_encoding("cl100k_base")
+_encoding = tiktoken.get_encoding("cl100k_base")
 
 def count_tokens(texts: list[str]) -> int:
-    return reduce(lambda a,b: a+b, [len(enc) for enc in encoding.encode_batch(texts)])
+    return reduce(lambda a,b: a+b, [len(enc) for enc in _encoding.encode_batch(texts)])
    
 def combine_texts(texts: list[str], batch_size: int, delimiter: str = "```") -> list[str]:
     if count_tokens(texts) > batch_size:
