@@ -234,13 +234,14 @@ class Beansack:
             # beans are already rectified with trendscore. so just leverage that  
             getbeans = lambda urls: self.beanstore.find(filter = {K_URL: {"$in": urls}}, projection={K_TRENDSCORE:1})
             nugget_trend_score = lambda urls: reduce(operator.add, [(bean[K_TRENDSCORE] or 0) for bean in getbeans(urls) if K_TRENDSCORE in bean], len(urls)*10)   
-            search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = 500, projection = {K_URL: 1})]
+            search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = 500, projection = {K_URL: 1, K_UPDATED: 1})]
             update_one = lambda nugget, urls: UpdateOne(
                         {K_ID: nugget.id}, 
                         {"$set": { K_TRENDSCORE: nugget_trend_score(urls), K_URLS: urls}})
             # rectify nuggets trend score and mapping 
             # each nugget should have at least one mapped url that is of the same batch as itself.
-            # if it cannot match the content, then delete that the nugget and proceed with the result            
+            # if it cannot match the content, then delete that the nugget and proceed with the result  
+            # TODO: remove this one, it is a redundant check          
             matches_same_batch = lambda nugget: self.count_search_beans(embedding=nugget.embedding, min_score=DEFAULT_MAPPING_SCORE, filter={K_UPDATED: nugget.updated}, limit = 1)
 
             to_update, to_delete = [], []
