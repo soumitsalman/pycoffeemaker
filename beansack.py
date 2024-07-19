@@ -28,6 +28,23 @@ DEFAULT_LIMIT = 100
 LATEST = {K_UPDATED: -1}
 TRENDING = {K_TRENDSCORE: -1}
 TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_UPDATED: -1}
+LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
+_ALL_FIELDS = {
+    K_URL:1,
+    K_KIND:1,
+    K_TITLE:1,
+    K_SOURCE: 1,
+    K_SUMMARY: 1,
+    K_UPDATED: 1,
+    K_TOTALLIKES: 1,
+    K_TOTALCOMMENTS: 1,
+    K_ID: 1,
+    K_KEYPHRASE: 1,
+    K_EVENT: 1,
+    K_DESCRIPTION: 1,
+    K_TRENDSCORE: 1,
+    K_URLS: 1
+}
 
 CLEANUP_WINDOW = 30
 MAX_TEXT_LENGTH = 2000
@@ -340,10 +357,10 @@ class Beansack:
         ) -> list[Bean]:        
         if not (query or embedding):
             # if query or embedding is not given, then this is scalar query
-            return self.get_beans(filter=filter, limit=limit, sort_by=TRENDING_AND_LATEST, projection=projection)
+            return self.get_beans(filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)
         else:
             # else run the vector query
-            return self.search_beans(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=TRENDING_AND_LATEST, projection=projection)
+            return self.search_beans(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)
         
     def count_trending_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter = None, limit = DEFAULT_LIMIT) -> int:        
         return self.beanstore.count_documents(filter=filter, limit=limit) \
@@ -360,40 +377,56 @@ class Beansack:
         ) -> list:
         if not (query or embedding):
             # if query or embedding is not given, then this is scalar query            
-            result = self.get_nuggets(filter = filter, limit = limit, sort_by=TRENDING_AND_LATEST)
+            result = self.get_nuggets(filter = filter, limit = limit, sort_by=LATEST_AND_TRENDING)
         else:
             # else run the vector query
-            result = self.search_nuggets(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=TRENDING_AND_LATEST, projection=projection)            
+            result = self.search_nuggets(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)            
         return result
     
     def count_trending_nuggets(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter = None, limit = DEFAULT_LIMIT) -> int:        
         return self.nuggetstore.count_documents(filter=filter, limit=limit) \
             if not (query or embedding) \
             else self.count_search_nuggets(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit)
-    
-    # def search_nuggets_with_beans(self, 
-    #         query: str = None,
-    #         embedding: list[float] = None, 
-    #         min_score = DEFAULT_SEARCH_SCORE, 
-    #         limit = DEFAULT_LIMIT,
-    #         filter = None
-    #     ) -> list:
-    #     # search for the nuggets with that query/embedding
-    #     nuggets = self.search_nuggets(
-    #         query=query,
-    #         embedding=embedding,
-    #         min_score=min_score,
-    #         filter=filter, 
-    #         limit=limit*10, # HACK: to make sure that we retrieve enough elements to dedupe this
-    #         sort_by=TRENDING_AND_LATEST
-    #     )
-    #     return self.get_beans_by_nuggets(nuggets=nuggets, filter=filter, limit=limit)
 
-    def get_sources(self):
-        return self.beanstore.distinct('source')
+    def text_search_beans(self, query: str, filter = None, sort_by = None, skip=0, limit = DEFAULT_LIMIT, projection=None):
+        return _deserialize_beans(
+            self.beanstore.aggregate(
+                self._text_search_pipeline(query, filter=filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)))
+    
+    def count_text_search_beans(self, query: str, filter = None, limit = DEFAULT_LIMIT):
+        result = self.beanstore.aggregate(self._text_search_pipeline(query, filter=filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True))
+        return next(iter(result))['total_count'] if result else 0
+    
+    def _text_search_pipeline(self, text: str, filter, sort_by, skip, limit, projection, for_count):
+        # this is hueristic to count the number of word match
+        min_score = len(text.split(sep=" ,.;:`'\"\n\t\r\f"))
+        match = {"$text": {"$search": text}}
+        if filter:
+            match.update(filter)
+
+        pipeline = [
+            { "$match": match },            
+            { "$addFields":  {"search_score": {"$meta": "textScore"}} },
+            {
+                "$match": {
+                    "search_score": {"$gte": min_score}
+                }
+            }
+        ]
+        if for_count:
+            pipeline.append({ "$count": "total_count"})
+        if sort_by:
+            pipeline.append({"$sort": sort_by})
+        if skip:
+            pipeline.append({"$skip": skip})
+        if limit:
+            pipeline.append({"$limit": limit})
+        if projection:
+            pipeline.append({"$project": projection})
+        return pipeline
 
     def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
-        pipline = [
+        pipeline = [
             {
                 "$search": {
                     "cosmosSearch": {
@@ -412,12 +445,12 @@ class Beansack:
             }
         ]       
         if filter:
-            pipline[0]["$search"]["cosmosSearch"]["filter"] = filter
+            pipeline[0]["$search"]["cosmosSearch"]["filter"] = filter
         if sort_by:
-            pipline.append({"$sort": sort_by})
+            pipeline.append({"$sort": sort_by})
         if projection:
-            pipline.append({"$project": projection})
-        return pipline
+            pipeline.append({"$project": projection})
+        return pipeline
     
     def _count_vector_search_pipeline(self, text, embedding, min_score, filter, limit):
         pipline = self._vector_search_pipeline(text, embedding, min_score, filter, limit, None, None)
