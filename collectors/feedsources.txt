@@ -44,3 +44,4 @@ https://www.marktechpost.com/feed/
 https://www.nextplatform.com/feed/
 https://blocksandfiles.com/feed/
 https://devclass.com/feed/
+https://www.tomshardware.com/feeds/all
