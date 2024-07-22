@@ -292,26 +292,21 @@ class Beansack:
         cursor = self.nuggetstore.find(filter=filter, projection=projection, sort=sort_by, skip=skip, limit=limit)
         return _deserialize_nuggets(cursor)
     
-    def get_beans_by_nugget(self, 
-            nugget_id = None,
-            nugget: Nugget = None,
-            filter = None,
-            limit = DEFAULT_LIMIT,
-            projection=None          
-        ) -> list:
-        urls = nugget.urls if nugget else self.nuggetstore.find_one({K_ID: nugget_id, K_URLS: {"$exists": True}}, {K_URLS: 1})[K_URLS]
-        bean_filter = {**{K_URL: {"$in": urls }}, **(filter or {})}
-        return self.get_beans(filter = bean_filter, limit=limit, sort_by=LATEST, projection=projection)
+    def get_beans_by_nugget(self, nugget: str|Nugget, filter = None, limit = DEFAULT_LIMIT, projection=None) -> list:
+        if isinstance(nugget, Nugget):
+            urls = nugget.urls
+        else:
+            item = self.nuggetstore.find_one({K_ID: nugget, K_URLS: {"$exists": True}}, {K_URLS: 1})
+            urls = item[K_URLS] if item else None        
+        return self.get_beans(filter = {**{K_URL: {"$in": urls }}, **(filter or {})}, sort_by=LATEST, limit=limit, projection=projection) if urls else None
     
-    def count_beans_by_nugget(self, 
-            nugget_id = None,
-            nugget: Nugget = None,
-            filter = None,
-            limit = DEFAULT_LIMIT            
-        ) -> list:
-        urls = nugget.urls if nugget else self.nuggetstore.find_one({K_ID: nugget_id, K_URLS: {"$exists": True}}, {K_URLS: 1})[K_URLS]
-        bean_filter = {**{K_URL: {"$in": urls }}, **(filter or {})}
-        return self.beanstore.count_documents(filter = bean_filter, limit=limit)
+    def count_beans_by_nugget(self, nugget: str|Nugget, filter: dict = None, limit: int = DEFAULT_LIMIT) -> list:
+        if isinstance(nugget, Nugget):
+            urls = nugget.urls
+        else:
+            item = self.nuggetstore.find_one({K_ID: nugget, K_URLS: {"$exists": True}}, {K_URLS: 1})
+            urls = item[K_URLS] if item else None
+        return self.beanstore.count_documents(filter = {**{K_URL: {"$in": urls }}, **(filter or {})}, limit=limit) if urls else 0
 
     def search_beans(self, 
             query: str = None,
@@ -398,30 +393,31 @@ class Beansack:
         return next(iter(result))['total_count'] if result else 0
     
     def _text_search_pipeline(self, text: str, filter, sort_by, skip, limit, projection, for_count):
-        # this is hueristic to count the number of word match
-        min_score = len(text.split(sep=" ,.;:`'\"\n\t\r\f"))
         match = {"$text": {"$search": text}}
         if filter:
             match.update(filter)
 
         pipeline = [
-            { "$match": match },            
-            { "$addFields":  {"search_score": {"$meta": "textScore"}} },
-            {
-                "$match": {
-                    "search_score": {"$gte": min_score}
-                }
-            }
+            {   "$match": match },            
+            {   "$addFields":  {"search_score": {"$meta": "textScore"}} },
+            {   "$match": { "search_score": {"$gte": len(text.split(sep=" ,.;:`'\"\n\t\r\f"))}} }  # this is hueristic to count the number of word match
         ]
         if for_count:
             pipeline.append({ "$count": "total_count"})
-        if sort_by:
-            pipeline.append({"$sort": sort_by})
-        if skip:
+
+        if not for_count:
+            sort = {"search_score": -1}
+            if sort_by:
+                sort.update(sort_by)
+            pipeline.append({"$sort": sort})
+
+        if not for_count and skip:
             pipeline.append({"$skip": skip})
+
         if limit:
             pipeline.append({"$limit": limit})
-        if projection:
+
+        if not for_count and projection:
             pipeline.append({"$project": projection})
         return pipeline
 
