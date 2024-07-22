@@ -12,5 +12,7 @@ pydantic
 feedparser
 tldextract
 beautifulsoup4
-python-dotenv
 icecream
+
+
+
