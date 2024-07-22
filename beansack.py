@@ -28,6 +28,23 @@ DEFAULT_LIMIT = 100
 LATEST = {K_UPDATED: -1}
 TRENDING = {K_TRENDSCORE: -1}
 TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_UPDATED: -1}
+LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
+_ALL_FIELDS = {
+    K_URL:1,
+    K_KIND:1,
+    K_TITLE:1,
+    K_SOURCE: 1,
+    K_SUMMARY: 1,
+    K_UPDATED: 1,
+    K_TOTALLIKES: 1,
+    K_TOTALCOMMENTS: 1,
+    K_ID: 1,
+    K_KEYPHRASE: 1,
+    K_EVENT: 1,
+    K_DESCRIPTION: 1,
+    K_TRENDSCORE: 1,
+    K_URLS: 1
+}
 
 CLEANUP_WINDOW = 30
 MAX_TEXT_LENGTH = 2000
@@ -234,13 +251,14 @@ class Beansack:
             # beans are already rectified with trendscore. so just leverage that  
             getbeans = lambda urls: self.beanstore.find(filter = {K_URL: {"$in": urls}}, projection={K_TRENDSCORE:1})
             nugget_trend_score = lambda urls: reduce(operator.add, [(bean[K_TRENDSCORE] or 0) for bean in getbeans(urls) if K_TRENDSCORE in bean], len(urls)*10)   
-            search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = 500, projection = {K_URL: 1})]
+            search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = 500, projection = {K_URL: 1, K_UPDATED: 1})]
             update_one = lambda nugget, urls: UpdateOne(
                         {K_ID: nugget.id}, 
                         {"$set": { K_TRENDSCORE: nugget_trend_score(urls), K_URLS: urls}})
             # rectify nuggets trend score and mapping 
             # each nugget should have at least one mapped url that is of the same batch as itself.
-            # if it cannot match the content, then delete that the nugget and proceed with the result            
+            # if it cannot match the content, then delete that the nugget and proceed with the result  
+            # TODO: remove this one, it is a redundant check          
             matches_same_batch = lambda nugget: self.count_search_beans(embedding=nugget.embedding, min_score=DEFAULT_MAPPING_SCORE, filter={K_UPDATED: nugget.updated}, limit = 1)
 
             to_update, to_delete = [], []
@@ -274,26 +292,21 @@ class Beansack:
         cursor = self.nuggetstore.find(filter=filter, projection=projection, sort=sort_by, skip=skip, limit=limit)
         return _deserialize_nuggets(cursor)
     
-    def get_beans_by_nugget(self, 
-            nugget_id = None,
-            nugget: Nugget = None,
-            filter = None,
-            limit = DEFAULT_LIMIT,
-            projection=None          
-        ) -> list:
-        urls = nugget.urls if nugget else self.nuggetstore.find_one({K_ID: nugget_id, K_URLS: {"$exists": True}}, {K_URLS: 1})[K_URLS]
-        bean_filter = {**{K_URL: {"$in": urls }}, **(filter or {})}
-        return self.get_beans(filter = bean_filter, limit=limit, sort_by=LATEST, projection=projection)
+    def get_beans_by_nugget(self, nugget: str|Nugget, filter = None, limit = DEFAULT_LIMIT, projection=None) -> list:
+        if isinstance(nugget, Nugget):
+            urls = nugget.urls
+        else:
+            item = self.nuggetstore.find_one({K_ID: nugget, K_URLS: {"$exists": True}}, {K_URLS: 1})
+            urls = item[K_URLS] if item else None        
+        return self.get_beans(filter = {**{K_URL: {"$in": urls }}, **(filter or {})}, sort_by=LATEST, limit=limit, projection=projection) if urls else None
     
-    def count_beans_by_nugget(self, 
-            nugget_id = None,
-            nugget: Nugget = None,
-            filter = None,
-            limit = DEFAULT_LIMIT            
-        ) -> list:
-        urls = nugget.urls if nugget else self.nuggetstore.find_one({K_ID: nugget_id, K_URLS: {"$exists": True}}, {K_URLS: 1})[K_URLS]
-        bean_filter = {**{K_URL: {"$in": urls }}, **(filter or {})}
-        return self.beanstore.count_documents(filter = bean_filter, limit=limit)
+    def count_beans_by_nugget(self, nugget: str|Nugget, filter: dict = None, limit: int = DEFAULT_LIMIT) -> list:
+        if isinstance(nugget, Nugget):
+            urls = nugget.urls
+        else:
+            item = self.nuggetstore.find_one({K_ID: nugget, K_URLS: {"$exists": True}}, {K_URLS: 1})
+            urls = item[K_URLS] if item else None
+        return self.beanstore.count_documents(filter = {**{K_URL: {"$in": urls }}, **(filter or {})}, limit=limit) if urls else 0
 
     def search_beans(self, 
             query: str = None,
@@ -339,10 +352,10 @@ class Beansack:
         ) -> list[Bean]:        
         if not (query or embedding):
             # if query or embedding is not given, then this is scalar query
-            return self.get_beans(filter=filter, limit=limit, sort_by=TRENDING_AND_LATEST, projection=projection)
+            return self.get_beans(filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)
         else:
             # else run the vector query
-            return self.search_beans(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=TRENDING_AND_LATEST, projection=projection)
+            return self.search_beans(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)
         
     def count_trending_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter = None, limit = DEFAULT_LIMIT) -> int:        
         return self.beanstore.count_documents(filter=filter, limit=limit) \
@@ -359,40 +372,57 @@ class Beansack:
         ) -> list:
         if not (query or embedding):
             # if query or embedding is not given, then this is scalar query            
-            result = self.get_nuggets(filter = filter, limit = limit, sort_by=TRENDING_AND_LATEST)
+            result = self.get_nuggets(filter = filter, limit = limit, sort_by=LATEST_AND_TRENDING)
         else:
             # else run the vector query
-            result = self.search_nuggets(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=TRENDING_AND_LATEST, projection=projection)            
+            result = self.search_nuggets(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)            
         return result
     
     def count_trending_nuggets(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter = None, limit = DEFAULT_LIMIT) -> int:        
         return self.nuggetstore.count_documents(filter=filter, limit=limit) \
             if not (query or embedding) \
             else self.count_search_nuggets(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit)
-    
-    # def search_nuggets_with_beans(self, 
-    #         query: str = None,
-    #         embedding: list[float] = None, 
-    #         min_score = DEFAULT_SEARCH_SCORE, 
-    #         limit = DEFAULT_LIMIT,
-    #         filter = None
-    #     ) -> list:
-    #     # search for the nuggets with that query/embedding
-    #     nuggets = self.search_nuggets(
-    #         query=query,
-    #         embedding=embedding,
-    #         min_score=min_score,
-    #         filter=filter, 
-    #         limit=limit*10, # HACK: to make sure that we retrieve enough elements to dedupe this
-    #         sort_by=TRENDING_AND_LATEST
-    #     )
-    #     return self.get_beans_by_nuggets(nuggets=nuggets, filter=filter, limit=limit)
 
-    def get_sources(self):
-        return self.beanstore.distinct('source')
+    def text_search_beans(self, query: str, filter = None, sort_by = None, skip=0, limit = DEFAULT_LIMIT, projection=None):
+        return _deserialize_beans(
+            self.beanstore.aggregate(
+                self._text_search_pipeline(query, filter=filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)))
+    
+    def count_text_search_beans(self, query: str, filter = None, limit = DEFAULT_LIMIT):
+        result = self.beanstore.aggregate(self._text_search_pipeline(query, filter=filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True))
+        return next(iter(result))['total_count'] if result else 0
+    
+    def _text_search_pipeline(self, text: str, filter, sort_by, skip, limit, projection, for_count):
+        match = {"$text": {"$search": text}}
+        if filter:
+            match.update(filter)
+
+        pipeline = [
+            {   "$match": match },            
+            {   "$addFields":  {"search_score": {"$meta": "textScore"}} },
+            {   "$match": { "search_score": {"$gte": len(text.split(sep=" ,.;:`'\"\n\t\r\f"))}} }  # this is hueristic to count the number of word match
+        ]
+        if for_count:
+            pipeline.append({ "$count": "total_count"})
+
+        if not for_count:
+            sort = {"search_score": -1}
+            if sort_by:
+                sort.update(sort_by)
+            pipeline.append({"$sort": sort})
+
+        if not for_count and skip:
+            pipeline.append({"$skip": skip})
+
+        if limit:
+            pipeline.append({"$limit": limit})
+
+        if not for_count and projection:
+            pipeline.append({"$project": projection})
+        return pipeline
 
     def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
-        pipline = [
+        pipeline = [
             {
                 "$search": {
                     "cosmosSearch": {
@@ -411,12 +441,12 @@ class Beansack:
             }
         ]       
         if filter:
-            pipline[0]["$search"]["cosmosSearch"]["filter"] = filter
+            pipeline[0]["$search"]["cosmosSearch"]["filter"] = filter
         if sort_by:
-            pipline.append({"$sort": sort_by})
+            pipeline.append({"$sort": sort_by})
         if projection:
-            pipline.append({"$project": projection})
-        return pipline
+            pipeline.append({"$project": projection})
+        return pipeline
     
     def _count_vector_search_pipeline(self, text, embedding, min_score, filter, limit):
         pipline = self._vector_search_pipeline(text, embedding, min_score, filter, limit, None, None)

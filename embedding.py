@@ -2,7 +2,7 @@ from retry import retry
 import tiktoken
 from .utils import create_logger
 from llama_cpp import Llama
-from langchain_core.embeddings import Embeddings
+from langchain_core.embeddings import  Embeddings
 
 EMBEDDER_MODEL_PATH = "models/nomic.gguf"
 EMBEDDER_CTX = 2047
