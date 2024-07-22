@@ -1,9 +1,7 @@
 .venv
 .env
-models
 __pycache__
-test/
+test
 *.log
 flagged
 .nicegui
-

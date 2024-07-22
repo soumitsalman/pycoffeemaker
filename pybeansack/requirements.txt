@@ -3,14 +3,9 @@ langchain
 langchain-community
 langchain-groq
 langchain-text-splitters
-numpy
 pymongo
 tiktoken
 retry
-requests
 pydantic
-feedparser
-tldextract
-beautifulsoup4
 python-dotenv
 icecream
