@@ -10,9 +10,12 @@ retry
 requests
 pydantic
 feedparser
+newspaper3k
 tldextract
 beautifulsoup4
+lxml_html_clean
 icecream
+python-dotenv
 
 
 

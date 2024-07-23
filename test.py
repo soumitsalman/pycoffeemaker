@@ -18,18 +18,21 @@ embedder = LocalEmbedder(embedder_path)
 from pybeansack import utils
 logger = utils.create_logger("tester")
 
+from pybeansack.beansack import *
+from pybeansack.beansack import _count_tokens
+from pybeansack.datamodels import *
+from collectors import rssfeed, ychackernews
+
 def write_datamodels(items, file_name: str = None):
     if items:
-        with open(f"test/{file_name or items[0].source}.json", 'w') as file:
+        with open(f"test/{file_name or ic(items[0].source)}.json", 'w') as file:
             json.dump([bean.model_dump(exclude_unset=True, exclude_none=True) for bean in items], file)
+    
+    [print(_count_tokens(bean.text), bean.url) for bean in items if _count_tokens(bean.text)>2000]
             
 def write_text(text, file_name):
     with open(f"test/{file_name}", 'w') as file:
         file.write(text)
-
-from pybeansack.beansack import *
-from pybeansack.datamodels import *
-from collectors import rssfeed, ychackernews
 
 def test_nlp():
     beansack = Beansack(db_conn, embedder, llm)
@@ -46,8 +49,15 @@ def test_nlp():
     write_datamodels(beansack.extract_nuggets(beans, int(dt.now().timestamp())), "EXTRACTED-NUGGETS")
 
 def test_collection_local():
-    # rssfeed.collect(store_func=write_datamodels)
-    ychackernews.collect(store_func=write_datamodels)
+    sources = [
+        # "https://dev.to/feed",
+        "https://techxplore.com/rss-feed/"
+        # "https://spacenews.com/feed/",
+        # "https://crypto.news/feed/"
+    ]
+    rssfeed.collect(sources=rssfeed.DEFAULT_FEED_SOURCES, store_func=write_datamodels)
+    # [rssfeed.collect_from(src) for src in sources]
+    # ychackernews.collect(store_func=write_datamodels)
 
 def test_collection_live():
     beansack = Beansack(db_conn, embedder, llm)
@@ -69,7 +79,7 @@ def test_retrieval():
 ### TEST CALLS
 # test_writing()
 # test_nlp()
-# test_collection_local()
-test_collection_live()
+test_collection_local()
+# test_collection_live()
 # test_rectify_beansack()
 # test_retrieval()

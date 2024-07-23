@@ -527,11 +527,14 @@ _encoding = tiktoken.get_encoding("cl100k_base")
 # truncates from both end and keeps the middle
 def _truncate(input: str) -> str:
     tokens = _encoding.encode(input)
-    token_count = len(tokens)
-    if token_count > MAX_TEXT_LENGTH:
-        mid = token_count//2
-        tokens = tokens[mid - (MAX_TEXT_LENGTH//2): mid + (MAX_TEXT_LENGTH//2)]
-    return _encoding.decode(tokens)   
+    # token_count = len(tokens)
+    # if token_count > MAX_TEXT_LENGTH:
+    #     mid = token_count//2
+    #     tokens = tokens[mid - (MAX_TEXT_LENGTH//2): mid + (MAX_TEXT_LENGTH//2)]
+    return _encoding.decode(tokens[:MAX_TEXT_LENGTH]) 
+
+def _count_tokens(input: str) -> int:
+    return len(_encoding.encode(input))
 
 def timewindow_filter(last_ndays: int):
     return {K_UPDATED: {"$gte": get_timevalue(last_ndays)}}
