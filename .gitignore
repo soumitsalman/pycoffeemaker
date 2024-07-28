@@ -1,8 +1,11 @@
 .venv
 .env
+.nicegui
+.chromadb
+.models
+.processingqueue
 __pycache__
-test/
+.test
 *.log
 flagged
-.nicegui
 

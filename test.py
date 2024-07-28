@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import json
 from datetime import datetime as dt
 from langchain_groq import ChatGroq
-from pybeansack.embedding import LocalEmbedder
+from pybeansack.embedding import Embeddings
     
 load_dotenv()
 llm_api_key = os.getenv('GROQ_API_KEY')
@@ -13,7 +13,7 @@ db_conn = os.getenv('DB_CONNECTION_STRING')
 embedder_path = "models/nomic.gguf"
 feed_source = "collectors/feedsources.txt"
 llm = ChatGroq(api_key=llm_api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
-embedder = LocalEmbedder(embedder_path)
+embedder = Embeddings(embedder_path)
 
 from pybeansack import utils
 logger = utils.create_logger("tester")
@@ -72,7 +72,7 @@ def test_retrieval():
     show_bean = lambda beans: "\n".join(f"[{dt.fromtimestamp(bean.updated).strftime('%y-%m-%d')}] {bean.title}" for bean in beans)
 
     beansack = Beansack(db_conn, embedder, llm)
-    nuggets = beansack.get_nuggets(sort_by=TRENDING_AND_LATEST, limit=5)
+    nuggets = beansack.get_highlights(sort_by=TRENDING_AND_LATEST, limit=5)
     [print(nugget.keyphrase+"\n", show_bean(beans)) for nugget, beans in beansack.get_beans_by_nuggets(filter=timewindow_filter(3), nuggets=nuggets, limit=5)]
     [print(nugget.keyphrase+"\n", show_bean(beans)) for nugget, beans in beansack.get_beans_by_nuggets(filter=timewindow_filter(1), nugget_ids=[nug.id for nug in nuggets], limit=5)]
 

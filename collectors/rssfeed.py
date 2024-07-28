@@ -4,29 +4,17 @@
 
 import feedparser
 import tldextract
-from pybeansack.datamodels import Bean, ARTICLE
-from datetime import datetime
-# from bs4 import BeautifulSoup
-from .utils import *
 from pybeansack.utils import create_logger
+from pybeansack.datamodels import Bean, NEWS
+from .individual import *
 import time
-# import tldextract
 from icecream import ic
 
-DEFAULT_FEED_SOURCES = "collectors/feedsources.txt"
-T_LINK = "link"
-T_TITLE = "title"
-T_TAGS = "tags"
-T_SUMMARY = "summary"
-T_CONTENT = "content"
-T_PUBLISHED = 'published_parsed'
-T_AUTHOR = 'author'
-
-logger = create_logger("rssfeed collector")
+logger = create_logger("rssfeed")
 
 # reads the list of feeds from a file path and collects
 # if sources is a string then it will be treated as a file path or else it will be a an array
-def collect(sources: str|list[str] = DEFAULT_FEED_SOURCES, store_func = None):
+def collect(sources: str|list[str], store_func = None):
     if isinstance(sources, str):
         # if sources are not provided, assume that there is sources_file provided
         with open(sources, 'r') as file:
@@ -34,61 +22,77 @@ def collect(sources: str|list[str] = DEFAULT_FEED_SOURCES, store_func = None):
     # santize the urls and start collecting
     sources = [url.strip() for url in sources if url.strip()]
     for url in sources:
-        try:
-            beans = collect_from(url)
-            beans = [bean for bean in beans if (bean and bean.text)]
-            logger.info("%d beans collected: %s", len(beans) if beans else 0, url)
-            if beans and store_func:
-                store_func(beans)                          
-        except Exception as err:
-            logger.warning("Failed storing beans from: %s. Error: %s", url, str(err))
+        beans = collect_from(url)   
+        logger.info("%d beans collected: %s", len(beans) if beans else 0, url)
+        store_func(beans)       
+        
+def collect_from(feed_url: str, content_kind = NEWS):
+    feed = feedparser.parse(feed_url, agent=USER_AGENT)
+    collection_time = int(time.time())
+    return [_to_bean(entry, content_kind, collection_time) for entry in feed.entries]
 
-def collect_from(url):
-    feed = feedparser.parse(url)
-    updated = int(datetime.now().timestamp())
-    make_bean = lambda entry: Bean(
+def _to_bean(entry, kind, collection_time):
+    body, summary = _extract_body_and_summary(entry)
+    is_valid_tag = lambda tag: len(tag)>= MIN_TAG_LEN and len(tag) <= MAX_TAG_LEN and ("/" not in tag)
+    return Bean(
         url=entry.link,
-        updated = updated,
-        source = tldextract.extract(entry.link).domain,
+        updated=collection_time,
+        source=tldextract.extract(entry.link).domain,
         title=entry.title,
-        kind = ARTICLE,
-        text=parse_description(entry),
-        author=entry.get(T_AUTHOR),
+        kind=kind,
+        text=body,
+        summary=summary,
+        author=entry.get('author'),
         created=int(time.mktime(entry.published_parsed)),
-        tags=[tag.term for tag in entry.get(T_TAGS, [])]
+        tags=[tag.term for tag in entry.get('tags', []) if is_valid_tag(tag.term)],
+        image_url=entry.media_content[0]['url'] if ('media_content' in entry and entry.media_content) else None
     )    
-    return [make_bean(entry) for entry in feed.entries]
 
-MIN_PULL_LIMIT = 1000
-# the main body usually lives in <description> or <content:encoded>
-# load the largest one, then check if this is above min_pull_limit. 
-# if not, load_html
-def parse_description(entry):    
+
+MIN_TAG_LEN = 3
+MAX_TAG_LEN = 20
+
+def _extract_body_and_summary(entry) -> tuple[str, str]:
+    body_html  = ""
+    # the body usually lives in <dc:content>, <content:encoded> or <description>
     if 'dc_content' in entry:
-        html = entry.dc_content
+        body_html = entry.dc_content
     elif 'content' in entry:        
-        html = entry.content[0]['value'] if isinstance(entry.content, list) else entry.content
-    else:
-        html = entry.get(T_SUMMARY)
+        body_html = entry.content[0]['value'] if isinstance(entry.content, list) else entry.content    
+    body = load_from_html(body_html)
+    summary = load_from_html(entry.get('summary'))    
+    
+    # now time for some heuristics when there is no <dc:content> or <content>
+    if len(body or "") < len(summary or ""):
+        body = summary
+    return body, summary
 
-    text = load_text_from_html(html)
-    if text and len(text) < MIN_PULL_LIMIT:  
-        _temp_text = load_text_from_url(entry.link)
-        # it may be that the url does not allow pulling in the content
-        # in that case just stay with what we got from the feed 
-        text = _temp_text if _temp_text and (len(_temp_text) > len(text)) else text
-    return text 
+# def parse_description(entry):    
+#     if 'dc_content' in entry:
+#         html = entry.dc_content
+#     elif 'content' in entry:        
+#         html = entry.content[0]['value'] if isinstance(entry.content, list) else entry.content
+#     else:
+#         html = entry.get(T_SUMMARY)
 
-def _sanitation_check(beans: list[Bean]):        
-    for bean in beans:
-        res = []
-        if not bean.text:
-            res.append("text")
-        if not bean.created:
-            res.append("created")            
-        if not bean.author:
-            res.append("author")            
-        if not bean.tags:
-            res.append("keywords")
-        if res:
-            ic(bean.url, res)
+#     text = load_text_from_html(html)
+#     if text and len(text) < MIN_BODY_LEN:  
+#         _temp_text = load_body_and_summary_from_url(entry.link)
+#         # it may be that the url does not allow pulling in the content
+#         # in that case just stay with what we got from the feed 
+#         text = _temp_text if _temp_text and (len(_temp_text) > len(text)) else text
+#     return text 
+
+# def _sanitation_check(beans: list[Bean]):        
+#     for bean in beans:
+#         res = []
+#         if not bean.text:
+#             res.append("text")
+#         if not bean.created:
+#             res.append("created")            
+#         if not bean.author:
+#             res.append("author")            
+#         if not bean.tags:
+#             res.append("keywords")
+#         if res:
+#             ic(bean.url, res)

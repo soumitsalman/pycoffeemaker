@@ -1,37 +1,35 @@
 from retry import retry
-import tiktoken
-from .utils import create_logger
+import os
+from .utils import create_logger, truncate
 from llama_cpp import Llama
-from langchain_core.embeddings import  Embeddings
+from langchain_core.embeddings import Embeddings
+from chromadb.utils.embedding_functions import EmbeddingFunction
 
-EMBEDDER_MODEL_PATH = "models/nomic.gguf"
-EMBEDDER_CTX = 2047
-SEARCH_DOCUMENT = "search_document"
-SEARCH_QUERY = "search_query"
-
-class LocalEmbedder(Embeddings):
-    def __init__(self, model_path: str = EMBEDDER_MODEL_PATH):        
-        self.model = Llama(model_path=model_path, n_ctx=EMBEDDER_CTX, embedding=True, verbose=False)
+class BeansackEmbeddings(Embeddings, EmbeddingFunction):
+    def __init__(self, model_path: str, context_len: int):        
+        self.model = Llama(model_path=model_path, n_ctx=context_len, n_threads=os.cpu_count(), embedding=True, verbose=False)
+        self.context_len = context_len    
        
-    def embed_documents(self, texts):
-        return self._embed(texts, SEARCH_DOCUMENT)
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if texts:
+            return self.embed(texts)
     
-    def embed_query(self, text):    
-        return self._embed(text, SEARCH_QUERY)
-
-    # def embed_queries(self, texts: list[str]):    
-    #     return self._embed(texts, SEARCH_QUERY)
-    
-    @retry(tries=5, logger=create_logger("local embedder"))
-    def _embed(self, input: str|list[str], task_type: str):
+    def embed_query(self, text: str) -> list[float]:    
+        if text:
+            return self.embed(text)
+        
+    def __call__(self, input):
         if input:
-            texts = LocalEmbedder._prep_input(input, task_type)
-            result = [self.model.create_embedding(text)['data'][0]['embedding'] for text in texts]
-            if any(not res for res in result):
-                raise Exception("None value returned by embedder")
-            return result[0] if isinstance(input, str) else result 
+            return self.embed(input)
     
-    def _prep_input(input: str|list[str], task_type: str):
+    @retry(tries=3, logger=create_logger("local embedder"))
+    def embed(self, input):
+        result = [self.model.create_embedding(text)['data'][0]['embedding'] for text in self._prep_input(input)]
+        if any(not res for res in result):
+            raise Exception("None value returned by embedder")
+        return result[0] if isinstance(input, str) else result
+    
+    def _prep_input(self, input):
         texts = [input] if isinstance(input, str) else input
-        return [f"{task_type}: {t}" for t in texts]
+        return [truncate(t, self.context_len) for t in texts]
     
