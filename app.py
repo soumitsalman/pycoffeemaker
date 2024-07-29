@@ -1,3 +1,4 @@
+import time
 import __init__
 from icecream import ic
 import os
@@ -19,12 +20,13 @@ INDEXING_EMBEDDER = WORKING_DIR+"/.models/gte-large-Q4.gguf"
 QUERY_EMBEDDER = WORKING_DIR+"/.models/snowflake-arctic-Q4.GGUF"
 # FEED_SOURCES = CURR_DIR+"/feedsources.txt"
 FEED_SOURCES = [
-    "https://crypto.news/feed/",
+    # "https://crypto.news/feed/",
     "https://www.gearpatrol.com/feed/",
     "https://betanews.com/feed/",
-    "https://www.engadget.com/rss.xml",
-    "https://spacenews.com/feed/"
+    # "https://www.engadget.com/rss.xml",
+    # "https://spacenews.com/feed/"
 ]
+CLEANUP_WINDOW = 30
 MIN_BODY_LEN = 1280 # ~200 words
 MAX_CATEGORIES = 3
 CATEGORY_EPS = 0.22
@@ -45,20 +47,17 @@ llm = ChatGroq(
     verbose=False, 
     streaming=False)
 
-def OLD_COLLECTOR():    
-    # collect news articles and then rectify
-    logger.info("Starting collection from rss feeds.")
-    rssfeed.collect(sources=FEED_SOURCES, store_func=remotesack.store)
-    logger.info("Starting collection from YC hackernews.")
-    ychackernews.collect(store_func=remotesack.store)
-    # TODO: add collection from reddit
-    # TODO: add collection from nextdoor
-    # TODO: add collection from linkedin
-    logger.info("Starting large rectification.")
-    remotesack.rectify_beansack(7, True, True)
-
-chatter_trend_score = lambda chatter: (chatter.comments or 0)*3 + (chatter.likes or 0)
-bean_trend_score = lambda chatter, cluster_size : chatter_trend_score(chatter)+10*cluster_size
+# def OLD_COLLECTOR():    
+#     # collect news articles and then rectify
+#     logger.info("Starting collection from rss feeds.")
+#     rssfeed.collect(sources=FEED_SOURCES, store_func=remotesack.store)
+#     logger.info("Starting collection from YC hackernews.")
+#     ychackernews.collect(store_func=remotesack.store)
+#     # TODO: add collection from reddit
+#     # TODO: add collection from nextdoor
+#     # TODO: add collection from linkedin
+#     logger.info("Starting large rectification.")
+#     remotesack.rectify_beansack(7, True, True)
 
 def _is_valid_to_index(bean: Bean):
     # TODO: this would be different for posts and subreddits and group
@@ -69,6 +68,20 @@ def _download_beans(beans: list[Bean]) -> list[Bean]:
         body = individual.load_from_url(bean.url)
         bean.text = body if (len(body or "") > len(bean.text or "")) else bean.text
     return beans
+
+def run_cleanup():
+    logger.info("Starting clean up")
+    remotesack.delete_old(CLEANUP_WINDOW)
+    localsack.delete_old(CLEANUP_WINDOW)
+
+def run_collector():
+    logger.info("Starting collection from rss feeds.")
+    rssfeed.collect(sources=FEED_SOURCES, store_func=_process_collection)
+    logger.info("Starting collection from YC hackernews.")
+    ychackernews.collect(store_func=_process_collection)
+    # TODO: add collection from reddit
+    # TODO: add collection from nextdoor
+    # TODO: add collection from linkedin
 
 def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
     if items:
@@ -82,38 +95,17 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
             beans, chatters = None,  items
 
         if beans:            
-            downloaded = [bean for bean in _download_beans(localsack.filter_unstored_beans(beans)) if _is_valid_to_index(bean)]
+            downloaded = [bean for bean in _download_beans(localsack.filter_unstored_beans(beans))[:5] if _is_valid_to_index(bean)]
             if downloaded:
                 logger.info("%d new beans downloaded from %s", len(downloaded), downloaded[0].source)
                 index_queue.put(downloaded)
-        if chatters:
-            # put them in database and queue the beans for trend_ranking
-            for chatter in chatters:
-                chatter.trend_score = chatter_trend_score(chatter)
-            remotesack.store_chatters(chatters)
-            trend_queue.put([chatter.url for chatter in chatters])
- 
-def _run_category_match(beans: list[Bean]):    
-    embs = localsack.beanstore.get(ids=[bean.url for bean in beans], include=['embeddings'])
-    matches = localsack.categorystore.query(query_embeddings=embs['embeddings'], n_results=3, include=['distances'])
-    for index in range(len(beans)):
-        dist = matches['distances'][index]
-        beans[index].categories = [cat for i, cat in enumerate(matches['ids'][index]) if dist[i]<= CATEGORY_EPS] or [NO_CATEGORY]  
-    return beans
-
-def run_collector():
-    logger.info("Starting collection from rss feeds.")
-    rssfeed.collect(sources=FEED_SOURCES, store_func=_process_collection)
-    logger.info("Starting collection from YC hackernews.")
-    ychackernews.collect(store_func=_process_collection)
-    # TODO: add collection from reddit
-    # TODO: add collection from nextdoor
-    # TODO: add collection from linkedin
+        if chatters:            
+            trend_queue.put(chatters)
 
 def run_indexing():
     q_embdr = BeansackEmbeddings(QUERY_EMBEDDER, 2000)
     digestor = DigestExtractor(llm) 
-
+    logger.info("Starting Indexing")
     while not index_queue.empty():
         beans = localsack.filter_unstored_beans(index_queue.get()) 
         if beans:
@@ -144,7 +136,16 @@ def run_indexing():
 
         index_queue.task_done()
 
+def _run_category_match(beans: list[Bean]):    
+    embs = localsack.beanstore.get(ids=[bean.url for bean in beans], include=['embeddings'])
+    matches = localsack.categorystore.query(query_embeddings=embs['embeddings'], n_results=3, include=['distances'])
+    for index in range(len(beans)):
+        dist = matches['distances'][index]
+        beans[index].categories = [cat for i, cat in enumerate(matches['ids'][index]) if dist[i]<= CATEGORY_EPS] or [NO_CATEGORY]  
+    return beans
+
 def run_clustering():
+    logger.info("Starting Clustering")
     # TODO: in future optimize the beans that need to be clustered.
     # right now we are just clustering the whole database
     beans = localsack.beanstore.get(include=['embeddings'])
@@ -171,24 +172,45 @@ def run_clustering():
     # for sequential posterities sake
     while not cluster_queue.empty():
         # ONLY PUT URL POINTERS IN THIS
-        trend_queue.put([bean.url for bean in cluster_queue.get()])
+        trend_queue.put(cluster_queue.get())
         cluster_queue.task_done()
 
 def run_trend_ranking():
+    logger.info("Starting Trend Ranking")
     while not trend_queue.empty():
         # remove the duplicates in the batch
-        urls = list({url for url in trend_queue.get()})    
+        # put them in database and queue the beans for trend_ranking
+        items = trend_queue.get()
+        if isinstance(items[0], Chatter):
+            remotesack.store_chatters(items)
+        # else item is Bean
+  
+        urls = [item.url for item in items]
         chatters=remotesack.get_latest_chatter_stats(urls)
-        cluster_sizes=localsack.get_cluster_size(urls)
-        
-        updates = list(map(
-            lambda chatter, cluster_size: {K_LIKES: chatter.likes, K_COMMENTS: chatter.comments, K_TRENDSCORE: bean_trend_score(chatter, cluster_size)},
-            chatters, cluster_sizes))
-        res = remotesack.update_beans(urls, updates)
+        cluster_sizes=localsack.count_related_beans(urls) # technically i can get this from remotesack as well
+
+        # trend_score = likes + 3*comments + 10*count_related_beans
+        def make_trend_update(item):
+            update = {K_UPDATED: item.updated}
+            ch = next(ch for ch in chatters if ch.url==item.url) if chatters else None
+            if ch:
+                update.update({
+                    K_LIKES: ch.likes or 0,
+                    K_COMMENTS: ch.comments or 0,
+                    K_TRENDSCORE:  (ch.likes or 0) + (ch.comments or 0)*3
+                })
+            update[K_TRENDSCORE] = update.get(K_TRENDSCORE, 0)+cluster_sizes.get(item.url, 0)*10
+            return update
+
+        trends = [make_trend_update(item) for item in items]
+        res = remotesack.update_beans(urls, trends)
+        localsack.update_beans(urls, trends) # updating the localsack is not exactly necessary
         logger.info("%d beans updated with trendscore", res)
         trend_queue.task_done()
 
+run_cleanup()
 run_collector()
 run_indexing()
 run_clustering()
 run_trend_ranking()
+
