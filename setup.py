@@ -42,5 +42,5 @@ def sync_remotecategories():
     make_cat = lambda i: {**{K_ID: local_categories['ids'][i], K_DESCRIPTION: local_categories['documents'][i]}, **local_categories['metadatas'][i]}
     remote_categorystore.insert_many([make_cat(i) for i in range(len(local_categories["ids"])) if local_categories['ids'][i] not in remote_categories])
 
-# setup_categories()
+setup_categories()
 sync_localsack()
