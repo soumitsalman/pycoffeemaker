@@ -15,7 +15,7 @@ logger = create_logger("ychackernews")
 def collect(store_func):
     entries = requests.get(TOP_STORIES_URL, headers={"User-Agent": USER_AGENT}).json()
     collection_time = int(time.time())
-    beans = [_extract(entry, collection_time) for entry in entries[:20]]
+    beans = [_extract(entry, collection_time) for entry in entries]
     logger.info("%d items collected from %s", len(beans), SOURCE)
     store_func(beans)
 

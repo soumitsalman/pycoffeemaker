@@ -45,9 +45,18 @@ def _to_bean(entry, kind, collection_time):
         author=entry.get('author'),
         created=int(time.mktime(entry.published_parsed)),
         tags=[tag.term for tag in entry.get('tags', []) if is_valid_tag(tag.term)],
-        image_url=entry.media_content[0]['url'] if ('media_content' in entry and entry.media_content) else None
+        image_url=_extract_image_link(entry)
     )    
 
+# 'media_content': [{}],
+# 'media_thumbnail': [{'height': '4603',
+#                         'url': 'https://media.wired.com/photos/66a257bc453579321b858dd1/master/pass/GettyImages-2162541554.jpg',
+#                         'width': '6904'}],
+def _extract_image_link(entry):
+    if ('media_content' in entry) and entry.media_content:
+        return entry.media_content[0].get('url')
+    elif ('media_thumbnail' in entry) and entry.media_thumbnail:
+        return entry.media_thumbnail[0].get('url')
 
 MIN_TAG_LEN = 3
 MAX_TAG_LEN = 20

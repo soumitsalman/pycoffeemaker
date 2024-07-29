@@ -48,35 +48,36 @@ class Beansack:
     ##########################
     def store_beans(self, beans: list[Bean]) -> int:    
         # filter out the new ones    
-        exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
-        beans = [bean for bean in beans if (bean.url not in exists) and (bean.embedding or bean.text)]
+        beans = self.filter_unstored_beans(beans)
         if beans:
             beans = self._rectify_as_needed(beans)            
             res = self.beanstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in beans], ordered=False)
             return len(res.inserted_ids)
         return 0
+
+    def filter_unstored_beans(self, beans: list[Bean]):
+        exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
+        beans = [bean for bean in beans if (bean.url not in exists)]
+        return beans
         
+    # this function checks for embeddings, updated time and any other rectification needed before inserting
+    def _rectify_as_needed(self, items: list[Bean|Highlight]):
+        # for each item if there is no embedding and create one from the text.
+        batch_time = int(datetime.now().timestamp())
+        for item in items:
+            if not item.id:
+                item.id = item.url
+            if not item.embedding:
+                item.embedding = self.embedder.embed(item.digest())
+            if not item.updated:
+                item.updated = batch_time
+        return items
+
     def store_chatters(self, chatters: list[Chatter]):
         if chatters:
             res = self.chatterstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in chatters])
             return len(res.inserted_ids or [])
-
-    # def store_noises(self, chatters: list[Chatter]):
-    #     if beans:
-    #         chatters = {noise.url: noise for noise in self._get_latest_noisestats([bean.url for bean in beans])}
-    #         update_one = lambda bean: UpdateOne(
-    #             {K_URL: bean.url}, 
-    #             {
-    #                 "$set": { 
-    #                     K_LIKES: chatters[bean.url].likes,
-    #                     K_COMMENTS: chatters[bean.url].comments,
-    #                     K_TRENDSCORE: chatters[bean.url].score
-    #                 }
-    #             }
-    #         )
-    #         update_count = _bulk_update(self.beanstore, [update_one(bean) for bean in beans if bean.url in chatters])
-    #         logger.info(f"{update_count} beans reranked")        
-
+        
     def update_beans(self, urls: list[str], updates: dict|list[dict]) -> int:
         # if update is a single dict then it will apply to all beans with the specified urls
         # or else update is a list of equal length, and we will do a bulk_write of update one
@@ -95,98 +96,6 @@ class Beansack:
         res = self.highlightstore.delete_many(time_filter)
         logger.info("%d old highlights deleted", res.deleted_count)
 
-
-        # filter out the old ones        
-        # exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
-        # beans = [bean for bean in beans if (bean.url not in exists) and bean.text]
-        # check for existing update time. If not assign one
-        
-        # noises = [to_noise(bean) for bean in beans if (bean.likes or bean.comments)]
-        # if noises:
-        #     self.noisestore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in noises])
-
-        # process the articles, posts, comments differently from the channels
-        # each bean has to have either embedding or text or else don't try to save it
-            
-            # self.rectify_beans(chatters)        
-               
-    #         # extract and insert nuggets
-    #         nuggets = self.extract_nuggets(chatters, current_time)  
-    #         if nuggets:   
-    #             res = self.nuggetstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in nuggets])
-    #             logger.info("%d nuggets inserted", len(res.inserted_ids))    
-    #             nuggets = self.rectify_nuggets(nuggets) 
-    #             # delete the old duplicate ones the nuggets
-    #             total = len(nuggets)          
-    #             nuggets = self._deduplicate_nuggets(nuggets)
-    #             logger.info("%d duplicate nuggets deleted", total - len(nuggets))    
-            
-    #         # now relink
-    #         self._rerank(chatters, nuggets)
-
-  
-
-    # this function checks for embeddings, updated time and any other rectification needed before inserting
-    def _rectify_as_needed(self, items: list[Bean|Highlight]):
-        # for each item if there is no embedding and create one from the text.
-        batch_time = int(datetime.now().timestamp())
-        for item in items:
-            if not item.id:
-                item.id = item.url
-            if not item.embedding:
-                item.embedding = self.embedder.embed(item.digest())
-            if not item.updated:
-                item.updated = batch_time
-        return items
-
-    def _rerank(self, beans: list[Bean], highlights: list[Highlight]):    
-        # BUG: currently trend_score is calculated for the entire database. That should NOT be the case. There should be a different trend score per time segment
-        # rectify beans trend score
-        if beans:
-            noises = {noise.url: noise for noise in self.get_latest_chatter_stats([bean.url for bean in beans])}
-            update_one = lambda bean: UpdateOne(
-                {K_URL: bean.url}, 
-                {
-                    "$set": { 
-                        K_LIKES: noises[bean.url].likes,
-                        K_COMMENTS: noises[bean.url].comments,
-                        K_TRENDSCORE: noises[bean.url].score
-                    }
-                }
-            )
-            update_count = _bulk_update(self.beanstore, [update_one(bean) for bean in beans if bean.url in noises])
-            logger.info(f"{update_count} beans reranked")        
-
-        # calculate and relink the unique nuggets
-        if highlights:
-
-            # beans are already rectified with trendscore. so just leverage that  
-            getbeans = lambda urls: self.beanstore.find(filter = {K_URL: {"$in": urls}}, projection={K_TRENDSCORE:1})
-            trend_score = lambda urls: reduce(operator.add, [(bean[K_TRENDSCORE] or 0) for bean in getbeans(urls) if K_TRENDSCORE in bean], len(urls)*10)   
-            search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = 500, projection = {K_URL: 1, K_UPDATED: 1})]
-            update_one = lambda highlight, urls: UpdateOne(
-                        {K_ID: highlight.id}, 
-                        {"$set": { K_TRENDSCORE: trend_score(urls), K_URLS: urls}})
-            # rectify nuggets trend score and mapping 
-            # each nugget should have at least one mapped url that is of the same batch as itself.
-            # if it cannot match the content, then delete that the nugget and proceed with the result  
-            # TODO: remove this one, it is a redundant check          
-            matches_same_batch = lambda highlight: self.count_search_beans(embedding=highlight.embedding, min_score=DEFAULT_MAPPING_SCORE, filter={K_UPDATED: highlight.updated}, limit = 1)
-
-            to_update, to_delete = [], []
-            for highlight in highlights:
-                if matches_same_batch(highlight):
-                    to_update.append(update_one(highlight, search(highlight.embedding)))
-                else:
-                    to_delete.append(highlight.id)
-
-            total = _bulk_update(self.highlightstore, update=to_update)
-            logger.info("%d nuggets reranked", total)
-            if to_delete:
-                deleted = self.highlightstore.delete_many({K_ID: {"$in": to_delete}}).deleted_count
-                logger.info("%d straggler nuggets deleted", deleted)
-
-    
     ####################
     ## GET AND SEARCH ##
     ####################
@@ -445,19 +354,19 @@ def _deserialize_beans(cursor) -> list[Bean]:
         logger.warning(f"{err}")
         return []
 
-def _deserialize_highlights(cursor) -> list[Highlight]:
-    try:
-        return [Highlight(**item) for item in cursor]
-    except InvalidBSON as err:
-        logger.warning(f"{err}")
-        return []
-
 def _deserialize_chatters(cursor) -> list[Chatter]:
     try:
         return [Chatter(**item) for item in cursor]
     except InvalidBSON as err:
         logger.warning(f"{err}")
         return []
+    
+# def _deserialize_highlights(cursor) -> list[Highlight]:
+#     try:
+#         return [Highlight(**item) for item in cursor]
+#     except InvalidBSON as err:
+#         logger.warning(f"{err}")
+#         return []
 
 # either the updates will have to be present OR
 # filters and values have to be present
@@ -474,12 +383,11 @@ def get_timevalue(last_ndays: int):
 
 class Localsack: 
     beanstore: ChromaColl
-    categorystore: ChromaColl
+    # categorystore: ChromaColl
 
     def __init__(self, path, embedder: BeansackEmbeddings = None):
         db = chromadb.PersistentClient(path=path)
-        self.beanstore: ChromaColl  = db.get_or_create_collection("beans", embedding_function=embedder)
-        self.categorystore: ChromaColl = db.get_or_create_collection("categories", embedding_function=embedder,  metadata={"hnsw:space": "cosine"})
+        self.beanstore: ChromaColl  = db.get_or_create_collection("beans", embedding_function=embedder)        
     
     def store_beans(self, beans: list[Bean]) -> int:
         self.beanstore.add(
@@ -490,7 +398,7 @@ class Localsack:
         return len(beans)  
     
     def filter_unstored_beans(self, beans: list[Bean]) -> list[Bean]:        
-        existing_beans = self.beanstore.get(ids=list({bean.url for bean in beans}), include=[])['ids']
+        existing_beans = ic(self.beanstore.get(ids=list({bean.url for bean in beans}), include=[])['ids'])
         return list(filter(lambda bean: bean.url not in existing_beans, beans))
     
     def count_related_beans(self, urls: list[str]) -> dict:
@@ -515,6 +423,98 @@ class Localsack:
         # if llm:
         #     self.nuggetor = NuggetExtractor(llm)
         #     self.summarizer = Summarizer(llm)   
+
+        # filter out the old ones        
+        # exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
+        # beans = [bean for bean in beans if (bean.url not in exists) and bean.text]
+        # check for existing update time. If not assign one
+        
+        # noises = [to_noise(bean) for bean in beans if (bean.likes or bean.comments)]
+        # if noises:
+        #     self.noisestore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in noises])
+
+        # process the articles, posts, comments differently from the channels
+        # each bean has to have either embedding or text or else don't try to save it
+            
+            # self.rectify_beans(chatters)        
+               
+    #         # extract and insert nuggets
+    #         nuggets = self.extract_nuggets(chatters, current_time)  
+    #         if nuggets:   
+    #             res = self.nuggetstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in nuggets])
+    #             logger.info("%d nuggets inserted", len(res.inserted_ids))    
+    #             nuggets = self.rectify_nuggets(nuggets) 
+    #             # delete the old duplicate ones the nuggets
+    #             total = len(nuggets)          
+    #             nuggets = self._deduplicate_nuggets(nuggets)
+    #             logger.info("%d duplicate nuggets deleted", total - len(nuggets))    
+            
+    #         # now relink
+    #         self._rerank(chatters, nuggets)
+
+    # def store_noises(self, chatters: list[Chatter]):
+    #     if beans:
+    #         chatters = {noise.url: noise for noise in self._get_latest_noisestats([bean.url for bean in beans])}
+    #         update_one = lambda bean: UpdateOne(
+    #             {K_URL: bean.url}, 
+    #             {
+    #                 "$set": { 
+    #                     K_LIKES: chatters[bean.url].likes,
+    #                     K_COMMENTS: chatters[bean.url].comments,
+    #                     K_TRENDSCORE: chatters[bean.url].score
+    #                 }
+    #             }
+    #         )
+    #         update_count = _bulk_update(self.beanstore, [update_one(bean) for bean in beans if bean.url in chatters])
+    #         logger.info(f"{update_count} beans reranked")     
+
+    # def _rerank(self, beans: list[Bean], highlights: list[Highlight]):    
+    #     # BUG: currently trend_score is calculated for the entire database. That should NOT be the case. There should be a different trend score per time segment
+    #     # rectify beans trend score
+    #     if beans:
+    #         noises = {noise.url: noise for noise in self.get_latest_chatter_stats([bean.url for bean in beans])}
+    #         update_one = lambda bean: UpdateOne(
+    #             {K_URL: bean.url}, 
+    #             {
+    #                 "$set": { 
+    #                     K_LIKES: noises[bean.url].likes,
+    #                     K_COMMENTS: noises[bean.url].comments,
+    #                     K_TRENDSCORE: noises[bean.url].score
+    #                 }
+    #             }
+    #         )
+    #         update_count = _bulk_update(self.beanstore, [update_one(bean) for bean in beans if bean.url in noises])
+    #         logger.info(f"{update_count} beans reranked")        
+
+    #     # calculate and relink the unique nuggets
+    #     if highlights:
+
+    #         # beans are already rectified with trendscore. so just leverage that  
+    #         getbeans = lambda urls: self.beanstore.find(filter = {K_URL: {"$in": urls}}, projection={K_TRENDSCORE:1})
+    #         trend_score = lambda urls: reduce(operator.add, [(bean[K_TRENDSCORE] or 0) for bean in getbeans(urls) if K_TRENDSCORE in bean], len(urls)*10)   
+    #         search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = 500, projection = {K_URL: 1, K_UPDATED: 1})]
+    #         update_one = lambda highlight, urls: UpdateOne(
+    #                     {K_ID: highlight.id}, 
+    #                     {"$set": { K_TRENDSCORE: trend_score(urls), K_URLS: urls}})
+    #         # rectify nuggets trend score and mapping 
+    #         # each nugget should have at least one mapped url that is of the same batch as itself.
+    #         # if it cannot match the content, then delete that the nugget and proceed with the result  
+    #         # TODO: remove this one, it is a redundant check          
+    #         matches_same_batch = lambda highlight: self.count_search_beans(embedding=highlight.embedding, min_score=DEFAULT_MAPPING_SCORE, filter={K_UPDATED: highlight.updated}, limit = 1)
+
+    #         to_update, to_delete = [], []
+    #         for highlight in highlights:
+    #             if matches_same_batch(highlight):
+    #                 to_update.append(update_one(highlight, search(highlight.embedding)))
+    #             else:
+    #                 to_delete.append(highlight.id)
+
+    #         total = _bulk_update(self.highlightstore, update=to_update)
+    #         logger.info("%d nuggets reranked", total)
+    #         if to_delete:
+    #             deleted = self.highlightstore.delete_many({K_ID: {"$in": to_delete}}).deleted_count
+    #             logger.info("%d straggler nuggets deleted", deleted)
+
 
     # # stores beans and post-processes them for generating embeddings, summary and nuggets
     # def _deprecated_store(self, beans: list[Bean]):        

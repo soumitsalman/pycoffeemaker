@@ -8,69 +8,47 @@ from langchain.chains.summarize import load_summarize_chain
 from typing import Optional
 from itertools import chain
 from pydantic import BaseModel, Field
+import re
 
-# _encoding = tiktoken.get_encoding("cl100k_base")
-
-# def count_tokens(texts: list[str]) -> int:
-#     return reduce(lambda a,b: a+b, [len(enc) for enc in _encoding.encode_batch(texts)])
-   
-
- 
-
-DIGEST_TEMPLATE="""Create a title and summary for following {kind}. Also extract the top 2 to 5 keyphrases and highlights from it.
+DIGEST_TEMPLATE="""TASK: Extract a title, summary, top keyphrases and highlights from the following {kind}. 
 OUTPUT FORMAT: {format_instruction}.
-```{kind}
-{text}
-```"""
-DIGEST_CONTEXT_LEN = 4096
+INPUT: {text}"""
 class Digest(BaseModel):
-    title: str = Field(description="title of the content in less than 25 words.")
-    summary: str = Field(description="concise summary of the content in less than 250 words")
-    keyphrases: Optional[list[str]] = Field(descrition="A list of the main keyphrases mentioned here such as company, organization, group, entity, product, person, object, place, technology, stock ticker etc.")
-    highlights: Optional[list[str]] = Field(description="A list of the main one-liner highlights and key takeways from the content")
+    title: str = Field(description="title of the content")
+    summary: str = Field(description="summary of the content")
+    keyphrases: list[str] = Field(descrition="A list of the main keyphrases mentioned here such as company, organization, group, entity, product, person, object, place, technology, stock ticker etc.")
+    highlights: list[str] = Field(description="A list of the main one-liner highlights and key takeways from the content")
 
 class DigestExtractor:
-    def __init__(self, llm):
+    def __init__(self, llm, context_len: int):
         parser = PydanticOutputParser(name = "digest parser", pydantic_object=Digest)
         prompt = PromptTemplate.from_template(
             template=DIGEST_TEMPLATE, 
             partial_variables={"format_instruction": parser.get_format_instructions()})
         self.chain = prompt | llm | parser
+        self.context_len = context_len
     
     @retry(tries=5, jitter=5, delay=10, logger=utils.create_logger("digestor"))
     def run(self, kind: str, text: str) -> Digest:
-        return self.chain.invoke({"kind": kind, "text": utils.truncate(text, DIGEST_CONTEXT_LEN)})
+        return self.chain.invoke({"kind": kind, "text": utils.truncate(text, self.context_len)})
         
     def __call__(self, kind: str, text: str) -> Digest:        
         return self.run(kind, text)
         
 
-################
-## SUMMARIZER ##
-################
-
-import re
-
-# SUMMARIZER_MODEL = "llama3-8b-8192"
-SUMMARIZER_BATCH_SIZE = 6144
 MIN_SUMMARIZER_LEN = 1000
-
 class Summarizer:
-    def __init__(self, llm):                
+    def __init__(self, llm, context_len: int):                
         self.chain = load_summarize_chain(llm=llm, chain_type="stuff", verbose=False)
+        self.context_len = context_len
 
     @retry(tries=5, jitter=5, delay=10, logger=utils.create_logger("summarizer"))
-    def summarize(self, text: str) -> str:
+    def run(self, text: str) -> str:
         if len(text) <= MIN_SUMMARIZER_LEN:
             return text
-        res = self.chain.invoke({"input_documents": [Document(page_content=text)]})
+        res = self.chain.invoke({"input_documents": [Document(page_content=utils.truncate(text, self.context_len))]})
         #  the regex is a hack for llama3
         return re.sub(r'(?i)Here is a concise summary:', '', res['output_text']).strip()
-
-######################
-## NUGGET EXTRACTOR ##
-######################
-
 
 
 NUGGETS_TEMPLATE = """You are provided with one or more excerpts from news article or social media posts delimitered by ```
