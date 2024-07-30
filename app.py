@@ -129,7 +129,7 @@ def run_clustering():
 
     update_counter = 0
     for indices in groups.values():
-        urls=ic([beans['ids'][index] for index in indices])
+        urls=[beans['ids'][index] for index in indices]
         # just take the first one of this cluster as a cluster_id. 
         # The exact value of the cluster_id does not matter
         update = {K_CLUSTER_ID: beans['ids'][indices[0]]} 
@@ -178,8 +178,8 @@ def run_trend_ranking():
         logger.info("%d beans updated with trendscore", res)
         trend_queue.task_done()
 
-# run_cleanup()
-# run_collector()
+run_cleanup()
+run_collector()
 run_indexing()
 run_clustering()
 run_trend_ranking()
