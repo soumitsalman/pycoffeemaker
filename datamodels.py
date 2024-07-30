@@ -37,6 +37,8 @@ class Chatter(BaseModel):
 
 K_URL="url"
 K_KIND = "kind"
+K_CATEGORIES = "categories"
+K_TAGS = "tags"
 K_TITLE = "title"
 K_TEXT = "text"
 K_SOURCE = "source"

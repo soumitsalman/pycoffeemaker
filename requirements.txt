@@ -9,3 +9,5 @@ retry
 pydantic
 python-dotenv
 icecream
+chromadb
+pysqlite3-binary
