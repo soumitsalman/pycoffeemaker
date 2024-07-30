@@ -13,7 +13,6 @@ COMMENT = "social media comment"
 K_LIKES = "likes"
 K_COMMENTS = "comments"
 K_TRENDSCORE = "trend_score"
-K_MAPPED_URL = "mapped_url"
 
 class Chatter(BaseModel):
     # this is the url of bean it represents
@@ -26,11 +25,11 @@ class Chatter(BaseModel):
     # this is the url in context of the social media post that contains the bean represented 'url'
     # when the bean itself is a post (instead of a news/article url) container url is the same as 'url'
     container_url: Optional[str] = None 
-    likes: Optional[int] = Field(default=None)
-    likes_ratio: Optional[float] = Field(default=None)
-    comments: Optional[int] = Field(default=None)
-    subscribers: Optional[int] = Field(default=None)
-    trend_score: Optional[int] = Field(default=None)
+    likes: Optional[int] = None
+    likes_ratio: Optional[float] = None
+    comments: Optional[int] = None
+    subscribers: Optional[int] = None
+    trend_score: Optional[int] = None
     
     def digest(self):
         return f"From: {self.source}\nBody: {self.text}"
@@ -46,9 +45,12 @@ K_EMBEDDING = "embedding"
 K_SUMMARY = "summary"
 K_UPDATED = "updated"
 K_CLUSTER_ID = "cluster_id"
+K_HIGHLIGHTS = "highlights"
+K_IMAGEURL = "image_url"
+K_CREATED = "created"
+K_AUTHOR = "author"
 
 class Bean(BaseModel):
-    id: str|ObjectId = Field(default=None, alias="_id")
     url: str
     updated: Optional[int] = None
     source: Optional[str] = None
@@ -58,23 +60,20 @@ class Bean(BaseModel):
     image_url: Optional[str] = None
     author: Optional[str] = None    
     created: Optional[int] = None   
-    categories: Optional[list[str]] = Field(default=None) 
-    tags: Optional[list[str]] = Field(default=None)
-    highlights: Optional[list[str]] = Field(default=None)
-    summary: Optional[str] = Field(default=None)
-    embedding: Optional[list[float]] = Field(default=None)
-    search_score: Optional[float|int] = Field(default=None)
-    likes: Optional[int] = Field(default=None),
-    comments: Optional[int] = Field(default=None)
-    trend_score: Optional[int] = Field(default=None)    
-    cluster_id: Optional[str] = Field(default=None)
+    categories: Optional[list[str]] = None
+    tags: Optional[list[str]] = None
+    highlights: Optional[list[str]] = None
+    summary: Optional[str] = None
+    embedding: Optional[list[float]] = None
+    search_score: Optional[float|int] = None
+    likes: Optional[int] = None
+    comments: Optional[int] = None
+    trend_score: Optional[int] = None    
+    cluster_id: Optional[str] = None
 
     def digest(self):
         return f"{self.kind} from {self.source}\nTitle: {self.title}\nBody: {self.text}"
     
-    class Config:
-        populate_by_name = True
-        arbitrary_types_allowed=True
 
 K_ID = "_id"
 K_KEYPHRASE = "keyphrase"
@@ -83,10 +82,8 @@ K_DESCRIPTION = "description"
 K_URLS = "urls"
 
 class Highlight(BaseModel):
-    id: str|ObjectId = Field(default=None, alias="_id")
+    id: str = Field(default=None, alias="_id")
     url: Optional[str] = None
-    keyphrase: str = None
-    event: str = None
     description: str 
     updated: Optional[int] = None
     embedding: Optional[list[float]] = None
@@ -94,7 +91,7 @@ class Highlight(BaseModel):
     trend_score: Optional[int] = None
 
     def digest(self) -> str:
-        return (self.keyphrase or "" )+((": "+self.description) if self.description else "")
+        return self.description
     
     class Config:
         populate_by_name = True

@@ -21,3 +21,21 @@ db.runCommand(
       ]
     }
 );
+
+db.beans.createIndex(
+  {
+      categories: 1
+  },
+  {
+      name: "beans_categories_search"
+  }
+);
+
+db.beans.createIndex(
+  {
+      tags: 1
+  },
+  {
+      name: "beans_tags_search"
+  }
+);

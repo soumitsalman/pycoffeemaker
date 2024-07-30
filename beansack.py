@@ -23,7 +23,7 @@ HIGHLIGHTS = "highlights"
 CHATTERS = "chatters"
 SOURCES = "sources"
 
-DEFAULT_SEARCH_SCORE = 0.68
+DEFAULT_SEARCH_SCORE = 0.73
 DEFAULT_MAPPING_SCORE = 0.72
 DEFAULT_LIMIT = 100
 
@@ -105,7 +105,7 @@ class Beansack:
         cursor = self.beanstore.find(filter = filter, projection = projection, sort=sort_by, skip = skip, limit=limit)
         return _deserialize_beans(cursor)
 
-    def search_beans(self, 
+    def vector_search_beans(self, 
             query: str = None,
             embedding: list[float] = None, 
             min_score = DEFAULT_SEARCH_SCORE, 
@@ -117,7 +117,7 @@ class Beansack:
         pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
         return _deserialize_beans(self.beanstore.aggregate(pipeline=pipline))
     
-    def count_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_LIMIT) -> int:
+    def count_vector_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_LIMIT) -> int:
         pipeline = self._count_vector_search_pipeline(query, embedding, min_score, filter, limit)
         result = list(self.beanstore.aggregate(pipeline))
         return result[0]['total_count'] if result else 0
@@ -131,26 +131,15 @@ class Beansack:
         result = self.beanstore.aggregate(self._text_search_pipeline(query, filter=filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True))
         return next(iter(result))['total_count'] if result else 0
     
-    def trending_beans(self, 
-            query: str = None,
-            embedding: list[float] = None, 
-            min_score = DEFAULT_SEARCH_SCORE, 
-            filter = None, 
-            limit = DEFAULT_LIMIT, 
-            projection = None
-        ) -> list[Bean]:        
-        if not (query or embedding):
-            # if query or embedding is not given, then this is scalar query
-            return self.get_beans(filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)
-        else:
-            # else run the vector query
-            return self.search_beans(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)
-        
-    def count_trending_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter = None, limit = DEFAULT_LIMIT) -> int:        
-        return self.beanstore.count_documents(filter=filter, limit=limit) \
-            if not (query or embedding) \
-            else self.count_search_beans(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit)
+    def query_unique_beans(self, filter, sort_by = None, skip = 0, limit = DEFAULT_LIMIT, projection = None):
+        pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
+        return _deserialize_beans(self.beanstore.aggregate(pipeline))
     
+    def count_unique_beans(self, filter, limit = DEFAULT_LIMIT):
+        pipeline = self._unique_beans_pipeline(filter, sort_by=None, skip=None, limit=limit, projection=None, for_count=True)
+        result = self.beanstore.aggregate(pipeline)
+        return next(iter(result))['total_count'] if result else 0
+  
     def count_related_beans(self, urls: list[str]) -> dict:
         pipeline = [
             {
@@ -181,75 +170,44 @@ class Beansack:
                 }
             }
         ]
+        
         return {item.url: item['cluster_size'] for item in self.beanstore.aggregate(pipeline)}
+    
+    def _unique_beans_pipeline(self, filter, sort_by, skip, limit, projection, for_count):
+        pipeline = [{"$match": filter}]
+        if not for_count and sort_by:
+            pipeline.append({"$sort": sort_by})
+        
+        pipeline.append({
+            "$group": {
+                "_id": "$cluster_id",
+                "cluster_id": {"$first": "$cluster_id"},
+                K_URL: {"$first": "$url"},
+                K_TITLE: {"$first": "$title"},
+                K_SUMMARY: {"$first": "$summary"},
+                K_HIGHLIGHTS: {"$first": "$highlights"},
+                K_TAGS: {"$first": "$tags"},
+                K_SOURCE: {"$first": "$source"},
+                K_UPDATED: {"$first": "$updated"},
+                K_CREATED: {"$first": "$created"},
+                K_LIKES: {"$first": "$likes"},
+                K_COMMENTS: {"$first": "$comments"},
+                K_AUTHOR: {"$first": "$author"},
+                K_KIND: {"$first": "$kind"},
+                K_IMAGEURL: {"$first": "$image_url"}
+            }
+        })
 
-    # def search_highlights(self, 
-    #         query: str = None,
-    #         embedding: list[float] = None, 
-    #         min_score = DEFAULT_SEARCH_SCORE, 
-    #         filter = None, 
-    #         limit = DEFAULT_LIMIT, 
-    #         sort_by = None, 
-    #         projection = None
-    #     ) -> list[Highlight]:
-    #     pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
-    #     return _deserialize_highlights(self.highlightstore.aggregate(pipeline=pipline))
-    
-    # def count_search_highlights(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_LIMIT) -> int:
-    #     pipeline = self._count_vector_search_pipeline(query, embedding, min_score, filter, limit)
-    #     result = list(self.highlightstore.aggregate(pipeline))
-    #     return result[0]['total_count'] if result else 0
+        if skip:
+            pipeline.append({"$skip": skip})
+        if limit:
+            pipeline.append({"$limit": limit})
+        if for_count:
+            pipeline.append({ "$count": "total_count"})
+        if not for_count and projection:
+            pipeline.append({"$project": projection})
+        return pipeline
 
-        # def get_highlights(self, filter, skip = 0, limit = 0,  sort_by = None, projection = None) -> list[Highlight]:        
-    #     # append the embeddings filter so that it takes into account only the indexed items
-    #     filter = {
-    #         **{K_EMBEDDING: {"$exists": True}}, 
-    #         **(filter or {})
-    #     }        
-    #     cursor = self.highlightstore.find(filter=filter, projection=projection, sort=sort_by, skip=skip, limit=limit)
-    #     return _deserialize_highlights(cursor)
-    
-    # def get_beans_by_highlights(self, highlight: str|Highlight, filter = None, limit = DEFAULT_LIMIT, projection=None) -> list:
-    #     if isinstance(highlight, Highlight):
-    #         urls = highlight.urls
-    #     else:
-    #         item = self.highlightstore.find_one({K_ID: highlight, K_URLS: {"$exists": True}}, {K_URLS: 1})
-    #         urls = item[K_URLS] if item else None        
-    #     return self.get_beans(filter = {**{K_URL: {"$in": urls }}, **(filter or {})}, sort_by=LATEST, limit=limit, projection=projection) if urls else None
-    
-    # def count_beans_by_highlights(self, highlight: str|Highlight, filter: dict = None, limit: int = DEFAULT_LIMIT) -> list:
-    #     if isinstance(highlight, Highlight):
-    #         urls = highlight.urls
-    #     else:
-    #         item = self.highlightstore.find_one({K_ID: highlight, K_URLS: {"$exists": True}}, {K_URLS: 1})
-    #         urls = item[K_URLS] if item else None
-    #     return self.beanstore.count_documents(filter = {**{K_URL: {"$in": urls }}, **(filter or {})}, limit=limit) if urls else 0
-    
-    
-
-    # def trending_highlights(self, 
-    #         query: str = None,
-    #         embedding: list[float] = None, 
-    #         min_score = DEFAULT_SEARCH_SCORE,             
-    #         filter = None,
-    #         limit = DEFAULT_LIMIT,
-    #         projection = None            
-    #     ) -> list:
-    #     if not (query or embedding):
-    #         # if query or embedding is not given, then this is scalar query            
-    #         result = self.get_highlights(filter = filter, limit = limit, sort_by=LATEST_AND_TRENDING)
-    #     else:
-    #         # else run the vector query
-    #         result = self.search_highlights(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)            
-    #     return result
-    
-    # def count_trending_highlights(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter = None, limit = DEFAULT_LIMIT) -> int:        
-    #     return self.highlightstore.count_documents(filter=filter, limit=limit) \
-    #         if not (query or embedding) \
-    #         else self.count_search_highlights(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit)
-
-    
-    
     def _text_search_pipeline(self, text: str, filter, sort_by, skip, limit, projection, for_count):
         match = {"$text": {"$search": text}}
         if filter:
@@ -259,9 +217,7 @@ class Beansack:
             {   "$match": match },            
             {   "$addFields":  {"search_score": {"$meta": "textScore"}} },
             {   "$match": { "search_score": {"$gte": len(text.split(sep=" ,.;:`'\"\n\t\r\f"))}} }  # this is hueristic to count the number of word match
-        ]
-        if for_count:
-            pipeline.append({ "$count": "total_count"})
+        ]        
 
         if not for_count:
             sort = {"search_score": -1}
@@ -269,16 +225,16 @@ class Beansack:
                 sort.update(sort_by)
             pipeline.append({"$sort": sort})
 
-        if not for_count and skip:
+        if skip:
             pipeline.append({"$skip": skip})
-
         if limit:
             pipeline.append({"$limit": limit})
-
+        if for_count:
+            pipeline.append({ "$count": "total_count"})
         if not for_count and projection:
             pipeline.append({"$project": projection})
         return pipeline
-
+   
     def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
         pipeline = [
             {
@@ -328,7 +284,8 @@ class Beansack:
                     "updated":       {"$first": "$updated"},
                     "url":           {"$first": "$url"},
                     "likes":         {"$first": "$likes"},
-                    "comments":      {"$first": "$comments"}                }
+                    "comments":      {"$first": "$comments"}                
+                }
             },
             {
                 "$group": {
@@ -341,10 +298,7 @@ class Beansack:
         ]
         return _deserialize_chatters(self.chatterstore.aggregate(pipeline))
 
-    # # current arbitrary calculation score: 10 x number_of_unique_articles_or_posts + 3*num_comments + likes     
-    # def _calculate_trend_score(self, urls: list[str]) -> int:
-    #     noises = self.get_latest_chatter_stats(urls)       
-    #     return reduce(lambda a, b: a + b, [n.score for n in noises if n.score], len(urls)*10) 
+
     
 
 ## local utilities for pymongo
@@ -452,6 +406,77 @@ class Localsack:
             
     #         # now relink
     #         self._rerank(chatters, nuggets)
+
+    # # current arbitrary calculation score: 10 x number_of_unique_articles_or_posts + 3*num_comments + likes     
+    # def _calculate_trend_score(self, urls: list[str]) -> int:
+    #     noises = self.get_latest_chatter_stats(urls)       
+    #     return reduce(lambda a, b: a + b, [n.score for n in noises if n.score], len(urls)*10) 
+
+    # def search_highlights(self, 
+    #         query: str = None,
+    #         embedding: list[float] = None, 
+    #         min_score = DEFAULT_SEARCH_SCORE, 
+    #         filter = None, 
+    #         limit = DEFAULT_LIMIT, 
+    #         sort_by = None, 
+    #         projection = None
+    #     ) -> list[Highlight]:
+    #     pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
+    #     return _deserialize_highlights(self.highlightstore.aggregate(pipeline=pipline))
+    
+    # def count_search_highlights(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_LIMIT) -> int:
+    #     pipeline = self._count_vector_search_pipeline(query, embedding, min_score, filter, limit)
+    #     result = list(self.highlightstore.aggregate(pipeline))
+    #     return result[0]['total_count'] if result else 0
+
+        # def get_highlights(self, filter, skip = 0, limit = 0,  sort_by = None, projection = None) -> list[Highlight]:        
+    #     # append the embeddings filter so that it takes into account only the indexed items
+    #     filter = {
+    #         **{K_EMBEDDING: {"$exists": True}}, 
+    #         **(filter or {})
+    #     }        
+    #     cursor = self.highlightstore.find(filter=filter, projection=projection, sort=sort_by, skip=skip, limit=limit)
+    #     return _deserialize_highlights(cursor)
+    
+    # def get_beans_by_highlights(self, highlight: str|Highlight, filter = None, limit = DEFAULT_LIMIT, projection=None) -> list:
+    #     if isinstance(highlight, Highlight):
+    #         urls = highlight.urls
+    #     else:
+    #         item = self.highlightstore.find_one({K_ID: highlight, K_URLS: {"$exists": True}}, {K_URLS: 1})
+    #         urls = item[K_URLS] if item else None        
+    #     return self.get_beans(filter = {**{K_URL: {"$in": urls }}, **(filter or {})}, sort_by=LATEST, limit=limit, projection=projection) if urls else None
+    
+    # def count_beans_by_highlights(self, highlight: str|Highlight, filter: dict = None, limit: int = DEFAULT_LIMIT) -> list:
+    #     if isinstance(highlight, Highlight):
+    #         urls = highlight.urls
+    #     else:
+    #         item = self.highlightstore.find_one({K_ID: highlight, K_URLS: {"$exists": True}}, {K_URLS: 1})
+    #         urls = item[K_URLS] if item else None
+    #     return self.beanstore.count_documents(filter = {**{K_URL: {"$in": urls }}, **(filter or {})}, limit=limit) if urls else 0
+    
+    
+
+    # def trending_highlights(self, 
+    #         query: str = None,
+    #         embedding: list[float] = None, 
+    #         min_score = DEFAULT_SEARCH_SCORE,             
+    #         filter = None,
+    #         limit = DEFAULT_LIMIT,
+    #         projection = None            
+    #     ) -> list:
+    #     if not (query or embedding):
+    #         # if query or embedding is not given, then this is scalar query            
+    #         result = self.get_highlights(filter = filter, limit = limit, sort_by=LATEST_AND_TRENDING)
+    #     else:
+    #         # else run the vector query
+    #         result = self.search_highlights(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)            
+    #     return result
+    
+    # def count_trending_highlights(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter = None, limit = DEFAULT_LIMIT) -> int:        
+    #     return self.highlightstore.count_documents(filter=filter, limit=limit) \
+    #         if not (query or embedding) \
+    #         else self.count_search_highlights(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit)
+
 
     # def store_noises(self, chatters: list[Chatter]):
     #     if beans:
