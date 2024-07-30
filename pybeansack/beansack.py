@@ -47,12 +47,15 @@ class Beansack:
     ## STORING AND INDEXING ##
     ##########################
     def store_beans(self, beans: list[Bean]) -> int:    
-        # filter out the new ones    
-        beans = self.filter_unstored_beans(beans)
+        create_upsert = lambda bean: UpdateOne(
+            filter={K_URL: bean.url},
+            update={"$set": bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True)},
+            upsert=True)
+        
         if beans:
-            beans = self._rectify_as_needed(beans)            
-            res = self.beanstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in beans], ordered=False)
-            return len(res.inserted_ids)
+            beans = self._rectify_as_needed(beans) 
+            res = self.beanstore.bulk_write([create_upsert(bean) for bean in beans], ordered=False)            
+            return res.upserted_count
         return 0
 
     def filter_unstored_beans(self, beans: list[Bean]):
@@ -65,8 +68,6 @@ class Beansack:
         # for each item if there is no embedding and create one from the text.
         batch_time = int(datetime.now().timestamp())
         for item in items:
-            if not item.id:
-                item.id = item.url
             if not item.embedding:
                 item.embedding = self.embedder.embed(item.digest())
             if not item.updated:
@@ -83,9 +84,9 @@ class Beansack:
         # or else update is a list of equal length, and we will do a bulk_write of update one
         if urls:
             if isinstance(updates, dict):
-                return self.beanstore.update_many(filter={K_URL: {"$in": urls}}, update={"$set": updates}).modified_count
-            elif isinstance(updates, list) and (len(urls) == len(updates)):
-                return _bulk_update(self.beanstore, list(map(lambda url, update: UpdateOne({K_URL: url}, {"$set": update}), urls, updates)))
+                return self.beanstore.update_many(filter={K_URL: {"$in": urls}}, update={"$set": updates}).matched_count
+            elif isinstance(updates, list) and ic((len(urls) == len(updates))):
+                return self.beanstore.bulk_write(list(map(lambda url, update: UpdateOne({K_URL: url}, {"$set": update}), urls, updates))).modified_count
         
     def delete_old(self, window: int):
         time_filter = {K_UPDATED: { "$lte": get_timevalue(window) }}
@@ -398,7 +399,7 @@ class Localsack:
         return len(beans)  
     
     def filter_unstored_beans(self, beans: list[Bean]) -> list[Bean]:        
-        existing_beans = ic(self.beanstore.get(ids=list({bean.url for bean in beans}), include=[])['ids'])
+        existing_beans = self.beanstore.get(ids=list({bean.url for bean in beans}), include=[])['ids']
         return list(filter(lambda bean: bean.url not in existing_beans, beans))
     
     def count_related_beans(self, urls: list[str]) -> dict:

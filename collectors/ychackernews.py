@@ -16,6 +16,7 @@ def collect(store_func):
     entries = requests.get(TOP_STORIES_URL, headers={"User-Agent": USER_AGENT}).json()
     collection_time = int(time.time())
     beans = [_extract(entry, collection_time) for entry in entries]
+    beans = [bean for bean in beans if bean]
     logger.info("%d items collected from %s", len(beans), SOURCE)
     store_func(beans)
 

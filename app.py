@@ -1,36 +1,18 @@
 from __init__ import *
 from icecream import ic
-# import os
 from pybeansack import utils
-# from pybeansack.beansack import Beansack, Localsack
 from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
-# from persistqueue import Queue
 from collectors import individual, rssfeed, ychackernews
 from sklearn.cluster import DBSCAN
-# from langchain_groq import ChatGroq
 from chains import DigestExtractor, Summarizer
 
-# CURR_DIR = os.path.dirname(os.path.abspath(__file__))
-# WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
-# QUEUE_DIR=WORKING_DIR+"/.processingqueue"
-# CHROMA_DIR=WORKING_DIR+"/.chromadb"
-# INDEXING_EMBEDDER = WORKING_DIR+"/.models/gte-large-Q4.gguf"
-# QUERY_EMBEDDER = WORKING_DIR+"/.models/snowflake-arctic-Q4.GGUF"
-# FEED_SOURCES = CURR_DIR+"/feedsources.txt"
-# FEED_SOURCES = [
-#     # "https://crypto.news/feed/",
-#     "https://www.gearpatrol.com/feed/",
-#     "https://betanews.com/feed/",
-#     # "https://www.engadget.com/rss.xml",
-#     # "https://spacenews.com/feed/"
-# ]
 FEED_SOURCES = CURR_DIR+"/feedsources.txt"
 QUEUE_DIR=WORKING_DIR+"/.processingqueue"
 CLEANUP_WINDOW = 30
 MIN_BODY_LEN = 1280 # ~200 words
 MAX_CATEGORIES = 3
-CATEGORY_EPS = 0.22
+CATEGORY_EPS = 0.25
 CLUSTER_EPS = 10.25
 
 logger = utils.create_logger("coffeemaker")
@@ -68,7 +50,7 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
             beans, chatters = None,  items
 
         if beans:            
-            downloaded = [bean for bean in _download_beans(remotesack.filter_unstored_beans(beans)) if _is_valid_to_index(bean)]
+            downloaded = [bean for bean in _download_beans(localsack.filter_unstored_beans(beans)) if _is_valid_to_index(bean)]
             if downloaded:
                 logger.info("%d new beans downloaded from %s", len(downloaded), downloaded[0].source)
                 index_queue.put(downloaded)
@@ -88,11 +70,11 @@ def run_indexing():
 
     logger.info("Starting Indexing")
     while not index_queue.empty():
-        beans = remotesack.filter_unstored_beans(index_queue.get()) 
+        beans = localsack.filter_unstored_beans(index_queue.get()) 
         if beans:
             # add to localsack for clustering
             res = localsack.store_beans(beans)
-            logger.info("%d new beans added to chromasack", res)   
+            logger.info("%d beans added to chromasack", res)   
             cluster_queue.put(beans) # set it out for clustering
 
             # this is the augmentation part
@@ -126,7 +108,8 @@ def _run_category_match(beans: list[Bean]):
     matches = local_categorystore.query(query_embeddings=embs['embeddings'], n_results=3, include=['distances'])
     for index in range(len(beans)):
         dist = matches['distances'][index]
-        beans[index].categories = [cat for i, cat in enumerate(matches['ids'][index]) if dist[i]<= CATEGORY_EPS]  
+        cats = [cat for i, cat in enumerate(matches['ids'][index]) if dist[i]<= CATEGORY_EPS]  
+        beans[index].categories = cats or None
     return beans
 
 def run_clustering():
@@ -146,12 +129,12 @@ def run_clustering():
 
     update_counter = 0
     for indices in groups.values():
-        urls=[beans['ids'][index] for index in indices]
+        urls=ic([beans['ids'][index] for index in indices])
         # just take the first one of this cluster as a cluster_id. 
         # The exact value of the cluster_id does not matter
         update = {K_CLUSTER_ID: beans['ids'][indices[0]]} 
         update_counter += remotesack.update_beans(urls, update)
-        localsack.beanstore.update(ids = urls, metadatas=[update]*len(indices)) # updating the localsack is not exactly necessary
+        localsack.beanstore.update(ids = urls, metadatas=[update]*len(urls)) # updating the localsack is not exactly necessary
     logger.info("%d beans updated with cluster_id", update_counter)
 
     # for sequential posterities sake
@@ -181,11 +164,11 @@ def run_trend_ranking():
             update = {K_UPDATED: item.updated}
             ch = next((ch for ch in chatters if ch.url==item.url), None) if chatters else None
             if ch:
-                update.update({
-                    K_LIKES: ch.likes or 0,
-                    K_COMMENTS: ch.comments or 0,
-                    K_TRENDSCORE:  (ch.likes or 0) + (ch.comments or 0)*3
-                })
+                if ch.likes:
+                    update[K_LIKES] = ch.likes
+                if ch.comments:
+                    update[K_COMMENTS] = ch.comments
+                update[K_TRENDSCORE] = (ch.likes or 0) + (ch.comments or 0)*3
             update[K_TRENDSCORE] = update.get(K_TRENDSCORE, 0)+cluster_sizes.get(item.url, 0)*10
             return update
 
@@ -195,8 +178,8 @@ def run_trend_ranking():
         logger.info("%d beans updated with trendscore", res)
         trend_queue.task_done()
 
-run_cleanup()
-run_collector()
+# run_cleanup()
+# run_collector()
 run_indexing()
 run_clustering()
 run_trend_ranking()
