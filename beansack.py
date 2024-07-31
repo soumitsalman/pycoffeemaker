@@ -83,7 +83,7 @@ class Beansack:
         if urls:
             if isinstance(updates, dict):
                 return self.beanstore.update_many(filter={K_URL: {"$in": urls}}, update={"$set": updates}).matched_count
-            elif isinstance(updates, list) and ic((len(urls) == len(updates))):
+            elif isinstance(updates, list) and (len(urls) == len(updates)):
                 return self.beanstore.bulk_write(list(map(lambda url, update: UpdateOne({K_URL: url}, {"$set": update}), urls, updates))).modified_count
         
     def delete_old(self, window: int):

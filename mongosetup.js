@@ -15,7 +15,7 @@ db.runCommand(
             "kind": "vector-ivf",
             "numLists": 10,
             "similarity": "COS",
-            "dimensions": 768
+            "dimensions": 1024
           }
         }
       ]
