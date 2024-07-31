@@ -15,9 +15,27 @@ db.runCommand(
             "kind": "vector-ivf",
             "numLists": 10,
             "similarity": "COS",
-            "dimensions": 768
+            "dimensions": 1024
           }
         }
       ]
     }
+);
+
+db.beans.createIndex(
+  {
+      categories: 1
+  },
+  {
+      name: "beans_categories_search"
+  }
+);
+
+db.beans.createIndex(
+  {
+      tags: 1
+  },
+  {
+      name: "beans_tags_search"
+  }
 );

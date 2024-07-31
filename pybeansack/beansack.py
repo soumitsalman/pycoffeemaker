@@ -10,9 +10,7 @@ from .datamodels import *
 from .utils import create_logger
 from bson import InvalidBSON
 from pymongo import MongoClient, UpdateOne
-from pymongo.collection import Collection as MongoColl
-import chromadb
-from chromadb import Collection as ChromaColl
+from pymongo.collection import Collection
 from icecream import ic
 
 
@@ -23,7 +21,7 @@ HIGHLIGHTS = "highlights"
 CHATTERS = "chatters"
 SOURCES = "sources"
 
-DEFAULT_SEARCH_SCORE = 0.68
+DEFAULT_SEARCH_SCORE = 0.73
 DEFAULT_MAPPING_SCORE = 0.72
 DEFAULT_LIMIT = 100
 
@@ -37,10 +35,10 @@ logger = create_logger("beansack")
 class Beansack:
     def __init__(self, conn_str: str, embedder: BeansackEmbeddings = None):        
         client = MongoClient(conn_str)        
-        self.beanstore: MongoColl = client[BEANSACK][BEANS]
-        self.highlightstore: MongoColl = client[BEANSACK][HIGHLIGHTS]
-        self.chatterstore: MongoColl = client[BEANSACK][CHATTERS]        
-        self.sourcestore: MongoColl = client[BEANSACK][SOURCES]  
+        self.beanstore: Collection = client[BEANSACK][BEANS]
+        self.highlightstore: Collection = client[BEANSACK][HIGHLIGHTS]
+        self.chatterstore: Collection = client[BEANSACK][CHATTERS]        
+        self.sourcestore: Collection = client[BEANSACK][SOURCES]  
         self.embedder: BeansackEmbeddings = embedder
 
     ##########################
@@ -85,7 +83,7 @@ class Beansack:
         if urls:
             if isinstance(updates, dict):
                 return self.beanstore.update_many(filter={K_URL: {"$in": urls}}, update={"$set": updates}).matched_count
-            elif isinstance(updates, list) and ic((len(urls) == len(updates))):
+            elif isinstance(updates, list) and (len(urls) == len(updates)):
                 return self.beanstore.bulk_write(list(map(lambda url, update: UpdateOne({K_URL: url}, {"$set": update}), urls, updates))).modified_count
         
     def delete_old(self, window: int):
@@ -105,7 +103,7 @@ class Beansack:
         cursor = self.beanstore.find(filter = filter, projection = projection, sort=sort_by, skip = skip, limit=limit)
         return _deserialize_beans(cursor)
 
-    def search_beans(self, 
+    def vector_search_beans(self, 
             query: str = None,
             embedding: list[float] = None, 
             min_score = DEFAULT_SEARCH_SCORE, 
@@ -117,7 +115,7 @@ class Beansack:
         pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
         return _deserialize_beans(self.beanstore.aggregate(pipeline=pipline))
     
-    def count_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_LIMIT) -> int:
+    def count_vector_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_LIMIT) -> int:
         pipeline = self._count_vector_search_pipeline(query, embedding, min_score, filter, limit)
         result = list(self.beanstore.aggregate(pipeline))
         return result[0]['total_count'] if result else 0
@@ -131,26 +129,15 @@ class Beansack:
         result = self.beanstore.aggregate(self._text_search_pipeline(query, filter=filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True))
         return next(iter(result))['total_count'] if result else 0
     
-    def trending_beans(self, 
-            query: str = None,
-            embedding: list[float] = None, 
-            min_score = DEFAULT_SEARCH_SCORE, 
-            filter = None, 
-            limit = DEFAULT_LIMIT, 
-            projection = None
-        ) -> list[Bean]:        
-        if not (query or embedding):
-            # if query or embedding is not given, then this is scalar query
-            return self.get_beans(filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)
-        else:
-            # else run the vector query
-            return self.search_beans(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)
-        
-    def count_trending_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter = None, limit = DEFAULT_LIMIT) -> int:        
-        return self.beanstore.count_documents(filter=filter, limit=limit) \
-            if not (query or embedding) \
-            else self.count_search_beans(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit)
+    def query_unique_beans(self, filter, sort_by = None, skip = 0, limit = DEFAULT_LIMIT, projection = None):
+        pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
+        return _deserialize_beans(self.beanstore.aggregate(pipeline))
     
+    def count_unique_beans(self, filter, limit = DEFAULT_LIMIT):
+        pipeline = self._unique_beans_pipeline(filter, sort_by=None, skip=None, limit=limit, projection=None, for_count=True)
+        result = self.beanstore.aggregate(pipeline)
+        return next(iter(result))['total_count'] if result else 0
+  
     def count_related_beans(self, urls: list[str]) -> dict:
         pipeline = [
             {
@@ -181,7 +168,243 @@ class Beansack:
                 }
             }
         ]
+        
         return {item.url: item['cluster_size'] for item in self.beanstore.aggregate(pipeline)}
+    
+    def _unique_beans_pipeline(self, filter, sort_by, skip, limit, projection, for_count):
+        pipeline = [{"$match": filter}]
+        if not for_count and sort_by:
+            pipeline.append({"$sort": sort_by})
+        
+        pipeline.append({
+            "$group": {
+                "_id": "$cluster_id",
+                "cluster_id": {"$first": "$cluster_id"},
+                K_URL: {"$first": "$url"},
+                K_TITLE: {"$first": "$title"},
+                K_SUMMARY: {"$first": "$summary"},
+                K_HIGHLIGHTS: {"$first": "$highlights"},
+                K_TAGS: {"$first": "$tags"},
+                K_SOURCE: {"$first": "$source"},
+                K_UPDATED: {"$first": "$updated"},
+                K_CREATED: {"$first": "$created"},
+                K_LIKES: {"$first": "$likes"},
+                K_COMMENTS: {"$first": "$comments"},
+                K_AUTHOR: {"$first": "$author"},
+                K_KIND: {"$first": "$kind"},
+                K_IMAGEURL: {"$first": "$image_url"}
+            }
+        })
+
+        if skip:
+            pipeline.append({"$skip": skip})
+        if limit:
+            pipeline.append({"$limit": limit})
+        if for_count:
+            pipeline.append({ "$count": "total_count"})
+        if not for_count and projection:
+            pipeline.append({"$project": projection})
+        return pipeline
+
+    def _text_search_pipeline(self, text: str, filter, sort_by, skip, limit, projection, for_count):
+        match = {"$text": {"$search": text}}
+        if filter:
+            match.update(filter)
+
+        pipeline = [
+            {   "$match": match },            
+            {   "$addFields":  {"search_score": {"$meta": "textScore"}} },
+            {   "$match": { "search_score": {"$gte": len(text.split(sep=" ,.;:`'\"\n\t\r\f"))}} }  # this is hueristic to count the number of word match
+        ]        
+
+        if not for_count:
+            sort = {"search_score": -1}
+            if sort_by:
+                sort.update(sort_by)
+            pipeline.append({"$sort": sort})
+
+        if skip:
+            pipeline.append({"$skip": skip})
+        if limit:
+            pipeline.append({"$limit": limit})
+        if for_count:
+            pipeline.append({"$count": "total_count"})
+        if not for_count and projection:
+            pipeline.append({"$project": projection})
+        return pipeline
+   
+    def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
+        pipeline = [
+            {
+                "$search": {
+                    "cosmosSearch": {
+                        "vector": embedding or self.embedder.embed_query(text),
+                        "path":   K_EMBEDDING,
+                        "k":      limit,
+                    },
+                    "returnStoredSource": True
+                }
+            },
+            {
+                "$addFields": { "search_score": {"$meta": "searchScore"} }
+            },
+            {
+                "$match": { "search_score": {"$gte": min_score} }
+            }
+        ]       
+        if filter:
+            pipeline[0]["$search"]["cosmosSearch"]["filter"] = filter
+        if sort_by:
+            pipeline.append({"$sort": sort_by})
+        if projection:
+            pipeline.append({"$project": projection})
+        return pipeline
+    
+    def _count_vector_search_pipeline(self, text, embedding, min_score, filter, limit):
+        pipline = self._vector_search_pipeline(text, embedding, min_score, filter, limit, None, None)
+        pipline.append({ "$count": "total_count"})
+        return pipline
+        
+    def get_latest_chatter_stats(self, urls: list[str]) -> list[Chatter]:
+        pipeline = [
+            {
+                "$match": { "url": {"$in": urls} }
+            },
+            {
+                "$sort": {"updated": -1}
+            },
+            {
+                "$group": {
+                    "_id": {
+                        "url": "$url",
+                        "container_url": "$container_url"
+                    },
+                    "updated":       {"$first": "$updated"},
+                    "url":           {"$first": "$url"},
+                    "likes":         {"$first": "$likes"},
+                    "comments":      {"$first": "$comments"}                
+                }
+            },
+            {
+                "$group": {
+                    "_id":           "$url",
+                    "url":           {"$first": "$url"},                    
+                    "likes":         {"$sum": "$likes"},
+                    "comments":      {"$sum": "$comments"}
+                }
+            }
+        ]
+        return _deserialize_chatters(self.chatterstore.aggregate(pipeline))
+
+
+    
+
+## local utilities for pymongo
+def _deserialize_beans(cursor) -> list[Bean]:
+    try:
+        return [Bean(**item) for item in cursor]
+    except InvalidBSON as err:
+        logger.warning(f"{err}")
+        return []
+
+def _deserialize_chatters(cursor) -> list[Chatter]:
+    try:
+        return [Chatter(**item) for item in cursor]
+    except InvalidBSON as err:
+        logger.warning(f"{err}")
+        return []
+    
+# def _deserialize_highlights(cursor) -> list[Highlight]:
+#     try:
+#         return [Highlight(**item) for item in cursor]
+#     except InvalidBSON as err:
+#         logger.warning(f"{err}")
+#         return []
+
+# either the updates will have to be present OR
+# filters and values have to be present
+def _bulk_update(collection: Collection, updates: list[UpdateOne] = None):
+    BATCH_SIZE = 200 # otherwise ghetto mongo throws a fit
+    modified_count = reduce(operator.add, [collection.bulk_write(updates[i:i+BATCH_SIZE]).modified_count for i in range(0, len(updates), BATCH_SIZE)], 0)
+    return modified_count
+
+def timewindow_filter(last_ndays: int):
+    return {K_UPDATED: {"$gte": get_timevalue(last_ndays)}}
+
+def get_timevalue(last_ndays: int):
+    return int((datetime.now() - timedelta(days=last_ndays)).timestamp())
+
+# class Localsack: 
+#     beanstore: ChromaColl
+#     # categorystore: ChromaColl
+
+#     def __init__(self, path, embedder: BeansackEmbeddings = None):
+#         db = chromadb.PersistentClient(path=path)
+#         self.beanstore: ChromaColl  = db.get_or_create_collection("beans", embedding_function=embedder)        
+    
+#     def store_beans(self, beans: list[Bean]) -> int:
+#         self.beanstore.add(
+#             ids=[bean.url for bean in beans],
+#             embeddings=self.beanstore._embed([bean.text for bean in beans]),
+#             metadatas=[{K_UPDATED: bean.updated} for bean in beans]
+#         ) 
+#         return len(beans)  
+    
+#     def filter_unstored_beans(self, beans: list[Bean]) -> list[Bean]:        
+#         existing_beans = self.beanstore.get(ids=list({bean.url for bean in beans}), include=[])['ids']
+#         return list(filter(lambda bean: bean.url not in existing_beans, beans))
+    
+#     def count_related_beans(self, urls: list[str]) -> dict:
+#         beans_result = self.beanstore.get(ids=urls, include=['metadatas'])
+#         get_cluster_size = lambda metadata: len(self.beanstore.get(where={K_CLUSTER_ID: metadata[K_CLUSTER_ID]}, include=[])["ids"])
+#         return {beans_result['ids'][i]: get_cluster_size(beans_result['metadatas'][i]) for i in range(len(beans_result['ids']))}
+    
+#     def delete_old(self, window: int):
+#         self.beanstore.delete(where=timewindow_filter(window))
+
+#     def update_beans(self, urls: list[str], updates: list[dict]):
+#         if urls and updates:
+#             self.beanstore.update(ids = urls, metadatas=updates)
+
+#####################################################
+### DEPRECATED OLD STORING AND INDEXING FUNCTIONS ###
+#####################################################
+        # if llm:
+        #     self.nuggetor = NuggetExtractor(llm)
+        #     self.summarizer = Summarizer(llm)   
+
+        # filter out the old ones        
+        # exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
+        # beans = [bean for bean in beans if (bean.url not in exists) and bean.text]
+        # check for existing update time. If not assign one
+        
+        # noises = [to_noise(bean) for bean in beans if (bean.likes or bean.comments)]
+        # if noises:
+        #     self.noisestore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in noises])
+
+        # process the articles, posts, comments differently from the channels
+        # each bean has to have either embedding or text or else don't try to save it
+            
+            # self.rectify_beans(chatters)        
+               
+    #         # extract and insert nuggets
+    #         nuggets = self.extract_nuggets(chatters, current_time)  
+    #         if nuggets:   
+    #             res = self.nuggetstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in nuggets])
+    #             logger.info("%d nuggets inserted", len(res.inserted_ids))    
+    #             nuggets = self.rectify_nuggets(nuggets) 
+    #             # delete the old duplicate ones the nuggets
+    #             total = len(nuggets)          
+    #             nuggets = self._deduplicate_nuggets(nuggets)
+    #             logger.info("%d duplicate nuggets deleted", total - len(nuggets))    
+            
+    #         # now relink
+    #         self._rerank(chatters, nuggets)
+
+    # # current arbitrary calculation score: 10 x number_of_unique_articles_or_posts + 3*num_comments + likes     
+    # def _calculate_trend_score(self, urls: list[str]) -> int:
+    #     noises = self.get_latest_chatter_stats(urls)       
+    #     return reduce(lambda a, b: a + b, [n.score for n in noises if n.score], len(urls)*10) 
 
     # def search_highlights(self, 
     #         query: str = None,
@@ -248,210 +471,6 @@ class Beansack:
     #         if not (query or embedding) \
     #         else self.count_search_highlights(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit)
 
-    
-    
-    def _text_search_pipeline(self, text: str, filter, sort_by, skip, limit, projection, for_count):
-        match = {"$text": {"$search": text}}
-        if filter:
-            match.update(filter)
-
-        pipeline = [
-            {   "$match": match },            
-            {   "$addFields":  {"search_score": {"$meta": "textScore"}} },
-            {   "$match": { "search_score": {"$gte": len(text.split(sep=" ,.;:`'\"\n\t\r\f"))}} }  # this is hueristic to count the number of word match
-        ]
-        if for_count:
-            pipeline.append({ "$count": "total_count"})
-
-        if not for_count:
-            sort = {"search_score": -1}
-            if sort_by:
-                sort.update(sort_by)
-            pipeline.append({"$sort": sort})
-
-        if not for_count and skip:
-            pipeline.append({"$skip": skip})
-
-        if limit:
-            pipeline.append({"$limit": limit})
-
-        if not for_count and projection:
-            pipeline.append({"$project": projection})
-        return pipeline
-
-    def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
-        pipeline = [
-            {
-                "$search": {
-                    "cosmosSearch": {
-                        "vector": embedding or self.embedder.embed_query(text),
-                        "path":   K_EMBEDDING,
-                        "k":      limit,
-                    },
-                    "returnStoredSource": True
-                }
-            },
-            {
-                "$addFields": { "search_score": {"$meta": "searchScore"} }
-            },
-            {
-                "$match": { "search_score": {"$gte": min_score} }
-            }
-        ]       
-        if filter:
-            pipeline[0]["$search"]["cosmosSearch"]["filter"] = filter
-        if sort_by:
-            pipeline.append({"$sort": sort_by})
-        if projection:
-            pipeline.append({"$project": projection})
-        return pipeline
-    
-    def _count_vector_search_pipeline(self, text, embedding, min_score, filter, limit):
-        pipline = self._vector_search_pipeline(text, embedding, min_score, filter, limit, None, None)
-        pipline.append({ "$count": "total_count"})
-        return pipline
-        
-    def get_latest_chatter_stats(self, urls: list[str]) -> list[Chatter]:
-        pipeline = [
-            {
-                "$match": { "url": {"$in": urls} }
-            },
-            {
-                "$sort": {"updated": -1}
-            },
-            {
-                "$group": {
-                    "_id": {
-                        "url": "$url",
-                        "container_url": "$container_url"
-                    },
-                    "updated":       {"$first": "$updated"},
-                    "url":           {"$first": "$url"},
-                    "likes":         {"$first": "$likes"},
-                    "comments":      {"$first": "$comments"}                }
-            },
-            {
-                "$group": {
-                    "_id":           "$url",
-                    "url":           {"$first": "$url"},                    
-                    "likes":         {"$sum": "$likes"},
-                    "comments":      {"$sum": "$comments"}
-                }
-            }
-        ]
-        return _deserialize_chatters(self.chatterstore.aggregate(pipeline))
-
-    # # current arbitrary calculation score: 10 x number_of_unique_articles_or_posts + 3*num_comments + likes     
-    # def _calculate_trend_score(self, urls: list[str]) -> int:
-    #     noises = self.get_latest_chatter_stats(urls)       
-    #     return reduce(lambda a, b: a + b, [n.score for n in noises if n.score], len(urls)*10) 
-    
-
-## local utilities for pymongo
-def _deserialize_beans(cursor) -> list[Bean]:
-    try:
-        return [Bean(**item) for item in cursor]
-    except InvalidBSON as err:
-        logger.warning(f"{err}")
-        return []
-
-def _deserialize_chatters(cursor) -> list[Chatter]:
-    try:
-        return [Chatter(**item) for item in cursor]
-    except InvalidBSON as err:
-        logger.warning(f"{err}")
-        return []
-    
-# def _deserialize_highlights(cursor) -> list[Highlight]:
-#     try:
-#         return [Highlight(**item) for item in cursor]
-#     except InvalidBSON as err:
-#         logger.warning(f"{err}")
-#         return []
-
-# either the updates will have to be present OR
-# filters and values have to be present
-def _bulk_update(collection: MongoColl, updates: list[UpdateOne] = None):
-    BATCH_SIZE = 200 # otherwise ghetto mongo throws a fit
-    modified_count = reduce(operator.add, [collection.bulk_write(updates[i:i+BATCH_SIZE]).modified_count for i in range(0, len(updates), BATCH_SIZE)], 0)
-    return modified_count
-
-def timewindow_filter(last_ndays: int):
-    return {K_UPDATED: {"$gte": get_timevalue(last_ndays)}}
-
-def get_timevalue(last_ndays: int):
-    return int((datetime.now() - timedelta(days=last_ndays)).timestamp())
-
-class Localsack: 
-    beanstore: ChromaColl
-    # categorystore: ChromaColl
-
-    def __init__(self, path, embedder: BeansackEmbeddings = None):
-        db = chromadb.PersistentClient(path=path)
-        self.beanstore: ChromaColl  = db.get_or_create_collection("beans", embedding_function=embedder)        
-    
-    def store_beans(self, beans: list[Bean]) -> int:
-        self.beanstore.add(
-            ids=[bean.url for bean in beans],
-            embeddings=self.beanstore._embed([bean.text for bean in beans]),
-            metadatas=[{K_UPDATED: bean.updated} for bean in beans]
-        ) 
-        return len(beans)  
-    
-    def filter_unstored_beans(self, beans: list[Bean]) -> list[Bean]:        
-        existing_beans = self.beanstore.get(ids=list({bean.url for bean in beans}), include=[])['ids']
-        return list(filter(lambda bean: bean.url not in existing_beans, beans))
-    
-    def count_related_beans(self, urls: list[str]) -> dict:
-        beans_result = self.beanstore.get(ids=urls, include=['metadatas'])
-        get_cluster_size = lambda metadata: len(self.beanstore.get(where={K_CLUSTER_ID: metadata[K_CLUSTER_ID]}, include=[])["ids"])
-        return {beans_result['ids'][i]: get_cluster_size(beans_result['metadatas'][i]) for i in range(len(beans_result['ids']))}
-    
-    def delete_old(self, window: int):
-        self.beanstore.delete(where=timewindow_filter(window))
-
-    def update_beans(self, urls: list[str], updates: list[dict]):
-        if urls and updates:
-            self.beanstore.update(ids = urls, metadatas=updates)
-        
-
-    
-
-
-#####################################################
-### DEPRECATED OLD STORING AND INDEXING FUNCTIONS ###
-#####################################################
-        # if llm:
-        #     self.nuggetor = NuggetExtractor(llm)
-        #     self.summarizer = Summarizer(llm)   
-
-        # filter out the old ones        
-        # exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
-        # beans = [bean for bean in beans if (bean.url not in exists) and bean.text]
-        # check for existing update time. If not assign one
-        
-        # noises = [to_noise(bean) for bean in beans if (bean.likes or bean.comments)]
-        # if noises:
-        #     self.noisestore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in noises])
-
-        # process the articles, posts, comments differently from the channels
-        # each bean has to have either embedding or text or else don't try to save it
-            
-            # self.rectify_beans(chatters)        
-               
-    #         # extract and insert nuggets
-    #         nuggets = self.extract_nuggets(chatters, current_time)  
-    #         if nuggets:   
-    #             res = self.nuggetstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in nuggets])
-    #             logger.info("%d nuggets inserted", len(res.inserted_ids))    
-    #             nuggets = self.rectify_nuggets(nuggets) 
-    #             # delete the old duplicate ones the nuggets
-    #             total = len(nuggets)          
-    #             nuggets = self._deduplicate_nuggets(nuggets)
-    #             logger.info("%d duplicate nuggets deleted", total - len(nuggets))    
-            
-    #         # now relink
-    #         self._rerank(chatters, nuggets)
 
     # def store_noises(self, chatters: list[Chatter]):
     #     if beans:

@@ -1,7 +1,4 @@
-################
-## RSS Reader ##
-################
-
+import os
 import feedparser
 import tldextract
 from pybeansack.utils import create_logger
@@ -10,11 +7,13 @@ from .individual import *
 import time
 from icecream import ic
 
+DEFAULT_FEEDS = os.path.dirname(os.path.abspath(__file__))+"/feedsources.txt"
+
 logger = create_logger("rssfeed")
 
 # reads the list of feeds from a file path and collects
 # if sources is a string then it will be treated as a file path or else it will be a an array
-def collect(sources: str|list[str], store_func = None):
+def collect(sources: str|list[str] = DEFAULT_FEEDS, store_func = None):
     if isinstance(sources, str):
         # if sources are not provided, assume that there is sources_file provided
         with open(sources, 'r') as file:

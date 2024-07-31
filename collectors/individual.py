@@ -1,5 +1,6 @@
 import newspaper
 from bs4 import BeautifulSoup
+from icecream import ic
 
 USER_AGENT = "Cafecito-Collector"
 

@@ -1,10 +1,7 @@
 llama-cpp-python
-langchain
 pymongo
 tiktoken
 retry
 pydantic
 python-dotenv
 icecream
-pysqlite3-binary
-chromadb

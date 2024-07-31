@@ -2,10 +2,8 @@ from retry import retry
 import os
 from .utils import create_logger, truncate
 from llama_cpp import Llama
-from langchain_core.embeddings import Embeddings
-from chromadb.utils.embedding_functions import EmbeddingFunction
 
-class BeansackEmbeddings(Embeddings, EmbeddingFunction):
+class BeansackEmbeddings:
     def __init__(self, model_path: str, context_len: int):        
         self.model = Llama(model_path=model_path, n_ctx=context_len, n_threads=os.cpu_count(), embedding=True, verbose=False)
         self.context_len = context_len    
