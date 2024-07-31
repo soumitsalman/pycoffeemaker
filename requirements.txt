@@ -1,13 +1,7 @@
 llama-cpp-python
-langchain
-langchain-community
-langchain-groq
-langchain-text-splitters
 pymongo
 tiktoken
 retry
 pydantic
 python-dotenv
 icecream
-chromadb
-pysqlite3-binary

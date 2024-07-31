@@ -10,9 +10,7 @@ from .datamodels import *
 from .utils import create_logger
 from bson import InvalidBSON
 from pymongo import MongoClient, UpdateOne
-from pymongo.collection import Collection as MongoColl
-import chromadb
-from chromadb import Collection as ChromaColl
+from pymongo.collection import Collection
 from icecream import ic
 
 
@@ -37,10 +35,10 @@ logger = create_logger("beansack")
 class Beansack:
     def __init__(self, conn_str: str, embedder: BeansackEmbeddings = None):        
         client = MongoClient(conn_str)        
-        self.beanstore: MongoColl = client[BEANSACK][BEANS]
-        self.highlightstore: MongoColl = client[BEANSACK][HIGHLIGHTS]
-        self.chatterstore: MongoColl = client[BEANSACK][CHATTERS]        
-        self.sourcestore: MongoColl = client[BEANSACK][SOURCES]  
+        self.beanstore: Collection = client[BEANSACK][BEANS]
+        self.highlightstore: Collection = client[BEANSACK][HIGHLIGHTS]
+        self.chatterstore: Collection = client[BEANSACK][CHATTERS]        
+        self.sourcestore: Collection = client[BEANSACK][SOURCES]  
         self.embedder: BeansackEmbeddings = embedder
 
     ##########################
@@ -230,7 +228,7 @@ class Beansack:
         if limit:
             pipeline.append({"$limit": limit})
         if for_count:
-            pipeline.append({ "$count": "total_count"})
+            pipeline.append({"$count": "total_count"})
         if not for_count and projection:
             pipeline.append({"$project": projection})
         return pipeline
@@ -325,7 +323,7 @@ def _deserialize_chatters(cursor) -> list[Chatter]:
 
 # either the updates will have to be present OR
 # filters and values have to be present
-def _bulk_update(collection: MongoColl, updates: list[UpdateOne] = None):
+def _bulk_update(collection: Collection, updates: list[UpdateOne] = None):
     BATCH_SIZE = 200 # otherwise ghetto mongo throws a fit
     modified_count = reduce(operator.add, [collection.bulk_write(updates[i:i+BATCH_SIZE]).modified_count for i in range(0, len(updates), BATCH_SIZE)], 0)
     return modified_count
@@ -336,41 +334,37 @@ def timewindow_filter(last_ndays: int):
 def get_timevalue(last_ndays: int):
     return int((datetime.now() - timedelta(days=last_ndays)).timestamp())
 
-class Localsack: 
-    beanstore: ChromaColl
-    # categorystore: ChromaColl
+# class Localsack: 
+#     beanstore: ChromaColl
+#     # categorystore: ChromaColl
 
-    def __init__(self, path, embedder: BeansackEmbeddings = None):
-        db = chromadb.PersistentClient(path=path)
-        self.beanstore: ChromaColl  = db.get_or_create_collection("beans", embedding_function=embedder)        
+#     def __init__(self, path, embedder: BeansackEmbeddings = None):
+#         db = chromadb.PersistentClient(path=path)
+#         self.beanstore: ChromaColl  = db.get_or_create_collection("beans", embedding_function=embedder)        
     
-    def store_beans(self, beans: list[Bean]) -> int:
-        self.beanstore.add(
-            ids=[bean.url for bean in beans],
-            embeddings=self.beanstore._embed([bean.text for bean in beans]),
-            metadatas=[{K_UPDATED: bean.updated} for bean in beans]
-        ) 
-        return len(beans)  
+#     def store_beans(self, beans: list[Bean]) -> int:
+#         self.beanstore.add(
+#             ids=[bean.url for bean in beans],
+#             embeddings=self.beanstore._embed([bean.text for bean in beans]),
+#             metadatas=[{K_UPDATED: bean.updated} for bean in beans]
+#         ) 
+#         return len(beans)  
     
-    def filter_unstored_beans(self, beans: list[Bean]) -> list[Bean]:        
-        existing_beans = self.beanstore.get(ids=list({bean.url for bean in beans}), include=[])['ids']
-        return list(filter(lambda bean: bean.url not in existing_beans, beans))
+#     def filter_unstored_beans(self, beans: list[Bean]) -> list[Bean]:        
+#         existing_beans = self.beanstore.get(ids=list({bean.url for bean in beans}), include=[])['ids']
+#         return list(filter(lambda bean: bean.url not in existing_beans, beans))
     
-    def count_related_beans(self, urls: list[str]) -> dict:
-        beans_result = self.beanstore.get(ids=urls, include=['metadatas'])
-        get_cluster_size = lambda metadata: len(self.beanstore.get(where={K_CLUSTER_ID: metadata[K_CLUSTER_ID]}, include=[])["ids"])
-        return {beans_result['ids'][i]: get_cluster_size(beans_result['metadatas'][i]) for i in range(len(beans_result['ids']))}
+#     def count_related_beans(self, urls: list[str]) -> dict:
+#         beans_result = self.beanstore.get(ids=urls, include=['metadatas'])
+#         get_cluster_size = lambda metadata: len(self.beanstore.get(where={K_CLUSTER_ID: metadata[K_CLUSTER_ID]}, include=[])["ids"])
+#         return {beans_result['ids'][i]: get_cluster_size(beans_result['metadatas'][i]) for i in range(len(beans_result['ids']))}
     
-    def delete_old(self, window: int):
-        self.beanstore.delete(where=timewindow_filter(window))
+#     def delete_old(self, window: int):
+#         self.beanstore.delete(where=timewindow_filter(window))
 
-    def update_beans(self, urls: list[str], updates: list[dict]):
-        if urls and updates:
-            self.beanstore.update(ids = urls, metadatas=updates)
-        
-
-    
-
+#     def update_beans(self, urls: list[str], updates: list[dict]):
+#         if urls and updates:
+#             self.beanstore.update(ids = urls, metadatas=updates)
 
 #####################################################
 ### DEPRECATED OLD STORING AND INDEXING FUNCTIONS ###
