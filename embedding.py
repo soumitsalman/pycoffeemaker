@@ -5,7 +5,7 @@ from llama_cpp import Llama
 
 class BeansackEmbeddings:
     def __init__(self, model_path: str, context_len: int):        
-        self.model = Llama(model_path=model_path, n_ctx=context_len, n_threads=os.cpu_count(), embedding=True, verbose=False)
+        self.model = Llama(model_path=model_path, n_ctx=context_len, n_threads=(os.cpu_count()-1) or 1, embedding=True, verbose=False)
         self.context_len = context_len    
        
     def embed_documents(self, texts: list[str]) -> list[list[float]]:

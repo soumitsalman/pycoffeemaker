@@ -72,7 +72,7 @@ class Bean(BaseModel):
     cluster_id: Optional[str] = None
 
     def digest(self):
-        return f"{self.kind} from {self.source}\nTitle: {self.title}\nBody: {self.text}"
+        return f"{self.kind} from {self.source}\n{self.title}\n{self.text}"
     
 
 K_ID = "_id"
