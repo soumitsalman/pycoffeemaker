@@ -7,19 +7,11 @@ CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR+"/.env")
 WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
 
-from coffeemaker import orchestrator as orch
+from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import K_SOURCE, K_DESCRIPTION, K_TEXT, K_EMBEDDING
 from pymongo import MongoClient
-from pybeansack.embedding import BeansackEmbeddings
 
-orch.initialize(
-    os.getenv("DB_CONNECTION_STRING"), 
-    WORKING_DIR, 
-    os.getenv("EMBEDDER_PATH"),
-    os.getenv("GROQ_API_KEY"),
-    float(os.getenv('CATEGORY_EPS')),
-    float(os.getenv('CLUSTER_EPS')))
-remote_categorystore = MongoClient(os.getenv("DB_CONNECTION_STRING"))['espresso']["categories"]
+categorystore = MongoClient(os.getenv("DB_CONNECTION_STRING"))['espresso']["categories"]
 embedder = BeansackEmbeddings(WORKING_DIR+"/.models/"+os.getenv("EMBEDDER_PATH"), 4096)
 
 def setup_categories():    
@@ -28,15 +20,10 @@ def setup_categories():
     cat_names = list(categories.keys())
     cat_desc = list(map(lambda keywords: ", ".join(keywords), categories.values()))
     cat_embs = embedder.embed_documents(cat_desc)
-    orch.local_categorystore.upsert(
-        ids=cat_names, 
-        documents=cat_desc,
-        embeddings=cat_embs,
-        metadatas=[{K_SOURCE: "__SYSTEM__"}]*len(categories)
-    )
+   
     
-    remote_categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
-    remote_categorystore.insert_many(list(map(
+    categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
+    categorystore.insert_many(list(map(
         lambda key, desc, emb: {K_TEXT: key, K_DESCRIPTION: desc, K_EMBEDDING: emb, K_SOURCE: "__SYSTEM__"},
         cat_names, cat_desc, cat_embs)))
     

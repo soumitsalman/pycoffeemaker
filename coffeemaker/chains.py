@@ -10,12 +10,12 @@ from itertools import chain
 from pydantic import BaseModel, Field
 import re
 
-DIGEST_TEMPLATE="""TASK: Extract a title, summary, top keyphrases and highlights from the following {kind}. 
+DIGEST_TEMPLATE="""TASK: Extract a title, top keyphrases and highlights from the following {kind}. 
 OUTPUT FORMAT: {format_instruction}.
 INPUT: {text}"""
 class Digest(BaseModel):
     title: str = Field(description="title of the content")
-    summary: str = Field(description="summary of the content")
+    # summary: str = Field(description="summary of the content")
     keyphrases: list[str] = Field(descrition="A list of the main keyphrases mentioned here such as company, organization, group, entity, product, person, object, place, technology, stock ticker etc.")
     highlights: list[str] = Field(description="A list of the main one-liner highlights and key takeways from the content")
 
@@ -28,7 +28,7 @@ class DigestExtractor:
         self.chain = prompt | llm | parser
         self.context_len = context_len
     
-    @retry(tries=5, jitter=5, delay=10, logger=utils.create_logger("digestor"))
+    @retry(tries=2, jitter=5, delay=10, logger=utils.create_logger("digestor"))
     def run(self, kind: str, text: str) -> Digest:
         return self.chain.invoke({"kind": kind, "text": utils.truncate(text, self.context_len)})
         
@@ -42,7 +42,7 @@ class Summarizer:
         self.chain = load_summarize_chain(llm=llm, chain_type="stuff", verbose=False)
         self.context_len = context_len
 
-    @retry(tries=5, jitter=5, delay=10, logger=utils.create_logger("summarizer"))
+    @retry(tries=3, jitter=5, delay=10, logger=utils.create_logger("summarizer"))
     def run(self, text: str) -> str:
         if len(text) <= MIN_SUMMARIZER_LEN:
             return text

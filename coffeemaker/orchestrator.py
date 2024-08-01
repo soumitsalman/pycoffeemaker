@@ -1,13 +1,13 @@
 from icecream import ic
-from langchain_groq import ChatGroq
 from pybeansack import utils
 from pybeansack.beansack import timewindow_filter, Beansack
 from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
-import chromadb
-from chromadb import Collection
+from pymongo import MongoClient
+from pymongo.collection import Collection
 from collectors import individual, rssfeed, ychackernews
 from sklearn.cluster import DBSCAN
+from langchain_groq import ChatGroq
 from coffeemaker.chains import DigestExtractor, Summarizer
 from persistqueue import Queue
 
@@ -19,8 +19,7 @@ CLEANUP_WINDOW = 30
 logger = utils.create_logger("coffeemaker")
 
 remotesack: Beansack = None
-local_beanstore: Collection = None
-local_categorystore: Collection = None
+categorystore: Collection = None 
 collect_queue: Queue = None
 index_queue: Queue = None
 cluster_queue: Queue = None
@@ -31,14 +30,13 @@ cluster_eps: int = None
 category_eps: int = None
 
 def initialize(db_conn_str: str, working_dir: str, emb_path: str, api_key: str, cl_eps: float, cat_eps: float):
-    db=chromadb.PersistentClient(path=working_dir+"/.chromadb")
     queue_dir=working_dir+"/.processingqueue"
-    global embedder_path, remotesack, local_beanstore, local_categorystore, collect_queue, index_queue, cluster_queue, trend_queue, llm_api_key, cluster_eps, category_eps
+    global embedder_path, remotesack, categorystore, collect_queue, index_queue, cluster_queue, trend_queue, llm_api_key, cluster_eps, category_eps
+
     embedder_path=working_dir+"/.models/"+emb_path
 
     remotesack = Beansack(db_conn_str, None)
-    local_beanstore  = db.get_or_create_collection("beans")        
-    local_categorystore = db.get_or_create_collection("categories",  metadata={"hnsw:space": "cosine"})
+    categorystore = MongoClient(db_conn_str)['espresso']['categories']
     
     collect_queue = Queue(queue_dir+"/collect", tempdir=queue_dir)     
     index_queue = Queue(queue_dir+"/index", tempdir=queue_dir)
@@ -50,31 +48,10 @@ def initialize(db_conn_str: str, working_dir: str, emb_path: str, api_key: str, 
     cluster_eps = cl_eps
     category_eps = cat_eps
 
-def _store_beans(beans: list[Bean]) -> int:
-    local_beanstore.add(
-        ids=[bean.url for bean in beans],
-        embeddings=[bean.embedding for bean in beans],
-        metadatas=[{K_UPDATED: bean.updated} for bean in beans]
-    ) 
-    return remotesack.store_beans(beans)
-
-def _filter_unstored_beans(beans: list[Bean]) -> list[Bean]:        
-    existing_beans = local_beanstore.get(ids=list({bean.url for bean in beans}), include=[])['ids']
-    return list(filter(lambda bean: bean.url not in existing_beans, beans))
-
-def _count_related_beans(urls: list[str]) -> dict:
-    beans_result = local_beanstore.get(ids=urls, include=['metadatas'])
-    get_cluster_size = lambda metadata: len(local_beanstore.get(where={K_CLUSTER_ID: metadata[K_CLUSTER_ID]}, include=[])["ids"])
-    return {beans_result['ids'][i]: get_cluster_size(beans_result['metadatas'][i]) for i in range(len(beans_result['ids']))}
-
-def _update_beans(urls: list[str], updates: dict|list[dict]):    
-    local_beanstore.update(urls, metadatas=[updates]*len(urls) if isinstance(updates, dict) else updates)
-    return remotesack.update_beans(urls, updates)
-
 def run_cleanup():
     logger.info("Starting clean up")
     remotesack.delete_old(CLEANUP_WINDOW)
-    local_beanstore.delete(where=timewindow_filter(CLEANUP_WINDOW))
+    # local_beanstore.delete(where=timewindow_filter(CLEANUP_WINDOW))
 
 def run_collector():
     logger.info("Starting collection from rss feeds.")
@@ -99,7 +76,7 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
             beans, chatters = None,  items
 
         if beans:            
-            downloaded = [bean for bean in _download_beans(_filter_unstored_beans(beans)) if _is_valid_to_index(bean)]
+            downloaded = [bean for bean in _download_beans(remotesack.filter_unstored_beans(beans)) if _is_valid_to_index(bean)]
             if downloaded:
                 logger.info("%d new beans downloaded from %s", len(downloaded), downloaded[0].source)
                 index_queue.put(downloaded)
@@ -115,12 +92,11 @@ def _download_beans(beans: list[Bean]) -> list[Bean]:
 def run_indexing():
     logger.info("Starting Indexing")
     while not index_queue.empty():
-        beans = _filter_unstored_beans(index_queue.get()) 
+        beans = remotesack.filter_unstored_beans(index_queue.get()) 
         if beans:
             # this is the data augmentation part: embeddings, summary, highlights
             _augment(beans)            
-            # add to localsack for clustering
-            res = _store_beans(beans)
+            res = remotesack.store_beans(beans)
             logger.info("%d beans added", res)
             cluster_queue.put(beans) # set it out for clustering
         index_queue.task_done()
@@ -140,29 +116,44 @@ def _augment(beans: list[Bean]):
             # summary because in the digestor the summary content looks like shit
             bean.summary = summarizer.run(bean.text)  
             # match categories
-            bean.categories = _find_categories(bean)  
+            bean.categories = _find_categories(bean)
             # highlights and tags
             digest = digestor.run(kind=bean.kind, text=bean.text)
             bean.tags = digest.keyphrases or bean.tags
             bean.highlights = digest.highlights 
-        except Exception:
-            logger.warning("Augmenting failed for %s", bean.url)        
+        except Exception as err:
+            logger.warning("Augmenting failed for %s. %s", bean.url, str(err))        
         bean.text = None # text field has no use any more and will just cause extra load 
 
     return beans
 
 def _find_categories(bean: Bean):    
-    matches = local_categorystore.query(query_embeddings=bean.embedding, n_results=MAX_CATEGORIES, include=['distances'])
-    dist = matches['distances'][0]
-    return [cat for i, cat in enumerate(matches['ids'][0]) if dist[i]<= category_eps] or None
+    pipeline = [
+        {
+            "$search": {
+                "cosmosSearch": {
+                    "vector": bean.embedding,
+                    "path":   K_EMBEDDING,
+                    "k":      MAX_CATEGORIES,
+                    "filter": {K_SOURCE: "__SYSTEM__"}
+                },
+                "returnStoredSource": True
+            }
+        },
+        {"$addFields": { "search_score": {"$meta": "searchScore"} }},
+        {"$match": { "search_score": {"$gte": 1-category_eps} }},
+        {"$project": {K_TEXT: 1, 'search_score': 1}}
+    ] 
+    matches = categorystore.aggregate(pipeline)
+    return [cat[K_TEXT] for cat in matches] or None
 
 def run_clustering():
     logger.info("Starting Clustering")
     # TODO: in future optimize the beans that need to be clustered.
     # right now we are just clustering the whole database
-    beans = local_beanstore.get(include=['embeddings'])
+    beans = remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1})
     dbscan = DBSCAN(eps = cluster_eps, min_samples=1)
-    labels = dbscan.fit(beans['embeddings']).labels_
+    labels = dbscan.fit([bean.embedding for bean in beans]).labels_
     
     groups = {}
     for index, label in enumerate(labels):
@@ -173,11 +164,7 @@ def run_clustering():
 
     update_counter = 0
     for indices in groups.values():
-        urls=[beans['ids'][index] for index in indices]
-        # just take the first one of this cluster as a cluster_id. 
-        # The exact value of the cluster_id does not matter
-        update = {K_CLUSTER_ID: beans['ids'][indices[0]]} 
-        update_counter += _update_beans(urls, update)
+        update_counter += remotesack.update_beans([beans[index].url for index in indices], {K_CLUSTER_ID: beans[indices[0]].url})
     logger.info("%d beans updated with cluster_id", update_counter)
 
     # for sequential posterities sake
@@ -200,7 +187,7 @@ def run_trend_ranking():
         urls, items = list(items.keys()), list(items.values())
 
         chatters=remotesack.get_latest_chatter_stats(urls)
-        cluster_sizes=_count_related_beans(urls) # technically i can get this from remotesack as well
+        cluster_sizes=remotesack.count_related_beans(urls) # technically i can get this from remotesack as well
 
         # trend_score = likes + 3*comments + 10*count_related_beans
         def make_trend_update(item):
@@ -216,6 +203,23 @@ def run_trend_ranking():
             return update
 
         trends = [make_trend_update(item) for item in items]
-        res = _update_beans(urls, trends)
+        res = remotesack.update_beans(urls, trends)
         logger.info("%d beans updated with trendscore", res)
         trend_queue.task_done()
+
+def run_rectification():
+    logger.info("Starting Rectification")
+    while(True):
+        beans = _augment(remotesack.get_beans(
+            filter={
+                "text": {"$exists": True},
+                "embedding": {"$exists": False}
+            },
+            limit=100))
+        if beans:
+            res = remotesack.update_beans(
+                [bean.url for bean in beans],
+                [bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans])
+            logger.info("%d beans rectified", res)
+        else:
+            break 

@@ -17,7 +17,6 @@ lxml_html_clean
 icecream
 python-dotenv
 persist-queue
-chromadb
 scikit-learn
-pysqlite3-binary
+
 

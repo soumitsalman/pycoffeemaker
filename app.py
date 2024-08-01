@@ -14,12 +14,13 @@ from coffeemaker import orchestrator as orch
 orch.initialize(
     os.getenv("DB_CONNECTION_STRING"), 
     WORKING_DIR, 
-    os.getenv("EMBEDDER_PATH"),
-    os.getenv("GROQ_API_KEY"),
-    float(os.getenv('CATEGORY_EPS')),
-    float(os.getenv('CLUSTER_EPS')))
+    os.getenv("EMBEDDER_FILE"),
+    os.getenv("GROQ_API_KEY"),    
+    float(os.getenv('CLUSTER_EPS')),
+    float(os.getenv('CATEGORY_EPS')))
 orch.run_cleanup()
 orch.run_collector()
 orch.run_indexing()
 orch.run_clustering()
 orch.run_trend_ranking()
+orch.run_rectification()
