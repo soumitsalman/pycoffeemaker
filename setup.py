@@ -20,7 +20,7 @@ orch.initialize(
     float(os.getenv('CATEGORY_EPS')),
     float(os.getenv('CLUSTER_EPS')))
 remote_categorystore = MongoClient(os.getenv("DB_CONNECTION_STRING"))['espresso']["categories"]
-embedder = BeansackEmbeddings(".models/"+os.getenv("EMBEDDER_PATH"), 4096)
+embedder = BeansackEmbeddings(WORKING_DIR+"/.models/"+os.getenv("EMBEDDER_PATH"), 4096)
 
 def setup_categories():    
     with open("factory_settings.json", 'r') as file:
