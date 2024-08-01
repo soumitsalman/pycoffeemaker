@@ -78,7 +78,7 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
         if beans:            
             downloaded = [bean for bean in _download_beans(remotesack.filter_unstored_beans(beans)) if _is_valid_to_index(bean)]
             if downloaded:
-                logger.info("%d new beans downloaded from %s", len(downloaded), downloaded[0].source)
+                logger.info("%d (out of %d) beans downloaded from %s", len(downloaded), len(beans), downloaded[0].source)
                 index_queue.put(downloaded)
         if chatters:            
             trend_queue.put(chatters)
@@ -182,10 +182,8 @@ def run_trend_ranking():
         if isinstance(items[0], Chatter):
             remotesack.store_chatters(items)
         # else item is Bean
-  
-        items = {item.url: item for item in items}
-        urls, items = list(items.keys()), list(items.values())
 
+        urls = ic([item.url for item in items])
         chatters=remotesack.get_latest_chatter_stats(urls)
         cluster_sizes=remotesack.count_related_beans(urls) # technically i can get this from remotesack as well
 

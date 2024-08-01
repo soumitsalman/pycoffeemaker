@@ -28,7 +28,7 @@ class DigestExtractor:
         self.chain = prompt | llm | parser
         self.context_len = context_len
     
-    @retry(tries=2, jitter=5, delay=10, logger=utils.create_logger("digestor"))
+    @retry(tries=2, jitter=5, delay=10)
     def run(self, kind: str, text: str) -> Digest:
         return self.chain.invoke({"kind": kind, "text": utils.truncate(text, self.context_len)})
         

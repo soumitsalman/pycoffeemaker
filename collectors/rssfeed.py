@@ -22,7 +22,7 @@ def collect(sources: str|list[str] = DEFAULT_FEEDS, store_func = None):
     sources = [url.strip() for url in sources if url.strip()]
     for url in sources:
         beans = collect_from(url)   
-        logger.info("%d beans collected: %s", len(beans) if beans else 0, url)
+        # logger.info("%d beans collected: %s", len(beans) if beans else 0, url)
         store_func(beans)       
         
 def collect_from(feed_url: str, content_kind = NEWS):
