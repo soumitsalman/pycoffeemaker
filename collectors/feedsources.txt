@@ -46,3 +46,8 @@ https://blocksandfiles.com/feed/
 https://devclass.com/feed/
 https://www.tomshardware.com/feeds/all
 https://simpleflying.com/feed/
+https://betanews.com/feed/
+https://www.gearpatrol.com/feed/
+https://www.engadget.com/rss.xml
+https://gpuopen.com/feed/
+https://qz.com/rss
