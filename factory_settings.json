@@ -1,7 +1,10 @@
 {
     "categories": {
         "Business & Finance": [
-            "Business news",
+            "Business",
+            "Banking & Finance",
+            "Consumer & Retail", "Real Estate & Housing",
+            "Stock trading",
             "Global economy",
             "Stock market",
             "Financial markets",
@@ -32,10 +35,12 @@
             "Global trade",
             "Currency exchange",
             "Business innovation",
-            "Banking sector"
+            "Banking sector", 
+            "Fed | Central Banks", "Treasuries | Corporate Debt", "Dividend", "Earnings", "Energy | Oil", "Financial Reports", "Currencies", "Gold | Metals | Materials", "Mergers & Acquisitions"
         ],
-        "Crypto & Blockchain":  [
-            "Cryptocurrency news",
+        "Cryptocurrency & Blockchain":  [
+            "Crypto Trading & Speculation",
+            "Cryptocurrency",
             "Blockchain technology",
             "Bitcoin",
             "Ethereum",
@@ -98,7 +103,12 @@
             "Security patches",
             "Cloud security",
             "Ethical hacking",
-            "Security breaches"
+            "Security breaches",
+            "Security Operations",
+            "Application Security",
+            "Product Security",
+            "infrastructure Security",
+            "Enterprise Security"
         ],    
         "Generative AI": [
             "Generative AI news",
@@ -132,7 +142,7 @@
             "Generative AI tools",
             "AI modeling techniques"
         ],
-        "HPC & Hardware": [
+        "Cloud & HPC": [
             "High-performance computing (HPC)",
             "Supercomputers",
             "Data centers",
@@ -140,6 +150,10 @@
             "HPC infrastructure",
             "GPU computing",
             "Cloud computing",
+            "Kubernetes",
+            "Docker",
+            "Azure, AWS, GCP, DigitalOcean",
+            "GPU, LPU, CPU, RAM, HDD, SSD, NVMe",
             "Parallel computing",
             "HPC architectures",
             "Processor technologies",
@@ -179,7 +193,6 @@
             "Larry Page",
             "Sergey Brin",
             "Satya Nadella",
-            "Jack Ma",
             "Sundar Pichai",
             "Greta Thunberg",
             "Malala Yousafzai",
@@ -211,15 +224,17 @@
             "Robert Behnken",
             "Doug Hurley",
             "Wernher von Braun",
-            "NASA Administrator (varies by term)",
+            "NASA Administrator",
             "Chris Hadfield",
-            "Alan Musk",
             "Gwynne Shotwell",
             "Tom Mueller",
-            "James Bridenstine"
+            "James Bridenstine",
+            "Royal Families"
         ],
-        "Robotics": [
-            "Robotics news",
+        "Robotics & Industrial Automation": [
+            "Industrial Automation",
+            "Industrial Assembly Line",
+            "Robotics",
             "Autonomous vehicles",
             "Self-driving cars",
             "Robotic systems",
@@ -231,7 +246,7 @@
             "Robot sensors",
             "Robotics engineering",
             "Autonomous driving technology",
-            "Machine vision",
+            "Computer vision",
             "Robot control systems",
             "Autonomous navigation",
             "Robotic process automation (RPA)",
@@ -251,8 +266,9 @@
             "Fleet management",
             "Human-robot interaction"
         ], 
-        "Space & Rockets": [
-            "Space news",
+        "Rockets & Space Technology": [
+            "Cosmology & The Universe",
+            "Space Technology",
             "Rocket launches",
             "Space exploration",
             "NASA missions",
@@ -315,10 +331,12 @@
             "Start-up accelerator programs",
             "Funding sources",
             "Growth hacking",
-            "Start-up scalability"
+            "Start-up scalability",
+            "Tech Startups", "Biomedical Startups"
         ],
-        "Tech Gadgets": [
+        "Gadgets & Gaming": [
             "Consumer electronics",
+            "Gaming & VR", "Video Games",
             "Tech gadgets",
             "Smartphones",
             "Wearable technology",
@@ -348,6 +366,17 @@
             "Electronic gadgets innovations",
             "Smart appliances",
             "Mobile technology"
-        ]
+        ],
+        "Sports": ["Sports", "Basketball", "MMA", "Tennis", "Hockey", "Boxing", "Football", "Baseball", "Weightlifting & Bodybuilding", "Autoracing", "Golf", "Boxing", "Olympics", "Soccer", "Swimming", "Chess", "Extreme Sports"],
+        "Environment & Climate Change": ["Environment & Climate Change", "Extreme Weather and Cataclysms", "Environmental Science",  "Renewable Energy", "Energy & Natural Resources"], 
+        "Fashion & Clothing": ["Clothes & Apparels", "Jewelry", "Cosmetics", "Fashion & Clothing"], 
+        "Food & Agriculture": ["Food & Agriculture", "Keto Diet", "Paleo Diet", "Vegan Diet", "Mediterranean Cuisine", "Nutrition Research"], 
+        "Science & Mathematics": ["Physics", "Chemistry and Material Sciences", "Biology", "Medical Innovations", "Drug Discoveries"], 
+        "Arts & Literature": ["Arts & Literature", "Photographers", "Writing and Publications", "Book Release"], 
+        "Culture & Entertainment": ["Culture & Entertainment", "Movies", "Festivals", "Music", "TV Series", "Concerts"], 
+        "Programming & Software Engineering": ["Operating Systems", "Algorithms", "Memory Management", "Interprocess Communication", "Compilers", "Software Programming", "Software Testing", "Software Engineering", "Software Deployment", "Frontend Development", "Backend Development", "Kubernetes", "Container Deployment", "CI/CD", "Batch Processing", "Programming Languages: C/C++, Rust, Go, Python, Javascript etc.", "DevOps", "Database", "Web Development", "App Development", "Github"], 
+        "Government & Politics": ["Government & Politics", "Senate & Congress", "US Circuit and Appeals Courts", "City Council a& Mayor", "Political Unrest", "Election Campaign", "Unemployment", "Labor Activism", "Civil Rights Activism", "Human Rights", "Europe Politics", "Asia Politics", "US Federal Policies", "Middle East Politics", "US Political Corruption", "US Involvement in Foreign Conflicts", "Africa politics", "India Politics"], 
+        "Leadership & Management": ["Team Leadership", "Team Management", "Team Growth", "Executive Coaching", "1:1s", "Difficult Conversations", "Manager Employee Engagement"], 
+        "Health & Wellness": ["Longevity", "Global Health", "Aerobics & Cardio", "Vaccine Development", "Nutrition", "Health & Wellness", "Disease Research", "Mental Health Treatments", "Medical Insurance", "Health Policy", "Men's Health", "Women's Health", "Stress Management", "Epidemics & Outbreaks"]
     }
 }

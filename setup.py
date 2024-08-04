@@ -12,20 +12,19 @@ from pybeansack.datamodels import K_SOURCE, K_DESCRIPTION, K_TEXT, K_EMBEDDING
 from pymongo import MongoClient
 
 categorystore = MongoClient(os.getenv("DB_CONNECTION_STRING"))['espresso']["categories"]
-embedder = BeansackEmbeddings(WORKING_DIR+"/.models/"+os.getenv("EMBEDDER_PATH"), 4096)
+embedder = BeansackEmbeddings(WORKING_DIR+"/.models/"+os.getenv("EMBEDDER_FILE"), 4096)
 
 def setup_categories():    
     with open("factory_settings.json", 'r') as file:
         categories = json.load(file)['categories']
-    cat_names = list(categories.keys())
-    cat_desc = list(map(lambda keywords: ", ".join(keywords), categories.values()))
-    cat_embs = embedder.embed_documents(cat_desc)
-   
+    cat_names = sorted(list(categories.keys()))
+    cat_desc = [", ".join(categories[cat]) for cat in cat_names]
     
     categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
     categorystore.insert_many(list(map(
         lambda key, desc, emb: {K_TEXT: key, K_DESCRIPTION: desc, K_EMBEDDING: emb, K_SOURCE: "__SYSTEM__"},
-        cat_names, cat_desc, cat_embs)))
+        cat_names, 
+        cat_desc, embedder.embed_documents(cat_desc))))
     
 setup_categories()
 
