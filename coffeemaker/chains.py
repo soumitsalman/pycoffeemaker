@@ -10,12 +10,12 @@ from itertools import chain
 from pydantic import BaseModel, Field
 import re
 
-DIGEST_TEMPLATE="""TASK: Extract a title, top keyphrases and highlights from the following {kind}. 
+DIGEST_TEMPLATE="""TASK: Create a title, determine the topic, extract the top 5 keyphrases & highlights from the following {kind}. 
 OUTPUT FORMAT: {format_instruction}.
 INPUT: {text}"""
 class Digest(BaseModel):
     title: str = Field(description="title of the content")
-    # summary: str = Field(description="summary of the content")
+    topic: str = Field(description="topic/category of the content such as Sports, Environment & Climate Change, Fashion & Clothing, Food & Agriculture, Science & Mathematics, Arts & Liberature, Culture & Entertainment, Programming & Software Engineering, Government & Politics, Robotics & Industrial Automation, Leadership & Management, Health & Wellness etc.")
     keyphrases: list[str] = Field(descrition="A list of the main keyphrases mentioned here such as company, organization, group, entity, product, person, object, place, technology, stock ticker etc.")
     highlights: list[str] = Field(description="A list of the main one-liner highlights and key takeways from the content")
 

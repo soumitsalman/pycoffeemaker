@@ -29,11 +29,11 @@ llm_api_key: str = None
 cluster_eps: int = None
 category_eps: int = None
 
-def initialize(db_conn_str: str, working_dir: str, emb_path: str, api_key: str, cl_eps: float, cat_eps: float):
+def initialize(db_conn_str: str, working_dir: str, emb_file: str, api_key: str, cl_eps: float, cat_eps: float):
     queue_dir=working_dir+"/.processingqueue"
     global embedder_path, remotesack, categorystore, collect_queue, index_queue, cluster_queue, trend_queue, llm_api_key, cluster_eps, category_eps
 
-    embedder_path=working_dir+"/.models/"+emb_path
+    embedder_path=working_dir+"/.models/"+emb_file
 
     remotesack = Beansack(db_conn_str, None)
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
@@ -93,7 +93,7 @@ def run_indexing():
     logger.info("Starting Indexing")
     while not index_queue.empty():
         beans = remotesack.filter_unstored_beans(index_queue.get()) 
-        if beans:
+        if beans:            
             # this is the data augmentation part: embeddings, summary, highlights
             _augment(beans)            
             res = remotesack.store_beans(beans)
@@ -119,10 +119,11 @@ def _augment(beans: list[Bean]):
             bean.categories = _find_categories(bean)
             # highlights and tags
             digest = digestor.run(kind=bean.kind, text=bean.text)
-            bean.tags = digest.keyphrases or bean.tags
-            bean.highlights = digest.highlights 
-        except Exception as err:
-            logger.warning("Augmenting failed for %s. %s", bean.url, str(err))        
+            bean.tags = digest.keyphrases[:5] or bean.tags
+            bean.highlights = digest.highlights[:5]
+            bean.categories = bean.categories or [digest.topic]
+        except Exception:
+            logger.warning("Augmenting failed for %s", bean.url)        
         bean.text = None # text field has no use any more and will just cause extra load 
 
     return beans
@@ -183,11 +184,10 @@ def run_trend_ranking():
             remotesack.store_chatters(items)
         # else item is Bean
 
-        urls = ic([item.url for item in items])
+        urls = [item.url for item in items]
         chatters=remotesack.get_latest_chatter_stats(urls)
         cluster_sizes=remotesack.count_related_beans(urls) # technically i can get this from remotesack as well
 
-        # trend_score = likes + 3*comments + 10*count_related_beans
         def make_trend_update(item):
             update = {K_UPDATED: item.updated}
             ch = next((ch for ch in chatters if ch.url==item.url), None) if chatters else None
@@ -206,18 +206,24 @@ def run_trend_ranking():
         trend_queue.task_done()
 
 def run_rectification():
-    logger.info("Starting Rectification")
-    while(True):
-        beans = _augment(remotesack.get_beans(
-            filter={
-                "text": {"$exists": True},
-                "embedding": {"$exists": False}
-            },
-            limit=100))
-        if beans:
-            res = remotesack.update_beans(
-                [bean.url for bean in beans],
-                [bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans])
-            logger.info("%d beans rectified", res)
-        else:
-            break 
+    logger.info("Starting Rectification")    
+    existing_categories = {cat[K_TEXT]: cat for cat in categorystore.find(projection={K_ID: 0})}
+    bean_categories = ic([bean_cat for bean_cat in remotesack.beanstore.distinct("categories") if bean_cat not in existing_categories])
+
+    # filter out the ones that do not exist
+
+    # not needed anymore
+    # while(True):
+    #     beans = _augment(remotesack.get_beans(
+    #         filter={
+    #             "text": {"$exists": True},
+    #             "embedding": {"$exists": False}
+    #         },
+    #         limit=100))
+    #     if beans:
+    #         res = remotesack.update_beans(
+    #             [bean.url for bean in beans],
+    #             [bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans])
+    #         logger.info("%d beans rectified", res)
+    #     else:
+    #         break 
