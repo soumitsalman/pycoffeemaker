@@ -1,3 +1,4 @@
+from itertools import chain
 import json
 import os
 from dotenv import load_dotenv
@@ -17,14 +18,12 @@ embedder = BeansackEmbeddings(WORKING_DIR+"/.models/"+os.getenv("EMBEDDER_FILE")
 def setup_categories():    
     with open("factory_settings.json", 'r') as file:
         categories = json.load(file)['categories']
-    cat_names = sorted(list(categories.keys()))
-    cat_desc = [", ".join(categories[cat]) for cat in cat_names]
+    # cat_names = sorted(list(categories.keys()))
+    # cat_desc = [", ".join(categories[cat]) for cat in cat_names]
     
     categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
-    categorystore.insert_many(list(map(
-        lambda key, desc, emb: {K_TEXT: key, K_DESCRIPTION: desc, K_EMBEDDING: emb, K_SOURCE: "__SYSTEM__"},
-        cat_names, 
-        cat_desc, embedder.embed_documents(cat_desc))))
+    items = chain(*list(map(lambda cat_cluster: [{K_TEXT: cat_cluster, K_DESCRIPTION: desc, K_EMBEDDING:  embedder.embed(desc), K_SOURCE: "__SYSTEM__"} for desc in categories[cat_cluster]], categories.keys())))
+    categorystore.insert_many(items)
     
 setup_categories()
 

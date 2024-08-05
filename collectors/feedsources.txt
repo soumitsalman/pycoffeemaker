@@ -51,3 +51,10 @@ https://www.gearpatrol.com/feed/
 https://www.engadget.com/rss.xml
 https://gpuopen.com/feed/
 https://qz.com/rss
+https://www.socialmediaexaminer.com/feed/
+https://www.digitaltrends.com/feed/
+https://feeds.distribution.dotdashmeredith.com/v3/rss/7a9d044b-30b9-48b1-84da-37d4f911dc95
+https://www.finsmes.com/feed
+https://www.iflscience.com/rss/ifls-latest-rss.xml
+https://cleantechnica.com/feed/
+https://www.csoonline.com/feed/
