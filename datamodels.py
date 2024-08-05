@@ -61,7 +61,7 @@ class Bean(BaseModel):
     author: Optional[str] = None    
     created: Optional[int] = None   
     categories: Optional[list[str]] = None
-    tags: Optional[list[str]] = None
+    tags: Optional[str|list[str]] = None
     highlights: Optional[list[str]] = None
     summary: Optional[str] = None
     embedding: Optional[list[float]] = None

@@ -39,3 +39,13 @@ db.beans.createIndex(
       name: "beans_tags_search"
   }
 );
+
+db.beans.createIndex(
+  {
+      trend_score: -1,
+      updated: -1
+  },
+  {
+      name: "beans_trend_score_and_latest"
+  }
+);

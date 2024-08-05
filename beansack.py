@@ -22,7 +22,9 @@ CHATTERS = "chatters"
 SOURCES = "sources"
 
 DEFAULT_VECTOR_SEARCH_SCORE = 0.73
+DEFAULT_VECTOR_SEARCH_SCORE = 0.73
 DEFAULT_MAPPING_SCORE = 0.72
+DEFAULT_VECTOR_LIMIT = 100
 DEFAULT_VECTOR_LIMIT = 100
 
 LATEST = {K_UPDATED: -1}
@@ -45,8 +47,11 @@ class Beansack:
     ## STORING AND INDEXING ##
     ##########################
     def store_beans(self, beans: list[Bean]) -> int:   
+    def store_beans(self, beans: list[Bean]) -> int:   
         if beans:
             beans = self._rectify_as_needed(beans) 
+            res = self.beanstore.insert_many([bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans], ordered=False)            
+            return len(res.inserted_ids)
             res = self.beanstore.insert_many([bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans], ordered=False)            
             return len(res.inserted_ids)
         return 0
@@ -79,6 +84,7 @@ class Beansack:
             if isinstance(updates, dict):
                 return self.beanstore.update_many(filter={K_URL: {"$in": urls}}, update={"$set": updates}).matched_count
             elif isinstance(updates, list) and (len(urls) == len(updates)):
+            elif isinstance(updates, list) and (len(urls) == len(updates)):
                 return self.beanstore.bulk_write(list(map(lambda url, update: UpdateOne({K_URL: url}, {"$set": update}), urls, updates))).modified_count
         
     def delete_old(self, window: int):
@@ -102,6 +108,7 @@ class Beansack:
             query: str = None,
             embedding: list[float] = None, 
             min_score = DEFAULT_VECTOR_SEARCH_SCORE, 
+            min_score = DEFAULT_VECTOR_SEARCH_SCORE, 
             filter = None, 
             limit = DEFAULT_VECTOR_LIMIT, 
             sort_by = None, 
@@ -121,17 +128,72 @@ class Beansack:
                 self._text_search_pipeline(query, filter=filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)))
     
     def count_text_search_beans(self, query: str, filter = None, limit = None):
+    def count_text_search_beans(self, query: str, filter = None, limit = None):
         result = self.beanstore.aggregate(self._text_search_pipeline(query, filter=filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True))
         return next(iter(result))['total_count'] if result else 0
     
+    def query_unique_beans(self, filter, sort_by = None, skip = 0, limit = None, projection = None):
     def query_unique_beans(self, filter, sort_by = None, skip = 0, limit = None, projection = None):
         pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
     
     def count_unique_beans(self, filter, limit = None):
+    def count_unique_beans(self, filter, limit = None):
         pipeline = self._unique_beans_pipeline(filter, sort_by=None, skip=None, limit=limit, projection=None, for_count=True)
         result = self.beanstore.aggregate(pipeline)
         return next(iter(result))['total_count'] if result else 0
+    
+    def query_unique_tags_and_highlights(self, filter, sort_by = None, limit = None):
+        match_filter = {
+            "tags": {"$exists": True},
+            "highlights": {"$exists": True}
+        }
+        if filter:
+            match_filter.update(filter)
+        pipeline = [{"$match": match_filter}]
+        if sort_by:
+            pipeline.append({"$sort": sort_by})
+        pipeline.extend([
+            {
+                "$group": {
+                    "_id": "$cluster_id",
+                    "cluster_id": {"$first": "$cluster_id"},  
+                    "url": {"$first": "$url"},              
+                    "tags": {"$first": "$tags"},
+                    "highlights": {"$first": "$highlights"},
+                    "trend_score": {"$first": "$trend_score"}
+                }
+            },
+            {"$unwind": "$tags"},
+            {
+                "$group": {
+                    "_id": "$tags",
+                    "tags": {"$first": "$tags"},
+                    "url": {"$first": "$url"},
+                    "highlights": {"$first": "$highlights"},
+                    "trend_score": {"$sum": "$trend_score"}
+                }
+            }
+        ])
+        if sort_by:
+            pipeline.append({"$sort": sort_by})        
+        pipeline.append(
+            {
+                "$group": {
+                    "_id": "$url",
+                    "url": {"$first": "$url"},
+                    "tags": {"$first": "$tags"},
+                    "highlights": {"$first": "$highlights"},
+                    "trend_score": {"$first": "$trend_score"}
+                }
+            }
+        ) 
+        if sort_by:
+            pipeline.append({"$sort": sort_by})
+        if limit:
+            pipeline.append({"$limit": limit})   
+        return _deserialize_beans(self.beanstore.aggregate(pipeline))
+  
   
     def count_related_beans(self, urls: list[str]) -> dict:
         pipeline = [
