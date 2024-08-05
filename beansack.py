@@ -108,8 +108,8 @@ class Beansack:
             embedding: list[float] = None, 
             min_score = DEFAULT_SEARCH_SCORE, 
             filter = None, 
+            sort_by = None,
             limit = DEFAULT_LIMIT, 
-            sort_by = None, 
             projection = None
         ) -> list[Bean]:
         pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
@@ -120,20 +120,20 @@ class Beansack:
         result = list(self.beanstore.aggregate(pipeline))
         return result[0]['total_count'] if result else 0
     
-    def text_search_beans(self, query: str, filter = None, sort_by = None, skip=0, limit = DEFAULT_LIMIT, projection=None):
+    def text_search_beans(self, query: str, filter = None, sort_by = None, skip=0, limit=None, projection=None):
         return _deserialize_beans(
             self.beanstore.aggregate(
                 self._text_search_pipeline(query, filter=filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)))
     
-    def count_text_search_beans(self, query: str, filter = None, limit = DEFAULT_LIMIT):
+    def count_text_search_beans(self, query: str, filter = None, limit = None):
         result = self.beanstore.aggregate(self._text_search_pipeline(query, filter=filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True))
         return next(iter(result))['total_count'] if result else 0
     
-    def query_unique_beans(self, filter, sort_by = None, skip = 0, limit = DEFAULT_LIMIT, projection = None):
+    def query_unique_beans(self, filter, sort_by = None, skip = 0, limit = None, projection = None):
         pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
     
-    def count_unique_beans(self, filter, limit = DEFAULT_LIMIT):
+    def count_unique_beans(self, filter, limit = None):
         pipeline = self._unique_beans_pipeline(filter, sort_by=None, skip=None, limit=limit, projection=None, for_count=True)
         result = self.beanstore.aggregate(pipeline)
         return next(iter(result))['total_count'] if result else 0
