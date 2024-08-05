@@ -121,7 +121,8 @@ def _augment(beans: list[Bean]):
             digest = digestor.run(kind=bean.kind, text=bean.text)
             bean.tags = digest.keyphrases[:5] or bean.tags
             bean.highlights = digest.highlights[:5]
-            bean.categories = bean.categories or [digest.topic]
+            # disabling this temporarily
+            # bean.categories = bean.categories or [digest.topic]
         except Exception:
             logger.warning("Augmenting failed for %s", bean.url)        
         bean.text = None # text field has no use any more and will just cause extra load 
