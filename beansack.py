@@ -132,6 +132,58 @@ class Beansack:
         pipeline = self._unique_beans_pipeline(filter, sort_by=None, skip=None, limit=limit, projection=None, for_count=True)
         result = self.beanstore.aggregate(pipeline)
         return next(iter(result))['total_count'] if result else 0
+    
+    def query_unique_tags_and_highlights(self, filter, sort_by = None, limit = None):
+        match_filter = {
+            "tags": {"$exists": True},
+            "highlights": {"$exists": True}
+        }
+        if filter:
+            match_filter.update(filter)
+        pipeline = [{"$match": match_filter}]
+        if sort_by:
+            pipeline.append({"$sort": sort_by})
+        pipeline.extend([
+            {
+                "$group": {
+                    "_id": "$cluster_id",
+                    "cluster_id": {"$first": "$cluster_id"},  
+                    "url": {"$first": "$url"},              
+                    "tags": {"$first": "$tags"},
+                    "highlights": {"$first": "$highlights"},
+                    "trend_score": {"$first": "$trend_score"}
+                }
+            },
+            {"$unwind": "$tags"},
+            {
+                "$group": {
+                    "_id": "$tags",
+                    "tags": {"$first": "$tags"},
+                    "url": {"$first": "$url"},
+                    "highlights": {"$first": "$highlights"},
+                    "trend_score": {"$sum": "$trend_score"}
+                }
+            }
+        ])
+        if sort_by:
+            pipeline.append({"$sort": sort_by})        
+        pipeline.append(
+            {
+                "$group": {
+                    "_id": "$url",
+                    "url": {"$first": "$url"},
+                    "tags": {"$first": "$tags"},
+                    "highlights": {"$first": "$highlights"},
+                    "trend_score": {"$first": "$trend_score"}
+                }
+            }
+        ) 
+        if sort_by:
+            pipeline.append({"$sort": sort_by})
+        if limit:
+            pipeline.append({"$limit": limit})   
+        return _deserialize_beans(self.beanstore.aggregate(pipeline))
+  
   
     def count_related_beans(self, urls: list[str]) -> dict:
         pipeline = [
