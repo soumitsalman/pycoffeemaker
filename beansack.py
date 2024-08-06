@@ -133,68 +133,59 @@ class Beansack:
         result = self.beanstore.aggregate(pipeline)
         return next(iter(result))['total_count'] if result else 0
     
-    def query_unique_tags_and_highlights(self, filter, sort_by = None, limit = None):
+    def query_top_tags_and_highlights(self, filter, limit = None):
         match_filter = {
             "tags": {"$exists": True},
             "highlights": {"$exists": True}
         }
         if filter:
             match_filter.update(filter)
-        pipeline = [{"$match": match_filter}]
-        if sort_by:
-            pipeline.append({"$sort": sort_by})
-        pipeline.extend([
-            {
-                "$group": {
-                    "_id": "$cluster_id",
-                    "cluster_id": {"$first": "$cluster_id"},  
-                    "url": {"$first": "$url"},              
-                    "tags": {"$first": "$tags"},
-                    "highlights": {"$first": "$highlights"},
-                    "trend_score": {"$first": "$trend_score"}
-                }
-            },
+        pipeline = [
+            {"$match": match_filter},
             {"$unwind": "$tags"},
             {
                 "$group": {
                     "_id": "$tags",
                     "tags": {"$first": "$tags"},
                     "url": {"$first": "$url"},
+                    "cluster_id": {"$first": "$cluster_id"},
                     "highlights": {"$first": "$highlights"},
                     "trend_score": {"$sum": "$trend_score"}
                 }
-            }
-        ])
-        if sort_by:
-            pipeline.append({"$sort": sort_by})        
-        pipeline.append(
+            },
+            {"$sort": TRENDING},
             {
                 "$group": {
                     "_id": "$url",
-                    "url": {"$first": "$url"},
                     "tags": {"$first": "$tags"},
+                    "url": {"$first": "$url"},
+                    "cluster_id": {"$first": "$cluster_id"},            
                     "highlights": {"$first": "$highlights"},
                     "trend_score": {"$first": "$trend_score"}
                 }
-            }
-        ) 
-        if sort_by:
-            pipeline.append({"$sort": sort_by})
+            },
+            {"$sort": TRENDING},
+            {
+                "$group": {
+                    "_id": "$cluster_id",
+                    "tags": {"$first": "$tags"},
+                    "url": {"$first": "$url"},
+                    "cluster_id": {"$first": "$cluster_id"},            
+                    "highlights": {"$first": "$highlights"},
+                    "trend_score": {"$first": "$trend_score"}
+                }
+            },
+            {"$sort": TRENDING}
+        ]
         if limit:
             pipeline.append({"$limit": limit})   
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
   
-  
     def count_related_beans(self, urls: list[str]) -> dict:
-        pipeline = [
-            {
-                "$match": {"cluster_id": {"$ne": None}}
-            },
+        pipeline = [            
             {
                 "$group": {
-                    "_id": {
-                        "cluster_id": "$cluster_id"
-                    },
+                    "_id": "$cluster_id",
                     "cluster_id": {"$first": "$cluster_id"},            
                     "urls": {"$addToSet": "$url"},
                     "count": {"$sum": 1}
@@ -214,42 +205,45 @@ class Beansack:
                     "cluster_size": "$count"
                 }
             }
-        ]
-        
+        ]        
         return {item[K_URL]: item['cluster_size'] for item in self.beanstore.aggregate(pipeline)}
     
     def _unique_beans_pipeline(self, filter, sort_by, skip, limit, projection, for_count):
-        pipeline = [{"$match": filter}]
-        if not for_count and sort_by:
-            pipeline.append({"$sort": sort_by})
-        
+        pipeline = []
+        if filter:
+            pipeline.append({"$match": filter})
+        if sort_by:
+            pipeline.append({"$sort": sort_by})        
         pipeline.append({
             "$group": {
                 "_id": "$cluster_id",
-                "cluster_id": {"$first": "$cluster_id"},
+                K_CLUSTER_ID: {"$first": "$cluster_id"},
                 K_URL: {"$first": "$url"},
                 K_TITLE: {"$first": "$title"},
                 K_SUMMARY: {"$first": "$summary"},
                 K_HIGHLIGHTS: {"$first": "$highlights"},
                 K_TAGS: {"$first": "$tags"},
+                K_CATEGORIES: {"$first": "$categories"},
                 K_SOURCE: {"$first": "$source"},
                 K_UPDATED: {"$first": "$updated"},
                 K_CREATED: {"$first": "$created"},
                 K_LIKES: {"$first": "$likes"},
                 K_COMMENTS: {"$first": "$comments"},
+                K_TRENDSCORE: {"$first": "$trend_score"},
                 K_AUTHOR: {"$first": "$author"},
                 K_KIND: {"$first": "$kind"},
                 K_IMAGEURL: {"$first": "$image_url"}
             }
         })
-
+        if sort_by:
+            pipeline.append({"$sort": sort_by})
         if skip:
             pipeline.append({"$skip": skip})
         if limit:
             pipeline.append({"$limit": limit})
         if for_count:
-            pipeline.append({ "$count": "total_count"})
-        if not for_count and projection:
+            pipeline.append({"$count": "total_count"})
+        if projection:
             pipeline.append({"$project": projection})
         return pipeline
 

@@ -49,3 +49,14 @@ db.beans.createIndex(
       name: "beans_trend_score_and_latest"
   }
 );
+
+db.beans.createIndex(
+  {
+      title: "text",
+      summary: "text",
+      highlights: "text",
+      tags: "text",
+      categories: "text"
+  },
+  { name: "beans_text_search"}
+)
