@@ -76,14 +76,14 @@ class Beansack:
             res = self.chatterstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in chatters])
             return len(res.inserted_ids or [])
         
-    def update_beans(self, urls: list[str], updates: dict|list[dict]) -> int:
-        # if update is a single dict then it will apply to all beans with the specified urls
-        # or else update is a list of equal length, and we will do a bulk_write of update one
-        if urls:
-            if isinstance(updates, dict):
-                return self.beanstore.update_many(filter={K_URL: {"$in": urls}}, update={"$set": updates}).matched_count
-            elif isinstance(updates, list) and (len(urls) == len(updates)):
-                return self.beanstore.bulk_write(list(map(lambda url, update: UpdateOne({K_URL: url}, {"$set": update}), urls, updates))).modified_count
+    # def update_beans(self, urls: list[str], updates: dict|list[dict]) -> int:
+    #     # if update is a single dict then it will apply to all beans with the specified urls
+    #     # or else update is a list of equal length, and we will do a bulk_write of update one
+    #     if urls:
+    #         if isinstance(updates, dict):
+    #             return self.beanstore.update_many(filter={K_URL: {"$in": urls}}, update={"$set": updates}).matched_count
+    #         elif isinstance(updates, list) and (len(urls) == len(updates)):
+    #             return self.beanstore.bulk_write(list(map(lambda url, update: UpdateOne({K_URL: url}, {"$set": update}), urls, updates))).modified_count
         
     def delete_old(self, window: int):
         time_filter = {K_UPDATED: { "$lte": get_timevalue(window) }}
