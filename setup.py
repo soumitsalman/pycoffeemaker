@@ -9,47 +9,49 @@ load_dotenv(CURR_DIR+"/.env")
 WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
 
 from pybeansack.embedding import BeansackEmbeddings
-from pybeansack.datamodels import K_SOURCE, K_DESCRIPTION, K_TEXT, K_EMBEDDING
-from pymongo import MongoClient
+from pybeansack.datamodels import *
+from pymongo import MongoClient, UpdateOne
+from coffeemaker import orchestrator as orch
 
-categorystore = MongoClient(os.getenv("DB_CONNECTION_STRING"))['espresso']["categories"]
-embedder = BeansackEmbeddings(WORKING_DIR+"/.models/"+os.getenv("EMBEDDER_FILE"), 4096)
+# categorystore = MongoClient(os.getenv("DB_CONNECTION_STRING"))['espresso']["categories"]
+# embedder = BeansackEmbeddings(WORKING_DIR+"/.models/"+os.getenv("EMBEDDER_FILE"), 4096)
+
 
 def setup_categories():    
     with open("factory_settings.json", 'r') as file:
         categories = json.load(file)['categories']
-    # cat_names = sorted(list(categories.keys()))
-    # cat_desc = [", ".join(categories[cat]) for cat in cat_names]
-    
-    categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
-    items = chain(*list(map(lambda cat_cluster: [{K_TEXT: cat_cluster, K_DESCRIPTION: desc, K_EMBEDDING:  embedder.embed(desc), K_SOURCE: "__SYSTEM__"} for desc in categories[cat_cluster]], categories.keys())))
-    categorystore.insert_many(items)
-    
+
+    embedder = BeansackEmbeddings(orch.embedder_path, 4096)
+    orch.categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
+    items = chain(*list(map(lambda cat_cluster: [{K_TEXT: cat_cluster, K_DESCRIPTION: desc, K_EMBEDDING:  embedder.embed(f"category/topic: {desc}"), K_SOURCE: "__SYSTEM__"} for desc in categories[cat_cluster]], categories.keys())))
+    orch.categorystore.insert_many(items)
+
+def rectify_beans():
+    beans = orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_EMBEDDING: 1})
+    updates = []
+    for bean in beans:
+        cats = orch._find_categories(bean)
+        if cats:
+            updates.append(UpdateOne(
+                filter = {K_URL: bean.url},
+                update = {"$set": {K_CATEGORIES: cats}}
+            ))
+        else:
+            updates.append(UpdateOne(
+                filter = {K_URL: bean.url},
+                update = {"$unset": {K_CATEGORIES: None}}
+            ))
+    orch.remotesack.beanstore.bulk_write(updates, False)
+
+
+orch.initialize(
+    os.getenv("DB_CONNECTION_STRING"), 
+    WORKING_DIR, 
+    os.getenv("EMBEDDER_FILE"),
+    os.getenv("GROQ_API_KEY"),    
+    float(os.getenv('CLUSTER_EPS')),
+    float(os.getenv('CATEGORY_EPS'))
+)
+
 setup_categories()
-
-# def sync_localsack():
-#     local_urls = localsack.beanstore.get(include=[])['ids']
-#     beans = remotesack.get_beans(
-#         filter={
-#             K_URL: {"$nin": local_urls}, 
-#             K_TEXT: {"$exists": True}
-#         }, 
-#         projection={K_URL: 1, K_TEXT: 1})
-#     localsack.store_beans(beans)   
-
-# def sync_localcategories():
-#     local_categories = local_categorystore.get(include=[])["ids"]
-#     categories = remote_categorystore.find(filter={K_TEXT: {"$nin": local_categories}})
-#     local_categorystore.upsert(
-#         ids=[cat[K_TEXT] for cat in categories], 
-#         documents=[cat.get(K_DESCRIPTION, cat[K_TEXT]) for cat in categories],
-#         metadatas=[{K_SOURCE: cat.get(K_SOURCE)} for cat in local_categories]
-#     )
-
-# def sync_remotecategories():
-#     local_categories = local_categorystore.get()
-#     remote_categories = [cat[K_ID] for cat in remote_categorystore.find(filter={K_ID: {"$in": local_categories["ids"]}}, projection={K_ID: 1})]    
-#     make_cat = lambda i: {**{K_ID: local_categories['ids'][i], K_DESCRIPTION: local_categories['documents'][i]}, **local_categories['metadatas'][i]}
-#     remote_categorystore.insert_many([make_cat(i) for i in range(len(local_categories["ids"])) if local_categories['ids'][i] not in remote_categories])
-
-# sync_localsack()
+rectify_beans()

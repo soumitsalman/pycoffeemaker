@@ -1,4 +1,5 @@
 from icecream import ic
+from datetime import datetime as dt
 from pybeansack import utils
 from pybeansack.beansack import timewindow_filter, Beansack
 from pybeansack.embedding import BeansackEmbeddings
@@ -11,9 +12,10 @@ from langchain_groq import ChatGroq
 from coffeemaker.chains import DigestExtractor, Summarizer
 from persistqueue import Queue
 
-MIN_BODY_LEN = 512 # ~100 words
-MIN_DOWNLOAD_LEN = 768 # ~ 150 words 
-MAX_CATEGORIES = 3
+MIN_ALLOWED_BODY_LEN = 75
+MIN_DOWNLOAD_BODY_LEN = 150 
+MIN_SUMMARY_BODY_LEN = 200
+MAX_CATEGORIES = 2
 CLEANUP_WINDOW = 30
 
 logger = utils.create_logger("coffeemaker")
@@ -63,7 +65,7 @@ def run_collector():
     # TODO: add collection from linkedin
 
 def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
-    _is_valid_to_index = lambda bean: bean.text and len(bean.text)>=MIN_BODY_LEN
+    _is_valid_to_index = lambda bean: bean.text and len(bean.text.split())>=MIN_ALLOWED_BODY_LEN
 
     if items:
         # download the articles for new beans
@@ -85,7 +87,7 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
 
 def _download_beans(beans: list[Bean]) -> list[Bean]:
     for bean in beans:
-        body = individual.load_from_url(bean.url) if(not bean.text or (len(bean.text)) <= MIN_DOWNLOAD_LEN) else bean.text
+        body = bean.text if (bean.text and len(bean.text.split())>MIN_DOWNLOAD_BODY_LEN) else individual.load_from_url(bean.url)
         bean.text = body if (len(body or "") > len(bean.text or "")) else bean.text
     return beans
 
@@ -114,15 +116,16 @@ def _augment(beans: list[Bean]):
             # embedding
             bean.embedding = embedder.embed(bean.digest())
             # summary because in the digestor the summary content looks like shit
-            bean.summary = summarizer.run(bean.text)  
+            bean.summary = summarizer.run(bean.text) if len(bean.text.split()) > MIN_SUMMARY_BODY_LEN else bean.text
             # match categories
             bean.categories = _find_categories(bean)
             # highlights and tags
             digest = digestor.run(kind=bean.kind, text=bean.text)
             bean.tags = digest.keyphrases[:5] or bean.tags
             bean.highlights = digest.highlights[:5]
-            # disabling this temporarily
-            # bean.categories = bean.categories or [digest.topic]
+            if bean.kind in [NEWS, BLOG]: # normalize creation time of news and blogs
+                bean.created = int(dt.fromtimestamp(bean.created).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+            # TODO: change the created time to normalize by day
         except Exception:
             logger.warning("Augmenting failed for %s", bean.url)        
         bean.text = None # text field has no use any more and will just cause extra load 
@@ -144,10 +147,10 @@ def _find_categories(bean: Bean):
         },
         {"$addFields": { "search_score": {"$meta": "searchScore"} }},
         {"$match": { "search_score": {"$gte": 1-category_eps} }},
-        {"$project": {K_TEXT: 1, 'search_score': 1}}
+        {"$project": {K_EMBEDDING: 0}}
     ] 
     matches = categorystore.aggregate(pipeline)
-    return [cat[K_TEXT] for cat in matches] or None
+    return list({cat[K_TEXT] for cat in matches}) or None
 
 def run_clustering():
     logger.info("Starting Clustering")

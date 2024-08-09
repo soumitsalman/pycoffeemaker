@@ -17,7 +17,7 @@ def collect(store_func):
     collection_time = int(time.time())
     beans = [_extract(entry, collection_time) for entry in entries]
     beans = [bean for bean in beans if bean]
-    logger.info("%d items collected from %s", len(beans), SOURCE)
+    # logger.info("%d items collected from %s", len(beans), SOURCE)
     store_func(beans)
 
 def _extract(id: int, collection_time: int):
@@ -30,8 +30,8 @@ def _extract(id: int, collection_time: int):
                 updated=collection_time,
                 source=SOURCE,
                 title=entry.get('title'),
-                kind=NEWS if 'url' in entry else POST,
-                text=load_from_html(entry.get('text')), # load if it has a text which usually applies to posts
+                kind=BLOG if 'url' in entry else POST,
+                text=load_from_html(entry['text']) if 'text' in entry else load_from_url(url), # load if it has a text which usually applies to posts
                 author=entry.get('by'),
                 created=int(entry.get('time'))), \
             Chatter(

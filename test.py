@@ -7,24 +7,12 @@ load_dotenv()
 
 import json
 from datetime import datetime as dt
-from langchain_groq import ChatGroq
-from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.beansack import *
 from pybeansack.datamodels import *
 from collectors import rssfeed, ychackernews, individual
 from coffeemaker import orchestrator as orch
 from coffeemaker.chains import *
 
-llm = ChatGroq(api_key=os.getenv('GROQ_API_KEY'), model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
-# embedder = BeansackEmbeddings(".models/"+os.getenv("EMBEDDER_PATH"), 4096)
-# beansack = Beansack(os.getenv('DB_CONNECTION_STRING'), embedder)
-orch.initialize(
-    os.getenv("DB_CONNECTION_STRING"), 
-    "/workspaces/coffeemaker-2/pycoffeemaker", 
-    os.getenv("EMBEDDER_FILE"),
-    os.getenv("GROQ_API_KEY"),    
-    float(os.getenv('CLUSTER_EPS')),
-    float(os.getenv('CATEGORY_EPS')))
 
 def write_datamodels(items, file_name: str = None):
     if items:
@@ -43,7 +31,6 @@ def test_chains():
     ]
     rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans), "TEST-CHAIN-"+beans[0].source))
    
-
 def test_collection():
     sources = [
         # "https://dev.to/feed",
@@ -60,10 +47,53 @@ def test_search():
     write_datamodels(ic(orch.remotesack.text_search_beans(query="kamala harris election", filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID:0})), "TEXT_SEARCH")
     write_datamodels(ic(orch.remotesack.vector_search_beans(query="kamala harris election", filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID: 0})), "VECTOR_SEARCH")
 
+orch.initialize(
+    os.getenv("DB_CONNECTION_STRING"), 
+    "/workspaces/coffeemaker-2/pycoffeemaker", 
+    os.getenv("EMBEDDER_FILE"),
+    os.getenv("GROQ_API_KEY"),    
+    float(os.getenv('CLUSTER_EPS')),
+    float(os.getenv('CATEGORY_EPS')))
+
+beans = []
+def collect_beans(new_items):    
+    if isinstance(new_items[0], Bean):
+        beans.extend(orch._augment(orch._download_beans(new_items)))
+        print("feed collection finished")
+    elif isinstance(new_items[0], tuple):
+        beans.extend(orch._augment([item[0] for item in new_items]))
+        print("yc collection finished")
+    
+
+yc_urls = [
+    "41163382",
+    "41182823",
+    "41130620",
+    "41127706",
+    "41171060",
+    "41150317",
+    "41154135",
+    "41165255",
+    "41156872",
+    "41144755"
+]        
+
+feeds = [
+    "https://www.theverge.com/rss/index.xml",
+    "https://scitechdaily.com/feed/",
+    # "https://qz.com/rss",
+    "https://chaski.huffpost.com/us/auto/vertical/politics"
+]
+# rssfeed.collect(feeds, collect_beans)
+collect_beans([ychackernews._extract(int(id), int(dt.now().timestamp())) for id in yc_urls])
+write_datamodels(beans, "DEBUGGING-DATA-2")
+
 ### TEST CALLS
 # test_writing()
-test_chains()
+# test_chains()
 # test_collection_local()
 # test_collection_live()
 # test_rectify_beansack()
 # test_search()
+
+
