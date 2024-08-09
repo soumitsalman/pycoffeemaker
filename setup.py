@@ -26,23 +26,6 @@ def setup_categories():
     items = chain(*list(map(lambda cat_cluster: [{K_TEXT: cat_cluster, K_DESCRIPTION: desc, K_EMBEDDING:  embedder.embed(f"category/topic: {desc}"), K_SOURCE: "__SYSTEM__"} for desc in categories[cat_cluster]], categories.keys())))
     orch.categorystore.insert_many(items)
 
-def rectify_beans():
-    beans = orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_EMBEDDING: 1})
-    updates = []
-    for bean in beans:
-        cats = orch._find_categories(bean)
-        if cats:
-            updates.append(UpdateOne(
-                filter = {K_URL: bean.url},
-                update = {"$set": {K_CATEGORIES: cats}}
-            ))
-        else:
-            updates.append(UpdateOne(
-                filter = {K_URL: bean.url},
-                update = {"$unset": {K_CATEGORIES: None}}
-            ))
-    orch.remotesack.beanstore.bulk_write(updates, False)
-
 
 orch.initialize(
     os.getenv("DB_CONNECTION_STRING"), 
@@ -52,6 +35,5 @@ orch.initialize(
     float(os.getenv('CLUSTER_EPS')),
     float(os.getenv('CATEGORY_EPS'))
 )
-
 setup_categories()
-rectify_beans()
+

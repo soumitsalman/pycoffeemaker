@@ -4,7 +4,7 @@ from pybeansack import utils
 from pybeansack.beansack import timewindow_filter, Beansack
 from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
-from pymongo import MongoClient
+from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 from collectors import individual, rssfeed, ychackernews
 from sklearn.cluster import DBSCAN
@@ -157,7 +157,7 @@ def run_clustering():
     # TODO: in future optimize the beans that need to be clustered.
     # right now we are just clustering the whole database
     beans = remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1})
-    dbscan = DBSCAN(eps = cluster_eps, min_samples=1)
+    dbscan = DBSCAN(eps = ic(cluster_eps), min_samples=1, metric="cosine")
     labels = dbscan.fit([bean.embedding for bean in beans]).labels_
     
     groups = {}
@@ -167,10 +167,17 @@ def run_clustering():
             groups[label] = []
         groups[label].append(index)
 
-    update_counter = 0
-    for indices in groups.values():
-        update_counter += remotesack.update_beans([beans[index].url for index in indices], {K_CLUSTER_ID: beans[indices[0]].url})
-    logger.info("%d beans updated with cluster_id", update_counter)
+    makeupdate = lambda indexes: UpdateMany(
+        filter={
+            K_URL: {"$in": [beans[index].url for index in indexes]}
+        },
+        update={
+            "$set": {K_CLUSTER_ID: beans[indexes[0]].url}
+        }
+    )
+    updates = [makeupdate(indexes) for indexes in groups.values()]
+    update_count = remotesack.beanstore.bulk_write(updates, ordered=False).modified_count
+    logger.info("%d beans updated with cluster_id", update_count)
 
     # for sequential posterities sake
     while not cluster_queue.empty():
@@ -202,32 +209,31 @@ def run_trend_ranking():
                     update[K_COMMENTS] = ch.comments
                 update[K_TRENDSCORE] = (ch.likes or 0) + (ch.comments or 0)*3
             update[K_TRENDSCORE] = update.get(K_TRENDSCORE, 0)+cluster_sizes.get(item.url, 0)*10
-            return update
+            return UpdateOne(filter={K_URL: item.url}, update={"$set":update})
 
-        trends = [make_trend_update(item) for item in items]
-        res = remotesack.update_beans(urls, trends)
+        res = remotesack.beanstore.bulk_write([make_trend_update(item) for item in items]).modified_count
         logger.info("%d beans updated with trendscore", res)
         trend_queue.task_done()
 
+def _rectify_bean_categories():
+    beans = remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_EMBEDDING: 1})
+    updates = []
+    for bean in beans:
+        cats = _find_categories(bean)
+        if cats:
+            updates.append(UpdateOne(
+                filter = {K_URL: bean.url},
+                update = {"$set": {K_CATEGORIES: cats}}
+            ))
+        else:
+            updates.append(UpdateOne(
+                filter = {K_URL: bean.url},
+                update = {"$unset": {K_CATEGORIES: ""}}
+            ))
+    return remotesack.beanstore.bulk_write(updates, False).modified_count
+
 def run_rectification():
-    logger.info("Starting Rectification")    
-    existing_categories = {cat[K_TEXT]: cat for cat in categorystore.find(projection={K_ID: 0})}
-    bean_categories = ic([bean_cat for bean_cat in remotesack.beanstore.distinct("categories") if bean_cat not in existing_categories])
-
-    # filter out the ones that do not exist
-
-    # not needed anymore
-    # while(True):
-    #     beans = _augment(remotesack.get_beans(
-    #         filter={
-    #             "text": {"$exists": True},
-    #             "embedding": {"$exists": False}
-    #         },
-    #         limit=100))
-    #     if beans:
-    #         res = remotesack.update_beans(
-    #             [bean.url for bean in beans],
-    #             [bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans])
-    #         logger.info("%d beans rectified", res)
-    #     else:
-    #         break 
+    _rectify_bean_categories()
+    run_clustering()
+    trend_queue.put(remotesack.get_beans(filter={}))
+    run_trend_ranking()
