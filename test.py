@@ -12,13 +12,13 @@ from pybeansack.datamodels import *
 from collectors import rssfeed, ychackernews, individual
 from coffeemaker import orchestrator as orch
 from coffeemaker.chains import *
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import DBSCAN, OPTICS
 from pymongo import UpdateMany
 
 
 def write_datamodels(items, file_name: str = None):
     if items:
-        with open(f".test/{file_name or ic(items[0].source)}.json", 'w') as file:
+        with open(f".test/{file_name or items[0].source}.json", 'w') as file:
             json.dump([bean.model_dump(exclude_unset=True, exclude_none=True) for bean in items], file)
             
 def write_text(text, file_name):
@@ -28,19 +28,21 @@ def write_text(text, file_name):
 def test_chains():
     sources = [
         # "https://dev.to/feed",
-        "https://www.ghacks.net/feed/",
-        "https://gearpatrol.com/feed/"
+        "https://www.finsmes.com/feed",
+        # "https://gearpatrol.com/feed/"
     ]
     rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans), "TEST-CHAIN-"+beans[0].source))
    
 def test_collection():
     sources = [
         # "https://dev.to/feed",
-        "https://techxplore.com/rss-feed/"
-        "https://spacenews.com/feed/",
-        "https://crypto.news/feed/"
+        # "https://techxplore.com/rss-feed/"
+        # "https://spacenews.com/feed/",
+        # "https://crypto.news/feed/"
+        # "https://www.finsmes.com/feed"
+        # "https://www.nature.com/nature.rss"
     ]
-    rssfeed.collect(sources=sources, store_func=write_datamodels)
+    rssfeed.collect(store_func=write_datamodels)
     # [rssfeed.collect_from(src) for src in sources]
     # ychackernews.collect(store_func=write_datamodels)
 
@@ -49,21 +51,11 @@ def test_search():
     write_datamodels(ic(orch.remotesack.text_search_beans(query="kamala harris election", filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID:0})), "TEXT_SEARCH")
     write_datamodels(ic(orch.remotesack.vector_search_beans(query="kamala harris election", filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID: 0})), "VECTOR_SEARCH")
 
-def test_clustering(urls):    
-    beans = orch.remotesack.get_beans(filter={K_URL: {"$in": urls}})
-    dbscan = DBSCAN(eps = orch.cluster_eps, min_samples=1, metric="cosine")
-    labels = dbscan.fit([bean.embedding for bean in beans]).labels_
-    
-    groups = {}
-    for index, label in enumerate(labels):
-        label = int(label)
-        if label not in groups:
-            groups[label] = []
-        groups[label].append(index)
+def test_clustering(): 
+    res = orch._run_clustering(orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_EMBEDDING: 1}), 4)
+    make_update = lambda group: print("[", len(group), "] ====\n", "\n\t".join(group) if isinstance(group[0], str) else group,"\n") # print("[", len(group), "] ====\n", "\n\t".join(group),"\n")
+    [make_update(group) for group in res if len(group) > 2]
 
-    make_update = lambda indexes: print("[", len(indexes), "]", beans[indexes[0]].title, "====\n", "\n".join(["\t"+beans[index].title for index in indexes]),"\n")
-    [make_update(indexes) for indexes in groups.values()]
-        
 
 urls = [
     "https://scitechdaily.com/laser-view-into-the-avocado-new-method-exposes-cellular-secrets/" ,
@@ -120,54 +112,51 @@ urls = [
     "https://www.prnewswire.com/news-releases/senestech-announces-second-quarter-2024-financial-results-302218295.html",
     "https://thenewstack.io/get-certified-in-platform-engineering-starting-aug-6/",
     "https://dev.to/danielbryantuk/what-is-platform-decay-and-why-should-platform-engineers-care-12o9",
-    "https://thenewstack.io/platform-owners-must-master-platform-optimization-to-drive-innovation/"
+    "https://thenewstack.io/platform-owners-must-master-platform-optimization-to-drive-innovation/",
+    "https://www.prnewswire.com/news-releases/uipath-inc-securities-fraud-class-action-lawsuit-pending-contact-levi--korsinsky-before-august-19-2024-to-discuss-your-rights--path-302218468.html",
+    "https://www.businessinsider.com/top-uber-lyft-driver-concerns-low-earnings-declining-pay-safety-2024-8",
+    "https://investorplace.com/earning-results/2024/08/aclx-stock-earnings-arcellx-for-q2-of-2024/",
+    "https://investorplace.com/earning-results/2024/08/alxo-stock-earnings-alx-oncology-holdings-for-q2-of-2024/",
+    "https://techxplore.com/news/2024-08-survey-sexually-explicit-deepfakes.html",
+    "https://www.prnewswire.com/news-releases/levi--korsinsky-announces-the-filing-of-a-securities-class-action-on-behalf-of-seastar-medical-holding-corporationicu-shareholders-302218471.html",
+    "https://www.prnewswire.com/news-releases/teradata-corporation-sued-for-securities-law-violations--investors-should-contact-levi--korsinsky-before-august-13-2024-to-discuss-your-rights--tdc-302218447.html",
+    "https://www.prnewswire.com/news-releases/levi--korsinsky-announces-the-filing-of-a-securities-class-action-on-behalf-of-vicor-corporationvicr-shareholders-302218463.html",
+    "https://www.prnewswire.com/news-releases/nike-inc-sued-for-securities-law-violations---contact-levi--korsinsky-before-august-19-2024-to-discuss-your-rights--nke-302218416.html",
+    "https://www.prnewswire.com/news-releases/shareholders-that-lost-money-on-macrogenics-incmgnx-urged-to-join-class-action--contact-levi--korsinsky-to-learn-more-302218467.html",
+    "https://www.prnewswire.com/news-releases/september-30-2024-deadline-contact-levi--korsinsky-to-join-class-action-suit-against-crwd-302218480.html"
 ]
 
-orch.initialize(
-    os.getenv("DB_CONNECTION_STRING"), 
-    "/workspaces/coffeemaker-2/pycoffeemaker", 
-    os.getenv("EMBEDDER_FILE"),
-    os.getenv("GROQ_API_KEY"),    
-    float(0.105),
-    float(os.getenv('CATEGORY_EPS')))
-test_clustering(urls)
-    
-# beans = []
-# def collect_beans(new_items):    
-#     if isinstance(new_items[0], Bean):
-#         beans.extend(orch._augment(orch._download_beans(new_items)))
-#         print("feed collection finished")
-#     elif isinstance(new_items[0], tuple):
-#         beans.extend(orch._augment([item[0] for item in new_items]))
-#         print("yc collection finished")
-# yc_urls = [
-#     "41163382",
-#     "41182823",
-#     "41130620",
-#     "41127706",
-#     "41171060",
-#     "41150317",
-#     "41154135",
-#     "41165255",
-#     "41156872",
-#     "41144755"
-# ]        
+urls = [
+    "https://www.prnewswire.com/news-releases/uipath-inc-securities-fraud-class-action-lawsuit-pending-contact-levi--korsinsky-before-august-19-2024-to-discuss-your-rights--path-302218468.html",
+    "https://www.businessinsider.com/top-uber-lyft-driver-concerns-low-earnings-declining-pay-safety-2024-8",
+    "https://investorplace.com/earning-results/2024/08/aclx-stock-earnings-arcellx-for-q2-of-2024/",
+    "https://investorplace.com/earning-results/2024/08/alxo-stock-earnings-alx-oncology-holdings-for-q2-of-2024/",
+    "https://techxplore.com/news/2024-08-survey-sexually-explicit-deepfakes.html",
+    "https://www.prnewswire.com/news-releases/levi--korsinsky-announces-the-filing-of-a-securities-class-action-on-behalf-of-seastar-medical-holding-corporationicu-shareholders-302218471.html",
+    "https://www.prnewswire.com/news-releases/teradata-corporation-sued-for-securities-law-violations--investors-should-contact-levi--korsinsky-before-august-13-2024-to-discuss-your-rights--tdc-302218447.html",
+    "https://www.prnewswire.com/news-releases/levi--korsinsky-announces-the-filing-of-a-securities-class-action-on-behalf-of-vicor-corporationvicr-shareholders-302218463.html",
+    "https://www.prnewswire.com/news-releases/nike-inc-sued-for-securities-law-violations---contact-levi--korsinsky-before-august-19-2024-to-discuss-your-rights--nke-302218416.html",
+    "https://www.prnewswire.com/news-releases/shareholders-that-lost-money-on-macrogenics-incmgnx-urged-to-join-class-action--contact-levi--korsinsky-to-learn-more-302218467.html",
+    "https://www.prnewswire.com/news-releases/september-30-2024-deadline-contact-levi--korsinsky-to-join-class-action-suit-against-crwd-302218480.html"
 
-# feeds = [
-#     "https://www.theverge.com/rss/index.xml",
-#     "https://scitechdaily.com/feed/",
-#     # "https://qz.com/rss",
-#     "https://chaski.huffpost.com/us/auto/vertical/politics"
-# ]
-# # rssfeed.collect(feeds, collect_beans)
-# collect_beans([ychackernews._extract(int(id), int(dt.now().timestamp())) for id in yc_urls])
-# write_datamodels(beans, "DEBUGGING-DATA-2")
+]
+
+
+
+# orch.initialize(
+#     os.getenv("DB_CONNECTION_STRING"), 
+#     "/workspaces/coffeemaker-2/pycoffeemaker", 
+#     os.getenv("EMBEDDER_FILE"),
+#     os.getenv("GROQ_API_KEY"),    
+#     float(os.getenv('CLUSTER_EPS')),
+#     float(os.getenv('CATEGORY_EPS')))
+# orch.run_clustering()
+    
 
 ### TEST CALLS
 # test_writing()
 # test_chains()
-# test_collection_local()
-# test_collection_live()
+test_collection()
 # test_rectify_beansack()
 # test_search()
 

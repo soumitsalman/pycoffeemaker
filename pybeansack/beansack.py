@@ -9,7 +9,7 @@ from .embedding import *
 from .datamodels import *
 from .utils import create_logger
 from bson import InvalidBSON
-from pymongo import MongoClient, UpdateOne
+from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 from icecream import ic
 
@@ -51,8 +51,6 @@ class Beansack:
             beans = self._rectify_as_needed(beans) 
             res = self.beanstore.insert_many([bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans], ordered=False)            
             return len(res.inserted_ids)
-            res = self.beanstore.insert_many([bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans], ordered=False)            
-            return len(res.inserted_ids)
         return 0
 
     def filter_unstored_beans(self, beans: list[Bean]):
@@ -75,16 +73,17 @@ class Beansack:
         if chatters:
             res = self.chatterstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in chatters])
             return len(res.inserted_ids or [])
+
+    def update_beans(self, urls: list[str|list[str]], updates: list[dict]) -> int:
+        # if update is a single dict then it will apply to all beans with the specified urls
+        # or else update is a list of equal length, and we will do a bulk_write of update one
+        if len(urls) != len(updates):
+            logger.warning("Bulk update discrepency: len(urls) [%d] != len(updates) [%d]", len(urls), len(updates))
         
-    # def update_beans(self, urls: list[str], updates: dict|list[dict]) -> int:
-    #     # if update is a single dict then it will apply to all beans with the specified urls
-    #     # or else update is a list of equal length, and we will do a bulk_write of update one
-    #     if urls:
-    #         if isinstance(updates, dict):
-    #             return self.beanstore.update_many(filter={K_URL: {"$in": urls}}, update={"$set": updates}).matched_count
-    #         elif isinstance(updates, list) and (len(urls) == len(updates)):
-    #             return self.beanstore.bulk_write(list(map(lambda url, update: UpdateOne({K_URL: url}, {"$set": update}), urls, updates))).modified_count
-        
+        makeupdate = lambda url,update: UpdateOne({K_URL: url}, {"$set": update}) if isinstance(url, str) else UpdateMany({K_URL: {"$in": urls}},{"$set": updates})       
+        writes = list(map(makeupdate, urls, updates))
+        return self.beanstore.bulk_write(writes).modified_count
+      
     def delete_old(self, window: int):
         time_filter = {K_UPDATED: { "$lte": get_timevalue(window) }}
         res = self.beanstore.delete_many(time_filter)
@@ -218,8 +217,7 @@ class Beansack:
                     "cluster_size": "$count"
                 }
             }
-        ]
-        
+        ]        
         return {item[K_URL]: item['cluster_size'] for item in self.beanstore.aggregate(pipeline)}
     
     def _unique_beans_pipeline(self, filter, sort_by, skip, limit, projection, for_count):

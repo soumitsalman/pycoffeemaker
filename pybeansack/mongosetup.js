@@ -49,3 +49,12 @@ db.beans.createIndex(
       name: "beans_trend_score_and_latest"
   }
 );
+
+db.beans.createIndex(
+  {
+      cluster_id: 1
+  },
+  {
+      name: "beans_cluster_id_search"
+  }
+);

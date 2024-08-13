@@ -22,7 +22,6 @@ def collect(sources: str|list[str] = DEFAULT_FEEDS, store_func = None):
     sources = [url.strip() for url in sources if url.strip()]
     for url in sources:
         beans = collect_from(url)   
-        # logger.info("%d beans collected: %s", len(beans) if beans else 0, url)
         store_func(beans)       
         
 def collect_from(feed_url: str, content_kind = NEWS):
@@ -31,8 +30,14 @@ def collect_from(feed_url: str, content_kind = NEWS):
     return [_to_bean(entry, content_kind, collection_time) for entry in feed.entries]
 
 def _to_bean(entry, kind, collection_time):
-    body, summary = _extract_body_and_summary(entry)
+    body, summary = _extract_body_and_summary(entry)    
+    created_time = collection_time
+    if 'published_parsed' in entry:
+        created_time = int(time.mktime(entry.published_parsed))
+    elif 'updated_parsed' in entry:
+        created_time = int(time.mktime(entry.updated_parsed))
     is_valid_tag = lambda tag: len(tag)>= MIN_TAG_LEN and len(tag) <= MAX_TAG_LEN and ("/" not in tag)
+
     return Bean(
         url=entry.link,
         updated=collection_time,
@@ -42,16 +47,30 @@ def _to_bean(entry, kind, collection_time):
         text=body,
         summary=summary,
         author=entry.get('author'),
-        created=int(time.mktime(entry.published_parsed)),
+        created=created_time,
         tags=[tag.term for tag in entry.get('tags', []) if is_valid_tag(tag.term)],
         image_url=_extract_image_link(entry)
     )    
 
-# 'media_content': [{}],
-# 'media_thumbnail': [{'height': '4603',
-#                         'url': 'https://media.wired.com/photos/66a257bc453579321b858dd1/master/pass/GettyImages-2162541554.jpg',
-#                         'width': '6904'}],
+# 'links': 
+# [{'href': 'https://www.iflscience.com/iflscience-the-big-questions-can-we-make-dogs-live-longer-75450',
+# 'rel': 'alternate',
+# 'type': 'text/html'},
+# {'href': 'https://assets.iflscience.com/assets/articleNo/75450/aImg/78048/tbqs4e4-l.jpg',
+# 'length': '165573',
+# 'rel': 'enclosure',
+# 'type': 'image/jpeg'}],
+# 
+# 'media_content': 
+# [{}],
+# 
+# 'media_thumbnail': 
+# [{'height': '4603',
+# 'url': 'https://media.wired.com/photos/66a257bc453579321b858dd1/master/pass/GettyImages-2162541554.jpg',
+# 'width': '6904'}],
 def _extract_image_link(entry):
+    if ('links' in entry) and any(item for item in entry.links if "image" in item.get('type', "")):
+        return next(item for item in entry.links if "image" in item.get('type', "")).get('href')
     if ('media_content' in entry) and entry.media_content:
         return entry.media_content[0].get('url')
     elif ('media_thumbnail' in entry) and entry.media_thumbnail:
@@ -74,33 +93,3 @@ def _extract_body_and_summary(entry) -> tuple[str, str]:
     if len(body or "") < len(summary or ""):
         body = summary
     return body, summary
-
-# def parse_description(entry):    
-#     if 'dc_content' in entry:
-#         html = entry.dc_content
-#     elif 'content' in entry:        
-#         html = entry.content[0]['value'] if isinstance(entry.content, list) else entry.content
-#     else:
-#         html = entry.get(T_SUMMARY)
-
-#     text = load_text_from_html(html)
-#     if text and len(text) < MIN_BODY_LEN:  
-#         _temp_text = load_body_and_summary_from_url(entry.link)
-#         # it may be that the url does not allow pulling in the content
-#         # in that case just stay with what we got from the feed 
-#         text = _temp_text if _temp_text and (len(_temp_text) > len(text)) else text
-#     return text 
-
-# def _sanitation_check(beans: list[Bean]):        
-#     for bean in beans:
-#         res = []
-#         if not bean.text:
-#             res.append("text")
-#         if not bean.created:
-#             res.append("created")            
-#         if not bean.author:
-#             res.append("author")            
-#         if not bean.tags:
-#             res.append("keywords")
-#         if res:
-#             ic(bean.url, res)

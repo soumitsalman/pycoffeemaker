@@ -1,3 +1,5 @@
+from itertools import chain
+import os
 from icecream import ic
 from datetime import datetime as dt
 from pybeansack import utils
@@ -15,7 +17,7 @@ from persistqueue import Queue
 MIN_ALLOWED_BODY_LEN = 75
 MIN_DOWNLOAD_BODY_LEN = 150 
 MIN_SUMMARY_BODY_LEN = 200
-MAX_CATEGORIES = 2
+MAX_CATEGORIES = 10
 CLEANUP_WINDOW = 30
 
 logger = utils.create_logger("coffeemaker")
@@ -150,14 +152,31 @@ def _find_categories(bean: Bean):
         {"$project": {K_EMBEDDING: 0}}
     ] 
     matches = categorystore.aggregate(pipeline)
-    return list({cat[K_TEXT] for cat in matches}) or None
+    return list(set(chain(*(cat[K_CATEGORIES] for cat in matches)))) or None
 
+N_DEPTH = 4
+MAX_CLUSTER_SIZE = 128
 def run_clustering():
     logger.info("Starting Clustering")
     # TODO: in future optimize the beans that need to be clustered.
     # right now we are just clustering the whole database
-    beans = remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1})
-    dbscan = DBSCAN(eps = ic(cluster_eps), min_samples=1, metric="cosine")
+    res = _run_clustering(
+        remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1}), 
+        N_DEPTH)    
+    update_count = remotesack.update_beans(res, [items[0] for items in res])
+    logger.info("%d beans updated with cluster_id", update_count)
+
+    # for sequential posterities sake
+    while not cluster_queue.empty():
+        # ONLY PUT URL POINTERS IN THIS
+        trend_queue.put(cluster_queue.get())
+        cluster_queue.task_done()
+    
+def _run_clustering(beans, n_depth):
+    if n_depth <= 0:
+        return [[bean.url for bean in beans]]
+    
+    dbscan = DBSCAN(eps=cluster_eps+n_depth, min_samples=2*n_depth-1, algorithm='brute', n_jobs=(os.cpu_count()-1) or 1)
     labels = dbscan.fit([bean.embedding for bean in beans]).labels_
     
     groups = {}
@@ -167,23 +186,13 @@ def run_clustering():
             groups[label] = []
         groups[label].append(index)
 
-    makeupdate = lambda indexes: UpdateMany(
-        filter={
-            K_URL: {"$in": [beans[index].url for index in indexes]}
-        },
-        update={
-            "$set": {K_CLUSTER_ID: beans[indexes[0]].url}
-        }
-    )
-    updates = [makeupdate(indexes) for indexes in groups.values()]
-    update_count = remotesack.beanstore.bulk_write(updates, ordered=False).modified_count
-    logger.info("%d beans updated with cluster_id", update_count)
-
-    # for sequential posterities sake
-    while not cluster_queue.empty():
-        # ONLY PUT URL POINTERS IN THIS
-        trend_queue.put(cluster_queue.get())
-        cluster_queue.task_done()
+    res = []
+    for indexes in groups.values():
+        if len(indexes) <= MAX_CLUSTER_SIZE:
+            res.append([beans[index].url for index in indexes])         
+        else:
+            res.extend(_run_clustering([beans[index] for index in indexes], n_depth-1))
+    return res
 
 def run_trend_ranking():
     logger.info("Starting Trend Ranking")
@@ -209,31 +218,9 @@ def run_trend_ranking():
                     update[K_COMMENTS] = ch.comments
                 update[K_TRENDSCORE] = (ch.likes or 0) + (ch.comments or 0)*3
             update[K_TRENDSCORE] = update.get(K_TRENDSCORE, 0)+cluster_sizes.get(item.url, 0)*10
-            return UpdateOne(filter={K_URL: item.url}, update={"$set":update})
+            return update # UpdateOne(filter={K_URL: item.url}, update={"$set":update})
 
-        res = remotesack.beanstore.bulk_write([make_trend_update(item) for item in items]).modified_count
+        res = remotesack.update_beans(urls, [make_trend_update(item) for item in items])
         logger.info("%d beans updated with trendscore", res)
         trend_queue.task_done()
 
-def _rectify_bean_categories():
-    beans = remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_EMBEDDING: 1})
-    updates = []
-    for bean in beans:
-        cats = _find_categories(bean)
-        if cats:
-            updates.append(UpdateOne(
-                filter = {K_URL: bean.url},
-                update = {"$set": {K_CATEGORIES: cats}}
-            ))
-        else:
-            updates.append(UpdateOne(
-                filter = {K_URL: bean.url},
-                update = {"$unset": {K_CATEGORIES: ""}}
-            ))
-    return remotesack.beanstore.bulk_write(updates, False).modified_count
-
-def run_rectification():
-    _rectify_bean_categories()
-    run_clustering()
-    trend_queue.put(remotesack.get_beans(filter={}))
-    run_trend_ranking()

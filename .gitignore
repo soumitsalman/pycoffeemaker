@@ -4,8 +4,9 @@
 .chromadb
 .models
 .processingqueue
-__pycache__
+.clustering
 .test
+__pycache__
 *.log
 flagged
 
