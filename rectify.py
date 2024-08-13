@@ -72,4 +72,4 @@ orch.initialize(
 # setup_categories()
 # rectify_categories()
 orch.run_clustering()
-# rectify_ranking()
+rectify_ranking()

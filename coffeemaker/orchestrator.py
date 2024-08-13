@@ -162,8 +162,14 @@ def run_clustering():
     # right now we are just clustering the whole database
     res = _run_clustering(
         remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1}), 
-        N_DEPTH)    
-    update_count = remotesack.update_beans(res, [{K_CLUSTER_ID: items[0]} for items in res])
+        N_DEPTH)   
+
+    for group in res:
+        if not isinstance(group[0], str):
+            ic(group)  
+
+    updates = [UpdateMany({K_URL: {"$in": group}},{"$set": {K_CLUSTER_ID: group[0]}}) for group in res]
+    update_count = remotesack.beanstore.bulk_write(updates, ordered=False).modified_count
     logger.info("%d beans updated with cluster_id", update_count)
 
     # for sequential posterities sake
@@ -218,9 +224,9 @@ def run_trend_ranking():
                     update[K_COMMENTS] = ch.comments
                 update[K_TRENDSCORE] = (ch.likes or 0) + (ch.comments or 0)*3
             update[K_TRENDSCORE] = update.get(K_TRENDSCORE, 0)+cluster_sizes.get(item.url, 0)*10
-            return update # UpdateOne(filter={K_URL: item.url}, update={"$set":update})
+            return UpdateOne({K_URL: item.url}, {"$set": update})
 
-        res = remotesack.update_beans(urls, [make_trend_update(item) for item in items])
+        res = remotesack.beanstore.bulk_write([make_trend_update(item) for item in items], ordered=False).modified_count
         logger.info("%d beans updated with trendscore", res)
         trend_queue.task_done()
 
