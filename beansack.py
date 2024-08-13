@@ -80,8 +80,8 @@ class Beansack:
         if len(urls) != len(updates):
             logger.warning("Bulk update discrepency: len(urls) [%d] != len(updates) [%d]", len(urls), len(updates))
         
-        makeupdate = lambda url,update: UpdateOne({K_URL: url}, {"$set": update}) if isinstance(url, str) else UpdateMany({K_URL: {"$in": urls}},{"$set": updates})       
-        writes = list(map(makeupdate, urls, updates))
+        makeupdate = lambda filter, set_fields: UpdateOne({K_URL: filter}, set_fields) if isinstance(filter, str) else UpdateMany({K_URL: {"$in": filter}}, set_fields)       
+        writes = list(map(makeupdate, urls, [{"$set": fields} for fields in updates]))
         return self.beanstore.bulk_write(writes).modified_count
       
     def delete_old(self, window: int):
