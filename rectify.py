@@ -55,7 +55,6 @@ def rectify_categories():
                 filter = {K_URL: bean.url},
                 update = {"$unset": {K_CATEGORIES: ""}}
             ))
-            print(bean.title)
     return orch.remotesack.beanstore.bulk_write(updates, False).modified_count
 
 def rectify_ranking():
@@ -70,7 +69,7 @@ orch.initialize(
     float(os.getenv('CLUSTER_EPS')),
     float(os.getenv('CATEGORY_EPS'))
 )
-setup_categories()
-rectify_categories()
+# setup_categories()
+# rectify_categories()
 orch.run_clustering()
-rectify_ranking()
+# rectify_ranking()

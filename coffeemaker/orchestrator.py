@@ -163,7 +163,7 @@ def run_clustering():
     res = _run_clustering(
         remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1}), 
         N_DEPTH)    
-    update_count = remotesack.update_beans(res, [items[0] for items in res])
+    update_count = remotesack.update_beans(res, [{K_CLUSTER_ID: items[0]} for items in res])
     logger.info("%d beans updated with cluster_id", update_count)
 
     # for sequential posterities sake

@@ -52,9 +52,9 @@ def test_search():
     write_datamodels(ic(orch.remotesack.vector_search_beans(query="kamala harris election", filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID: 0})), "VECTOR_SEARCH")
 
 def test_clustering(): 
-    res = orch._run_clustering(orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_EMBEDDING: 1}), 4)
-    make_update = lambda group: print("[", len(group), "] ====\n", "\n\t".join(group) if isinstance(group[0], str) else group,"\n") # print("[", len(group), "] ====\n", "\n\t".join(group),"\n")
-    [make_update(group) for group in res if len(group) > 2]
+    res = orch._run_clustering(orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_EMBEDDING: 1}), orch.N_DEPTH)
+    make_update = lambda group, header: print("[", len(group), "]", header, "====\n", "\n\t".join(group) if isinstance(group[0], str) else group,"\n") # print("[", len(group), "] ====\n", "\n\t".join(group),"\n")
+    list(map(make_update, res, [items[0] for items in res]))
 
 
 urls = [
@@ -143,21 +143,21 @@ urls = [
 
 
 
-# orch.initialize(
-#     os.getenv("DB_CONNECTION_STRING"), 
-#     "/workspaces/coffeemaker-2/pycoffeemaker", 
-#     os.getenv("EMBEDDER_FILE"),
-#     os.getenv("GROQ_API_KEY"),    
-#     float(os.getenv('CLUSTER_EPS')),
-#     float(os.getenv('CATEGORY_EPS')))
+orch.initialize(
+    os.getenv("DB_CONNECTION_STRING"), 
+    "/workspaces/coffeemaker-2/pycoffeemaker", 
+    os.getenv("EMBEDDER_FILE"),
+    os.getenv("GROQ_API_KEY"),    
+    float(os.getenv('CLUSTER_EPS')),
+    float(os.getenv('CATEGORY_EPS')))
 # orch.run_clustering()
     
 
 ### TEST CALLS
 # test_writing()
 # test_chains()
-test_collection()
-# test_rectify_beansack()
+# test_collection()
+test_clustering()
 # test_search()
 
 
