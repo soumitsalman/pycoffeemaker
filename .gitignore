@@ -6,6 +6,7 @@
 .processingqueue
 .clustering
 .test
+.vscode
 __pycache__
 *.log
 flagged
