@@ -77,3 +77,12 @@ https://nationalinterest.org/feed
 https://insideevs.com/rss/articles/all/
 https://climatecrisis247.com/feed/
 https://www.slashgear.com/feed/
+https://thenextweb.com/feed
+https://www.teslarati.com/feed/
+https://www.environmentenergyleader.com/feed/
+https://theaircurrent.com/feed/
+https://www.flightaware.com/squawks/rss/general/7_days/popular
+https://www.popularmechanics.com/rss/science.xml
+https://www.popularmechanics.com/rss/product-reviews.xml
+https://www.topspeed.com/feed/
+https://krebsonsecurity.com/feed/
