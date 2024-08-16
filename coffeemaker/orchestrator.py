@@ -90,7 +90,7 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
 
 def _download_beans(beans: list[Bean]) -> list[Bean]:
     for bean in beans:
-        body = bean.text if (bean.kind in [NEWS, BLOG] or (bean.text and len(bean.text.split())>MIN_DOWNLOAD_BODY_LEN)) else individual.load_from_url(bean.url)
+        body = bean.text if (bean.kind in [POST, COMMENT] or (bean.text and len(bean.text.split())>MIN_DOWNLOAD_BODY_LEN)) else individual.load_from_url(bean.url)
         bean.text = body if (len(body or "") > len(bean.text or "")) else bean.text
     return beans
 
