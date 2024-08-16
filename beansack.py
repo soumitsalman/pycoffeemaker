@@ -26,11 +26,18 @@ DEFAULT_VECTOR_SEARCH_SCORE = 0.73
 DEFAULT_MAPPING_SCORE = 0.72
 DEFAULT_VECTOR_LIMIT = 100
 DEFAULT_VECTOR_LIMIT = 100
+DEFAULT_VECTOR_LIMIT = 100
+
+TRENDING = {K_TRENDSCORE: -1}
 
 LATEST = {K_UPDATED: -1}
 TRENDING = {K_TRENDSCORE: -1}
 TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_UPDATED: -1}
 LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
+
+NEWEST = {K_CREATED: -1}
+NEWEST_AND_TRENDING = {K_CREATED: -1, K_TRENDSCORE: -1}
+
 
 logger = create_logger("beansack")
 
@@ -106,8 +113,8 @@ class Beansack:
             embedding: list[float] = None, 
             min_score = DEFAULT_VECTOR_SEARCH_SCORE, 
             filter = None, 
+            sort_by = None,
             limit = DEFAULT_VECTOR_LIMIT, 
-            sort_by = None, 
             projection = None
         ) -> list[Bean]:
         pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
@@ -118,7 +125,7 @@ class Beansack:
         result = list(self.beanstore.aggregate(pipeline))
         return result[0]['total_count'] if result else 0
     
-    def text_search_beans(self, query: str, filter = None, sort_by = None, skip=0, limit = None, projection=None):
+    def text_search_beans(self, query: str, filter = None, sort_by = None, skip=0, limit=None, projection=None):
         return _deserialize_beans(
             self.beanstore.aggregate(
                 self._text_search_pipeline(query, filter=filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)))
@@ -187,17 +194,60 @@ class Beansack:
             pipeline.append({"$limit": limit})   
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
   
-  
-    def count_related_beans(self, urls: list[str]) -> dict:
+    
+    def query_top_tags_and_highlights(self, filter, limit = None):
+        match_filter = {
+            "tags": {"$exists": True},
+            "highlights": {"$exists": True}
+        }
+        if filter:
+            match_filter.update(filter)
         pipeline = [
-            {
-                "$match": {"cluster_id": {"$ne": None}}
-            },
+            {"$match": match_filter},
+            {"$unwind": "$tags"},
             {
                 "$group": {
-                    "_id": {
-                        "cluster_id": "$cluster_id"
-                    },
+                    "_id": "$tags",
+                    "tags": {"$first": "$tags"},
+                    "url": {"$first": "$url"},
+                    "cluster_id": {"$first": "$cluster_id"},
+                    "highlights": {"$first": "$highlights"},
+                    "trend_score": {"$sum": "$trend_score"}
+                }
+            },
+            {"$sort": TRENDING},
+            {
+                "$group": {
+                    "_id": "$url",
+                    "tags": {"$first": "$tags"},
+                    "url": {"$first": "$url"},
+                    "cluster_id": {"$first": "$cluster_id"},            
+                    "highlights": {"$first": "$highlights"},
+                    "trend_score": {"$first": "$trend_score"}
+                }
+            },
+            {"$sort": TRENDING},
+            {
+                "$group": {
+                    "_id": "$cluster_id",
+                    "tags": {"$first": "$tags"},
+                    "url": {"$first": "$url"},
+                    "cluster_id": {"$first": "$cluster_id"},            
+                    "highlights": {"$first": "$highlights"},
+                    "trend_score": {"$first": "$trend_score"}
+                }
+            },
+            {"$sort": TRENDING}
+        ]
+        if limit:
+            pipeline.append({"$limit": limit})   
+        return _deserialize_beans(self.beanstore.aggregate(pipeline))
+  
+    def count_related_beans(self, urls: list[str]) -> dict:
+        pipeline = [            
+            {
+                "$group": {
+                    "_id": "$cluster_id",
                     "cluster_id": {"$first": "$cluster_id"},            
                     "urls": {"$addToSet": "$url"},
                     "count": {"$sum": 1}
@@ -218,40 +268,45 @@ class Beansack:
                 }
             }
         ]        
+        ]        
         return {item[K_URL]: item['cluster_size'] for item in self.beanstore.aggregate(pipeline)}
     
     def _unique_beans_pipeline(self, filter, sort_by, skip, limit, projection, for_count):
-        pipeline = [{"$match": filter}]
-        if not for_count and sort_by:
-            pipeline.append({"$sort": sort_by})
-        
+        pipeline = []
+        if filter:
+            pipeline.append({"$match": filter})
+        if sort_by:
+            pipeline.append({"$sort": sort_by})        
         pipeline.append({
             "$group": {
                 "_id": "$cluster_id",
-                "cluster_id": {"$first": "$cluster_id"},
+                K_CLUSTER_ID: {"$first": "$cluster_id"},
                 K_URL: {"$first": "$url"},
                 K_TITLE: {"$first": "$title"},
                 K_SUMMARY: {"$first": "$summary"},
                 K_HIGHLIGHTS: {"$first": "$highlights"},
                 K_TAGS: {"$first": "$tags"},
+                K_CATEGORIES: {"$first": "$categories"},
                 K_SOURCE: {"$first": "$source"},
                 K_UPDATED: {"$first": "$updated"},
                 K_CREATED: {"$first": "$created"},
                 K_LIKES: {"$first": "$likes"},
                 K_COMMENTS: {"$first": "$comments"},
+                K_TRENDSCORE: {"$first": "$trend_score"},
                 K_AUTHOR: {"$first": "$author"},
                 K_KIND: {"$first": "$kind"},
                 K_IMAGEURL: {"$first": "$image_url"}
             }
         })
-
+        if sort_by:
+            pipeline.append({"$sort": sort_by})
         if skip:
             pipeline.append({"$skip": skip})
         if limit:
             pipeline.append({"$limit": limit})
         if for_count:
-            pipeline.append({ "$count": "total_count"})
-        if not for_count and projection:
+            pipeline.append({"$count": "total_count"})
+        if projection:
             pipeline.append({"$project": projection})
         return pipeline
 
