@@ -27,7 +27,6 @@ def collect_subreddit(client, name, collection_time) -> list:
     try:
         return [makedatamodel(post, collection_time) for post in client.subreddit(name).hot(limit=MAX_LIMIT) if not is_non_text(post.url)]
     except:
-        ic(name)
         return []
 
 def collect_user(client, name, collection_time):    

@@ -132,7 +132,7 @@ def _augment(beans: list[Bean]):
             logger.warning("Augmenting failed for %s", bean.url)        
         bean.text = None # text field has no use any more and will just cause extra load 
 
-    return [bean for bean in beans if bean.embedding or bean.summary]
+    return [bean for bean in beans if bean.embedding and bean.summary]
 
 def _find_categories(bean: Bean):    
     pipeline = [

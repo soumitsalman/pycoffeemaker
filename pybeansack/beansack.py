@@ -62,8 +62,7 @@ class Beansack:
 
     def filter_unstored_beans(self, beans: list[Bean]):
         exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
-        beans = [bean for bean in beans if (bean.url not in exists)]
-        return beans
+        return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
         
     # this function checks for embeddings, updated time and any other rectification needed before inserting
     def _rectify_as_needed(self, items: list[Bean|Highlight]):
