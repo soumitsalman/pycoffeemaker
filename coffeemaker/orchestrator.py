@@ -8,7 +8,7 @@ from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
 from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
-from collectors import individual, rssfeed, ychackernews
+from collectors import individual, rssfeed, ychackernews, redditor
 from sklearn.cluster import DBSCAN
 from langchain_groq import ChatGroq
 from coffeemaker.chains import DigestExtractor, Summarizer
@@ -62,7 +62,8 @@ def run_collector():
     rssfeed.collect(store_func=_process_collection)
     logger.info("Starting collection from YC hackernews.")
     ychackernews.collect(store_func=_process_collection)
-    # TODO: add collection from reddit
+    logger.info("Starting collection from Reddit.")
+    redditor.collect(store_func=_process_collection)
     # TODO: add collection from nextdoor
     # TODO: add collection from linkedin
 
@@ -89,7 +90,7 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
 
 def _download_beans(beans: list[Bean]) -> list[Bean]:
     for bean in beans:
-        body = bean.text if (bean.text and len(bean.text.split())>MIN_DOWNLOAD_BODY_LEN) else individual.load_from_url(bean.url)
+        body = bean.text if (bean.kind in [NEWS, BLOG] or (bean.text and len(bean.text.split())>MIN_DOWNLOAD_BODY_LEN)) else individual.load_from_url(bean.url)
         bean.text = body if (len(body or "") > len(bean.text or "")) else bean.text
     return beans
 
