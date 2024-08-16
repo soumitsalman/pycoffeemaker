@@ -267,8 +267,7 @@ class Beansack:
                     "cluster_size": "$count"
                 }
             }
-        ]        
-        ]        
+        ]    
         return {item[K_URL]: item['cluster_size'] for item in self.beanstore.aggregate(pipeline)}
     
     def _unique_beans_pipeline(self, filter, sort_by, skip, limit, projection, for_count):
