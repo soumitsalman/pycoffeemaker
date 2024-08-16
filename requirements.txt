@@ -18,5 +18,6 @@ icecream
 python-dotenv
 persist-queue
 scikit-learn
+praw
 
 

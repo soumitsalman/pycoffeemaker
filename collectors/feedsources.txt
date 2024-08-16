@@ -86,3 +86,15 @@ https://www.popularmechanics.com/rss/science.xml
 https://www.popularmechanics.com/rss/product-reviews.xml
 https://www.topspeed.com/feed/
 https://krebsonsecurity.com/feed/
+https://electrek.co/feed/
+https://www.enterpriseai.news/feed/
+https://federalnewsnetwork.com/feed/
+https://www.autoblog.com/category/hirings-firings-layoffs/rss.xml
+https://www.autoblog.com/category/government-legal/rss.xml
+https://www.autoblog.com/category/green-auto-news/rss.xml
+https://www.autoblog.com/category/hirings-firings-layoffs/rss.xml
+https://www.autoblog.com/category/infrastructure/rss.xml
+https://www.autoblog.com/category/plants-manufacturing/rss.xml
+https://www.bleepingcomputer.com/feed/
+https://dexwirenews.com/feed/
+https://www.hackster.io/projects?format=atom&sort=recent

@@ -39,7 +39,7 @@ def initialize(db_conn_str: str, working_dir: str, emb_file: str, api_key: str, 
 
     embedder_path=working_dir+"/.models/"+emb_file
 
-    remotesack = Beansack(db_conn_str, None)
+    remotesack = Beansack(db_conn_str)
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
     
     collect_queue = Queue(queue_dir+"/collect", tempdir=queue_dir)     
@@ -127,12 +127,11 @@ def _augment(beans: list[Bean]):
             bean.highlights = digest.highlights[:5]
             if bean.kind in [NEWS, BLOG]: # normalize creation time of news and blogs
                 bean.created = int(dt.fromtimestamp(bean.created).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-            # TODO: change the created time to normalize by day
         except Exception:
             logger.warning("Augmenting failed for %s", bean.url)        
         bean.text = None # text field has no use any more and will just cause extra load 
 
-    return beans
+    return [bean for bean in beans if bean.embedding or bean.summary]
 
 def _find_categories(bean: Bean):    
     pipeline = [
