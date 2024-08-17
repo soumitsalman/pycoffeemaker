@@ -96,16 +96,19 @@ def _download_beans(beans: list[Bean]) -> list[Bean]:
 
 def run_indexing():
     logger.info("Starting Indexing")
-    while not index_queue.empty():
+    while not index_queue.empty():        
         beans = remotesack.filter_unstored_beans(index_queue.get()) 
-        if beans:            
-            # this is the data augmentation part: embeddings, summary, highlights
-            _augment(beans)            
-            res = remotesack.store_beans(beans)
-            logger.info("%d beans added", res)
-            cluster_queue.put(beans) # set it out for clustering
-        index_queue.task_done()
+        if beans:      
+            try:      
+                _augment(beans) # this is the data augmentation part: embeddings, summary, highlights           
+                res = remotesack.store_beans(beans)
+                logger.info("%d beans from %s added", res, beans[0].source)
+                cluster_queue.put(beans) # set it out for clustering
+            except Exception as err:
+                logger.warning("Indexing/Storing failed for a batch from %s. %s", beans[0].source, str(err))
 
+        index_queue.task_done()
+        
 def _augment(beans: list[Bean]):
     embedder = BeansackEmbeddings(embedder_path, 4095)
     llm = ChatGroq(api_key=llm_api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
@@ -206,27 +209,27 @@ def run_trend_ranking():
         # remove the duplicates in the batch
         # put them in database and queue the beans for trend_ranking
         items = trend_queue.get()
-        if isinstance(items[0], Chatter):
-            remotesack.store_chatters(items)
-        # else item is Bean
-
-        urls = [item.url for item in items]
-        chatters=remotesack.get_latest_chatter_stats(urls)
-        cluster_sizes=remotesack.count_related_beans(urls) # technically i can get this from remotesack as well
-
-        def make_trend_update(item):
-            update = {K_UPDATED: item.updated}
-            ch = next((ch for ch in chatters if ch.url==item.url), None) if chatters else None
-            if ch:
-                if ch.likes:
-                    update[K_LIKES] = ch.likes
-                if ch.comments:
-                    update[K_COMMENTS] = ch.comments
-                update[K_TRENDSCORE] = (ch.likes or 0) + (ch.comments or 0)*3
-            update[K_TRENDSCORE] = update.get(K_TRENDSCORE, 0)+cluster_sizes.get(item.url, 0)*10
-            return UpdateOne({K_URL: item.url}, {"$set": update})
-
-        res = remotesack.beanstore.bulk_write([make_trend_update(item) for item in items], ordered=False).modified_count
-        logger.info("%d beans updated with trendscore", res)
+        try:
+            if isinstance(items[0], Chatter):
+                remotesack.store_chatters(items)
+            # else item is Bean
+            urls = [item.url for item in items]
+            chatters=remotesack.get_latest_chatter_stats(urls)
+            cluster_sizes=remotesack.count_related_beans(urls) # technically i can get this from remotesack as well
+            res = remotesack.beanstore.bulk_write([_make_trend_update(item, chatters, cluster_sizes) for item in items], ordered=False).modified_count
+            logger.info("%d beans from %s updated with trendscore", res, items[0].source)
+        except Exception as err:
+            logger.warning("Trend calculation failed for a batch of %s. %s", items[0].source, str(err))
         trend_queue.task_done()
 
+def _make_trend_update(item, chatters, cluster_sizes):
+    update = {K_UPDATED: item.updated}
+    ch = next((ch for ch in chatters if ch.url==item.url), None) if chatters else None
+    if ch:
+        if ch.likes:
+            update[K_LIKES] = ch.likes
+        if ch.comments:
+            update[K_COMMENTS] = ch.comments
+        update[K_TRENDSCORE] = (ch.likes or 0) + (ch.comments or 0)*3
+    update[K_TRENDSCORE] = update.get(K_TRENDSCORE, 0)+cluster_sizes.get(item.url, 0)*10
+    return UpdateOne({K_URL: item.url}, {"$set": update})
