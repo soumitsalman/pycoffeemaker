@@ -17,7 +17,7 @@ from persistqueue import Queue
 MIN_ALLOWED_BODY_LEN = 75
 MIN_DOWNLOAD_BODY_LEN = 150 
 MIN_SUMMARY_BODY_LEN = 200
-MAX_CATEGORIES = 10
+MAX_CATEGORIES = 5
 CLEANUP_WINDOW = 30
 
 logger = utils.create_logger("coffeemaker")
@@ -68,7 +68,7 @@ def run_collector():
     # TODO: add collection from linkedin
 
 def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
-    _is_valid_to_index = lambda bean: bean.text and len(bean.text.split())>=MIN_ALLOWED_BODY_LEN
+    
 
     if items:
         # download the articles for new beans
@@ -81,7 +81,7 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
             beans, chatters = None,  items
 
         if beans:            
-            downloaded = [bean for bean in _download_beans(remotesack.filter_unstored_beans(beans)) if _is_valid_to_index(bean)]
+            downloaded = [bean for bean in _download_beans(remotesack.filter_unstored_beans(beans))]
             if downloaded:
                 logger.info("%d (out of %d) beans downloaded from %s", len(downloaded), len(beans), downloaded[0].source)
                 index_queue.put(downloaded)
@@ -90,9 +90,12 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
 
 def _download_beans(beans: list[Bean]) -> list[Bean]:
     for bean in beans:
-        body = bean.text if (bean.kind in [POST, COMMENT] or (bean.text and len(bean.text.split())>MIN_DOWNLOAD_BODY_LEN)) else individual.load_from_url(bean.url)
-        bean.text = body if (len(body or "") > len(bean.text or "")) else bean.text
-    return beans
+        if (bean.kind in [NEWS, BLOG]) and (not bean.text or len(bean.text.split())<MIN_DOWNLOAD_BODY_LEN):
+            res = individual.load_from_url(bean.url)
+            if res:
+                bean.image_url = bean.image_url or res[1]
+                bean.text = res[0] if len(res[0]) > len(bean.text or "") else bean.text
+    return [bean for bean in beans if bean.text and len(bean.text.split())>=MIN_ALLOWED_BODY_LEN]
 
 def run_indexing():
     logger.info("Starting Indexing")
@@ -102,7 +105,7 @@ def run_indexing():
             try:      
                 _augment(beans) # this is the data augmentation part: embeddings, summary, highlights           
                 res = remotesack.store_beans(beans)
-                logger.info("%d beans from %s added", res, beans[0].source)
+                logger.info("%d beans added from %s", res, beans[0].source)
                 cluster_queue.put(beans) # set it out for clustering
             except Exception as err:
                 logger.warning("Indexing/Storing failed for a batch from %s. %s", beans[0].source, str(err))
@@ -135,7 +138,7 @@ def _augment(beans: list[Bean]):
             logger.warning("Augmenting failed for %s", bean.url)        
         bean.text = None # text field has no use any more and will just cause extra load 
 
-    return [bean for bean in beans if bean.embedding and bean.summary]
+    return [bean for bean in beans if bean.embedding]
 
 def _find_categories(bean: Bean):    
     pipeline = [

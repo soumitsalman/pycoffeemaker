@@ -41,6 +41,7 @@ K_TAGS = "tags"
 K_TITLE = "title"
 K_TEXT = "text"
 K_SOURCE = "source"
+K_CHANNEL = "channel"
 K_EMBEDDING = "embedding"
 K_SUMMARY = "summary"
 K_UPDATED = "updated"
@@ -54,6 +55,7 @@ class Bean(BaseModel):
     url: str
     updated: Optional[int] = None
     source: Optional[str] = None
+    channel: Optional[str] = None
     title: Optional[str] = None
     kind: Optional[str] = None
     text: Optional[str] = None

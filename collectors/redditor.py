@@ -39,9 +39,10 @@ def makedatamodel(post, collection_time):
             url=post.url,
             updated=collection_time,
             source=SOURCE,
+            channel="r/"+post.subreddit.display_name,
             title=post.title,
             kind=POST if post.is_self else NEWS,
-            text = post.selftext,
+            text = post.selftext.strip(),
             author=post.author.name if post.author else None,
             created=int(post.created_utc)
         ),

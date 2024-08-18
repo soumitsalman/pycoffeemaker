@@ -10,6 +10,7 @@ from .datamodels import *
 from .utils import create_logger
 from bson import InvalidBSON
 from pymongo import MongoClient, UpdateMany, UpdateOne
+from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 from icecream import ic
 
@@ -69,7 +70,7 @@ class Beansack:
         # for each item if there is no embedding and create one from the text.
         batch_time = int(datetime.now().timestamp())
         for item in items:
-            if not item.embedding:
+            if not item.embedding and self.embedder:
                 item.embedding = self.embedder.embed(item.digest())
             if not item.updated:
                 item.updated = batch_time
@@ -79,6 +80,17 @@ class Beansack:
         if chatters:
             res = self.chatterstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in chatters])
             return len(res.inserted_ids or [])
+
+    def update_beans(self, urls: list[str|list[str]], updates: list[dict]) -> int:
+        # if update is a single dict then it will apply to all beans with the specified urls
+        # or else update is a list of equal length, and we will do a bulk_write of update one
+        if len(urls) != len(updates):
+            logger.warning("Bulk update discrepency: len(urls) [%d] != len(updates) [%d]", len(urls), len(updates))
+        
+        makeupdate = lambda filter, set_fields: UpdateOne({K_URL: filter}, set_fields) if isinstance(filter, str) else UpdateMany({K_URL: {"$in": filter}}, set_fields)       
+        writes = list(map(makeupdate, urls, [{"$set": fields} for fields in updates]))
+        return self.beanstore.bulk_write(writes).modified_count
+      
 
     def update_beans(self, urls: list[str|list[str]], updates: list[dict]) -> int:
         # if update is a single dict then it will apply to all beans with the specified urls
@@ -142,62 +154,9 @@ class Beansack:
         result = self.beanstore.aggregate(pipeline)
         return next(iter(result))['total_count'] if result else 0
     
-    def query_unique_tags_and_highlights(self, filter, sort_by = None, limit = None):
+    def query_top_tags(self, filter, limit = None):
         match_filter = {
-            "tags": {"$exists": True},
-            "highlights": {"$exists": True}
-        }
-        if filter:
-            match_filter.update(filter)
-        pipeline = [{"$match": match_filter}]
-        if sort_by:
-            pipeline.append({"$sort": sort_by})
-        pipeline.extend([
-            {
-                "$group": {
-                    "_id": "$cluster_id",
-                    "cluster_id": {"$first": "$cluster_id"},  
-                    "url": {"$first": "$url"},              
-                    "tags": {"$first": "$tags"},
-                    "highlights": {"$first": "$highlights"},
-                    "trend_score": {"$first": "$trend_score"}
-                }
-            },
-            {"$unwind": "$tags"},
-            {
-                "$group": {
-                    "_id": "$tags",
-                    "tags": {"$first": "$tags"},
-                    "url": {"$first": "$url"},
-                    "highlights": {"$first": "$highlights"},
-                    "trend_score": {"$sum": "$trend_score"}
-                }
-            }
-        ])
-        if sort_by:
-            pipeline.append({"$sort": sort_by})        
-        pipeline.append(
-            {
-                "$group": {
-                    "_id": "$url",
-                    "url": {"$first": "$url"},
-                    "tags": {"$first": "$tags"},
-                    "highlights": {"$first": "$highlights"},
-                    "trend_score": {"$first": "$trend_score"}
-                }
-            }
-        ) 
-        if sort_by:
-            pipeline.append({"$sort": sort_by})
-        if limit:
-            pipeline.append({"$limit": limit})   
-        return _deserialize_beans(self.beanstore.aggregate(pipeline))
-  
-    
-    def query_top_tags_and_highlights(self, filter, limit = None):
-        match_filter = {
-            "tags": {"$exists": True},
-            "highlights": {"$exists": True}
+            "tags": {"$exists": True}
         }
         if filter:
             match_filter.update(filter)
@@ -210,33 +169,33 @@ class Beansack:
                     "tags": {"$first": "$tags"},
                     "url": {"$first": "$url"},
                     "cluster_id": {"$first": "$cluster_id"},
-                    "highlights": {"$first": "$highlights"},
-                    "trend_score": {"$sum": "$trend_score"}
+                    "trend_score": {"$sum": "$trend_score"},
+                    "updated": {"$first": "$updated"}
                 }
             },
-            {"$sort": TRENDING},
+            {"$sort": TRENDING_AND_LATEST},
             {
                 "$group": {
                     "_id": "$url",
                     "tags": {"$first": "$tags"},
                     "url": {"$first": "$url"},
-                    "cluster_id": {"$first": "$cluster_id"},            
-                    "highlights": {"$first": "$highlights"},
-                    "trend_score": {"$first": "$trend_score"}
+                    "cluster_id": {"$first": "$cluster_id"}, 
+                    "trend_score": {"$first": "$trend_score"},                    
+                    "updated": {"$first": "$updated"}
                 }
             },
-            {"$sort": TRENDING},
+            {"$sort": TRENDING_AND_LATEST},
             {
                 "$group": {
                     "_id": "$cluster_id",
                     "tags": {"$first": "$tags"},
                     "url": {"$first": "$url"},
-                    "cluster_id": {"$first": "$cluster_id"},            
-                    "highlights": {"$first": "$highlights"},
-                    "trend_score": {"$first": "$trend_score"}
+                    "cluster_id": {"$first": "$cluster_id"}, 
+                    "trend_score": {"$first": "$trend_score"},
+                    "updated": {"$first": "$updated"}
                 }
             },
-            {"$sort": TRENDING}
+            {"$sort": TRENDING_AND_LATEST}
         ]
         if limit:
             pipeline.append({"$limit": limit})   
@@ -286,6 +245,7 @@ class Beansack:
                 K_TAGS: {"$first": "$tags"},
                 K_CATEGORIES: {"$first": "$categories"},
                 K_SOURCE: {"$first": "$source"},
+                K_CHANNEL: {"$first": "$channel"},
                 K_UPDATED: {"$first": "$updated"},
                 K_CREATED: {"$first": "$created"},
                 K_LIKES: {"$first": "$likes"},

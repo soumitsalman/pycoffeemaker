@@ -48,7 +48,7 @@ class Summarizer:
             return text
         res = self.chain.invoke({"input_documents": [Document(page_content=utils.truncate(text, self.context_len))]})
         #  the regex is a hack for llama3
-        return re.sub(r'(?i)Here is a concise summary:', '', res['output_text']).strip()
+        return re.sub(r'(?i)Here(?:\s+\w+)*\s+is(?:\s+\w+)*\s+a(?:\s+\w+)*\s+concise(?:\s+\w+)*\s+summary(?:\s+\w+)*:', '', res['output_text']).strip()
 
 
 NUGGETS_TEMPLATE = """You are provided with one or more excerpts from news article or social media posts delimitered by ```
