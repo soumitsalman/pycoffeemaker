@@ -216,7 +216,7 @@ def run_trend_ranking():
             # else item is Bean
             urls = [item.url for item in items]
             chatters=remotesack.get_latest_chatter_stats(urls)
-            cluster_sizes=remotesack.count_related_beans(urls) # technically i can get this from remotesack as well
+            cluster_sizes=remotesack.count_related_beans(urls)
             res = remotesack.beanstore.bulk_write([_make_trend_update(item, chatters, cluster_sizes) for item in items], ordered=False).modified_count
             logger.info("%d beans from %s updated with trendscore", res, items[0].source)
         except Exception as err:
@@ -224,13 +224,16 @@ def run_trend_ranking():
         trend_queue.task_done()
 
 def _make_trend_update(item, chatters, cluster_sizes):
-    update = {K_UPDATED: item.updated}
+    update = {
+        K_UPDATED: item.updated,
+        K_TRENDSCORE: (next((cluster for cluster in cluster_sizes if cluster[K_URL] == item.url), {'cluster_size': 1})['cluster_size'] if cluster_sizes else 1)*10
+    }
     ch = next((ch for ch in chatters if ch.url==item.url), None) if chatters else None
     if ch:
         if ch.likes:
             update[K_LIKES] = ch.likes
+            update[K_TRENDSCORE] += ch.likes
         if ch.comments:
             update[K_COMMENTS] = ch.comments
-        update[K_TRENDSCORE] = (ch.likes or 0) + (ch.comments or 0)*3
-    update[K_TRENDSCORE] = update.get(K_TRENDSCORE, 0)+cluster_sizes.get(item.url, 0)*10
+            update[K_TRENDSCORE] += (ch.comments*3)
     return UpdateOne({K_URL: item.url}, {"$set": update})

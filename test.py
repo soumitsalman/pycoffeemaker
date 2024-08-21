@@ -48,20 +48,34 @@ def test_clustering():
     make_update = lambda group, header: print("[", len(group), "]", header, "====\n", "\n\t".join(group) if isinstance(group[0], str) else group,"\n") # print("[", len(group), "] ====\n", "\n\t".join(group),"\n")
     list(map(make_update, res, [items[0] for items in res]))
 
+def test_trend_ranking():
+    selected_urls = [
+        "https://www.nature.com/articles/d41586-024-02526-y", 
+        "https://www.livescience.com/space/black-holes/final-parsec-problem-supermassive-black-holes-impossible-solution", 
+        "https://scitechdaily.com/hubble-captures-a-supernova-spiral-a-galaxys-tale-of-birth-beauty-and-explosions/", 
+        "https://www.livescience.com/space/cosmology/catastrophic-collision-between-milky-way-and-andromeda-galaxies-may-not-happen-after-all-new-study-hints", 
+        "https://www.iflscience.com/astronomers-place-5050-odds-on-andromeda-colliding-with-us-75543"
+    ]
+    items = orch.remotesack.get_beans(filter={K_URL: {"$in": selected_urls}})
+    urls = [item.url for item in items]
+    chatters=orch.remotesack.get_latest_chatter_stats(urls)
+    cluster_sizes=orch.remotesack.count_related_beans(urls)
+    ic([orch._make_trend_update(item, chatters, cluster_sizes) for item in items])
 
-# orch.initialize(
-#     os.getenv("DB_CONNECTION_STRING"), 
-#     os.getenv("WORKING_DIR", "."), 
-#     os.getenv("EMBEDDER_FILE"),
-#     os.getenv("GROQ_API_KEY"),    
-#     float(os.getenv('CLUSTER_EPS')),
-#     float(os.getenv('CATEGORY_EPS')))
+orch.initialize(
+    os.getenv("DB_CONNECTION_STRING"), 
+    os.getenv("WORKING_DIR", "."), 
+    os.getenv("EMBEDDER_FILE"),
+    os.getenv("GROQ_API_KEY"),    
+    float(os.getenv('CLUSTER_EPS')),
+    float(os.getenv('CATEGORY_EPS')))
    
 
 ### TEST CALLS
 # test_writing()
 # test_chains()
-test_collection()
+# test_collection()
 # test_clustering()
 # test_search()
+test_trend_ranking()
 
