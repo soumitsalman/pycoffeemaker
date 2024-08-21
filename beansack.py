@@ -91,17 +91,6 @@ class Beansack:
         writes = list(map(makeupdate, urls, [{"$set": fields} for fields in updates]))
         return self.beanstore.bulk_write(writes).modified_count
       
-
-    def update_beans(self, urls: list[str|list[str]], updates: list[dict]) -> int:
-        # if update is a single dict then it will apply to all beans with the specified urls
-        # or else update is a list of equal length, and we will do a bulk_write of update one
-        if len(urls) != len(updates):
-            logger.warning("Bulk update discrepency: len(urls) [%d] != len(updates) [%d]", len(urls), len(updates))
-        
-        makeupdate = lambda filter, set_fields: UpdateOne({K_URL: filter}, set_fields) if isinstance(filter, str) else UpdateMany({K_URL: {"$in": filter}}, set_fields)       
-        writes = list(map(makeupdate, urls, [{"$set": fields} for fields in updates]))
-        return self.beanstore.bulk_write(writes).modified_count
-      
     def delete_old(self, window: int):
         time_filter = {K_UPDATED: { "$lte": get_timevalue(window) }}
         res = self.beanstore.delete_many(time_filter)
@@ -212,11 +201,11 @@ class Beansack:
                 }        
             },
             {
-                "$match": {"urls": {"$in": urls}}
-            },
-            {
                 "$unwind": "$urls"
             },
+            {
+                "$match": {"urls": {"$in": urls}}
+            },            
             {
                 "$project": {
                     "_id": 0,
@@ -226,7 +215,7 @@ class Beansack:
                 }
             }
         ]    
-        return {item[K_URL]: item['cluster_size'] for item in self.beanstore.aggregate(pipeline)}
+        return [item for item in self.beanstore.aggregate(pipeline)]
     
     def _unique_beans_pipeline(self, filter, sort_by, skip, limit, projection, for_count):
         pipeline = []
