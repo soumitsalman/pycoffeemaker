@@ -68,8 +68,6 @@ def run_collector():
     # TODO: add collection from linkedin
 
 def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
-    
-
     if items:
         # download the articles for new beans
         if isinstance(items[0], Bean):
@@ -90,7 +88,7 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
 
 def _download_beans(beans: list[Bean]) -> list[Bean]:
     for bean in beans:
-        if (bean.kind in [NEWS, BLOG]) and (not bean.text or len(bean.text.split())<MIN_DOWNLOAD_BODY_LEN):
+        if (bean.kind in [NEWS, BLOG]) and (not bean.image_url or not bean.text or len(bean.text.split())<MIN_DOWNLOAD_BODY_LEN):
             res = individual.load_from_url(bean.url)
             if res:
                 bean.image_url = bean.image_url or res[1]

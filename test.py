@@ -13,7 +13,6 @@ from collectors import rssfeed, ychackernews, individual, redditor
 from coffeemaker import orchestrator as orch
 from coffeemaker.chains import *
 
-
 def write_datamodels(items, file_name: str = None):
     if items:
         with open(f".test/{file_name or items[0].source}.json", 'w') as file:
@@ -25,21 +24,28 @@ def write_text(text, file_name):
 
 def test_collection():
     sources = [
-        "https://electrek.co/feed/",
-        "https://www.enterpriseai.news/feed/",
-        "https://federalnewsnetwork.com/feed/",
-        "https://www.autoblog.com/category/hirings-firings-layoffs/rss.xml",
-        "https://www.autoblog.com/category/government-legal/rss.xml",
-        "https://www.autoblog.com/category/green-auto-news/rss.xml",
-        "https://www.autoblog.com/category/hirings-firings-layoffs/rss.xml",
-        "https://www.autoblog.com/category/infrastructure/rss.xml",
-        "https://www.autoblog.com/category/plants-manufacturing/rss.xml",
-        "https://www.bleepingcomputer.com/feed/",
-        "https://dexwirenews.com/feed/",
-        "https://www.hackster.io/projects?format=atom&sort=recent"
+        "https://dev.to/feed",
+        "https://cyberscoop.com/feed/",
+        "https://itsfoss.com/rss/",
+        "https://www.securityinfowatch.com/__rss/website-scheduled-content.xml?input=%7B%22sectionAlias%22%3A%22home%22%7D",
+        "https://news.crunchbase.com/feed/",
+        "https://feeds.feedburner.com/visualcapitalist",
+        "https://www.makeuseof.com/feed/",
+        "https://thebeardedbunch.com/feed/",
+        "https://www.whathifi.com/feeds/all",
+        "https://theaviationist.com/feed/",
+        "https://simplymoretime.com/feed/",
+        "https://www.insidermonkey.com/blog/google-news-feed/",
+        "https://www.zmescience.com/feed/",
+        "https://www.pocket-lint.com/feed/",
+        "https://www.creativebloq.com/feed",
+        "https://www.thecooldown.com/feed/",
+        "https://www.benzinga.com/feed",
+        "https://eletric-vehicles.com/feed/",
+        "https://www.gamingonlinux.com/article_rss.php"
     ]
-    rssfeed.collect(sources=sources, store_func=write_datamodels)
-    redditor.collect(store_func=lambda items: write_datamodels([item[0] for item in items]))
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._download_beans(beans)))
+    redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in items])))
 
 def test_chains():
     sources = [
