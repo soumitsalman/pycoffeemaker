@@ -24,28 +24,12 @@ def write_text(text, file_name):
 
 def test_collection():
     sources = [
-        "https://dev.to/feed",
-        "https://cyberscoop.com/feed/",
-        "https://itsfoss.com/rss/",
-        "https://www.securityinfowatch.com/__rss/website-scheduled-content.xml?input=%7B%22sectionAlias%22%3A%22home%22%7D",
-        "https://news.crunchbase.com/feed/",
-        "https://feeds.feedburner.com/visualcapitalist",
-        "https://www.makeuseof.com/feed/",
-        "https://thebeardedbunch.com/feed/",
-        "https://www.whathifi.com/feeds/all",
-        "https://theaviationist.com/feed/",
-        "https://simplymoretime.com/feed/",
-        "https://www.insidermonkey.com/blog/google-news-feed/",
-        "https://www.zmescience.com/feed/",
-        "https://www.pocket-lint.com/feed/",
-        "https://www.creativebloq.com/feed",
-        "https://www.thecooldown.com/feed/",
-        "https://www.benzinga.com/feed",
-        "https://eletric-vehicles.com/feed/",
-        "https://www.gamingonlinux.com/article_rss.php"
+        # "https://www.prnewswire.com/rss/environment-latest-news/environment-latest-news-list.rss",
+        # "https://chaski.huffpost.com/us/auto/vertical/world-news",
+        "https://theaviationist.com/feed/"
     ]
     rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._download_beans(beans)))
-    redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in items])))
+    # redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in items])))
 
 def test_chains():
     sources = [

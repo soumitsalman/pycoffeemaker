@@ -26,8 +26,12 @@ def collect(sources: str|list[str] = DEFAULT_FEEDS, store_func = None):
         
 def collect_from(feed_url: str, content_kind = NEWS):
     feed = feedparser.parse(feed_url, agent=USER_AGENT)
+    # if we know that this feed is NOT in english, just skip for now. if language is not specified, assume it is english
+    if not feed.get("language", "en-US").startswith("en-"):
+        return []    
     collection_time = int(time.time())
-    return [_to_bean(entry, content_kind, collection_time) for entry in feed.entries]
+    # collect only the ones that is english. if language is not specified, assume it is english
+    return [_to_bean(entry, content_kind, collection_time) for entry in feed.entries if entry.get("language", "en-US").startswith("en-")]
 
 def _to_bean(entry, kind, collection_time):
     body, summary = _extract_body_and_summary(entry)    
