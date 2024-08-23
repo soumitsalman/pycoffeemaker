@@ -32,10 +32,8 @@ def test_collection():
     # redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in items])))
 
 def test_chains():
-    sources = [
-        "https://www.finsmes.com/feed"
-    ]
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans), "TEST-CHAIN-"+beans[0].source))
+    source = "https://eletric-vehicles.com/feed/"
+    write_datamodels(orch._augment(rssfeed.collect_from(source)[:5]), "TEST-CHAIN")
   
 def test_search():
     query = "profession: pilot"
@@ -73,9 +71,9 @@ orch.initialize(
 
 ### TEST CALLS
 # test_writing()
-# test_chains()
+test_chains()
 # test_collection()
 # test_clustering()
 # test_search()
-test_trend_ranking()
+# test_trend_ranking()
 

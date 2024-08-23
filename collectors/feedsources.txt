@@ -117,3 +117,4 @@ https://www.thecooldown.com/feed/
 https://www.benzinga.com/feed
 https://eletric-vehicles.com/feed/
 https://www.gamingonlinux.com/article_rss.php
+https://www.howtogeek.com/feed/

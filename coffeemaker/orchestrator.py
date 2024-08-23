@@ -129,7 +129,7 @@ def _augment(beans: list[Bean]):
             # highlights and tags
             digest = digestor.run(kind=bean.kind, text=bean.text)
             bean.tags = digest.keyphrases[:5] or bean.tags
-            bean.highlights = digest.highlights[:5]
+            bean.title = digest.highlight
             if bean.kind in [NEWS, BLOG]: # normalize creation time of news and blogs
                 bean.created = int(dt.fromtimestamp(bean.created).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
         except Exception:
