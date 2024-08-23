@@ -132,7 +132,8 @@ def _augment(beans: list[Bean]):
             # extract named entities.
             # TODO: merge categories and tags?
             bean.tags = keyphraser.run(bean.text)
-            bean.categories.extend(bean.tags)
+            if bean.categories and bean.tags:
+                bean.categories.extend(bean.tags)
 
             # highlight: not merging this summary because otherwise the summary content looks like shit
             digest = digestor.run(kind=bean.kind, text=bean.text)            
