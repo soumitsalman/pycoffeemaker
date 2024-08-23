@@ -9,6 +9,22 @@ from langchain.chains.summarize import load_summarize_chain
 from itertools import chain
 from pydantic import BaseModel, Field
 import re
+from gliner import GLiNER
+
+KEYPHRASE_TYPES = ["company", "organization", "group", "entity", "product", "person", "place", "technology", "vulnerability", "profession", "software", "vehicle"]
+MIN_KEYPHRASE_LEN = 3
+
+class KeyphraseExtractor:
+    def __init__(self, model_path: str="numind/NuNerZero_span", context_len: int=383, cache_dir=".models"):
+        self.model = GLiNER.from_pretrained(model_path, cache_dir=cache_dir)
+        self.n_ctx = context_len
+
+    def run(self, text: str) -> list[str]:
+        entities = chain(*(self.model.predict_entities(c, KEYPHRASE_TYPES) for c in utils.chunk(text, n_ctx=self.n_ctx)[:2])) # this is an approximation assuming that there isn't much new after the first 1 pages
+        return sorted({entity["text"].lower():entity['text'] for entity in entities if len(entity["text"])>=MIN_KEYPHRASE_LEN}.values(), key=lambda x: len(x), reverse=True)
+        
+    def __call__(self, text: str) -> list[str]:        
+        return self.run(text)
 
 DIGEST_TEMPLATE="""TASK: Extract a one-liner highlight/tldr and extract the top five key phrases.
 OUTPUT FORMAT: {format_instruction}.
@@ -35,6 +51,7 @@ class DigestExtractor:
         res = self.chain.invoke({"kind": kind, "text": utils.truncate(text, self.context_len)})
         if res.highlight[-1] in string.punctuation:
             res.highlight = res.highlight[:-1]
+        res.keyphrases = sorted((item for item in res.keyphrases if len(item)>=3), key=lambda x: len(x), reverse=True)
         return res
         
     def __call__(self, kind: str, text: str) -> Digest:        

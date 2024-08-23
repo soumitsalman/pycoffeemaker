@@ -18,7 +18,6 @@ def setup_categories():
     with open("factory_settings.json", 'r') as file:
         categories = json.load(file)['categories']
 
-    embedder = BeansackEmbeddings(orch.embedder_path, 4096)
     def _make_category_entry(predecessors, entry):
         if isinstance(entry, str):
             path = predecessors + [entry]
@@ -26,8 +25,8 @@ def setup_categories():
                 {
                     K_TEXT: entry, 
                     K_CATEGORIES: path,
-                    K_DESCRIPTION: "-->".join(path), 
-                    K_EMBEDDING:  embedder.embed( "-->".join(f"topic:{cat}" for cat in path)), 
+                    K_DESCRIPTION: " > ".join(path), 
+                    K_EMBEDDING:  orch.embedder.embed( "topic: " + (" > ".join(path))), 
                     K_SOURCE: "__SYSTEM__"
                 }
             ]
@@ -69,7 +68,7 @@ orch.initialize(
     float(os.getenv('CLUSTER_EPS')),
     float(os.getenv('CATEGORY_EPS'))
 )
-# setup_categories()
-# rectify_categories()
-orch.run_clustering()
-rectify_ranking()
+setup_categories()
+rectify_categories()
+# orch.run_clustering()
+# rectify_ranking()

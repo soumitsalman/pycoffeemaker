@@ -1,6 +1,8 @@
 import os
+from datetime import datetime as dt
 from dotenv import load_dotenv
 from pybeansack import utils
+
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR+"/.env")
@@ -18,8 +20,11 @@ orch.initialize(
     os.getenv("GROQ_API_KEY"),    
     float(os.getenv('CLUSTER_EPS')),
     float(os.getenv('CATEGORY_EPS')))
+
+start_time = dt.now()
 orch.run_cleanup()
 orch.run_collector()
 orch.run_indexing()
 orch.run_clustering()
 orch.run_trend_ranking()
+orch.logger.info("Run Completed! Total Time: %s", str(dt.now()-start_time))

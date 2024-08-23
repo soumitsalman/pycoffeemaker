@@ -33,7 +33,7 @@ def test_collection():
 
 def test_chains():
     source = "https://eletric-vehicles.com/feed/"
-    write_datamodels(orch._augment(rssfeed.collect_from(source)[:5]), "TEST-CHAIN")
+    write_datamodels(orch._augment(rssfeed.collect_from(source)), "TEST-CHAIN")
   
 def test_search():
     query = "profession: pilot"
@@ -68,7 +68,6 @@ orch.initialize(
     float(os.getenv('CLUSTER_EPS')),
     float(os.getenv('CATEGORY_EPS')))
    
-
 ### TEST CALLS
 # test_writing()
 test_chains()

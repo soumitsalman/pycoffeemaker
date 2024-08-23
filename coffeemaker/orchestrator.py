@@ -11,33 +11,36 @@ from pymongo.collection import Collection
 from collectors import individual, rssfeed, ychackernews, redditor
 from sklearn.cluster import DBSCAN
 from langchain_groq import ChatGroq
-from coffeemaker.chains import DigestExtractor, Summarizer
+from coffeemaker.chains import *
 from persistqueue import Queue
 
 MIN_ALLOWED_BODY_LEN = 75
 MIN_DOWNLOAD_BODY_LEN = 150 
 MIN_SUMMARY_BODY_LEN = 200
-MAX_CATEGORIES = 5
+MAX_CATEGORIES = 3
 CLEANUP_WINDOW = 30
 
 logger = utils.create_logger("coffeemaker")
 
+keyphraser: KeyphraseExtractor = None
+embedder: BeansackEmbeddings = None
 remotesack: Beansack = None
 categorystore: Collection = None 
 collect_queue: Queue = None
 index_queue: Queue = None
 cluster_queue: Queue = None
 trend_queue: Queue = None
-embedder_path: str = None
 llm_api_key: str = None
 cluster_eps: int = None
 category_eps: int = None
 
 def initialize(db_conn_str: str, working_dir: str, emb_file: str, api_key: str, cl_eps: float, cat_eps: float):
     queue_dir=working_dir+"/.processingqueue"
-    global embedder_path, remotesack, categorystore, collect_queue, index_queue, cluster_queue, trend_queue, llm_api_key, cluster_eps, category_eps
+    global keyphraser, embedder, remotesack, categorystore, collect_queue, index_queue, cluster_queue, trend_queue, llm_api_key, cluster_eps, category_eps
 
-    embedder_path=working_dir+"/.models/"+emb_file
+    models_dir=working_dir+"/.models/"
+    keyphraser = KeyphraseExtractor(cache_dir=models_dir)
+    embedder = BeansackEmbeddings(model_path=models_dir+emb_file, context_len=4095)
 
     remotesack = Beansack(db_conn_str)
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
@@ -55,7 +58,6 @@ def initialize(db_conn_str: str, working_dir: str, emb_file: str, api_key: str, 
 def run_cleanup():
     logger.info("Starting clean up")
     remotesack.delete_old(CLEANUP_WINDOW)
-    # local_beanstore.delete(where=timewindow_filter(CLEANUP_WINDOW))
 
 def run_collector():
     logger.info("Starting collection from rss feeds.")
@@ -111,30 +113,38 @@ def run_indexing():
         index_queue.task_done()
         
 def _augment(beans: list[Bean]):
-    embedder = BeansackEmbeddings(embedder_path, 4095)
+    # embedder = BeansackEmbeddings(embedder_path, 4095)
     llm = ChatGroq(api_key=llm_api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
     digestor = DigestExtractor(llm, 3072) 
     summarizer = Summarizer(llm, 3072)
-
+    
     # extract digest and prepare for pushing to beansack
     for bean in beans:
-        # extract digest
+        # putting this in try catch because these have remote call and are not always reliable
         try:
             # embedding
-            bean.embedding = embedder.embed(bean.digest())
+            bean.embedding = embedder.embed(bean.digest())            
+            bean.categories = _find_categories(bean)
+
             # summary because in the digestor the summary content looks like shit
             bean.summary = summarizer.run(bean.text) if len(bean.text.split()) > MIN_SUMMARY_BODY_LEN else bean.text
-            # match categories
-            bean.categories = _find_categories(bean)
-            # highlights and tags
-            digest = digestor.run(kind=bean.kind, text=bean.text)
-            bean.tags = digest.keyphrases[:5] or bean.tags
+            
+            # extract named entities.
+            # TODO: merge categories and tags?
+            bean.tags = keyphraser.run(bean.text)
+            bean.categories.extend(bean.tags)
+
+            # highlight: not merging this summary because otherwise the summary content looks like shit
+            digest = digestor.run(kind=bean.kind, text=bean.text)            
             bean.title = digest.highlight
-            if bean.kind in [NEWS, BLOG]: # normalize creation time of news and blogs
-                bean.created = int(dt.fromtimestamp(bean.created).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+
         except Exception:
-            logger.warning("Augmenting failed for %s", bean.url)        
+            logger.warning("Augmenting failed for %s", bean.url)   
+
+        # normalize fields and values that are immaterial   
         bean.text = None # text field has no use any more and will just cause extra load 
+        if bean.kind in [NEWS, BLOG]: # normalize creation time of news and blogs
+            bean.created = int(dt.fromtimestamp(bean.created).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
 
     return [bean for bean in beans if bean.embedding]
 
