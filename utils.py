@@ -18,6 +18,10 @@ def create_logger(name: str):
 
 _encoding = tiktoken.get_encoding("cl100k_base")
 
+def chunk(input: str, n_ctx) -> list[str]:
+    tokens = _encoding.encode(input)
+    return [_encoding.decode(tokens[start:start+n_ctx]) for start in range(0, len(tokens), n_ctx)]
+
 def truncate(input: str, n_ctx) -> str:
     tokens = _encoding.encode(input)
     return _encoding.decode(tokens[:n_ctx]) 
