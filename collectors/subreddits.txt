@@ -21,3 +21,16 @@ Crypto_Currency_News
 worldnews
 UpliftingNews
 NewsHub
+Conservative
+Conservative_News
+WorldNews_Serious
+gamingnews
+altcoin_news
+CyberNews
+RobotNews
+hackernews
+ChatbotNews
+ConflictNews
+GlobalNews
+IntelligenceNews
+China_News

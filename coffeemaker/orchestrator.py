@@ -16,8 +16,8 @@ from persistqueue import Queue
 
 MIN_ALLOWED_BODY_LEN = 75
 MIN_DOWNLOAD_BODY_LEN = 150 
-MIN_SUMMARY_BODY_LEN = 200
-MAX_CATEGORIES = 3
+MIN_SUMMARIZER_BODY_LEN = 150
+MAX_CATEGORIES = 5
 CLEANUP_WINDOW = 30
 
 logger = utils.create_logger("coffeemaker")
@@ -127,7 +127,7 @@ def _augment(beans: list[Bean]):
             bean.categories = _find_categories(bean)
 
             # summary because in the digestor the summary content looks like shit
-            bean.summary = summarizer.run(bean.text) if len(bean.text.split()) > MIN_SUMMARY_BODY_LEN else bean.text
+            bean.summary = summarizer.run(bean.text) if len(bean.text.split()) > MIN_SUMMARIZER_BODY_LEN else bean.text
             
             # extract named entities.
             # TODO: merge categories and tags?

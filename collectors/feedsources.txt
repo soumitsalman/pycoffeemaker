@@ -118,3 +118,12 @@ https://www.benzinga.com/feed
 https://eletric-vehicles.com/feed/
 https://www.gamingonlinux.com/article_rss.php
 https://www.howtogeek.com/feed/
+https://www.dagens.com/feeds/rss/articles/latest-news/
+https://www.cfo.com/feeds/news/
+https://physicsworld.com/feed/
+https://www.financial-world.org/world/rss.php
+https://regtechtimes.com/feed/
+https://www.datasciencecentral.com/feed/atom/
+https://the-decoder.com/feed/
+https://content.techgig.com/rss_section_feeds/65437660.cms
+https://www.lesswrong.com/feed.xml

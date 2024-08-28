@@ -24,9 +24,17 @@ def write_text(text, file_name):
 
 def test_collection():
     sources = [
-        # "https://www.prnewswire.com/rss/environment-latest-news/environment-latest-news-list.rss",
-        # "https://chaski.huffpost.com/us/auto/vertical/world-news",
-        "https://theaviationist.com/feed/"
+        "https://www.dagens.com/feeds/rss/articles/latest-news/",
+        "https://www.cfo.com/feeds/news/",
+        "https://physicsworld.com/feed/",
+        "https://www.financial-world.org/world/rss.php",
+        "https://regtechtimes.com/feed/",
+        "https://www.datasciencecentral.com/feed/atom/",
+        "https://the-decoder.com/feed/",
+        "https://www.kiplinger.com/feeds.xml",
+        "https://content.techgig.com/rss_section_feeds/65437660.cms",
+        "https://content.techgig.com/rss_section_feeds/65437686.cms",
+        "https://www.lesswrong.com/feed.xml"
     ]
     rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._download_beans(beans)))
     # redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in items])))
@@ -70,8 +78,8 @@ orch.initialize(
    
 ### TEST CALLS
 # test_writing()
-test_chains()
-# test_collection()
+# test_chains()
+test_collection()
 # test_clustering()
 # test_search()
 # test_trend_ranking()
