@@ -217,22 +217,25 @@ def _run_clustering(beans, n_depth):
 
 def run_trend_ranking():
     logger.info("Starting Trend Ranking")
+    batch = {}
     while not trend_queue.empty():
         # remove the duplicates in the batch
         # put them in database and queue the beans for trend_ranking
         items = trend_queue.get()
-        try:
-            if isinstance(items[0], Chatter):
-                remotesack.store_chatters(items)
-            # else item is Bean
-            urls = [item.url for item in items]
-            chatters=remotesack.get_latest_chatter_stats(urls)
-            cluster_sizes=remotesack.count_related_beans(urls)
-            res = remotesack.beanstore.bulk_write([_make_trend_update(item, chatters, cluster_sizes) for item in items], ordered=False).modified_count
-            logger.info("%d beans from %s updated with trendscore", res, items[0].source)
-        except Exception as err:
-            logger.warning("Trend calculation failed for a batch of %s. %s", items[0].source, str(err))
+        if isinstance(items[0], Chatter):
+            remotesack.store_chatters(items) 
+        batch.update({item.url: item for item in items})
         trend_queue.task_done()
+    
+    items = list(batch.values())
+    urls = [item.url for item in items]
+    try:    
+        chatters=remotesack.get_latest_chatter_stats(urls)
+        cluster_sizes=remotesack.count_related_beans(urls)
+        res = remotesack.beanstore.bulk_write([_make_trend_update(item, chatters, cluster_sizes) for item in items], ordered=False).modified_count
+        logger.info("%d beans updated with trendscore", res)
+    except Exception as err:
+        logger.warning("Trend calculation failed for a batch of %d beans. %s", len(items), str(err))
 
 def _make_trend_update(item, chatters, cluster_sizes):
     update = {

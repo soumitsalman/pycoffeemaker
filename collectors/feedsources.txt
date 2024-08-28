@@ -120,7 +120,6 @@ https://www.gamingonlinux.com/article_rss.php
 https://www.howtogeek.com/feed/
 https://www.dagens.com/feeds/rss/articles/latest-news/
 https://www.cfo.com/feeds/news/
-https://physicsworld.com/feed/
 https://www.financial-world.org/world/rss.php
 https://regtechtimes.com/feed/
 https://www.datasciencecentral.com/feed/atom/

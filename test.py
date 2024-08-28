@@ -68,6 +68,17 @@ def test_trend_ranking():
     cluster_sizes=orch.remotesack.count_related_beans(urls)
     ic([orch._make_trend_update(item, chatters, cluster_sizes) for item in items])
 
+def test_trend_ranking_v2():
+    sources = [
+        "https://www.dagens.com/feeds/rss/articles/latest-news/",
+        "https://www.cfo.com/feeds/news/",
+        "https://physicsworld.com/feed/"        
+    ]
+    rssfeed.collect(sources=sources, store_func=orch._process_collection)
+    orch.run_indexing()
+    orch.run_clustering()
+    orch.run_trend_ranking()
+
 orch.initialize(
     os.getenv("DB_CONNECTION_STRING"), 
     os.getenv("WORKING_DIR", "."), 
@@ -79,8 +90,10 @@ orch.initialize(
 ### TEST CALLS
 # test_writing()
 # test_chains()
-test_collection()
+# test_collection()
 # test_clustering()
 # test_search()
 # test_trend_ranking()
+test_trend_ranking_v2()
+
 
