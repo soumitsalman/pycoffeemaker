@@ -356,8 +356,9 @@ def _deserialize_chatters(cursor) -> list[Chatter]:
 #         logger.warning(f"{err}")
 #         return []
 
-def timewindow_filter(last_ndays: int):
-    return {K_UPDATED: {"$gte": get_timevalue(last_ndays)}}
+def timewindow_filter(last_ndays: int, from_updated: bool):
+    val = {"$gte": get_timevalue(last_ndays)}
+    return {K_UPDATED: val} if from_updated else {K_CREATED: val}
 
 def get_timevalue(last_ndays: int):
     return int((datetime.now() - timedelta(days=last_ndays)).timestamp())
