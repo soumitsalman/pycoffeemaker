@@ -62,9 +62,9 @@
                 "Open Source Software (OSS)"
             ],
             "Computer Programming": [
-                "Low-level Programming",
+                "Lowlevel Programming",
                 "Assembly Language Programming",
-                "Multi-Threaded Programming",
+                "Multi Threaded Programming",
                 "Async Programming",
                 "Graphics Programming",
                 "C/C++",
@@ -176,8 +176,7 @@
                 "Microelectronics",
                 "Nanotechnology"
             ],
-            "Hardware-Software Co-Design": [
-                "Hardware-Software Co-Design",
+            "Hardware Software CoDesign": [
                 "Performance Optimization",
                 "Advanced Computing Systems"
             ],
@@ -186,10 +185,10 @@
                 "Parallel Processing",
                 "Cluster Computing",
                 "Grid Computing",
-                "High-Throughput Computing",
+                "High Throughput Computing",
                 "Computational Fluid Dynamics",
                 "GPU Acceleration",
-                "Data-Intensive Computing",
+                "Data Intensive Computing",
                 "HPC Architectures",
                 "Distributed Systems",
                 "Scalability",
@@ -296,7 +295,7 @@
                 "Tectonic Plates",
                 "Antarctic Ice Sheet",
                 "Earth's Mantle",
-                "Sea-Level Rise",
+                "Sea Level Rise",
                 "Global Warming",
                 "Climate Policy",
                 "Greenhouse Gases",
@@ -337,7 +336,7 @@
                 "Grid Integration"
             ],
             "Green Technologies": [
-                "Low-Carbon Energy",
+                "Low Carbon Energy",
                 "Energy Conservation",
                 "Hydroelectric Dams",
                 "Renewable Energy Incentives"
@@ -388,7 +387,6 @@
                 "Security Alliances",
                 "Political Parties",
                 "Leadership Changes",
-                "Cross-Border Relations",
                 "Military Strategy",
                 "Public Protests",
                 "Political Activism",
@@ -424,7 +422,7 @@
                 "United Nations",
                 "Global Policies",
                 "International Treaties",
-                "Cross-Border Relations",
+                "Cross Border Relations",
                 "Global Diplomacy"
             ]   
         },
@@ -452,7 +450,7 @@
             "Blockchain Technology": [
                 "Blockchain Development",
                 "Smart Contracts",
-                "Non-Fungible Tokens (NFT)",
+                "Non Fungible Tokens (NFT)",
                 "Blockchain Security",
                 "Blockchain Startups",
                 "Blockchain Applications",
@@ -489,7 +487,7 @@
                 "Brain Health",
                 "Smoking",
                 "Telemedicine",
-                "Psychological Well-Being",
+                "Psychological WellBeing",
                 "Mindfulness"
             ],
             "Diseases & Epidemics": [
@@ -508,7 +506,7 @@
                 "Antibiotics",
                 "Bacteria",
                 "Blood Vessel Health",
-                "Early-Onset Dementia",
+                "Early Onset Dementia",
                 "Alzheimer's Disease",
                 "Lung Disease",
                 "Silicosis",
@@ -539,39 +537,38 @@
                 "Agricultural Pesticides"
             ]
         },
-        "Entrepreneurship & Start-Ups": {
+        "Entrepreneurship & StartUps": {
             "Venture Capital & Funding": [
                 "Venture Capital",
-                "Start-Up Funding",
+                "StartUp Funding",
                 "Angel Investors",
                 "Seed Funding",
                 "Series A Funding",
                 "Funding Rounds",
                 "Investment Trends",
                 "Pitch Decks",
-                "Start-Up Valuation",
+                "StartUp Valuation",
                 "Equity Financing",
                 "Crowdfunding",
                 "Funding Sources"
             ],
             "Entrepreneurship": [
-                "Start-Up News",
-                "Start-Up Incubators",
-                "Start-Up Accelerators",
-                "Start-Up Growth",
-                "Start-Up Exits",
+                "StartUp Incubators",
+                "StartUp Accelerators",
+                "StartUp Growth",
+                "StartUp Exits",
                 "Acquisitions",
                 "Initial Public Offering (IPO)",
-                "Start-Up Ecosystem",
-                "Start-Up Success Stories",
+                "StartUp Ecosystem",
+                "StartUp Success Stories",
                 "Investment Opportunities",
-                "Start-Up Partnerships",
+                "StartUp Partnerships",
                 "Business Model Innovation",
-                "Start-Up Challenges",
-                "Start-Up Mentors",
-                "Start-Up Accelerator Programs",
+                "StartUp Challenges",
+                "StartUp Mentors",
+                "StartUp Accelerator Programs",
                 "Growth Hacking",
-                "Start-Up Scalability",
+                "StartUp Scalability",
                 "Tech Startups",
                 "Biomedical Startups",
                 "Networking Strategies",
@@ -698,7 +695,7 @@
                 "Interstellar Travel",
                 "Gravitational Waves",
                 "Milky Way Galaxy",
-                "Multi-Messenger Astronomy",
+                "MultiMessenger Astronomy",
                 "Theoretical Cosmology"
             ]
         },
@@ -721,7 +718,7 @@
                 "Utility Robots",
                 "Robotics Innovation",
                 "Robotic Research Labs",
-                "Human-Robot Interaction"
+                "Human Robot Interaction"
             ],
             "Advanced Robotics": [
                 "Computer Vision",
@@ -730,7 +727,7 @@
                 "Smart Robots",
                 "Surgical Robots",
                 "Defense Robots",
-                "Law-Enforcement Robots",
+                "Law Enforcement Robots",
                 "Robotics Research"
             ]
         },
@@ -758,7 +755,7 @@
                 "Numerical Methods"
             ],
             "Physics": [
-                "Matter-Antimatter",
+                "Matter Antimatter",
                 "Quantum Mechanics",
                 "Relativity Theory",
                 "Thermodynamics",
@@ -773,8 +770,8 @@
                 "Solid State Physics",
                 "Quantum Field Theory",
                 "Cosmology",
-                "High-Energy Physics",
-                "Wave-Particle Duality",
+                "High Energy Physics",
+                "Wave Particle Duality",
                 "Experimental Physics",
                 "Theoretical Physics",
                 "Gravity",
@@ -801,7 +798,7 @@
                 "Catalysis",
                 "Spectroscopy",
                 "Thermodynamics",
-                "Solid-State Chemistry",
+                "Solid State Chemistry",
                 "Composite Materials",
                 "Nanotechnology",
                 "Organic Synthesis",
@@ -838,7 +835,7 @@
                 "Career Planning",
                 "Professional Growth",
                 "Skill Development",
-                "Self-Development",
+                "Self Development",
                 "Continuing Education",
                 "Professional Certifications",
                 "Mentorship Programs",
@@ -848,7 +845,7 @@
                 "Coaching & Mentoring",
                 "Growth Mindset",
                 "Learning & Development Strategies",
-                "Work-life Balance"
+                "Worklife Balance"
             ],
             "Career Mobility": [
                 "Job Search Techniques",
@@ -874,7 +871,7 @@
             ],
             "Performance Management": [
                 "Performance Reviews",
-                "Self-Assessment Techniques",
+                "Self Assessment Techniques",
                 "Feedback Integration",
                 "Continuous Improvement",
                 "Setting Personal Benchmarks",
@@ -898,6 +895,7 @@
                 "Automotive startups",
                 "Automotive recalls",
                 "Vehicle safety standards",
+                "Autonomous Vehicle Safety Issue",
                 "Automotive brands",
                 "Automotive marketing"
             ],
@@ -905,7 +903,7 @@
                 "Fleet management",                
                 "Commercial vehicles",
                 "Transportation logistics",
-                "Last-mile delivery",
+                "Lastmile delivery",
                 "Freight transportation",
                 "Logistics technology",
                 "Vehicle telematics",
@@ -919,7 +917,7 @@
                 "Autonomous driving technology",
                 "Driver assistance systems",
                 "V2X communication",
-                "In-car entertainment systems",
+                "Car entertainment systems",
                 "Telematics",
                 "Connected cars",
                 "Vehicle software",
@@ -933,10 +931,10 @@
                 "Driver assistance systems",
                 "Fleet management",
                 "Autonomous Vehicles",
-                "Self-driving cars",
-                "Self-driving technology",
+                "Self driving cars",
+                "Self driving technology",
                 "Simulation Systems",
-                "Vehicle-to-everything (V2X) communication",
+                "Vehicle to everything (V2X) communication",
                 "Electric Vehicles (EVs)",
                 "Vehicle Carbon emissions",
                 "Fuel efficiency",
@@ -1062,7 +1060,7 @@
                 "Product Positioning",
                 "Competitive Analysis",
                 "Product Profitability Analysis",
-                "Cross-Functional Collaboration",
+                "Cross Functional Collaboration",
                 "Product Strategy Alignment with Business Goals"
             ],
             "Execution Management": [
@@ -1075,11 +1073,11 @@
                 "Execution Monitoring & Control",
                 "Execution Tools & Technologies",
                 "Execution Best Practices",
-                "Real-Time Execution Analytics",
+                "RealTime Execution Analytics",
                 "Continuous Improvement in Execution",
                 "Execution Alignment with Strategy",
                 "Resource Management in Execution",
-                "Effective Decision-Making in Execution",
+                "Effective Decision Making in Execution",
                 "Execution Communication",
                 "Execution Review & Feedback"
             ],

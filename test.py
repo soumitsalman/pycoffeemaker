@@ -24,20 +24,19 @@ def write_text(text, file_name):
 
 def test_collection():
     sources = [
-        "https://www.dagens.com/feeds/rss/articles/latest-news/",
-        "https://www.cfo.com/feeds/news/",
-        "https://physicsworld.com/feed/",
-        "https://www.financial-world.org/world/rss.php",
-        "https://regtechtimes.com/feed/",
-        "https://www.datasciencecentral.com/feed/atom/",
-        "https://the-decoder.com/feed/",
-        "https://www.kiplinger.com/feeds.xml",
-        "https://content.techgig.com/rss_section_feeds/65437660.cms",
-        "https://content.techgig.com/rss_section_feeds/65437686.cms",
-        "https://www.lesswrong.com/feed.xml"
+        "https://citywire.com/ria/latest-news/rss.xml",
     ]
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._download_beans(beans)))
+    rssfeed.collect(sources=sources, store_func=lambda beans: [ic(len(beans)), write_datamodels(orch._download_beans(beans))])
     # redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in items])))
+
+def test_whole_path_live():
+    sources = [
+        "https://www.ictworks.org/feed/",
+    ]
+    rssfeed.collect(sources=sources, store_func=orch._process_collection)
+    orch.run_indexing()
+    orch.run_clustering()
+    orch.run_trend_ranking()
 
 def test_chains():
     source = "https://eletric-vehicles.com/feed/"
@@ -54,6 +53,9 @@ def test_clustering():
     make_update = lambda group, header: print("[", len(group), "]", header, "====\n", "\n\t".join(group) if isinstance(group[0], str) else group,"\n") # print("[", len(group), "] ====\n", "\n\t".join(group),"\n")
     list(map(make_update, res, [items[0] for items in res]))
 
+def test_clustering_live(): 
+    orch.run_clustering()
+
 def test_trend_ranking():
     selected_urls = [
         "https://www.nature.com/articles/d41586-024-02526-y", 
@@ -68,16 +70,6 @@ def test_trend_ranking():
     cluster_sizes=orch.remotesack.count_related_beans(urls)
     ic([orch._make_trend_update(item, chatters, cluster_sizes) for item in items])
 
-def test_trend_ranking_v2():
-    sources = [
-        "https://www.dagens.com/feeds/rss/articles/latest-news/",
-        "https://www.cfo.com/feeds/news/",
-        "https://physicsworld.com/feed/"        
-    ]
-    rssfeed.collect(sources=sources, store_func=orch._process_collection)
-    orch.run_indexing()
-    orch.run_clustering()
-    orch.run_trend_ranking()
 
 orch.initialize(
     os.getenv("DB_CONNECTION_STRING"), 
@@ -92,8 +84,9 @@ orch.initialize(
 # test_chains()
 # test_collection()
 # test_clustering()
+# test_clustering_live()
+test_whole_path_live()
 # test_search()
 # test_trend_ranking()
-test_trend_ranking_v2()
 
 

@@ -126,3 +126,9 @@ https://www.datasciencecentral.com/feed/atom/
 https://the-decoder.com/feed/
 https://content.techgig.com/rss_section_feeds/65437660.cms
 https://www.lesswrong.com/feed.xml
+https://www.theatlantic.com/feed/all/
+https://feed.infoq.com/
+https://mlcommons.org/feed/
+https://www.techrepublic.com/rssfeeds/articles/
+https://decrypt.co/feed
+https://www.ictworks.org/feed/
