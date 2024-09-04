@@ -8,7 +8,7 @@ import time
 
 SOURCE = "Reddit"
 STORY_URL_TEMPLATE = "https://www.reddit.com%s"
-SUBREDDITS_FILE = os.path.dirname(os.path.abspath(__file__))+"/subreddits.txt"
+SUBREDDITS_FILE = os.path.dirname(os.path.abspath(__file__))+"/redditsources.txt"
 MAX_LIMIT = 20
 
 def collect(store_func):

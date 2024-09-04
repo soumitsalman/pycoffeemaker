@@ -7,7 +7,7 @@ from .individual import *
 import time
 from icecream import ic
 
-DEFAULT_FEEDS = os.path.dirname(os.path.abspath(__file__))+"/feedsources.txt"
+DEFAULT_FEEDS = os.path.dirname(os.path.abspath(__file__))+"/rssfeedsources.txt"
 
 logger = create_logger("rssfeed")
 
