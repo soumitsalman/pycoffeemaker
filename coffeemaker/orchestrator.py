@@ -66,24 +66,26 @@ def run_collector():
     # TODO: add collection from linkedin
 
 def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
-    if items:
-        # download the articles for new beans
-        beans, chatters = None, None
-        if isinstance(items[0], Bean):
-            beans = items
-        if isinstance(items[0], Chatter):
-            chatters = items
-        if isinstance(items[0], tuple):
-            beans = [item[0] for item in items]
-            chatters = [item[1] for item in items]
+    if not items:
+        return
+    
+    # download the articles for new beans
+    beans, chatters = None, None
+    if isinstance(items[0], Bean):
+        beans = items
+    if isinstance(items[0], Chatter):
+        chatters = items
+    if isinstance(items[0], tuple):
+        beans = [item[0] for item in items]
+        chatters = [item[1] for item in items]
 
-        if beans:            
-            downloaded = _download_beans(remotesack.filter_unstored_beans(beans))
-            if downloaded:
-                logger.info("%d (out of %d) beans downloaded from %s", len(downloaded), len(beans), downloaded[0].source)
-                _queue(index_queue, downloaded)
-        if chatters:            
-            _queue(trend_queue, chatters)
+    if beans:            
+        downloaded = _download_beans(remotesack.filter_unstored_beans(beans))
+        if downloaded:
+            logger.info("%d (out of %d) beans downloaded from %s", len(downloaded), len(beans), downloaded[0].source)
+            _queue(index_queue, downloaded)
+    if chatters:            
+        _queue(trend_queue, chatters)
 
 def _download_beans(beans: list[Bean]) -> list[Bean]:
     for bean in beans:
@@ -99,14 +101,15 @@ def run_indexing():
     while not index_queue.empty():   
         beans = _dequeue(index_queue)     
         beans = remotesack.filter_unstored_beans(beans) if beans else None
-        if beans:      
-            try:      
-                beans = _augment(beans) # this is the data augmentation part: embeddings, summary, highlights           
-                res = remotesack.store_beans(beans)
-                logger.info("%d beans added from %s", res, beans[0].source)
-                _queue(trend_queue, beans) # set it out for clustering
-            except Exception as err:
-                logger.warning("Indexing/Storing failed for a batch from %s. %s", beans[0].source, str(err))
+        if not beans:   
+            continue   
+        try:      
+            beans = _augment(beans) # this is the data augmentation part: embeddings, summary, highlights           
+            res = remotesack.store_beans(beans)
+            logger.info("%d beans added from %s", res, beans[0].source)
+            _queue(trend_queue, beans) # set it out for clustering
+        except Exception as err:
+            logger.warning("Indexing/Storing failed for a batch from %s. %s", beans[0].source, str(err))
         
 def _augment(beans: list[Bean]):
     # embedder = BeansackEmbeddings(embedder_path, 4095)
