@@ -44,7 +44,7 @@ logger = create_logger("beansack")
 
 class Beansack:
     def __init__(self, conn_str: str, embedder: BeansackEmbeddings = None):        
-        client = MongoClient(conn_str)        
+        client = MongoClient(conn_str, appname="PyCoffeemaker_or_Espresso", timeoutMS=180000)        
         self.beanstore: Collection = client[BEANSACK][BEANS]
         self.highlightstore: Collection = client[BEANSACK][HIGHLIGHTS]
         self.chatterstore: Collection = client[BEANSACK][CHATTERS]        

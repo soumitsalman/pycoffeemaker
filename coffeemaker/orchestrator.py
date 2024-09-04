@@ -180,11 +180,7 @@ def run_clustering():
             ic(group)  
 
     updates = [UpdateMany({K_URL: {"$in": group}},{"$set": {K_CLUSTER_ID: group[0]}}) for group in res]
-    update_count = 0
-    # breaking it into chunk of 10000
-    BULK_CHUNK_SIZE = 10000
-    for i in range(0, len(updates), BULK_CHUNK_SIZE):
-        update_count += remotesack.beanstore.bulk_write(updates[i: i+BULK_CHUNK_SIZE], ordered=False).modified_count
+    update_count = _bulk_update(updates)
     logger.info("%d beans updated with cluster_id", update_count)
     
 def _run_clustering(beans, n_depth):
@@ -226,7 +222,7 @@ def run_trend_ranking():
     try:    
         chatters=remotesack.get_latest_chatter_stats(urls)
         cluster_sizes=remotesack.count_related_beans(urls)
-        res = remotesack.beanstore.bulk_write([_make_trend_update(item, chatters, cluster_sizes) for item in items], ordered=False).modified_count
+        res = _bulk_update([_make_trend_update(item, chatters, cluster_sizes) for item in items])
         logger.info("%d beans updated with trendscore", res)
     except Exception as err:
         logger.warning("Trend calculation failed for a batch of %d beans. %s", len(items), str(err))
@@ -245,6 +241,14 @@ def _make_trend_update(item, chatters, cluster_sizes):
             update[K_COMMENTS] = ch.comments
             update[K_TRENDSCORE] += (ch.comments*3)
     return UpdateOne({K_URL: item.url}, {"$set": update})
+
+def _bulk_update(updates):
+    update_count = 0
+    # breaking it into chunk of 10000
+    BULK_CHUNK_SIZE = 10000
+    for i in range(0, len(updates), BULK_CHUNK_SIZE):
+        update_count += remotesack.beanstore.bulk_write(updates[i: i+BULK_CHUNK_SIZE], ordered=False).modified_count
+    return update_count
 
 def _dequeue(q: Queue):
     try:
