@@ -14,6 +14,7 @@ from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 from icecream import ic
 
+TIMEOUT = 180000 # 3 mins
 
 # names of db and collections
 BEANSACK = "beansack"
@@ -23,14 +24,9 @@ CHATTERS = "chatters"
 SOURCES = "sources"
 
 DEFAULT_VECTOR_SEARCH_SCORE = 0.73
-DEFAULT_VECTOR_SEARCH_SCORE = 0.73
-DEFAULT_MAPPING_SCORE = 0.72
-DEFAULT_VECTOR_LIMIT = 100
-DEFAULT_VECTOR_LIMIT = 100
 DEFAULT_VECTOR_LIMIT = 100
 
 TRENDING = {K_TRENDSCORE: -1}
-
 LATEST = {K_UPDATED: -1}
 TRENDING = {K_TRENDSCORE: -1}
 TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_UPDATED: -1}
@@ -39,12 +35,19 @@ LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
 NEWEST = {K_CREATED: -1}
 NEWEST_AND_TRENDING = {K_CREATED: -1, K_TRENDSCORE: -1}
 
-
 logger = create_logger("beansack")
 
 class Beansack:
-    def __init__(self, conn_str: str, embedder: BeansackEmbeddings = None):        
-        client = MongoClient(conn_str, appname="PyCoffeemaker_or_Espresso", timeoutMS=180000)        
+    def __init__(self, conn_str: str, embedder: BeansackEmbeddings = None):   
+             
+        client = MongoClient(
+            conn_str, 
+            appname="PyCoffeemaker_or_Espresso", 
+            timeoutMS=TIMEOUT,
+            serverSelectionTimeoutMS=TIMEOUT,
+            socketTimeoutMS=TIMEOUT,
+            connectTimeoutMS=TIMEOUT,
+            retryWrites=True)        
         self.beanstore: Collection = client[BEANSACK][BEANS]
         self.highlightstore: Collection = client[BEANSACK][HIGHLIGHTS]
         self.chatterstore: Collection = client[BEANSACK][CHATTERS]        
