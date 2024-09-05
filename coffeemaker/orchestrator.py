@@ -248,7 +248,7 @@ def _make_trend_update(item, chatters, cluster_sizes):
 def _bulk_update(updates):
     update_count = 0
     # breaking it into chunk of 10000
-    BULK_CHUNK_SIZE = 10000
+    BULK_CHUNK_SIZE = 5000
     for i in range(0, len(updates), BULK_CHUNK_SIZE):
         update_count += remotesack.beanstore.bulk_write(updates[i: i+BULK_CHUNK_SIZE], ordered=False).modified_count
     return update_count
