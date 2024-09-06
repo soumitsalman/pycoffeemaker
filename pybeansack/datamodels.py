@@ -55,7 +55,7 @@ class Bean(BaseModel):
     url: str
     updated: Optional[int] = None
     source: Optional[str] = None
-    channel: Optional[str] = None
+    source_domain: Optional[str] = None
     title: Optional[str] = None
     kind: Optional[str] = None
     text: Optional[str] = None

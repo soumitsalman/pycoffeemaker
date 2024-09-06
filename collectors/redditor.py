@@ -6,7 +6,7 @@ from .individual import *
 from icecream import ic
 import time
 
-SOURCE = "Reddit"
+REDDIT = "Reddit"
 STORY_URL_TEMPLATE = "https://www.reddit.com%s"
 SUBREDDITS_FILE = os.path.dirname(os.path.abspath(__file__))+"/redditsources.txt"
 MAX_LIMIT = 20
@@ -22,7 +22,6 @@ def collect(store_func):
         subreddits = [line.strip() for line in file.readlines()]   
     store_func(list(chain(*(collect_subreddit(reddit, source, collection_time) for source in subreddits))))
 
-
 def collect_subreddit(client, name, collection_time) -> list:    
     try:
         return [makedatamodel(post, collection_time) for post in client.subreddit(name).hot(limit=MAX_LIMIT) if not is_non_text(post.url)]
@@ -34,12 +33,13 @@ def collect_user(client, name, collection_time):
     return [makedatamodel(post, collection_time) for post in user.submissions.new(limit=MAX_LIMIT) if not is_non_text(post.url)]
 
 def makedatamodel(post, collection_time): 
+    source, domain = extract_source(post.url)
     return (
         Bean(
             url=post.url,
             updated=collection_time,
-            source=SOURCE,
-            channel="r/"+post.subreddit.display_name,
+            source=source if not post.is_self else f"r/{post.subreddit.display_name}",
+            source_domain=domain,
             title=post.title,
             kind=POST if post.is_self else NEWS,
             text = post.selftext.strip(),
@@ -49,7 +49,7 @@ def makedatamodel(post, collection_time):
         Chatter(
             url=post.url,
             updated=collection_time,
-            source=SOURCE,
+            source=REDDIT,
             container_url=STORY_URL_TEMPLATE%post.permalink,            
             channel=post.subreddit.display_name,
             likes=post.score,

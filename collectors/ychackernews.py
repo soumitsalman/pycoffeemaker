@@ -9,7 +9,7 @@ from icecream import ic
 TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
 COLLECTION_URL_TEMPLATE = "https://hacker-news.firebaseio.com/v0/item/%d.json"
 STORY_URL_TEMPLATE = "https://news.ycombinator.com/item?id=%d"
-SOURCE = "YC hackernews"
+YC = "ycombinator"
 logger = create_logger("ychackernews")
 
 def collect(store_func):
@@ -23,11 +23,13 @@ def _extract(id: int, collection_time: int):
     try:
         entry = requests.get(COLLECTION_URL_TEMPLATE % id, timeout=2).json()  
         url = entry.get('url', STORY_URL_TEMPLATE % id)
+        source, domain = extract_source(url)
         return \
             Bean(            
                 url=url, # this is either a linked url or a direct post
                 updated=collection_time,
-                source=SOURCE,
+                source=source,
+                source_domain=domain,
                 title=entry.get('title'),
                 kind=BLOG if 'url' in entry else POST,
                 text=load_from_html(entry['text']) if 'text' in entry else "", # load if it has a text which usually applies to posts
@@ -36,10 +38,10 @@ def _extract(id: int, collection_time: int):
             Chatter(
                 url=url,
                 updated=collection_time,
-                source=SOURCE,
+                source=YC,
                 container_url=STORY_URL_TEMPLATE % id,
                 likes=entry.get('score'),
-                comments=len(entry.get('kids') or []))
+                comments=len(entry.get('kids', [])))
     except Exception as err:
         logger.warning("Failed loading from %s. Error: %s", COLLECTION_URL_TEMPLATE%id, str(err))
 

@@ -38,17 +38,14 @@ def collect_from(feed_url: str, content_kind = NEWS):
 
 def _to_bean(entry, kind, collection_time):
     body, summary = _extract_body_and_summary(entry)    
-    created_time = collection_time
-    if 'published_parsed' in entry:
-        created_time = int(time.mktime(entry.published_parsed))
-    elif 'updated_parsed' in entry:
-        created_time = int(time.mktime(entry.updated_parsed))
+    created_time = int(time.mktime(entry.get("published_parsed") or entry.get("updated_parsed") or time.localtime()))
     is_valid_tag = lambda tag: len(tag)>= MIN_TAG_LEN and len(tag) <= MAX_TAG_LEN and ("/" not in tag)
-
+    source, domain = extract_source(entry.link)
     return Bean(
         url=entry.link,
         updated=collection_time,
-        source=tldextract.extract(entry.link).domain,
+        source=source,
+        source_domain=domain,
         title=entry.title,
         kind=kind,
         text=body,

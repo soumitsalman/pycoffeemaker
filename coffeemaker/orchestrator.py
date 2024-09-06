@@ -3,7 +3,7 @@ import os
 from icecream import ic
 from datetime import datetime as dt
 from pybeansack import utils
-from pybeansack.beansack import timewindow_filter, Beansack
+from pybeansack.beansack import updated_in, Beansack
 from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
 from pymongo import MongoClient, UpdateMany, UpdateOne
@@ -91,9 +91,10 @@ def _download_beans(beans: list[Bean]) -> list[Bean]:
     for bean in beans:
         if (bean.kind in [NEWS, BLOG]) and (not bean.image_url or not bean.text or len(bean.text.split())<MIN_DOWNLOAD_BODY_LEN):
             res = individual.load_from_url(bean.url)
-            if res:
-                bean.image_url = bean.image_url or res[1]
+            if res:                
                 bean.text = res[0] if len(res[0]) > len(bean.text or "") else bean.text
+                bean.image_url = bean.image_url or res[1]
+                bean.source = res[2] or bean.source
     return [bean for bean in beans if bean.text and len(bean.text.split())>=MIN_ALLOWED_BODY_LEN]
 
 def run_indexing():

@@ -12,6 +12,7 @@ from pybeansack.datamodels import *
 from collectors import rssfeed, ychackernews, individual, redditor
 from coffeemaker import orchestrator as orch
 from coffeemaker.chains import *
+import random
 
 def write_datamodels(items, file_name: str = None):
     if items:
@@ -24,10 +25,15 @@ def write_text(text, file_name):
 
 def test_collection():
     sources = [
-        "https://citywire.com/ria/latest-news/rss.xml",
+        "https://fedoramagazine.org/feed/",
+        "https://www.ft.com/rss/home",
+        "https://mashable.com/feeds/rss/all",
+        "https://www.cybersecuritydive.com/feeds/news/"
     ]
-    rssfeed.collect(sources=sources, store_func=lambda beans: [ic(len(beans)), write_datamodels(orch._download_beans(beans))])
-    # redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in items])))
+    
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._download_beans(random.sample(beans, k=5))))
+    # redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="REDDIT"))
+    # ychackernews.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="YC"))
 
 def test_whole_path_live():
     sources = [
@@ -46,7 +52,7 @@ def test_search():
     query = "profession: pilot"
     # write_datamodels(ic(orch.remotesack.query_unique_beans(filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID:0})), "QUERY_BEANS")
     # write_datamodels(ic(orch.remotesack.text_search_beans(query=query, filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID:0})), "TEXT_SEARCH")
-    write_datamodels(orch.remotesack.vector_search_beans(query=query, filter=timewindow_filter(3), sort_by=LATEST, projection={K_EMBEDDING: 0, K_ID: 0}), "VECTOR_SEARCH")
+    write_datamodels(orch.remotesack.vector_search_beans(query=query, filter=updated_in(3), sort_by=LATEST, projection={K_EMBEDDING: 0, K_ID: 0}), "VECTOR_SEARCH")
 
 def test_clustering(): 
     res = orch._run_clustering(orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_EMBEDDING: 1}), orch.N_DEPTH)
@@ -82,10 +88,10 @@ orch.initialize(
 ### TEST CALLS
 # test_writing()
 # test_chains()
-# test_collection()
+test_collection()
 # test_clustering()
 # test_clustering_live()
-test_whole_path_live()
+# test_whole_path_live()
 # test_search()
 # test_trend_ranking()
 

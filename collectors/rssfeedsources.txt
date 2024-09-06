@@ -132,3 +132,6 @@ https://mlcommons.org/feed/
 https://www.techrepublic.com/rssfeeds/articles/
 https://decrypt.co/feed
 https://www.ictworks.org/feed/
+https://fedoramagazine.org/feed/
+https://mashable.com/feeds/rss/all
+https://www.cybersecuritydive.com/feeds/news/
