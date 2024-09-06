@@ -365,15 +365,11 @@ def _deserialize_chatters(cursor) -> list[Chatter]:
         logger.warning(f"{err}")
         return []
     
-# def _deserialize_highlights(cursor) -> list[Highlight]:
-#     try:
-#         return [Highlight(**item) for item in cursor]
-#     except InvalidBSON as err:
-#         logger.warning(f"{err}")
-#         return []
-
-def timewindow_filter(last_ndays: int):
+def updated_in(last_ndays: int):
     return {K_UPDATED: {"$gte": get_timevalue(last_ndays)}}
+
+def created_in(last_ndays: int):
+    return {K_CREATED: {"$gte": get_timevalue(last_ndays)}}
 
 def get_timevalue(last_ndays: int):
     return int((datetime.now() - timedelta(days=last_ndays)).timestamp())
