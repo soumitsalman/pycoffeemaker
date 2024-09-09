@@ -37,8 +37,8 @@ def initialize(db_conn_str: str, working_dir: str, emb_file: str, api_key: str, 
     global keyphraser, embedder, remotesack, categorystore, index_queue, trend_queue, llm_api_key, cluster_eps, category_eps
 
     models_dir=working_dir+"/.models/"
-    # keyphraser = KeyphraseExtractor(cache_dir=models_dir)
-    # embedder = BeansackEmbeddings(model_path=models_dir+emb_file, context_len=4095)
+    keyphraser = KeyphraseExtractor(cache_dir=models_dir)
+    embedder = BeansackEmbeddings(model_path=models_dir+emb_file, context_len=4095)
 
     remotesack = Beansack(db_conn_str)
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
