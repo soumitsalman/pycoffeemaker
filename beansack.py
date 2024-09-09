@@ -14,29 +14,42 @@ from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 from icecream import ic
 
+TIMEOUT = 180000 # 3 mins
 
 # names of db and collections
 BEANSACK = "beansack"
 BEANS = "beans"
+HIGHLIGHTS = "highlights"
 CHATTERS = "chatters"
 SOURCES = "sources"
 
 DEFAULT_VECTOR_SEARCH_SCORE = 0.73
-DEFAULT_VECTOR_SEARCH_LIMIT = 100
+DEFAULT_VECTOR_LIMIT = 100
 
-LATEST = {K_UPDATED: -1}
-NEWEST = {K_CREATED: -1}
 TRENDING = {K_TRENDSCORE: -1}
-LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
-NEWEST_AND_TRENDING = {K_CREATED: -1, K_TRENDSCORE: -1}
+LATEST = {K_UPDATED: -1}
+TRENDING = {K_TRENDSCORE: -1}
 TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_UPDATED: -1}
+LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
+
+NEWEST = {K_CREATED: -1}
+NEWEST_AND_TRENDING = {K_CREATED: -1, K_TRENDSCORE: -1}
 
 logger = create_logger("beansack")
 
 class Beansack:
-    def __init__(self, conn_str: str, embedder: BeansackEmbeddings = None):        
-        client = MongoClient(conn_str)        
+    def __init__(self, conn_str: str, embedder: BeansackEmbeddings = None):   
+             
+        client = MongoClient(
+            conn_str, 
+            appname="PyCoffeemaker_or_Espresso", 
+            timeoutMS=TIMEOUT,
+            serverSelectionTimeoutMS=TIMEOUT,
+            socketTimeoutMS=TIMEOUT,
+            connectTimeoutMS=TIMEOUT,
+            retryWrites=True)        
         self.beanstore: Collection = client[BEANSACK][BEANS]
+        self.highlightstore: Collection = client[BEANSACK][HIGHLIGHTS]
         self.chatterstore: Collection = client[BEANSACK][CHATTERS]        
         self.sourcestore: Collection = client[BEANSACK][SOURCES]  
         self.embedder: BeansackEmbeddings = embedder
@@ -104,14 +117,14 @@ class Beansack:
             min_score = DEFAULT_VECTOR_SEARCH_SCORE, 
             filter = None, 
             sort_by = None,
-            limit = DEFAULT_VECTOR_SEARCH_LIMIT, 
+            limit = DEFAULT_VECTOR_LIMIT, 
             projection = None
         ) -> list[Bean]:
-        pipline = self._vector_search_pipeline(query, embedding, min_score, filter, sort_by, limit, projection, False)
+        pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
         return _deserialize_beans(self.beanstore.aggregate(pipeline=pipline))
     
-    def count_vector_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_VECTOR_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_VECTOR_SEARCH_LIMIT) -> int:
-        pipeline = self._vector_search_pipeline(query, embedding, min_score, filter, None, limit, None, True)
+    def count_vector_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_VECTOR_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_VECTOR_LIMIT) -> int:
+        pipeline = self._count_vector_search_pipeline(query, embedding, min_score, filter, limit)
         result = list(self.beanstore.aggregate(pipeline))
         return result[0]['total_count'] if result else 0
     
@@ -274,7 +287,7 @@ class Beansack:
             pipeline.append({"$project": projection})
         return pipeline
    
-    def _vector_search_pipeline(self, text, embedding, min_score, filter, sort_by, limit, projection, for_count):
+    def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
         pipeline = [
             {
                 "$search": {
@@ -296,12 +309,15 @@ class Beansack:
         if filter:
             pipeline[0]["$search"]["cosmosSearch"]["filter"] = filter
         if sort_by:
-            pipeline.append({"$sort": sort_by})        
+            pipeline.append({"$sort": sort_by})
         if projection:
             pipeline.append({"$project": projection})
-        if for_count:
-            pipeline.append({"$count": "total_count"})
         return pipeline
+    
+    def _count_vector_search_pipeline(self, text, embedding, min_score, filter, limit):
+        pipline = self._vector_search_pipeline(text, embedding, min_score, filter, limit, None, None)
+        pipline.append({ "$count": "total_count"})
+        return pipline
         
     def get_latest_chatter_stats(self, urls: list[str]) -> list[Chatter]:
         pipeline = [
@@ -349,16 +365,342 @@ def _deserialize_chatters(cursor) -> list[Chatter]:
         logger.warning(f"{err}")
         return []
     
-# def _deserialize_highlights(cursor) -> list[Highlight]:
-#     try:
-#         return [Highlight(**item) for item in cursor]
-#     except InvalidBSON as err:
-#         logger.warning(f"{err}")
-#         return []
+def updated_in(last_ndays: int):
+    return {K_UPDATED: {"$gte": get_timevalue(last_ndays)}}
 
-def timewindow_filter(last_ndays: int, from_updated: bool):
-    val = {"$gte": get_timevalue(last_ndays)}
-    return {K_UPDATED: val} if from_updated else {K_CREATED: val}
+def created_in(last_ndays: int):
+    return {K_CREATED: {"$gte": get_timevalue(last_ndays)}}
 
 def get_timevalue(last_ndays: int):
     return int((datetime.now() - timedelta(days=last_ndays)).timestamp())
+
+
+#####################################################
+### DEPRECATED OLD STORING AND INDEXING FUNCTIONS ###
+#####################################################
+        # if llm:
+        #     self.nuggetor = NuggetExtractor(llm)
+        #     self.summarizer = Summarizer(llm)   
+
+        # filter out the old ones        
+        # exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
+        # beans = [bean for bean in beans if (bean.url not in exists) and bean.text]
+        # check for existing update time. If not assign one
+        
+        # noises = [to_noise(bean) for bean in beans if (bean.likes or bean.comments)]
+        # if noises:
+        #     self.noisestore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in noises])
+
+        # process the articles, posts, comments differently from the channels
+        # each bean has to have either embedding or text or else don't try to save it
+            
+            # self.rectify_beans(chatters)        
+               
+    #         # extract and insert nuggets
+    #         nuggets = self.extract_nuggets(chatters, current_time)  
+    #         if nuggets:   
+    #             res = self.nuggetstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in nuggets])
+    #             logger.info("%d nuggets inserted", len(res.inserted_ids))    
+    #             nuggets = self.rectify_nuggets(nuggets) 
+    #             # delete the old duplicate ones the nuggets
+    #             total = len(nuggets)          
+    #             nuggets = self._deduplicate_nuggets(nuggets)
+    #             logger.info("%d duplicate nuggets deleted", total - len(nuggets))    
+            
+    #         # now relink
+    #         self._rerank(chatters, nuggets)
+
+    # # current arbitrary calculation score: 10 x number_of_unique_articles_or_posts + 3*num_comments + likes     
+    # def _calculate_trend_score(self, urls: list[str]) -> int:
+    #     noises = self.get_latest_chatter_stats(urls)       
+    #     return reduce(lambda a, b: a + b, [n.score for n in noises if n.score], len(urls)*10) 
+
+    # def search_highlights(self, 
+    #         query: str = None,
+    #         embedding: list[float] = None, 
+    #         min_score = DEFAULT_SEARCH_SCORE, 
+    #         filter = None, 
+    #         limit = DEFAULT_LIMIT, 
+    #         sort_by = None, 
+    #         projection = None
+    #     ) -> list[Highlight]:
+    #     pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
+    #     return _deserialize_highlights(self.highlightstore.aggregate(pipeline=pipline))
+    
+    # def count_search_highlights(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_LIMIT) -> int:
+    #     pipeline = self._count_vector_search_pipeline(query, embedding, min_score, filter, limit)
+    #     result = list(self.highlightstore.aggregate(pipeline))
+    #     return result[0]['total_count'] if result else 0
+
+        # def get_highlights(self, filter, skip = 0, limit = 0,  sort_by = None, projection = None) -> list[Highlight]:        
+    #     # append the embeddings filter so that it takes into account only the indexed items
+    #     filter = {
+    #         **{K_EMBEDDING: {"$exists": True}}, 
+    #         **(filter or {})
+    #     }        
+    #     cursor = self.highlightstore.find(filter=filter, projection=projection, sort=sort_by, skip=skip, limit=limit)
+    #     return _deserialize_highlights(cursor)
+    
+    # def get_beans_by_highlights(self, highlight: str|Highlight, filter = None, limit = DEFAULT_LIMIT, projection=None) -> list:
+    #     if isinstance(highlight, Highlight):
+    #         urls = highlight.urls
+    #     else:
+    #         item = self.highlightstore.find_one({K_ID: highlight, K_URLS: {"$exists": True}}, {K_URLS: 1})
+    #         urls = item[K_URLS] if item else None        
+    #     return self.get_beans(filter = {**{K_URL: {"$in": urls }}, **(filter or {})}, sort_by=LATEST, limit=limit, projection=projection) if urls else None
+    
+    # def count_beans_by_highlights(self, highlight: str|Highlight, filter: dict = None, limit: int = DEFAULT_LIMIT) -> list:
+    #     if isinstance(highlight, Highlight):
+    #         urls = highlight.urls
+    #     else:
+    #         item = self.highlightstore.find_one({K_ID: highlight, K_URLS: {"$exists": True}}, {K_URLS: 1})
+    #         urls = item[K_URLS] if item else None
+    #     return self.beanstore.count_documents(filter = {**{K_URL: {"$in": urls }}, **(filter or {})}, limit=limit) if urls else 0
+    
+    
+
+    # def trending_highlights(self, 
+    #         query: str = None,
+    #         embedding: list[float] = None, 
+    #         min_score = DEFAULT_SEARCH_SCORE,             
+    #         filter = None,
+    #         limit = DEFAULT_LIMIT,
+    #         projection = None            
+    #     ) -> list:
+    #     if not (query or embedding):
+    #         # if query or embedding is not given, then this is scalar query            
+    #         result = self.get_highlights(filter = filter, limit = limit, sort_by=LATEST_AND_TRENDING)
+    #     else:
+    #         # else run the vector query
+    #         result = self.search_highlights(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit, sort_by=LATEST_AND_TRENDING, projection=projection)            
+    #     return result
+    
+    # def count_trending_highlights(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_SEARCH_SCORE, filter = None, limit = DEFAULT_LIMIT) -> int:        
+    #     return self.highlightstore.count_documents(filter=filter, limit=limit) \
+    #         if not (query or embedding) \
+    #         else self.count_search_highlights(query=query, embedding=embedding, min_score=min_score, filter=filter, limit=limit)
+
+
+    # def store_noises(self, chatters: list[Chatter]):
+    #     if beans:
+    #         chatters = {noise.url: noise for noise in self._get_latest_noisestats([bean.url for bean in beans])}
+    #         update_one = lambda bean: UpdateOne(
+    #             {K_URL: bean.url}, 
+    #             {
+    #                 "$set": { 
+    #                     K_LIKES: chatters[bean.url].likes,
+    #                     K_COMMENTS: chatters[bean.url].comments,
+    #                     K_TRENDSCORE: chatters[bean.url].score
+    #                 }
+    #             }
+    #         )
+    #         update_count = _bulk_update(self.beanstore, [update_one(bean) for bean in beans if bean.url in chatters])
+    #         logger.info(f"{update_count} beans reranked")     
+
+    # def _rerank(self, beans: list[Bean], highlights: list[Highlight]):    
+    #     # BUG: currently trend_score is calculated for the entire database. That should NOT be the case. There should be a different trend score per time segment
+    #     # rectify beans trend score
+    #     if beans:
+    #         noises = {noise.url: noise for noise in self.get_latest_chatter_stats([bean.url for bean in beans])}
+    #         update_one = lambda bean: UpdateOne(
+    #             {K_URL: bean.url}, 
+    #             {
+    #                 "$set": { 
+    #                     K_LIKES: noises[bean.url].likes,
+    #                     K_COMMENTS: noises[bean.url].comments,
+    #                     K_TRENDSCORE: noises[bean.url].score
+    #                 }
+    #             }
+    #         )
+    #         update_count = _bulk_update(self.beanstore, [update_one(bean) for bean in beans if bean.url in noises])
+    #         logger.info(f"{update_count} beans reranked")        
+
+    #     # calculate and relink the unique nuggets
+    #     if highlights:
+
+    #         # beans are already rectified with trendscore. so just leverage that  
+    #         getbeans = lambda urls: self.beanstore.find(filter = {K_URL: {"$in": urls}}, projection={K_TRENDSCORE:1})
+    #         trend_score = lambda urls: reduce(operator.add, [(bean[K_TRENDSCORE] or 0) for bean in getbeans(urls) if K_TRENDSCORE in bean], len(urls)*10)   
+    #         search = lambda embedding: [bean.url for bean in self.search_beans(embedding = embedding, min_score = DEFAULT_MAPPING_SCORE, limit = 500, projection = {K_URL: 1, K_UPDATED: 1})]
+    #         update_one = lambda highlight, urls: UpdateOne(
+    #                     {K_ID: highlight.id}, 
+    #                     {"$set": { K_TRENDSCORE: trend_score(urls), K_URLS: urls}})
+    #         # rectify nuggets trend score and mapping 
+    #         # each nugget should have at least one mapped url that is of the same batch as itself.
+    #         # if it cannot match the content, then delete that the nugget and proceed with the result  
+    #         # TODO: remove this one, it is a redundant check          
+    #         matches_same_batch = lambda highlight: self.count_search_beans(embedding=highlight.embedding, min_score=DEFAULT_MAPPING_SCORE, filter={K_UPDATED: highlight.updated}, limit = 1)
+
+    #         to_update, to_delete = [], []
+    #         for highlight in highlights:
+    #             if matches_same_batch(highlight):
+    #                 to_update.append(update_one(highlight, search(highlight.embedding)))
+    #             else:
+    #                 to_delete.append(highlight.id)
+
+    #         total = _bulk_update(self.highlightstore, update=to_update)
+    #         logger.info("%d nuggets reranked", total)
+    #         if to_delete:
+    #             deleted = self.highlightstore.delete_many({K_ID: {"$in": to_delete}}).deleted_count
+    #             logger.info("%d straggler nuggets deleted", deleted)
+
+
+    # # stores beans and post-processes them for generating embeddings, summary and nuggets
+    # def _deprecated_store(self, beans: list[Bean]):        
+    #     # filter out the old ones        
+    #     exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
+    #     beans = [bean for bean in beans if (bean.url not in exists) and bean.text]
+    #     current_time = int(datetime.now().timestamp())
+        
+    #     # removing the media noises into separate item        
+    #     noises = []
+    #     for bean in beans:
+    #         if bean.noise:
+    #             bean.noise.url = bean.url                
+    #             bean.noise.updated = current_time
+    #             bean.noise.text = _truncate(bean.noise.text) if bean.noise.text else None
+    #             bean.noise.score = (bean.noise.comments or 0)*3 + (bean.noise.likes or 0)
+    #             noises.append(bean.noise)
+    #             bean.noise = None    
+    #     if noises:
+    #         self.noisestore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in noises])
+
+    #     # process items with text body. if the body is empty just scrap it
+    #     # process the articles, posts, comments differently from the channels
+    #     chatters = [bean for bean in beans if bean.kind != CHANNEL ] 
+    #     for bean in chatters:
+    #         bean.updated = current_time
+    #         bean.text = _truncate(bean.text)
+
+    #     if chatters:
+    #         # insert the beans
+    #         res = self.beanstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True) for item in chatters])
+    #         logger.info("%d beans inserted", len(res.inserted_ids))    
+    #         self.rectify_beans(chatters)        
+               
+    #         # extract and insert nuggets
+    #         nuggets = self.extract_nuggets(chatters, current_time)  
+    #         if nuggets:   
+    #             res = self.nuggetstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in nuggets])
+    #             logger.info("%d nuggets inserted", len(res.inserted_ids))    
+    #             nuggets = self.rectify_nuggets(nuggets) 
+    #             # delete the old duplicate ones the nuggets
+    #             total = len(nuggets)          
+    #             nuggets = self._deduplicate_nuggets(nuggets)
+    #             logger.info("%d duplicate nuggets deleted", total - len(nuggets))    
+            
+    #         # now relink
+    #         self._rerank(chatters, nuggets)
+
+    #     #############        
+    #     # TODO: process channels differently
+    #     #############
+    #     # channels = [bean for bean in beans if bean.kind == CHANNEL ] 
+
+    # def extract_nuggets(self, beans: list[Bean], batch_time: int) -> list[Nugget]:         
+    #     try:
+    #         texts = [bean.text for bean in beans]
+    #         is_valid_nugget = lambda nug: nug and (K_DESCRIPTION in nug) and (K_KEYPHRASE in nug) and (len(nug[K_DESCRIPTION]) > len(nug[K_KEYPHRASE]))
+    #         nuggets = [Nugget(id=f"{batch_time}-{i}", keyphrase=n[K_KEYPHRASE], event=n.get(K_EVENT), description=n[K_DESCRIPTION], updated=batch_time) for i, n in enumerate(self.nuggetor.extract(texts)) if is_valid_nugget(n)]           
+    #         return nuggets
+    #     except Exception as err:
+    #         logger.warning("Nugget extraction failed.")
+    #         ic(err)
+
+    # def rectify_beansack(self, last_ndays:int, cleanup:bool, rerank: bool):        
+    #     if cleanup:
+    #         time_filter = {K_UPDATED: { "$lte": get_timevalue(CLEANUP_WINDOW) }}
+    #         # clean up beanstore (but retain the channels)
+    #         res = self.beanstore.delete_many(time_filter)
+    #         logger.info("%d old beans deleted", res.deleted_count)
+    #         # clean up nuggets
+    #         res = self.nuggetstore.delete_many(time_filter)
+    #         logger.info("%d old nuggets deleted", res.deleted_count)
+    #         # clean up beanstore
+    #         res = self.beanstore.delete_many(time_filter)
+    #         logger.info("%d old noises deleted", res.deleted_count)
+
+    #     # get all the beans to rectify        
+    #     beans = _deserialize_beans(self.beanstore.find(
+    #         {
+    #             "$or": [
+    #                 { K_EMBEDDING: { "$exists": False } },
+    #                 { K_SUMMARY: { "$exists": False } }
+    #             ],
+    #             K_UPDATED: { "$gte": get_timevalue(last_ndays) }
+    #         }
+    #     ))  
+    #     self.rectify_beans(beans)
+
+    #     # get all the nuggets to rectify        
+    #     nuggets = _deserialize_nuggets(self.nuggetstore.find(
+    #         {
+    #             K_EMBEDDING: { "$exists": False },
+    #             K_UPDATED: { "$gte": get_timevalue(last_ndays) }
+    #         }
+    #     ))
+    #     nuggets = self.rectify_nuggets(nuggets)   
+        
+    #     if rerank:
+    #         # pull in all nuggets or else keep the ones in the rectify window
+    #         filter = {
+    #             K_UPDATED: { "$gte": get_timevalue(last_ndays) },
+    #             K_EMBEDDING: { "$exists": True }
+    #         }
+    #         beans = _deserialize_beans(self.beanstore.find(filter = filter, projection = { K_URL: 1 }))
+    #         nuggets = _deserialize_nuggets(self.nuggetstore.find(filter=filter, sort=LATEST))
+       
+    #     # rectify the mappings
+    #     self._rerank(beans, nuggets) 
+
+    # def rectify_beans(self, beans: list[Bean]):
+    #     def _generate(bean: Bean):
+    #         to_set = {}
+    #         try:
+    #             if not bean.embedding:
+    #                 bean.embedding = to_set[K_EMBEDDING] = self.embedder.embed_documents(bean.digest())
+    #             if not bean.summary:
+    #                 summary = self.summarizer.summarize(bean.text)
+    #                 # this is heuristic to weed out bad summaries
+    #                 bean.summary = to_set[K_SUMMARY] = summary if len(summary) > len(bean.title) else f"{bean.text[:500]}..."
+    #         except Exception as err:
+    #             logger.warning(f"bean rectification error: {err}")
+    #             pass # do nothing, to set will be empty
+    #         return UpdateOne({K_URL: bean.url}, {"$set": to_set}), bean
+        
+    #     if beans:
+    #         updates, beans = zip(*[_generate(bean) for bean in beans])
+    #         update_count = _update_collection(self.beanstore, list(updates))
+    #         logger.info(f"{update_count} beans rectified")
+    #     return beans
+
+    # def rectify_nuggets(self, nuggets: list[Nugget]):
+    #     def _generate(nugget: Nugget):
+    #         to_set = {}
+    #         try:
+    #             if not nugget.embedding:                    
+    #                 nugget.embedding = to_set[K_EMBEDDING] = self.embedder.embed_query(nugget.digest()) # embedding as a search query towards the documents      
+    #         except Exception as err:
+    #             logger.warning(f"nugget rectification error: {err}")
+    #         return UpdateOne({K_ID: nugget.id}, {"$set": to_set}), nugget
+        
+    #     if nuggets:
+    #         updates, nuggets = zip(*[_generate(nugget) for nugget in nuggets])
+    #         update_count =_update_collection(self.nuggetstore, list(updates))
+    #         logger.info(f"{update_count} nuggets rectified")
+    #         return [nugget for nugget in nuggets if nugget.embedding]
+    #     else:
+    #         return nuggets
+    
+    # def _deduplicate_nuggets(self, nuggets: list[Nugget]):        
+    #     # using .92 for similarity score calculation
+    #     # and pulling in 10000 as a rough limit
+    #     total = 0
+    #     for nug in nuggets:
+    #         to_delete = list(self.nuggetstore.aggregate(
+    #             self._vector_search_pipeline(text=None, embedding=nug.embedding, min_score=0.92, filter = None, limit=10000, sort_by=LATEST, projection={K_ID:1})
+    #         ))[1:]
+    #         to_delete = [item[K_ID] for item in to_delete]
+    #         total += self.nuggetstore.delete_many({K_ID: {"$in": to_delete}}).deleted_count
+                
+    #     return self.get_nuggets(filter={K_ID: {"$in": [n.id for n in nuggets]}}) 
