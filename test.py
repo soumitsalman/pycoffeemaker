@@ -16,7 +16,7 @@ import random
 
 def write_datamodels(items, file_name: str = None):
     if items:
-        with open(f".test/{file_name or items[0].source}.json", 'w') as file:
+        with open(f".test/{file_name or ic(items[0].source)}.json", 'w') as file:
             json.dump([bean.model_dump(exclude_unset=True, exclude_none=True) for bean in items], file)
             
 def write_text(text, file_name):
@@ -25,15 +25,12 @@ def write_text(text, file_name):
 
 def test_collection():
     sources = [
-        "https://fedoramagazine.org/feed/",
-        "https://www.ft.com/rss/home",
-        "https://mashable.com/feeds/rss/all",
-        "https://www.cybersecuritydive.com/feeds/news/"
+        "https://www.buzzhint.com/feed/"
     ]
     
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._download_beans(random.sample(beans, k=5))))
-    # redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="REDDIT"))
-    # ychackernews.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="YC"))
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._download_beans(beans[:5])))
+    redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="REDDIT"))
+    ychackernews.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="YC"))
 
 def test_whole_path_live():
     sources = [
@@ -55,8 +52,8 @@ def test_search():
     write_datamodels(orch.remotesack.vector_search_beans(query=query, filter=updated_in(3), sort_by=LATEST, projection={K_EMBEDDING: 0, K_ID: 0}), "VECTOR_SEARCH")
 
 def test_clustering(): 
-    res = orch._run_clustering(orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_EMBEDDING: 1}), orch.N_DEPTH)
-    make_update = lambda group, header: print("[", len(group), "]", header, "====\n", "\n\t".join(group) if isinstance(group[0], str) else group,"\n") # print("[", len(group), "] ====\n", "\n\t".join(group),"\n")
+    res = orch._run_clustering(orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_EMBEDDING: 1}))
+    make_update = lambda group, header: print("[", len(group), "]", header, "====\n", "\n\t".join(group) if isinstance(group[0], str) else group,"\n")
     list(map(make_update, res, [items[0] for items in res]))
 
 def test_clustering_live(): 
@@ -89,7 +86,7 @@ orch.initialize(
 # test_writing()
 # test_chains()
 test_collection()
-# test_clustering()
+test_clustering()
 # test_clustering_live()
 # test_whole_path_live()
 # test_search()

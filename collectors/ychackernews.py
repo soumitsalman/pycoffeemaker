@@ -23,13 +23,11 @@ def _extract(id: int, collection_time: int):
     try:
         entry = requests.get(COLLECTION_URL_TEMPLATE % id, timeout=2).json()  
         url = entry.get('url', STORY_URL_TEMPLATE % id)
-        source, domain = extract_source(url)
         return \
             Bean(            
                 url=url, # this is either a linked url or a direct post
                 updated=collection_time,
-                source=source,
-                source_domain=domain,
+                source=extract_source(url)[0],
                 title=entry.get('title'),
                 kind=BLOG if 'url' in entry else POST,
                 text=load_from_html(entry['text']) if 'text' in entry else "", # load if it has a text which usually applies to posts

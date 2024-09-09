@@ -33,16 +33,14 @@ def collect_user(client, name, collection_time):
     return [makedatamodel(post, collection_time) for post in user.submissions.new(limit=MAX_LIMIT) if not is_non_text(post.url)]
 
 def makedatamodel(post, collection_time): 
-    source, domain = extract_source(post.url)
     return (
         Bean(
             url=post.url,
             updated=collection_time,
-            source=source if not post.is_self else f"r/{post.subreddit.display_name}",
-            source_domain=domain,
+            source=extract_source(post.url)[0] if not post.is_self else f"r/{post.subreddit.display_name}",
             title=post.title,
             kind=POST if post.is_self else NEWS,
-            text = post.selftext.strip(),
+            text=post.selftext.strip(),
             author=post.author.name if post.author else None,
             created=int(post.created_utc)
         ),

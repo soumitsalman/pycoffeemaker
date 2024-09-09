@@ -21,8 +21,7 @@ def collect(sources: str|list[str] = DEFAULT_FEEDS, store_func = None):
     # santize the urls and start collecting
     sources = [url.strip() for url in sources if url.strip()]
     for url in sources:
-        beans = collect_from(url)   
-        store_func(beans)       
+        store_func(collect_from(url))       
         
 def collect_from(feed_url: str, content_kind = NEWS):
     try:
@@ -32,20 +31,20 @@ def collect_from(feed_url: str, content_kind = NEWS):
             return []    
         collection_time = int(time.time())
         # collect only the ones that is english. if language is not specified, assume it is english
-        return [_to_bean(entry, content_kind, collection_time) for entry in feed.entries if entry.get("language", "en-US").startswith("en-")]
-    except:
+        source_name = extract_source_name(feed)
+        return [_to_bean(entry, source_name, content_kind, collection_time) for entry in feed.entries if entry.get("language", "en-US").startswith("en-")]
+    except Exception as err:
+        ic(err)
         return None
 
-def _to_bean(entry, kind, collection_time):
+def _to_bean(entry, source_name, kind, collection_time):
     body, summary = _extract_body_and_summary(entry)    
     created_time = int(time.mktime(entry.get("published_parsed") or entry.get("updated_parsed") or time.localtime()))
-    is_valid_tag = lambda tag: len(tag)>= MIN_TAG_LEN and len(tag) <= MAX_TAG_LEN and ("/" not in tag)
-    source, domain = extract_source(entry.link)
+    is_valid_tag = lambda tag: len(tag)>= MIN_TAG_LEN and len(tag) <= MAX_TAG_LEN and ("/" not in tag)    
     return Bean(
         url=entry.link,
         updated=collection_time,
-        source=source,
-        source_domain=domain,
+        source=source_name,
         title=entry.title,
         kind=kind,
         text=body,
@@ -55,6 +54,11 @@ def _to_bean(entry, kind, collection_time):
         tags=[tag.term for tag in entry.get('tags', []) if is_valid_tag(tag.term)],
         image_url=_extract_image_link(entry)
     )    
+
+def extract_source_name(feed):
+    if feed.entries:
+        res = load_from_url(feed.entries[0].link)
+        return site_name(res) or extract_source(feed.entries[0].link)[0]
 
 # 'links': 
 # [{'href': 'https://www.iflscience.com/iflscience-the-big-questions-can-we-make-dogs-live-longer-75450',

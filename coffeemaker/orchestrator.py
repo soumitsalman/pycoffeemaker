@@ -1,15 +1,14 @@
 from itertools import chain
 import os
 from icecream import ic
-from datetime import datetime as dt
 from pybeansack import utils
-from pybeansack.beansack import updated_in, Beansack
+from pybeansack.beansack import  Beansack
 from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
 from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 from collectors import individual, rssfeed, ychackernews, redditor
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import AffinityPropagation, KMeans, MiniBatchKMeans
 from langchain_groq import ChatGroq
 from coffeemaker.chains import *
 from persistqueue import Queue
@@ -19,6 +18,7 @@ MIN_DOWNLOAD_BODY_LEN = 150
 MIN_SUMMARIZER_BODY_LEN = 150
 MAX_CATEGORIES = 5
 CLEANUP_WINDOW = 30
+N_THREADS = os.cpu_count()
 
 logger = utils.create_logger("coffeemaker")
 
@@ -37,8 +37,8 @@ def initialize(db_conn_str: str, working_dir: str, emb_file: str, api_key: str, 
     global keyphraser, embedder, remotesack, categorystore, index_queue, trend_queue, llm_api_key, cluster_eps, category_eps
 
     models_dir=working_dir+"/.models/"
-    keyphraser = KeyphraseExtractor(cache_dir=models_dir)
-    embedder = BeansackEmbeddings(model_path=models_dir+emb_file, context_len=4095)
+    # keyphraser = KeyphraseExtractor(cache_dir=models_dir)
+    # embedder = BeansackEmbeddings(model_path=models_dir+emb_file, context_len=4095)
 
     remotesack = Beansack(db_conn_str)
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
@@ -91,10 +91,11 @@ def _download_beans(beans: list[Bean]) -> list[Bean]:
     for bean in beans:
         if (bean.kind in [NEWS, BLOG]) and (not bean.image_url or not bean.text or len(bean.text.split())<MIN_DOWNLOAD_BODY_LEN):
             res = individual.load_from_url(bean.url)
-            if res:                
-                bean.text = res[0] if len(res[0]) > len(bean.text or "") else bean.text
-                bean.image_url = bean.image_url or res[1]
-                bean.source = res[2] or bean.source
+            if res:            
+                bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()
+                bean.image_url = bean.image_url or res.top_image
+                bean.source = individual.site_name(res) or bean.source
+                bean.created = int(res.publish_date.timestamp()) if res.publish_date else bean.created
     return [bean for bean in beans if bean.text and len(bean.text.split())>=MIN_ALLOWED_BODY_LEN]
 
 def run_indexing():
@@ -143,10 +144,6 @@ def _augment(beans: list[Bean]):
         finally:
             # normalize fields and values that are immaterial   
             bean.text = None # text field has no use any more and will just cause extra load 
-            # TODO: removing normalization temporarily. delete this block if it is not needed in future
-            # if bean.kind in [NEWS, BLOG]: # normalize creation time of news and blogs
-            #     bean.created = int(dt.fromtimestamp(bean.created).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-
     return [bean for bean in beans if (bean.embedding and bean.summary)]
 
 def _find_categories(bean: Bean):    
@@ -169,31 +166,31 @@ def _find_categories(bean: Bean):
     matches = categorystore.aggregate(pipeline)
     return list(set(chain(*(cat[K_CATEGORIES] for cat in matches)))) or None
 
-N_DEPTH = 4
-MAX_CLUSTER_SIZE = 128
 def run_clustering():
     logger.info("Starting Clustering")
     # TODO: in future optimize the beans that need to be clustered.
     # right now we are just clustering the whole database
-    res = _run_clustering(
-        remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1}), 
-        N_DEPTH)   
-
-    for group in res:
-        if not isinstance(group[0], str):
-            ic(group)  
-
+    res = _run_clustering(remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1}))   
     updates = [UpdateMany({K_URL: {"$in": group}},{"$set": {K_CLUSTER_ID: group[0]}}) for group in res]
     update_count = _bulk_update(updates)
     logger.info("%d beans updated with cluster_id", update_count)
+
+# TODO: change the whole clustering concept later
+# explanation: the current approach is heuristic because 
+# neither AffinityPropagation or MeanShift can handle large data set
+# K-means is reasonably decent but cannot function without a defined cluster-size
+# option 1: (currently implemented) use a fixed size for k-means based on the population size.
+# but this does not translate well in scenarios where the contents may be similar. option 2 may be better
+# option 2: find out an n-cluster size based on random samples and use that as a seed for K-Means
+# option 3: process each incoming batch iteratively. we cluster the collected batch using affinityPropagation or meanshift
+# and then union the cluster size with exiting cluters in the DB
+def _run_clustering(beans: list[Bean]):     
+    POPULATION_SIZE_THRESHOLD = 5000  
+    clusterer =  AffinityPropagation(damping=0.6, convergence_iter=50, random_state=23)\
+        if len(beans) < POPULATION_SIZE_THRESHOLD else \
+        KMeans(n_clusters=len(beans)//10, max_iter=300, random_state=23)
     
-def _run_clustering(beans, n_depth):
-    if n_depth <= 0:
-        return [[bean.url for bean in beans]]
-    
-    dbscan = DBSCAN(eps=cluster_eps+n_depth, min_samples=2*n_depth-1, algorithm='brute', n_jobs=(os.cpu_count()-1) or 1)
-    labels = dbscan.fit([bean.embedding for bean in beans]).labels_
-    
+    labels = clusterer.fit([bean.embedding for bean in beans]).labels_
     groups = {}
     for index, label in enumerate(labels):
         label = int(label)
@@ -203,10 +200,7 @@ def _run_clustering(beans, n_depth):
 
     res = []
     for indexes in groups.values():
-        if len(indexes) <= MAX_CLUSTER_SIZE:
-            res.append([beans[index].url for index in indexes])         
-        else:
-            res.extend(_run_clustering([beans[index] for index in indexes], n_depth-1))
+        res.append([beans[index].url for index in indexes])    
     return res
 
 def run_trend_ranking():

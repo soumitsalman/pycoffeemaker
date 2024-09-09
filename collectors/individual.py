@@ -6,14 +6,14 @@ import tldextract
 
 USER_AGENT = "Cafecito-Coffeemaker"
 
-def load_from_url(url) -> tuple[str, str, str]:
+def load_from_url(url):
     if is_non_text(url):
         return None
     try:
         article = newspaper.Article(url)
         article.download()
         article.parse()
-        return article.text.strip(), article.top_image, article.meta_data['og'].get('site_name') if 'og' in article.meta_data else None
+        return article
     except newspaper.article.ArticleException:
         return None
 
@@ -28,3 +28,7 @@ def is_non_text(url: str):
 def extract_source(url):
     extracted = tldextract.extract(url)
     return extracted.domain, extracted.registered_domain
+
+def site_name(article: newspaper.Article):
+    if article and ('og' in article.meta_data):
+        return article.meta_data['og'].get('site_name')
