@@ -20,5 +20,6 @@ persist-queue
 scikit-learn
 praw
 gliner
+retry
 
 

@@ -51,10 +51,6 @@ def initialize(db_conn_str: str, working_dir: str, emb_file: str, api_key: str, 
     cluster_eps = cl_eps
     category_eps = cat_eps
 
-def run_cleanup():
-    logger.info("Starting clean up")
-    remotesack.delete_old(CLEANUP_WINDOW)
-
 def run_collector():
     logger.info("Starting collection from rss feeds.")
     rssfeed.collect(store_func=_process_collection)
@@ -240,13 +236,18 @@ def _make_trend_update(item, chatters, cluster_sizes):
             update[K_TRENDSCORE] += (ch.comments*3)
     return UpdateOne({K_URL: item.url}, {"$set": update})
 
+BULK_CHUNK_SIZE = 7500
+FIVE_MINUTES = 300
+TEN_MINUTES = 600
 def _bulk_update(updates):
-    update_count = 0
-    # breaking it into chunk of 10000
-    BULK_CHUNK_SIZE = 5000
+    update_count = 0   
     for i in range(0, len(updates), BULK_CHUNK_SIZE):
-        update_count += remotesack.beanstore.bulk_write(updates[i: i+BULK_CHUNK_SIZE], ordered=False).modified_count
+        update_count += _write_batch(updates, ic(i))
     return update_count
+
+@retry(tries=3, delay=FIVE_MINUTES, max_delay=TEN_MINUTES, logger=logger)
+def _write_batch(updates, start_index):
+    return remotesack.beanstore.bulk_write(updates[start_index: start_index+BULK_CHUNK_SIZE], ordered=False, bypass_document_validation=True).modified_count
 
 def _dequeue(q: Queue):
     try:

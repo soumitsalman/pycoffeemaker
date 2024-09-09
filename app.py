@@ -22,7 +22,7 @@ orch.initialize(
     float(os.getenv('CATEGORY_EPS')))
 
 start_time = dt.now()
-orch.run_cleanup()
+# orch.run_cleanup()
 orch.run_collector()
 orch.run_indexing()
 orch.run_clustering()
