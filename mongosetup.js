@@ -33,24 +33,6 @@ db.beans.createIndex(
 
 db.beans.createIndex(
   {
-      cluster_id: 1
-  },
-  {
-      name: "beans_cluster_id"
-  }
-);
-
-db.beans.createIndex(
-  {
-      categories: 1
-  },
-  {
-      name: "beans_categories"
-  }
-);
-
-db.beans.createIndex(
-  {
       tags: 1
   },
   {
@@ -60,80 +42,39 @@ db.beans.createIndex(
 
 db.beans.createIndex(
   {
-      kind: 1
-  },
-  {
-      name: "beans_kind"
-  }
-);
-
-db.beans.createIndex(
-  {
-      created: -1
-  },
-  {
-      name: "beans_newest"
-  }
-);
-
-db.beans.createIndex(
-  {
-      updated: -1
-  },
-  {
-      name: "beans_latest"
-  }
-);
-
-db.beans.createIndex(
-  {
-      trend_score: -1
-  },
-  {
-      name: "beans_trending"
-  }
-);
-
-db.beans.createIndex(
-  {
-      created: -1,
-      trend_score: -1
-  },
-  {
-      name: "beans_newest_and_trending"
-  }
-);
-
-db.beans.createIndex(
-  {
-      latest: -1,
-      trend_score: -1
-  },
-  {
-      name: "beans_latest_and_trending"
-  }
-);
-
-db.beans.createIndex(
-  {
       categories: 1,
+      cluster_id: 1,
       kind: 1,
-      trend_score: -1
-  },
-  {
-      name: "beans_categories_kind_and_trending"
-  }
-);
-
-db.beans.createIndex(
-  {
-      categories: 1,
-      kind: 1,
-      created: -1,
+      newest: -1,
       trend_score: -1
   },
   {
       name: "beans_categories_kind_newest_and_trending"
+  }
+);
+
+db.beans.createIndex(
+  {
+      categories: 1,
+      cluster_id: 1,
+      kind: 1,
+      trend_score: -1,
+      latest: -1,
+      
+  },
+  {
+      name: "beans_categories_kind_trending_and_latest"
+  }
+);
+
+db.beans.createIndex(
+  {
+      url: 1,
+      cluster_id: 1,
+      
+  },
+  {
+      name: "beans_url_and_cluster"
   }
 );
 
@@ -147,5 +88,33 @@ db.beans.createIndex(
   },
   {
       name: "beans_text_search"
+  }
+);
+
+
+DELETE_TIME = 2592000 // 30 DAYS * 24 HOURS * 60 MINS * 60 SECONDS
+db.beans.createIndex(
+    {"_ts":1}, 
+    {
+        name: "delete-stale-beans",
+        expireAfterSeconds: DELETE_TIME
+    }
+);
+db.chatters.createIndex(
+    {"_ts":1}, 
+    {
+        name: "delete-stale-chatters",
+        expireAfterSeconds: DELETE_TIME
+    }
+);
+
+db.chatters.createIndex(
+  {
+      url: 1,
+      source: 1,
+      
+  },
+  {
+      name: "chatters_url_and_source"
   }
 );
