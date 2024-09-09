@@ -14,12 +14,11 @@ from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 from icecream import ic
 
-TIMEOUT = 180000 # 3 mins
+TIMEOUT = 300000 # 3 mins
 
 # names of db and collections
 BEANSACK = "beansack"
 BEANS = "beans"
-HIGHLIGHTS = "highlights"
 CHATTERS = "chatters"
 SOURCES = "sources"
 
@@ -28,11 +27,9 @@ DEFAULT_VECTOR_LIMIT = 100
 
 TRENDING = {K_TRENDSCORE: -1}
 LATEST = {K_UPDATED: -1}
-TRENDING = {K_TRENDSCORE: -1}
+NEWEST = {K_CREATED: -1}
 TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_UPDATED: -1}
 LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
-
-NEWEST = {K_CREATED: -1}
 NEWEST_AND_TRENDING = {K_CREATED: -1, K_TRENDSCORE: -1}
 
 logger = create_logger("beansack")
@@ -49,7 +46,6 @@ class Beansack:
             connectTimeoutMS=TIMEOUT,
             retryWrites=True)        
         self.beanstore: Collection = client[BEANSACK][BEANS]
-        self.highlightstore: Collection = client[BEANSACK][HIGHLIGHTS]
         self.chatterstore: Collection = client[BEANSACK][CHATTERS]        
         self.sourcestore: Collection = client[BEANSACK][SOURCES]  
         self.embedder: BeansackEmbeddings = embedder
@@ -94,14 +90,14 @@ class Beansack:
         writes = list(map(makeupdate, urls, [{"$set": fields} for fields in updates]))
         return self.beanstore.bulk_write(writes).modified_count
       
-    def delete_old(self, window: int):
-        time_filter = {K_UPDATED: { "$lte": get_timevalue(window) }}
-        res = self.beanstore.delete_many(time_filter)
-        logger.info("%d old beans deleted", res.deleted_count)
-        res = self.chatterstore.delete_many(time_filter)
-        logger.info("%d old chatters deleted", res.deleted_count)
-        res = self.highlightstore.delete_many(time_filter)
-        logger.info("%d old highlights deleted", res.deleted_count)
+    # def delete_old(self, window: int):
+    #     time_filter = {K_UPDATED: { "$lte": get_timevalue(window) }}
+    #     res = self.beanstore.delete_many(time_filter)
+    #     logger.info("%d old beans deleted", res.deleted_count)
+    #     res = self.chatterstore.delete_many(time_filter)
+    #     logger.info("%d old chatters deleted", res.deleted_count)
+    #     res = self.highlightstore.delete_many(time_filter)
+    #     logger.info("%d old highlights deleted", res.deleted_count)
 
     ####################
     ## GET AND SEARCH ##
