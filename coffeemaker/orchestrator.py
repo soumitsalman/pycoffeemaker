@@ -253,7 +253,7 @@ def _augment(beans: list[Bean]):
             logger.warning("Augmenting failed for %s", bean.url)   
     return beans
 
-BULK_CHUNK_SIZE = 10000
+BULK_CHUNK_SIZE = 20000
 FIVE_MINUTES = 300
 TEN_MINUTES = 600
 def _bulk_update(updates):

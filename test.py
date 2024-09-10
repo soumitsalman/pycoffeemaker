@@ -90,8 +90,8 @@ orch.initialize(
 # test_chains()
 # test_collection()
 # test_clustering()
-# test_clustering_live()
-test_whole_path_live()
+test_clustering_live()
+# test_whole_path_live()
 # test_search()
 # test_trend_ranking()
 
