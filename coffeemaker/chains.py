@@ -1,3 +1,4 @@
+import random
 import string
 from icecream import ic
 from retry import retry
@@ -15,12 +16,21 @@ KEYPHRASE_TYPES = ["company", "organization", "group", "entity", "product", "per
 MIN_KEYPHRASE_LEN = 3
 
 class KeyphraseExtractor:
+    model_path = None
+    cache_dir = None
+    model = None
+
     def __init__(self, model_path: str="numind/NuNerZero_span", context_len: int=383, cache_dir=".models"):
-        self.model = GLiNER.from_pretrained(model_path, cache_dir=cache_dir)
+        self.model_path = model_path
+        self.cache_dir = cache_dir
         self.n_ctx = context_len
 
     def run(self, text: str) -> list[str]:
-        entities = chain(*(self.model.predict_entities(c, KEYPHRASE_TYPES) for c in utils.chunk(text, n_ctx=self.n_ctx)[:2])) # this is an approximation assuming that there isn't much new after the first 1 pages
+        if not self.model:
+            self.model = GLiNER.from_pretrained(self.model_path, cache_dir=self.cache_dir)
+        chunks = utils.chunk(text, n_ctx=self.n_ctx)
+        chunks = random.sample(chunks, k=min(2, len(chunks))) # select any 2 random chunks
+        entities = chain(*(self.model.predict_entities(c, KEYPHRASE_TYPES, threshold=0.8) for c in chunks)) # this is an approximation assuming that there isn't much new after the first 1 pages
         return sorted({entity["text"].lower():entity['text'] for entity in entities if len(entity["text"])>=MIN_KEYPHRASE_LEN}.values(), key=lambda x: len(x), reverse=True)
         
     def __call__(self, text: str) -> list[str]:        
@@ -34,7 +44,7 @@ OUTPUT FORMAT: {format_instruction}.
 class Digest(BaseModel):
     # title: str = Field(description="title of the content")
     # topic: str = Field(description="topic/category of the content such as Sports, Environment & Climate Change, Fashion & Clothing, Food & Agriculture, Science & Mathematics, Arts & Liberature, Culture & Entertainment, Programming & Software Engineering, Government & Politics, Robotics & Industrial Automation, Leadership & Management, Health & Wellness etc.")
-    keyphrases: list[str] = Field(descrition="A list of the main keyphrases mentioned here such as company, organization, group, entity, product, person, object, place, technology, stock ticker etc.")
+    keyphrases: list[str] = Field(descrition="A list of the entity names mentioned here such as company, organization, political group, person, profession, geographic location, product, software, technology, vulnerability, vehicle, stock ticker symbol etc.")
     highlight: str = Field(description="One-liner highlights/tldr from the content")
 
 class DigestExtractor:

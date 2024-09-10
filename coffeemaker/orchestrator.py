@@ -11,7 +11,8 @@ from collectors import individual, rssfeed, ychackernews, redditor
 from sklearn.cluster import AffinityPropagation, KMeans, MiniBatchKMeans
 from langchain_groq import ChatGroq
 from coffeemaker.chains import *
-from persistqueue import Queue
+import persistqueue
+import queue
 
 MIN_ALLOWED_BODY_LEN = 75
 MIN_DOWNLOAD_BODY_LEN = 150 
@@ -22,46 +23,52 @@ N_THREADS = os.cpu_count()
 
 logger = utils.create_logger("coffeemaker")
 
-keyphraser: KeyphraseExtractor = None
+# index queue is a non persistence queue because at this point nothing is stored. things need to be stored before they can be processed further
+# if storing fails in this round, it can succeed in the next
+index_queue: queue.Queue = None 
+trend_queue: persistqueue.Queue = None
+aug_queue: persistqueue.Queue = None
+
 embedder: BeansackEmbeddings = None
 remotesack: Beansack = None
 categorystore: Collection = None 
-index_queue: Queue = None
-trend_queue: Queue = None
-llm_api_key: str = None
-cluster_eps: int = None
 category_eps: int = None
 
-def initialize(db_conn_str: str, working_dir: str, emb_file: str, api_key: str, cl_eps: float, cat_eps: float):
+digestor: DigestExtractor = None
+summarizer: Summarizer = None
+keyphraser: KeyphraseExtractor = None
+
+def initialize(db_conn_str: str, working_dir: str, emb_file: str, api_key: str, cat_eps: float):
     queue_dir=working_dir+"/.processingqueue"
-    global keyphraser, embedder, remotesack, categorystore, index_queue, trend_queue, llm_api_key, cluster_eps, category_eps
-
     models_dir=working_dir+"/.models/"
-    keyphraser = KeyphraseExtractor(cache_dir=models_dir)
+
+    global keyphraser, embedder, remotesack, categorystore, index_queue, trend_queue, aug_queue, category_eps , digestor, summarizer  
+
+    index_queue = queue.Queue()
+    trend_queue = persistqueue.Queue(queue_dir+"/trend", tempdir=queue_dir)
+    aug_queue = persistqueue.Queue(queue_dir+"/augment", tempdir=queue_dir)
+    
     embedder = BeansackEmbeddings(model_path=models_dir+emb_file, context_len=4095)
-
-    remotesack = Beansack(db_conn_str)
+    remotesack = Beansack(db_conn_str, embedder)
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
-       
-    index_queue = Queue(queue_dir+"/index", tempdir=queue_dir)
-    trend_queue = Queue(queue_dir+"/trend", tempdir=queue_dir)
-
-    llm_api_key = api_key
-
-    cluster_eps = cl_eps
     category_eps = cat_eps
 
-def run_collector():
+    # keyphraser = KeyphraseExtractor(cache_dir=models_dir)
+    llm = ChatGroq(api_key=api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
+    digestor = DigestExtractor(llm, 3072) 
+    summarizer = Summarizer(llm, 3072)
+
+def run_collection():
     logger.info("Starting collection from rss feeds.")
-    rssfeed.collect(store_func=_process_collection)
+    rssfeed.collect(store_func=_collect)
     logger.info("Starting collection from YC hackernews.")
-    ychackernews.collect(store_func=_process_collection)
+    ychackernews.collect(store_func=_collect)
     logger.info("Starting collection from Reddit.")
-    redditor.collect(store_func=_process_collection)
+    redditor.collect(store_func=_collect)
     # TODO: add collection from nextdoor
     # TODO: add collection from linkedin
 
-def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
+def _collect(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
     if not items:
         return
     
@@ -79,9 +86,9 @@ def _process_collection(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatte
         downloaded = _download_beans(remotesack.filter_unstored_beans(beans))
         if downloaded:
             logger.info("%d (out of %d) beans downloaded from %s", len(downloaded), len(beans), downloaded[0].source)
-            _queue(index_queue, downloaded)
+            index_queue.put_nowait(downloaded)
     if chatters:            
-        _queue(trend_queue, chatters)
+        trend_queue.put_nowait(chatters)
 
 def _download_beans(beans: list[Bean]) -> list[Bean]:
     for bean in beans:
@@ -97,50 +104,28 @@ def _download_beans(beans: list[Bean]) -> list[Bean]:
 def run_indexing():
     logger.info("Starting Indexing")
     while not index_queue.empty():   
-        beans = _dequeue(index_queue)     
+        beans = index_queue.get_nowait()
         beans = remotesack.filter_unstored_beans(beans) if beans else None
+        beans = _index(beans) if beans else None
         if not beans:   
-            continue   
-        try:      
-            beans = _augment(beans) # this is the data augmentation part: embeddings, summary, highlights           
-            res = remotesack.store_beans(beans)
-            logger.info("%d beans added from %s", res, beans[0].source)
-            _queue(trend_queue, beans) # set it out for clustering
-        except Exception as err:
-            logger.warning("Indexing/Storing failed for a batch from %s. %s", beans[0].source, str(err))
-        
-def _augment(beans: list[Bean]):
-    # embedder = BeansackEmbeddings(embedder_path, 4095)
-    llm = ChatGroq(api_key=llm_api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
-    digestor = DigestExtractor(llm, 3072) 
-    summarizer = Summarizer(llm, 3072)
-    
+            continue                        
+        res = remotesack.store_beans(beans)
+        logger.info("%d beans added from %s", res, beans[0].source)
+        # send it out for trend analysis and augementation. these can happen in parallel
+        # trimming down some of fields because otherwise writing embeddings back and for becomes a lot for persistence queue
+        beans = [Bean(url=bean.url, text=bean.text, summary=bean.summary, title=bean.title, tags=bean.tags) for bean in beans]
+        trend_queue.put_nowait(beans) 
+        aug_queue.put_nowait(beans)
+
+def _index(beans: list[Bean]):   
     # extract digest and prepare for pushing to beansack
     for bean in beans:
-        # putting this in try catch because these have remote call and are not always reliable
         try:
-            # embedding
             bean.embedding = embedder.embed(bean.digest())            
             bean.categories = _find_categories(bean)
-
-            # summary because in the digestor the summary content looks like shit
-            bean.summary = summarizer.run(bean.text) if len(bean.text.split()) > MIN_SUMMARIZER_BODY_LEN else bean.text
-            
-            # extract named entities.
-            # TODO: merge categories and tags?
-            bean.tags = keyphraser.run(bean.text)
-            if bean.categories and bean.tags:
-                bean.categories.extend(bean.tags)
-
-            # highlight: not merging this summary because otherwise the summary content looks like shit
-            digest = digestor.run(kind=bean.kind, text=bean.text)            
-            bean.title = digest.highlight
         except:
-            logger.warning("Augmenting failed for %s", bean.url)   
-        finally:
-            # normalize fields and values that are immaterial   
-            bean.text = None # text field has no use any more and will just cause extra load 
-    return [bean for bean in beans if (bean.embedding and bean.summary)]
+            logger.warning("Indexing failed for %s", bean.url)   
+    return [bean for bean in beans if bean.embedding]
 
 def _find_categories(bean: Bean):    
     pipeline = [
@@ -166,8 +151,8 @@ def run_clustering():
     logger.info("Starting Clustering")
     # TODO: in future optimize the beans that need to be clustered.
     # right now we are just clustering the whole database
-    res = _run_clustering(remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1}))   
-    updates = [UpdateMany({K_URL: {"$in": group}},{"$set": {K_CLUSTER_ID: group[0]}}) for group in res]
+    beans = _cluster(remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1}))   
+    updates = [UpdateOne({K_URL: bean.url},{"$set": {K_CLUSTER_ID: bean.cluster_id}}) for bean in beans]
     update_count = _bulk_update(updates)
     logger.info("%d beans updated with cluster_id", update_count)
 
@@ -180,7 +165,7 @@ def run_clustering():
 # option 2: find out an n-cluster size based on random samples and use that as a seed for K-Means
 # option 3: process each incoming batch iteratively. we cluster the collected batch using affinityPropagation or meanshift
 # and then union the cluster size with exiting cluters in the DB
-def _run_clustering(beans: list[Bean]):     
+def _cluster(beans: list[Bean]):     
     POPULATION_SIZE_THRESHOLD = 5000  
     clusterer =  AffinityPropagation(damping=0.6, convergence_iter=50, random_state=23)\
         if len(beans) < POPULATION_SIZE_THRESHOLD else \
@@ -191,13 +176,9 @@ def _run_clustering(beans: list[Bean]):
     for index, label in enumerate(labels):
         label = int(label)
         if label not in groups:
-            groups[label] = []
-        groups[label].append(index)
-
-    res = []
-    for indexes in groups.values():
-        res.append([beans[index].url for index in indexes])    
-    return res
+            groups[label] = beans[index].url
+        beans[index].cluster_id = groups[label]
+    return beans
 
 def run_trend_ranking():
     logger.info("Starting Trend Ranking")
@@ -205,21 +186,23 @@ def run_trend_ranking():
     while not trend_queue.empty():
         # remove the duplicates in the batch
         # put them in database and queue the beans for trend_ranking
-        items = _dequeue(trend_queue)
-        if items:
-            if isinstance(items[0], Chatter):
-                remotesack.store_chatters(items) 
-            batch.update({item.url: item for item in items})
+        try:
+            items = trend_queue.get_nowait()
+            if items:
+                if isinstance(items[0], Chatter):
+                    remotesack.store_chatters(items) 
+                batch.update({item.url: item for item in items})
+        except:
+            logger.warning("Dequeueing from trend-queue failed for a batch")
+        finally:
+            trend_queue.task_done()
     
     items = list(batch.values())
     urls = [item.url for item in items]
-    try:    
-        chatters=remotesack.get_latest_chatter_stats(urls)
-        cluster_sizes=remotesack.count_related_beans(urls)
-        res = _bulk_update([_make_trend_update(item, chatters, cluster_sizes) for item in items])
-        logger.info("%d beans updated with trendscore", res)
-    except Exception as err:
-        logger.warning("Trend calculation failed for a batch of %d beans. %s", len(items), str(err))
+    chatters=remotesack.get_latest_chatter_stats(urls)
+    cluster_sizes=remotesack.count_related_beans(urls)
+    res = _bulk_update([_make_trend_update(item, chatters, cluster_sizes) for item in items])
+    logger.info("%d beans updated with trendscore", res)
 
 def _make_trend_update(item, chatters, cluster_sizes):
     update = {
@@ -236,29 +219,49 @@ def _make_trend_update(item, chatters, cluster_sizes):
             update[K_TRENDSCORE] += (ch.comments*3)
     return UpdateOne({K_URL: item.url}, {"$set": update})
 
-BULK_CHUNK_SIZE = 7500
+def run_augmentation():
+    logger.info("Starting Augmentation")
+    updates = []
+    _make_update = lambda bean: UpdateOne(
+        filter = {K_URL: bean.url}, 
+        update={
+            "$set": {
+                K_SUMMARY: bean.summary,
+                K_TAGS: bean.tags,
+                K_TITLE: bean.title
+            },
+            "$unset": { K_TEXT: ""}
+        }
+    )
+    while not aug_queue.empty():
+        updates.extend((_make_update(bean) for bean in _augment(aug_queue.get_nowait())))
+        aug_queue.task_done()
+    res = _bulk_update(updates)    
+    logger.info("%d beans updated with summary, tldr & tags", res)
+
+def _augment(beans: list[Bean]):
+    for bean in beans:
+        # putting this in try catch because these have remote call and are not always reliable
+        try:
+            # NOTE: ideally summary, highlight and keyphrase extraction can be called through the same api call
+            # but the summary generation in JSON format and named entity extraction with the current model looks like shit
+            bean.summary = summarizer.run(bean.text) if len(bean.text.split()) > MIN_SUMMARIZER_BODY_LEN else bean.text
+            digest = digestor.run(kind=bean.kind, text=bean.text)
+            bean.title = digest.highlight or bean.title            
+            bean.tags = digest.keyphrases[:5]  # take the first 5 tags and call it good          
+        except:
+            logger.warning("Augmenting failed for %s", bean.url)   
+    return beans
+
+BULK_CHUNK_SIZE = 10000
 FIVE_MINUTES = 300
 TEN_MINUTES = 600
 def _bulk_update(updates):
     update_count = 0   
     for i in range(0, len(updates), BULK_CHUNK_SIZE):
-        update_count += _write_batch(updates, ic(i))
+        update_count += _write_batch(updates, i)
     return update_count
 
 @retry(tries=3, delay=FIVE_MINUTES, max_delay=TEN_MINUTES, logger=logger)
 def _write_batch(updates, start_index):
     return remotesack.beanstore.bulk_write(updates[start_index: start_index+BULK_CHUNK_SIZE], ordered=False, bypass_document_validation=True).modified_count
-
-def _dequeue(q: Queue):
-    try:
-        val = q.get()        
-        return val
-    finally:
-        q.task_done()
-
-def _queue(q: Queue, val) -> bool:
-    try:
-        q.put_nowait(val)
-        return True
-    except:
-        return False

@@ -17,14 +17,13 @@ orch.initialize(
     os.getenv("DB_CONNECTION_STRING"), 
     WORKING_DIR, 
     os.getenv("EMBEDDER_FILE"),
-    os.getenv("GROQ_API_KEY"),    
-    float(os.getenv('CLUSTER_EPS')),
+    os.getenv("GROQ_API_KEY"),   
     float(os.getenv('CATEGORY_EPS')))
 
 start_time = dt.now()
-# orch.run_cleanup()
-orch.run_collector()
+orch.run_collection()
 orch.run_indexing()
 orch.run_clustering()
 orch.run_trend_ranking()
+orch.run_augmentation()
 orch.logger.info("Run Completed! Total Time: %s", str(dt.now()-start_time))

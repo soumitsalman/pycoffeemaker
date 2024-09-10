@@ -154,3 +154,4 @@ https://driversdrift.com/feed/
 https://underknown.com/feed/
 https://www.pastchronicle.com/feed/
 https://www.techopedia.com/feed
+https://www.phonearena.com/feed/reviews

@@ -34,12 +34,15 @@ def test_collection():
 
 def test_whole_path_live():
     sources = [
-        "https://www.ictworks.org/feed/",
+        "https://www.nationalreview.com/feed/",
+        "https://www.moneytalksnews.com/feed/"
     ]
-    rssfeed.collect(sources=sources, store_func=orch._process_collection)
+    # rssfeed.collect(sources=sources, store_func=orch._collect)
+    redditor.collect(store_func=orch._collect)
     orch.run_indexing()
     orch.run_clustering()
     orch.run_trend_ranking()
+    orch.run_augmentation()
 
 def test_chains():
     source = "https://eletric-vehicles.com/feed/"
@@ -52,7 +55,7 @@ def test_search():
     write_datamodels(orch.remotesack.vector_search_beans(query=query, filter=updated_in(3), sort_by=LATEST, projection={K_EMBEDDING: 0, K_ID: 0}), "VECTOR_SEARCH")
 
 def test_clustering(): 
-    res = orch._run_clustering(orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_EMBEDDING: 1}))
+    res = orch._cluster(orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_EMBEDDING: 1}))
     make_update = lambda group, header: print("[", len(group), "]", header, "====\n", "\n\t".join(group) if isinstance(group[0], str) else group,"\n")
     list(map(make_update, res, [items[0] for items in res]))
 
@@ -78,17 +81,17 @@ orch.initialize(
     os.getenv("DB_CONNECTION_STRING"), 
     os.getenv("WORKING_DIR", "."), 
     os.getenv("EMBEDDER_FILE"),
-    os.getenv("GROQ_API_KEY"),    
-    float(os.getenv('CLUSTER_EPS')),
+    os.getenv("GROQ_API_KEY"),
     float(os.getenv('CATEGORY_EPS')))
    
+
 ### TEST CALLS
 # test_writing()
 # test_chains()
-test_collection()
-test_clustering()
+# test_collection()
+# test_clustering()
 # test_clustering_live()
-# test_whole_path_live()
+test_whole_path_live()
 # test_search()
 # test_trend_ranking()
 
