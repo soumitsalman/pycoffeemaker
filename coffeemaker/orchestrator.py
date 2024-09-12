@@ -144,8 +144,12 @@ def _find_categories(bean: Bean):
         {"$match": { "search_score": {"$gte": 1-category_eps} }},
         {"$project": {K_EMBEDDING: 0}}
     ] 
-    matches = categorystore.aggregate(pipeline)
-    return list(set(chain(*(cat[K_CATEGORIES] for cat in matches)))) or None
+    ids = []
+    for cat in categorystore.aggregate(pipeline):
+        ids.append(cat[K_ID])
+        ids.extend(cat['related'])
+
+    return list(set(ids)) if ids else None
 
 def run_clustering():
     logger.info("Starting Clustering")
@@ -221,7 +225,6 @@ def _make_trend_update(item, chatters, cluster_sizes):
 
 def run_augmentation():
     logger.info("Starting Augmentation")
-    updates = []
     _make_update = lambda bean: UpdateOne(
         filter = {K_URL: bean.url}, 
         update={
@@ -233,10 +236,10 @@ def run_augmentation():
             "$unset": { K_TEXT: ""}
         }
     )
+    res = 0
     while not aug_queue.empty():
-        updates.extend((_make_update(bean) for bean in _augment(aug_queue.get_nowait())))
+        res += _bulk_update([_make_update(bean) for bean in _augment(aug_queue.get_nowait())])
         aug_queue.task_done()
-    res = _bulk_update(updates)    
     logger.info("%d beans updated with summary, tldr & tags", res)
 
 def _augment(beans: list[Bean]):

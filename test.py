@@ -44,9 +44,9 @@ def test_whole_path_live():
     orch.run_trend_ranking()
     orch.run_augmentation()
 
-def test_chains():
-    source = "https://eletric-vehicles.com/feed/"
-    write_datamodels(orch._augment(rssfeed.collect_from(source)), "TEST-CHAIN")
+def test_indexing_and_augment():
+    source = "https://247wallst.com/feed/"
+    write_datamodels(orch._augment(orch._index(rssfeed.collect_from(source))), "TEST-INDEXING")
   
 def test_search():
     query = "profession: pilot"
@@ -90,7 +90,7 @@ orch.initialize(
 # test_chains()
 # test_collection()
 # test_clustering()
-test_clustering_live()
+test_indexing_and_augment()
 # test_whole_path_live()
 # test_search()
 # test_trend_ranking()
