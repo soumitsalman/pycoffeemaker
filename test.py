@@ -47,10 +47,11 @@ def test_whole_path_live():
         "https://www.moneytalksnews.com/feed/"
     ]
     # rssfeed.collect(sources=sources, store_func=orch._collect)
-    redditor.collect(store_func=orch._collect)
+    # redditor.collect(store_func=orch._collect)
+    espresso.collect(orch.sb_connection_str, orch._collect)
     orch.run_indexing()
-    orch.run_clustering()
-    orch.run_trend_ranking()
+    # orch.run_clustering()
+    # orch.run_trend_ranking()
     orch.run_augmentation()
 
 def test_indexing_and_augment():
@@ -99,10 +100,10 @@ orch.initialize(
 ### TEST CALLS
 # test_writing()
 # test_chains()
-test_collection()
+# test_collection()
 # test_clustering()
 # test_indexing_and_augment()
-# test_whole_path_live()
+test_whole_path_live()
 # test_search()
 # test_trend_ranking()
 

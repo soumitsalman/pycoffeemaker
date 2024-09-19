@@ -1,11 +1,12 @@
 from itertools import chain
 import os
+import time
 from icecream import ic
 from pybeansack import utils
 from pybeansack.beansack import  Beansack
 from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
-from pymongo import DeleteOne, MongoClient, UpdateMany, UpdateOne
+from pymongo import DeleteOne, MongoClient, UpdateOne
 from pymongo.collection import Collection
 from collectors import espresso, individual, rssfeed, ychackernews, redditor
 from sklearn.cluster import AffinityPropagation, KMeans, MiniBatchKMeans
@@ -105,7 +106,7 @@ def _download_beans(beans: list[Bean]) -> list[Bean]:
     for bean in beans:
         if (bean.kind in [NEWS, BLOG]) and (not bean.image_url or not bean.text or len(bean.text.split())<MIN_DOWNLOAD_BODY_LEN):
             res = individual.load_from_url(bean.url)
-            if res:            
+            if res and res.text:  # this is a decent indicator if loading from the url even worked 
                 bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()
                 bean.image_url = bean.image_url or res.top_image
                 bean.source = individual.site_name(res) or bean.source
@@ -137,6 +138,7 @@ def _index(beans: list[Bean]):
         try:
             bean.embedding = embedder.embed(bean.digest())            
             bean.categories = _find_categories(bean)
+            bean.created = min(bean.created, bean.updated) # sometimes due to time zone issue the created dates look wierd. this is a patch
         except:
             logger.warning("Indexing failed for %s", bean.url)   
     return [bean for bean in beans if bean.embedding]
@@ -201,6 +203,7 @@ def _cluster(beans: list[Bean]):
 def run_trend_ranking():
     logger.info("Starting Trend Ranking")
     batch = {}
+    current_time = int(time.time())
     while not trend_queue.empty():
         # remove the duplicates in the batch
         # put them in database and queue the beans for trend_ranking
@@ -219,12 +222,12 @@ def run_trend_ranking():
     urls = [item.url for item in items]
     chatters=remotesack.get_latest_chatter_stats(urls)
     cluster_sizes=remotesack.count_related_beans(urls)
-    res = _bulk_update([_make_trend_update(item, chatters, cluster_sizes) for item in items])
+    res = _bulk_update([_make_trend_update(item, chatters, cluster_sizes, current_time) for item in items])
     logger.info("%d beans updated with trendscore", res)
 
-def _make_trend_update(item, chatters, cluster_sizes):
+def _make_trend_update(item, chatters, cluster_sizes, updated):
     update = {
-        K_UPDATED: item.updated,
+        K_UPDATED: updated,
         K_TRENDSCORE: (next((cluster for cluster in cluster_sizes if cluster[K_URL] == item.url), {'cluster_size': 1})['cluster_size'] if cluster_sizes else 1)*10
     }
     ch = next((ch for ch in chatters if ch.url==item.url), None) if chatters else None
@@ -262,7 +265,7 @@ def _augment(beans: list[Bean]):
         try:
             # NOTE: ideally summary, highlight and keyphrase extraction can be called through the same api call
             # but the summary generation in JSON format and named entity extraction with the current model looks like shit
-            bean.summary = (summarizer.run(bean.text) or bean.summary) if len(bean.text.split()) > MIN_SUMMARIZER_BODY_LEN else bean.text
+            bean.summary = (summarizer.run(bean.text) or bean.summary or bean.text) if len(bean.text.split()) > MIN_SUMMARIZER_BODY_LEN else bean.text
             digest = digestor.run(kind=bean.kind, text=bean.text)
             bean.title = digest.highlight or bean.title            
             bean.tags = digest.keyphrases[:5]  # take the first 5 tags and call it good          
