@@ -14,11 +14,13 @@ if LOG_FILE:
 from coffeemaker import orchestrator as orch
 
 orch.initialize(
-    os.getenv("DB_CONNECTION_STRING"), 
+    os.getenv("DB_CONNECTION_STRING"),
+    os.getenv("SB_CONNECTION_STRING"), 
     WORKING_DIR, 
     os.getenv("EMBEDDER_FILE"),
     os.getenv("GROQ_API_KEY"),   
-    float(os.getenv('CATEGORY_EPS')))
+    float(os.getenv('CATEGORY_EPS')),
+    float(os.getenv('CLUSTER_EPS')))
 
 start_time = dt.now()
 orch.run_collection()

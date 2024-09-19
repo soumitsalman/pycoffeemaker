@@ -1,4 +1,5 @@
 ## MAIN FUNC ##
+import time
 from icecream import ic
 import os
 from dotenv import load_dotenv
@@ -9,9 +10,10 @@ import json
 from datetime import datetime as dt
 from pybeansack.beansack import *
 from pybeansack.datamodels import *
-from collectors import rssfeed, ychackernews, individual, redditor
+from collectors import rssfeed, ychackernews, individual, redditor, espresso
 from coffeemaker import orchestrator as orch
 from coffeemaker.chains import *
+from azure.servicebus import ServiceBusClient, ServiceBusMessage
 import random
 
 def write_datamodels(items, file_name: str = None):
@@ -28,9 +30,16 @@ def test_collection():
         "https://www.buzzhint.com/feed/"
     ]
     
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._download_beans(beans[:5])))
-    redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="REDDIT"))
-    ychackernews.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="YC"))
+    # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._download_beans(beans[:5])))
+    # redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="REDDIT"))
+    # ychackernews.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="YC"))
+
+    # with ServiceBusClient.from_connection_string(orch.sb_connection_str).get_queue_sender("index-queue") as index_queue:
+    #     to_json = lambda bean: ServiceBusMessage(json.dumps({K_ID: f"TEST:{bean.url}", K_SOURCE: "TEST", K_URL: bean.url, K_CREATED: int(time.time())}))
+    #     rssfeed.collect(sources=sources, store_func=lambda beans: index_queue.send_messages([to_json(bean) for bean in beans]))
+
+    espresso.collect(orch.sb_connection_str, store_func=lambda beans: write_datamodels(orch._download_beans(beans), "ESPRESSO-QUEUE"))
+
 
 def test_whole_path_live():
     sources = [
@@ -79,18 +88,20 @@ def test_trend_ranking():
 
 orch.initialize(
     os.getenv("DB_CONNECTION_STRING"), 
+    os.getenv("SB_CONNECTION_STRING"),
     os.getenv("WORKING_DIR", "."), 
     os.getenv("EMBEDDER_FILE"),
     os.getenv("GROQ_API_KEY"),
-    float(os.getenv('CATEGORY_EPS')))
+    float(os.getenv('CATEGORY_EPS')),
+    float(os.getenv('CLUSTER_EPS')))
    
 
 ### TEST CALLS
 # test_writing()
 # test_chains()
-# test_collection()
+test_collection()
 # test_clustering()
-test_indexing_and_augment()
+# test_indexing_and_augment()
 # test_whole_path_live()
 # test_search()
 # test_trend_ranking()

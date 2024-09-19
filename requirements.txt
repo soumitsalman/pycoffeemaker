@@ -21,5 +21,6 @@ scikit-learn
 praw
 gliner
 retry
+azure-servicebus
 
 

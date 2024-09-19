@@ -5,9 +5,9 @@ from pybeansack import utils
 from pybeansack.beansack import  Beansack
 from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
-from pymongo import MongoClient, UpdateMany, UpdateOne
+from pymongo import DeleteOne, MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
-from collectors import individual, rssfeed, ychackernews, redditor
+from collectors import espresso, individual, rssfeed, ychackernews, redditor
 from sklearn.cluster import AffinityPropagation, KMeans, MiniBatchKMeans
 from langchain_groq import ChatGroq
 from coffeemaker.chains import *
@@ -27,33 +27,42 @@ logger = utils.create_logger("coffeemaker")
 # if storing fails in this round, it can succeed in the next
 index_queue: queue.Queue = None 
 trend_queue: persistqueue.Queue = None
+cluster_queue: persistqueue.Queue = None
 aug_queue: persistqueue.Queue = None
 
+sb_connection_str: str = None
 embedder: BeansackEmbeddings = None
 remotesack: Beansack = None
 categorystore: Collection = None 
-category_eps: int = None
+category_eps: float = None
+cluster_eps: float = None
 
 digestor: DigestExtractor = None
 summarizer: Summarizer = None
 keyphraser: KeyphraseExtractor = None
 
-def initialize(db_conn_str: str, working_dir: str, emb_file: str, api_key: str, cat_eps: float):
+def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_file: str, api_key: str, cat_eps: float, clus_eps: float):
     queue_dir=working_dir+"/.processingqueue"
     models_dir=working_dir+"/.models/"
 
-    global keyphraser, embedder, remotesack, categorystore, index_queue, trend_queue, aug_queue, category_eps , digestor, summarizer  
+    global index_queue, trend_queue, cluster_queue, aug_queue
 
-    index_queue = queue.Queue()
+    index_queue = queue.Queue() # local queue
     trend_queue = persistqueue.Queue(queue_dir+"/trend", tempdir=queue_dir)
-    aug_queue = persistqueue.Queue(queue_dir+"/augment", tempdir=queue_dir)
+    cluster_queue = persistqueue.Queue(queue_dir+"/cluster", tempdir=queue_dir)
+    aug_queue = persistqueue.Queue(queue_dir+"/augment", tempdir=queue_dir)    
+
+    global embedder, remotesack, categorystore, category_eps, cluster_eps , sb_connection_str
     
+    sb_connection_str = sb_conn_str
     embedder = BeansackEmbeddings(model_path=models_dir+emb_file, context_len=4095)
     remotesack = Beansack(db_conn_str, embedder)
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
     category_eps = cat_eps
+    cluster_queue = clus_eps
 
-    # keyphraser = KeyphraseExtractor(cache_dir=models_dir)
+    global  digestor, summarizer  
+
     llm = ChatGroq(api_key=api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
     digestor = DigestExtractor(llm, 3072) 
     summarizer = Summarizer(llm, 3072)
@@ -65,6 +74,8 @@ def run_collection():
     ychackernews.collect(store_func=_collect)
     logger.info("Starting collection from Reddit.")
     redditor.collect(store_func=_collect)
+    logger.info("Starting collection from Espresso Queue.")
+    espresso.collect(sb_conn_str=sb_connection_str, store_func=_collect)
     # TODO: add collection from nextdoor
     # TODO: add collection from linkedin
 
@@ -99,10 +110,12 @@ def _download_beans(beans: list[Bean]) -> list[Bean]:
                 bean.image_url = bean.image_url or res.top_image
                 bean.source = individual.site_name(res) or bean.source
                 bean.created = int(res.publish_date.timestamp()) if res.publish_date else bean.created
+                bean.title = bean.title or res.title
     return [bean for bean in beans if bean.text and len(bean.text.split())>=MIN_ALLOWED_BODY_LEN]
 
 def run_indexing():
     logger.info("Starting Indexing")
+    # local index queue
     while not index_queue.empty():   
         beans = index_queue.get_nowait()
         beans = remotesack.filter_unstored_beans(beans) if beans else None
@@ -113,9 +126,10 @@ def run_indexing():
         logger.info("%d beans added from %s", res, beans[0].source)
         # send it out for trend analysis and augementation. these can happen in parallel
         # trimming down some of fields because otherwise writing embeddings back and for becomes a lot for persistence queue
-        beans = [Bean(url=bean.url, text=bean.text, summary=bean.summary, title=bean.title, tags=bean.tags) for bean in beans]
+        beans = [Bean(url=bean.url, text=bean.text, summary=bean.summary, title=bean.title, tags=bean.tags, updated=bean.updated) for bean in beans]
         trend_queue.put_nowait(beans) 
         aug_queue.put_nowait(beans)
+
 
 def _index(beans: list[Bean]):   
     # extract digest and prepare for pushing to beansack
@@ -235,7 +249,7 @@ def run_augmentation():
             },
             "$unset": { K_TEXT: ""}
         }
-    )
+    ) if bean.summary else DeleteOne(filter = {K_URL: bean.url})
     res = 0
     while not aug_queue.empty():
         res += _bulk_update([_make_update(bean) for bean in _augment(aug_queue.get_nowait())])
@@ -248,7 +262,7 @@ def _augment(beans: list[Bean]):
         try:
             # NOTE: ideally summary, highlight and keyphrase extraction can be called through the same api call
             # but the summary generation in JSON format and named entity extraction with the current model looks like shit
-            bean.summary = summarizer.run(bean.text) if len(bean.text.split()) > MIN_SUMMARIZER_BODY_LEN else bean.text
+            bean.summary = (summarizer.run(bean.text) or bean.summary) if len(bean.text.split()) > MIN_SUMMARIZER_BODY_LEN else bean.text
             digest = digestor.run(kind=bean.kind, text=bean.text)
             bean.title = digest.highlight or bean.title            
             bean.tags = digest.keyphrases[:5]  # take the first 5 tags and call it good          
