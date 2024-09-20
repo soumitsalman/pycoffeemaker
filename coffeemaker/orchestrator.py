@@ -194,9 +194,6 @@ def _cluster(beans: list[Bean]):
         # prepare update package
         to_update.update({bean.url:bean for bean in related_beans})
 
-        [print(bean.title) for bean in related_beans]
-        print("\n ==================\n") 
-
     embeddings = np.array([bean.embedding for bean in beans])
     for bean in beans:
         if not bean.cluster_id: # this is newly added
