@@ -155,3 +155,13 @@ https://underknown.com/feed/
 https://www.pastchronicle.com/feed/
 https://www.techopedia.com/feed
 https://www.phonearena.com/feed/reviews
+https://accessvector.net/rss.xml
+https://androidoffsec.withgoogle.com/index.xml
+https://www.runzero.com/blog/index.xml
+https://blog.stratumsecurity.com/rss/
+https://blog.assetnote.io/feed.xml
+https://www.atredis.com/blog?format=rss
+https://starlabs.sg/blog/index.xml
+https://labs.watchtowr.com/rss/
+http://feeds.feedburner.com/positiveTechnologiesResearchLab
+http://googleprojectzero.blogspot.com/feeds/posts/default

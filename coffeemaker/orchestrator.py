@@ -6,7 +6,7 @@ from pybeansack import utils
 from pybeansack.beansack import  Beansack
 from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
-from pymongo import DeleteOne, MongoClient, UpdateOne
+from pymongo import DeleteOne, MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 from collectors import espresso, individual, rssfeed, ychackernews, redditor
 from sklearn.cluster import AffinityPropagation, KMeans, MiniBatchKMeans
@@ -14,6 +14,8 @@ from langchain_groq import ChatGroq
 from coffeemaker.chains import *
 import persistqueue
 import queue
+from sklearn.metrics.pairwise import euclidean_distances
+import numpy as np
 
 MIN_ALLOWED_BODY_LEN = 75
 MIN_DOWNLOAD_BODY_LEN = 150 
@@ -28,13 +30,12 @@ logger = utils.create_logger("coffeemaker")
 # if storing fails in this round, it can succeed in the next
 index_queue: queue.Queue = None 
 trend_queue: persistqueue.Queue = None
-cluster_queue: persistqueue.Queue = None
 aug_queue: persistqueue.Queue = None
 
-sb_connection_str: str = None
 embedder: BeansackEmbeddings = None
 remotesack: Beansack = None
 categorystore: Collection = None 
+sb_connection_str: str = None
 category_eps: float = None
 cluster_eps: float = None
 
@@ -46,21 +47,20 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_file: s
     queue_dir=working_dir+"/.processingqueue"
     models_dir=working_dir+"/.models/"
 
-    global index_queue, trend_queue, cluster_queue, aug_queue
+    global index_queue, trend_queue, aug_queue
 
     index_queue = queue.Queue() # local queue
     trend_queue = persistqueue.Queue(queue_dir+"/trend", tempdir=queue_dir)
-    cluster_queue = persistqueue.Queue(queue_dir+"/cluster", tempdir=queue_dir)
     aug_queue = persistqueue.Queue(queue_dir+"/augment", tempdir=queue_dir)    
 
-    global embedder, remotesack, categorystore, category_eps, cluster_eps , sb_connection_str
+    global embedder, remotesack, categorystore, sb_connection_str, category_eps, cluster_eps    
     
-    sb_connection_str = sb_conn_str
     embedder = BeansackEmbeddings(model_path=models_dir+emb_file, context_len=4095)
     remotesack = Beansack(db_conn_str, embedder)
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
+    sb_connection_str = sb_conn_str
     category_eps = cat_eps
-    cluster_queue = clus_eps
+    cluster_eps = clus_eps
 
     global  digestor, summarizer  
 
@@ -131,7 +131,6 @@ def run_indexing():
         trend_queue.put_nowait(beans) 
         aug_queue.put_nowait(beans)
 
-
 def _index(beans: list[Bean]):   
     # extract digest and prepare for pushing to beansack
     for bean in beans:
@@ -176,29 +175,35 @@ def run_clustering():
     update_count = _bulk_update(updates)
     logger.info("%d beans updated with cluster_id", update_count)
 
-# TODO: change the whole clustering concept later
-# explanation: the current approach is heuristic because 
-# neither AffinityPropagation or MeanShift can handle large data set
-# K-means is reasonably decent but cannot function without a defined cluster-size
-# option 1: (currently implemented) use a fixed size for k-means based on the population size.
-# but this does not translate well in scenarios where the contents may be similar. option 2 may be better
-# option 2: find out an n-cluster size based on random samples and use that as a seed for K-Means
-# option 3: process each incoming batch iteratively. we cluster the collected batch using affinityPropagation or meanshift
-# and then union the cluster size with exiting cluters in the DB
-def _cluster(beans: list[Bean]):     
-    POPULATION_SIZE_THRESHOLD = 5000  
-    clusterer =  AffinityPropagation(damping=0.6, convergence_iter=50, random_state=23)\
-        if len(beans) < POPULATION_SIZE_THRESHOLD else \
-        KMeans(n_clusters=len(beans)//10, max_iter=300, random_state=23)
-    
-    labels = clusterer.fit([bean.embedding for bean in beans]).labels_
-    groups = {}
-    for index, label in enumerate(labels):
-        label = int(label)
-        if label not in groups:
-            groups[label] = beans[index].url
-        beans[index].cluster_id = groups[label]
-    return beans
+# current clustering approach
+# new beans (essentially beans without cluster gets priority for defining cluster)
+# for each bean without a cluster_id (essentially a new bean) fine the related beans within cluster_eps threshold
+# override their current cluster_id (if any) with the new bean's url
+# a bean is already in the update list then skip that one to include as a related item
+# if a new bean is found related to the query new bean, then it should be skipped for finding related beans for itself
+# keep running this loop through the whole collection until there is no bean without cluster id left
+# every time we find a cluster (a set of related beans) we add it to the update collection and return
+def _cluster(beans: list[Bean]):
+    to_update = {}
+    in_update_list = lambda b: b.url in to_update
+     
+    def assign_cluster_id(related_beans, cluster_id):
+        # assign cluster_id to all the related ones
+        for bean in related_beans:
+            bean.cluster_id = cluster_id
+        # prepare update package
+        to_update.update({bean.url:bean for bean in related_beans})
+
+        [print(bean.title) for bean in related_beans]
+        print("\n ==================\n") 
+
+    embeddings = np.array([bean.embedding for bean in beans])
+    for bean in beans:
+        if not bean.cluster_id: # this is newly added
+            distances = euclidean_distances([bean.embedding], embeddings)[0]
+            related_beans = [b for j, b in enumerate(beans) if distances[j] <= cluster_eps and not in_update_list(b)]
+            assign_cluster_id(related_beans, bean.url)
+    return list(to_update.values())
 
 def run_trend_ranking():
     logger.info("Starting Trend Ranking")

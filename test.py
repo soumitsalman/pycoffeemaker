@@ -64,10 +64,33 @@ def test_search():
     # write_datamodels(ic(orch.remotesack.text_search_beans(query=query, filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID:0})), "TEXT_SEARCH")
     write_datamodels(orch.remotesack.vector_search_beans(query=query, filter=updated_in(3), sort_by=LATEST, projection={K_EMBEDDING: 0, K_ID: 0}), "VECTOR_SEARCH")
 
-def test_clustering(): 
-    res = orch._cluster(orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_EMBEDDING: 1}))
-    make_update = lambda group, header: print("[", len(group), "]", header, "====\n", "\n\t".join(group) if isinstance(group[0], str) else group,"\n")
-    list(map(make_update, res, [items[0] for items in res]))
+def test_clustering():  
+    existing = orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1})    
+    sources = [
+        "https://accessvector.net/rss.xml",
+        "https://androidoffsec.withgoogle.com/index.xml",
+        "https://www.runzero.com/blog/index.xml",
+        "https://blog.stratumsecurity.com/rss/",
+        "https://blog.assetnote.io/feed.xml",
+        "https://www.atredis.com/blog?format=rss",
+        "https://starlabs.sg/blog/index.xml",
+        "https://labs.watchtowr.com/rss/",
+        "http://feeds.feedburner.com/positiveTechnologiesResearchLab",
+        "http://googleprojectzero.blogspot.com/feeds/posts/default"
+    ]
+    rssfeed.collect(sources = sources, store_func=lambda beans: existing.extend(orch._index(orch._download_beans(orch.remotesack.filter_unstored_beans(beans)))))
+    url_set = set()
+    duplicate_urls = []
+    for bean in orch._cluster(existing):
+        if bean.url in url_set:
+            duplicate_urls.append(bean.url)
+        else:
+            url_set.add(bean.url)
+    if duplicate_urls:
+        print(f"Duplicate URLs found: {duplicate_urls}")
+    else:
+        print("No duplicate URLs found.")
+    
 
 def test_clustering_live(): 
     orch.run_clustering()
@@ -101,9 +124,9 @@ orch.initialize(
 # test_writing()
 # test_chains()
 # test_collection()
-# test_clustering()
+test_clustering()
 # test_indexing_and_augment()
-test_whole_path_live()
+# test_whole_path_live()
 # test_search()
 # test_trend_ranking()
 

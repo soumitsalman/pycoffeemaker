@@ -101,3 +101,55 @@ def _extract_body_and_summary(entry) -> tuple[str, str]:
     if len(body or "") < len(summary or ""):
         body = summary
     return body, summary
+
+
+ # TODO: VERIFY AND ADD TO FEEDLIST
+ 
+# https://dustri.org/b/rss.xml
+
+# https://www.shielder.it/blog/index.xml
+
+# https://research.checkpoint.com/feed/
+# http://feeds.feedburner.com/feedburner/Talos
+# https://www.darknavy.org/index.xml
+# https://blog.dfsec.com/feed.xml
+
+# https://gamozolabs.github.io/feed.xml
+# https://github.blog/tag/github-security-lab/feed/
+
+# https://guidovranken.com/feed/
+# https://blog.impalabs.com/feed.xml
+
+# https://www.mdsec.co.uk/feed/
+
+# https://rtx.meta.security/feed.xml
+# https://microsoftedge.github.io/edgevr/feed.xml
+# https://blog.mozilla.org/attack-and-defense/feed/
+# https://research.nccgroup.com/feed/
+# https://blog.oversecured.com/feed.xml
+# https://swarm.ptsecurity.com/feed/
+# https://portswigger.net/research/rss
+# http://feeds.feedburner.com/positiveTechnologiesResearchLab
+# http://googleprojectzero.blogspot.com/feeds/posts/default
+
+# https://blog.ret2.io/feed.xml
+# https://medium.com/feed/realmodelabs
+# https://codeanlabs.com/blog/category/research/feed/
+# https://rhinosecuritylabs.com/feed/
+# https://ssd-disclosure.com/feed/
+
+# https://blog.stratumsecurity.com/rss/
+
+# https://labs.taszk.io/blog/index.xml
+# https://blog.teddykatz.com/feed.xml
+# https://windows-internals.com/feed/
+# https://ysamm.com/?feed=rss2
+# https://www.zerodayinitiative.com/blog?format=rss
+# https://ysanatomic.github.io/feed.xml
+# https://bugs.xdavidhu.me/feed.xml
+# https://jub0bs.com/posts/index.xml
+# https://blog.kylebot.net/atom.xml
+# http://blog.pi3.com.pl/?feed=rss2
+# https://research.securitum.com/feed/
+# https://secret.club/feed.xml
+# https://spaceraccoon.dev/feed/
