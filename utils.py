@@ -1,3 +1,4 @@
+import math
 import sys
 import logging
 import tiktoken
@@ -18,9 +19,11 @@ def create_logger(name: str):
 
 _encoding = tiktoken.get_encoding("cl100k_base")
 
-def chunk(input: str, n_ctx) -> list[str]:
+def chunk(input: str, context_len: int) -> list[str]:
     tokens = _encoding.encode(input)
-    return [_encoding.decode(tokens[start:start+n_ctx]) for start in range(0, len(tokens), n_ctx)]
+    num_chunks = math.ceil(len(tokens) / context_len)
+    chunk_size = math.ceil(len(tokens) / num_chunks)
+    return [_encoding.decode(tokens[start : start+chunk_size]) for start in range(0, len(tokens), chunk_size)]
 
 def truncate(input: str, n_ctx) -> str:
     tokens = _encoding.encode(input)
