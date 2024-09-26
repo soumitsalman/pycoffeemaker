@@ -13,6 +13,7 @@ def load_from_url(url):
         article = newspaper.Article(url)
         article.download()
         article.parse()
+        article.nlp()
         return article
     except newspaper.article.ArticleException:
         return None

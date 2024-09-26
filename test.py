@@ -20,6 +20,7 @@ def write_datamodels(items, file_name: str = None):
     if items:
         with open(f".test/{file_name or ic(items[0].source)}.json", 'w') as file:
             json.dump([bean.model_dump(exclude_unset=True, exclude_none=True) for bean in items], file)
+        return len(items)
             
 def write_text(text, file_name):
     with open(f".test/{file_name}", 'w') as file:
@@ -38,8 +39,7 @@ def test_collection():
     #     to_json = lambda bean: ServiceBusMessage(json.dumps({K_ID: f"TEST:{bean.url}", K_SOURCE: "TEST", K_URL: bean.url, K_CREATED: int(time.time())}))
     #     rssfeed.collect(sources=sources, store_func=lambda beans: index_queue.send_messages([to_json(bean) for bean in beans]))
 
-    espresso.collect(orch.sb_connection_str, store_func=lambda beans: write_datamodels(orch._download_beans(beans), "ESPRESSO-QUEUE"))
-
+    espresso.collect(orch.sb_connection_str, store_func=lambda beans: write_datamodels(orch._download(beans), "ESPRESSO-QUEUE"))
 
 def test_whole_path_live():
     sources = [
@@ -54,9 +54,10 @@ def test_whole_path_live():
     # orch.run_trend_ranking()
     orch.run_augmentation()
 
-def test_indexing_and_augment():
-    source = "https://247wallst.com/feed/"
-    write_datamodels(orch._augment(orch._index(rssfeed.collect_from(source))), "TEST-INDEXING")
+def test_augment():
+    source = "https://regtechtimes.com/feed/"
+    # return write_datamodels(orch._augment(orch._index(orch._download(rssfeed.collect_from(source)))), "TEST-AUGMENT")
+    return write_datamodels(orch._augment(rssfeed.collect_from(source)), "TEST-AUGMENT")
   
 def test_search():
     query = "profession: pilot"
@@ -78,7 +79,7 @@ def test_clustering():
         "http://feeds.feedburner.com/positiveTechnologiesResearchLab",
         "http://googleprojectzero.blogspot.com/feeds/posts/default"
     ]
-    rssfeed.collect(sources = sources, store_func=lambda beans: existing.extend(orch._index(orch._download_beans(orch.remotesack.filter_unstored_beans(beans)))))
+    rssfeed.collect(sources = sources, store_func=lambda beans: existing.extend(orch._index(orch._download(orch.remotesack.filter_unstored_beans(beans)))))
     url_set = set()
     duplicate_urls = []
     for bean in orch._cluster(existing):
@@ -90,7 +91,6 @@ def test_clustering():
         print(f"Duplicate URLs found: {duplicate_urls}")
     else:
         print("No duplicate URLs found.")
-    
 
 def test_clustering_live(): 
     orch.run_clustering()
@@ -114,20 +114,21 @@ orch.initialize(
     os.getenv("DB_CONNECTION_STRING"), 
     os.getenv("SB_CONNECTION_STRING"),
     os.getenv("WORKING_DIR", "."), 
-    os.getenv("EMBEDDER_FILE"),
-    os.getenv("GROQ_API_KEY"),
+    os.getenv("EMBEDDER_PATH"),
+    None,
     float(os.getenv('CATEGORY_EPS')),
     float(os.getenv('CLUSTER_EPS')))
    
 
 ### TEST CALLS
+start = time.time()
 # test_writing()
 # test_chains()
 # test_collection()
-test_clustering()
-# test_indexing_and_augment()
+# test_clustering()
+res = test_augment()
 # test_whole_path_live()
 # test_search()
 # test_trend_ranking()
-
+print(f"Time taken: {(time.time() - start)/res} seconds per item")
 

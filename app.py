@@ -17,8 +17,8 @@ orch.initialize(
     os.getenv("DB_CONNECTION_STRING"),
     os.getenv("SB_CONNECTION_STRING"), 
     WORKING_DIR, 
-    os.getenv("EMBEDDER_FILE"),
-    os.getenv("GROQ_API_KEY"),   
+    os.getenv("EMBEDDER_PATH"),
+    None,   
     float(os.getenv('CATEGORY_EPS')),
     float(os.getenv('CLUSTER_EPS')))
 

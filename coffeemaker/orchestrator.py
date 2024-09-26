@@ -9,20 +9,25 @@ from pybeansack.datamodels import *
 from pymongo import DeleteOne, MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 from collectors import espresso, individual, rssfeed, ychackernews, redditor
-from sklearn.cluster import AffinityPropagation, KMeans, MiniBatchKMeans
-from langchain_groq import ChatGroq
+from langchain_community.llms import LlamaCpp
+# from langchain_groq import ChatGroq
 from coffeemaker.chains import *
 import persistqueue
 import queue
 from sklearn.metrics.pairwise import euclidean_distances
 import numpy as np
 
-MIN_ALLOWED_BODY_LEN = 75
-MIN_DOWNLOAD_BODY_LEN = 150 
-MIN_SUMMARIZER_BODY_LEN = 150
+# if a bean.text is less than 75 words, it is not worth indexing
+ALLOWED_BODY_LEN = 50   
+allowed_body = lambda bean: bean.text and len(bean.text.split()) >= ALLOWED_BODY_LEN
+# if a bean.text is more than 150 words, then assume it is a good candidate for indexing and does not need to be downloaded again
+NEEDS_DOWNLOAD_BODY_LEN = 150 
+needs_download = lambda bean: not bean.text or len(bean.text.split()) < NEEDS_DOWNLOAD_BODY_LEN
+# if a bean.summary is less than 150 words, it is not worth summarizing again
+NEEDS_SUMMARY_BODY_LEN = 150
+needs_summary = lambda bean: len(bean.text.split()) >= NEEDS_SUMMARY_BODY_LEN
+
 MAX_CATEGORIES = 5
-CLEANUP_WINDOW = 30
-N_THREADS = os.cpu_count()
 
 logger = utils.create_logger("coffeemaker")
 
@@ -32,20 +37,21 @@ index_queue: queue.Queue = None
 trend_queue: persistqueue.Queue = None
 aug_queue: persistqueue.Queue = None
 
-embedder: BeansackEmbeddings = None
 remotesack: Beansack = None
 categorystore: Collection = None 
 sb_connection_str: str = None
 category_eps: float = None
 cluster_eps: float = None
 
-digestor: DigestExtractor = None
-summarizer: Summarizer = None
-keyphraser: KeyphraseExtractor = None
+# embedder_path: str = None
+# title_extractor_path: str = None
+# digestor: DigestExtractor = None
+# summarizer: Summarizer = None
+# keyphraser: KeyphraseExtractor = None
 
-def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_file: str, api_key: str, cat_eps: float, clus_eps: float):
+def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_path: str, cat_eps: float, clus_eps: float):
     queue_dir=working_dir+"/.processingqueue"
-    models_dir=working_dir+"/.models/"
+    # models_dir=working_dir+"/.models/"
 
     global index_queue, trend_queue, aug_queue
 
@@ -53,20 +59,20 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_file: s
     trend_queue = persistqueue.Queue(queue_dir+"/trend", tempdir=queue_dir)
     aug_queue = persistqueue.Queue(queue_dir+"/augment", tempdir=queue_dir)    
 
-    global embedder, remotesack, categorystore, sb_connection_str, category_eps, cluster_eps    
+    global remotesack, categorystore, sb_connection_str, category_eps, cluster_eps    
     
-    embedder = BeansackEmbeddings(model_path=models_dir+emb_file, context_len=4095)
-    remotesack = Beansack(db_conn_str, embedder)
+    remotesack = Beansack(db_conn_str, BeansackEmbeddings(model_path=emb_path, context_len=4095))
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
     sb_connection_str = sb_conn_str
     category_eps = cat_eps
     cluster_eps = clus_eps
 
-    global  digestor, summarizer  
-
-    llm = ChatGroq(api_key=api_key, model="llama3-8b-8192", temperature=0.1, verbose=False, streaming=False)
-    digestor = DigestExtractor(llm, 3072) 
-    summarizer = Summarizer(llm, 3072)
+    # global title_extractor_path
+    # title_extractor_path = llm_path
+    # llm = LlamaCpp(model_path=models_dir+api_key, n_ctx=4095, n_threads=os.cpu_count(), embedding=False, verbose=False)
+    # digestor = DigestExtractor(llm, 2048) 
+    # summarizer = LocalSummarizer(model_path=models_dir+api_key, context_len=2048)
+    # keyphraser = KeyphraseExtractor()
 
 def run_collection():
     logger.info("Starting collection from rss feeds.")
@@ -95,24 +101,24 @@ def _collect(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
         chatters = [item[1] for item in items]
 
     if beans:            
-        downloaded = _download_beans(remotesack.filter_unstored_beans(beans))
+        downloaded = _download(remotesack.filter_unstored_beans(beans))
         if downloaded:
             logger.info("%d (out of %d) beans downloaded from %s", len(downloaded), len(beans), downloaded[0].source)
             index_queue.put_nowait(downloaded)
     if chatters:            
         trend_queue.put_nowait(chatters)
 
-def _download_beans(beans: list[Bean]) -> list[Bean]:
-    for bean in beans:
-        if (bean.kind in [NEWS, BLOG]) and (not bean.image_url or not bean.text or len(bean.text.split())<MIN_DOWNLOAD_BODY_LEN):
+def _download(beans: list[Bean]) -> list[Bean]:
+    for bean in beans:           
+        if (bean.kind in [NEWS, BLOG]) and (not bean.image_url or needs_download(bean)):
             res = individual.load_from_url(bean.url)
             if res and res.text:  # this is a decent indicator if loading from the url even worked 
                 bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()
                 bean.image_url = bean.image_url or res.top_image
                 bean.source = individual.site_name(res) or bean.source
-                bean.created = int(res.publish_date.timestamp()) if res.publish_date else bean.created
+                bean.created = bean.created or int(min(res.publish_date.timestamp() if res.publish_date else time.time(), time.time()))
                 bean.title = bean.title or res.title
-    return [bean for bean in beans if bean.text and len(bean.text.split())>=MIN_ALLOWED_BODY_LEN]
+    return [bean for bean in beans if allowed_body(bean)]
 
 def run_indexing():
     logger.info("Starting Indexing")
@@ -133,6 +139,7 @@ def run_indexing():
 
 def _index(beans: list[Bean]):   
     # extract digest and prepare for pushing to beansack
+    embedder = remotesack.embedder
     for bean in beans:
         try:
             bean.embedding = embedder.embed(bean.digest())            
@@ -262,17 +269,23 @@ def run_augmentation():
     logger.info("%d beans updated with summary, tldr & tags", res)
 
 def _augment(beans: list[Bean]):
+    return _digestify(_tagify(beans))
+
+def _digestify(beans: list[Bean]):
+    digestor = LocalDigestor()
+    for bean in beans: 
+        if needs_summary(bean):       
+            digest = digestor.run(bean.text)
+            bean.summary = digest.summary
+            bean.title = digest.highlight
+        else:
+            bean.summary = bean.text
+    return beans     
+
+def _tagify(beans: list[Bean]):
+    keyphraser = LocalKeyphraseExtractor()
     for bean in beans:
-        # putting this in try catch because these have remote call and are not always reliable
-        try:
-            # NOTE: ideally summary, highlight and keyphrase extraction can be called through the same api call
-            # but the summary generation in JSON format and named entity extraction with the current model looks like shit
-            bean.summary = (summarizer.run(bean.text) or bean.summary or bean.text) if len(bean.text.split()) > MIN_SUMMARIZER_BODY_LEN else bean.text
-            digest = digestor.run(kind=bean.kind, text=bean.text)
-            bean.title = digest.highlight or bean.title            
-            bean.tags = digest.keyphrases[:5]  # take the first 5 tags and call it good          
-        except:
-            logger.warning("Augmenting failed for %s", bean.url)   
+        bean.tags = keyphraser.run(text=bean.text)[:10]
     return beans
 
 BULK_CHUNK_SIZE = 20000
