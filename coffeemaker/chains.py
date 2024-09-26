@@ -16,7 +16,7 @@ from itertools import chain
 from pydantic import BaseModel, Field
 import re
 from gliner import GLiNER
-from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 class Digest(BaseModel):
     # title: str = Field(description="title of the content")
