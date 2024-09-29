@@ -55,9 +55,14 @@ def test_whole_path_live():
     orch.run_augmentation()
 
 def test_augment():
-    source = "https://regtechtimes.com/feed/"
-    # return write_datamodels(orch._augment(orch._index(orch._download(rssfeed.collect_from(source)))), "TEST-AUGMENT")
-    return write_datamodels(orch._augment(rssfeed.collect_from(source)), "TEST-AUGMENT")
+    sources = [
+        "https://regtechtimes.com/feed/",
+        "https://fedoramagazine.org/feed/"
+    ]
+        
+    digestor = LocalDigestor(cache_dir="./.models")
+    keyphraser = LocalKeyphraseExtractor(cache_dir="./.models")
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans, digestor, keyphraser), "TEST-AUGMENT"))
   
 def test_search():
     query = "profession: pilot"
@@ -126,9 +131,9 @@ start = time.time()
 # test_chains()
 # test_collection()
 # test_clustering()
-res = test_augment()
+test_augment()
 # test_whole_path_live()
 # test_search()
 # test_trend_ranking()
-print(f"Time taken: {(time.time() - start)/res} seconds per item")
+print(f"Time taken: {(time.time() - start)} seconds per item")
 

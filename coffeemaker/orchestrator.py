@@ -43,6 +43,7 @@ sb_connection_str: str = None
 category_eps: float = None
 cluster_eps: float = None
 
+models_dir: str = None
 # embedder_path: str = None
 # title_extractor_path: str = None
 # digestor: DigestExtractor = None
@@ -50,8 +51,7 @@ cluster_eps: float = None
 # keyphraser: KeyphraseExtractor = None
 
 def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_path: str, cat_eps: float, clus_eps: float):
-    queue_dir=working_dir+"/.processingqueue"
-    # models_dir=working_dir+"/.models/"
+    queue_dir=working_dir+"/.processingqueue"    
 
     global index_queue, trend_queue, aug_queue
 
@@ -66,6 +66,9 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
     sb_connection_str = sb_conn_str
     category_eps = cat_eps
     cluster_eps = clus_eps
+
+    global models_dir
+    models_dir = working_dir+"/.models/"
 
     # global title_extractor_path
     # title_extractor_path = llm_path
@@ -263,16 +266,17 @@ def run_augmentation():
         }
     ) if bean.summary else DeleteOne(filter = {K_URL: bean.url})
     res = 0
+    digestor = LocalDigestor(cache_dir=models_dir)
+    keyphraser = LocalKeyphraseExtractor(cache_dir=models_dir)
     while not aug_queue.empty():
-        res += _bulk_update([_make_update(bean) for bean in _augment(aug_queue.get_nowait())])
+        res += _bulk_update([_make_update(bean) for bean in _augment(aug_queue.get_nowait(), digestor, keyphraser)])
         aug_queue.task_done()
     logger.info("%d beans updated with summary, tldr & tags", res)
 
-def _augment(beans: list[Bean]):
-    return _digestify(_tagify(beans))
+def _augment(beans: list[Bean], digestor, keyphraser):
+    return _digestify(_tagify(beans, keyphraser), digestor)
 
-def _digestify(beans: list[Bean]):
-    digestor = LocalDigestor()
+def _digestify(beans: list[Bean], digestor):    
     for bean in beans: 
         if needs_summary(bean):       
             digest = digestor.run(bean.text)
@@ -282,8 +286,7 @@ def _digestify(beans: list[Bean]):
             bean.summary = bean.text
     return beans     
 
-def _tagify(beans: list[Bean]):
-    keyphraser = LocalKeyphraseExtractor()
+def _tagify(beans: list[Bean], keyphraser):   
     for bean in beans:
         bean.tags = keyphraser.run(text=bean.text)[:10]
     return beans

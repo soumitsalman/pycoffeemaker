@@ -49,7 +49,7 @@ class LocalDigestor:
         
         # generate a highlight from the first chunk
         highlight = self.tokenizer.decode(
-            self.model.generate(chunks[0], max_length=48, min_length=20, length_penalty=2.0, num_beams=4, early_stopping=True)[0], 
+            self.model.generate(chunks[0], max_length=48, min_length=20, length_penalty=2.0, num_beams=4, early_stopping=False)[0], 
             skip_special_tokens=True)
         
         # generate an initial summary from the chunks and then generate a cumulative summary from the initial summary
