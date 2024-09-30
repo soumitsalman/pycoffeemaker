@@ -45,7 +45,7 @@ db.beans.createIndex(
       categories: 1,
       cluster_id: 1,
       kind: 1,
-      newest: -1,
+      created: -1,
       trend_score: -1
   },
   {
@@ -59,7 +59,7 @@ db.beans.createIndex(
       cluster_id: 1,
       kind: 1,
       trend_score: -1,
-      latest: -1,
+      updated: -1,
       
   },
   {
