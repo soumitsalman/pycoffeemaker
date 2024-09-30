@@ -1,8 +1,4 @@
 llama-cpp-python
-langchain
-langchain-community
-langchain-groq
-langchain-text-splitters
 numpy
 pymongo
 tiktoken
@@ -23,3 +19,4 @@ gliner
 retry
 azure-servicebus
 transformers
+openai

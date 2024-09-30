@@ -35,7 +35,12 @@ NEWEST_AND_TRENDING = {K_CREATED: -1, K_TRENDSCORE: -1}
 logger = create_logger("beansack")
 
 class Beansack:
-    def __init__(self, conn_str: str, embedder: BeansackEmbeddings = None):   
+    beanstore: Collection
+    chatterstore: Collection
+    sourcestore: Collection
+    embedder: Embeddings
+
+    def __init__(self, conn_str: str, embedder: Embeddings = None):   
              
         client = MongoClient(
             conn_str, 
@@ -48,7 +53,7 @@ class Beansack:
         self.beanstore: Collection = client[BEANSACK][BEANS]
         self.chatterstore: Collection = client[BEANSACK][CHATTERS]        
         self.sourcestore: Collection = client[BEANSACK][SOURCES]  
-        self.embedder: BeansackEmbeddings = embedder
+        self.embedder: Embeddings = embedder
 
     ##########################
     ## STORING AND INDEXING ##
@@ -142,7 +147,7 @@ class Beansack:
         result = self.beanstore.aggregate(pipeline)
         return next(iter(result))['total_count'] if result else 0
     
-    def query_top_tags(self, filter, limit = None):
+    def query_trending_tags(self, filter, skip = 0, limit = None):
         match_filter = {
             "tags": {"$exists": True}
         }
@@ -161,7 +166,7 @@ class Beansack:
                     "updated": {"$first": "$updated"}
                 }
             },
-            {"$sort": TRENDING_AND_LATEST},
+            {"$sort": LATEST_AND_TRENDING},
             {
                 "$group": {
                     "_id": "$url",
@@ -172,7 +177,7 @@ class Beansack:
                     "updated": {"$first": "$updated"}
                 }
             },
-            {"$sort": TRENDING_AND_LATEST},
+            {"$sort": LATEST_AND_TRENDING},
             {
                 "$group": {
                     "_id": "$cluster_id",
@@ -183,8 +188,10 @@ class Beansack:
                     "updated": {"$first": "$updated"}
                 }
             },
-            {"$sort": TRENDING_AND_LATEST}
+            {"$sort": LATEST_AND_TRENDING}
         ]
+        if skip:
+            pipeline.append({"$skip": skip})    
         if limit:
             pipeline.append({"$limit": limit})   
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
