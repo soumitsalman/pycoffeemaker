@@ -1,8 +1,6 @@
 import time
-from bs4 import BeautifulSoup
 import requests
 from .individual import *
-from pybeansack.utils import create_logger
 from pybeansack.datamodels import *
 from icecream import ic
 
@@ -10,7 +8,6 @@ TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
 COLLECTION_URL_TEMPLATE = "https://hacker-news.firebaseio.com/v0/item/%d.json"
 STORY_URL_TEMPLATE = "https://news.ycombinator.com/item?id=%d"
 YC = "ycombinator"
-logger = create_logger("ychackernews")
 
 def collect(store_func):
     entries = requests.get(TOP_STORIES_URL, headers={"User-Agent": USER_AGENT}).json()
@@ -40,6 +37,7 @@ def _extract(id: int, collection_time: int):
                 container_url=STORY_URL_TEMPLATE % id,
                 likes=entry.get('score'),
                 comments=len(entry.get('kids', [])))
-    except Exception as err:
-        logger.warning("Failed loading from %s. Error: %s", COLLECTION_URL_TEMPLATE%id, str(err))
+    except:
+        return None
+        # logger.warning("Failed loading from %s. Error: %s", COLLECTION_URL_TEMPLATE%id, str(err))
 

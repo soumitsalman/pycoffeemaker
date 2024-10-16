@@ -3,6 +3,19 @@ import time
 from icecream import ic
 import os
 from dotenv import load_dotenv
+import logging
+
+logging.basicConfig(
+    level=logging.INFO, 
+    datefmt="%Y-%m-%d %H:%M:%S",
+    format="%(asctime)s|%(name)s|%(levelname)s|%(message)s"
+)
+logging.getLogger('httpx').setLevel(logging.ERROR)
+logging.getLogger('openai._base_client').setLevel(logging.ERROR)
+logging.getLogger('persistqueue').setLevel(logging.ERROR)
+logging.getLogger('persistqueue.serializers.pickle').setLevel(logging.ERROR)
+logging.getLogger('pymongo.client').setLevel(logging.ERROR)
+logger = logging.getLogger(__name__)
     
 load_dotenv()
 
@@ -12,7 +25,7 @@ from pybeansack.beansack import *
 from pybeansack.datamodels import *
 from collectors import rssfeed, ychackernews, individual, redditor, espresso
 from coffeemaker import orchestrator as orch
-from coffeemaker.chains import *
+from coffeemaker.digestors import *
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 import random
 
@@ -41,28 +54,12 @@ def test_collection():
 
     espresso.collect(orch.sb_connection_str, store_func=lambda beans: write_datamodels(orch._download(beans), "ESPRESSO-QUEUE"))
 
-def test_whole_path_live():
-    sources = [
-        "https://www.nationalreview.com/feed/",
-        "https://www.moneytalksnews.com/feed/"
-    ]
-    # rssfeed.collect(sources=sources, store_func=orch._collect)
-    # redditor.collect(store_func=orch._collect)
-    espresso.collect(orch.sb_connection_str, orch._collect)
-    orch.run_indexing()
-    # orch.run_clustering()
-    # orch.run_trend_ranking()
-    orch.run_augmentation()
-
 def test_augment():
     sources = [
         "https://regtechtimes.com/feed/",
         "https://fedoramagazine.org/feed/"
     ]
-        
-    digestor = LocalDigestor(cache_dir="./.models")
-    keyphraser = LocalKeyphraseExtractor(cache_dir="./.models")
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans, digestor, keyphraser), "TEST-AUGMENT"))
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans[:2])))
   
 def test_search():
     query = "profession: pilot"
@@ -114,26 +111,39 @@ def test_trend_ranking():
     cluster_sizes=orch.remotesack.count_related_beans(urls)
     ic([orch._make_trend_update(item, chatters, cluster_sizes) for item in items])
 
+def test_whole_path_live():
+    # sources = [
+    #     "https://www.nationalreview.com/feed/",
+    #     "https://www.moneytalksnews.com/feed/"
+    # ]
+    # rssfeed.collect(sources=sources, store_func=orch._collect)
+    ychackernews.collect(store_func=orch._collect)
+    # redditor.collect(store_func=orch._collect)
+    # espresso.collect(orch.sb_connection_str, orch._collect)
+    orch.run_indexing()
+    orch.run_clustering()
+    orch.run_trend_ranking()
+    orch.run_augmentation()
 
 orch.initialize(
     os.getenv("DB_CONNECTION_STRING"), 
     os.getenv("SB_CONNECTION_STRING"),
     os.getenv("WORKING_DIR", "."), 
     os.getenv("EMBEDDER_PATH"),
-    None,
+    os.getenv("LLM_BASE_URL"),
+    os.getenv("LLM_API_KEY"),
+    os.getenv("LLM_MODEL"),
     float(os.getenv('CATEGORY_EPS')),
     float(os.getenv('CLUSTER_EPS')))
    
 
 ### TEST CALLS
 start = time.time()
-# test_writing()
-# test_chains()
 # test_collection()
 # test_clustering()
-test_augment()
-# test_whole_path_live()
+# test_augment()
+test_whole_path_live()
 # test_search()
 # test_trend_ranking()
-print(f"Time taken: {(time.time() - start)} seconds per item")
+logger.info("execution time,%d", (time.time() - start))
 

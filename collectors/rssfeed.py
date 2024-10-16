@@ -1,15 +1,11 @@
 import os
 import feedparser
-import tldextract
-from pybeansack.utils import create_logger
 from pybeansack.datamodels import Bean, NEWS
 from .individual import *
 import time
 from icecream import ic
 
 DEFAULT_FEEDS = os.path.dirname(os.path.abspath(__file__))+"/rssfeedsources.txt"
-
-logger = create_logger("rssfeed")
 
 # reads the list of feeds from a file path and collects
 # if sources is a string then it will be treated as a file path or else it will be a an array
@@ -33,8 +29,7 @@ def collect_from(feed_url: str, content_kind = NEWS):
         # collect only the ones that is english. if language is not specified, assume it is english
         source_name = extract_source_name(feed)
         return [_to_bean(entry, source_name, content_kind, collection_time) for entry in feed.entries if entry.get("language", "en-US").startswith("en-")]
-    except Exception as err:
-        ic(err)
+    except:
         return None
 
 def _to_bean(entry, source_name, kind, collection_time):
