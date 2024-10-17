@@ -16,6 +16,8 @@ import queue
 from sklearn.metrics.pairwise import euclidean_distances
 import numpy as np
 
+logger = lambda: logging.getLogger("orchestrator")
+
 # if a bean.text is less than 75 words, it is not worth indexing
 ALLOWED_BODY_LEN = 50   
 allowed_body = lambda bean: bean.text and len(bean.text.split()) >= ALLOWED_BODY_LEN
@@ -44,7 +46,7 @@ digestor: LocalDigestor = None
 models_dir: str = None
 
 
-def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_path: str, llm_api_key: str, llm_model: str, cat_eps: float, clus_eps: float):
+def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_path: str, llm_base_url: str, llm_api_key: str, llm_model: str, cat_eps: float, clus_eps: float):
     queue_dir=working_dir+"/.processingqueue"    
 
     global index_queue, trend_queue, aug_queue
@@ -63,17 +65,18 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
     cluster_eps = clus_eps
 
     global digestor
-    # digestor = LocalDigestor(model_path=llm_path, context_len=8192)
-    digestor = RemoteDigestor(base_url=llm_path, api_key=llm_api_key, model_name=llm_model, context_len=8192)
+    digestor = LocalDigestor(model_path=llm_path, context_len=8192) \
+        if llm_path else \
+            RemoteDigestor(base_url=llm_base_url, api_key=llm_api_key, model_name=llm_model, context_len=8192)
 
 def run_collection():
-    _get_logger().info("collecting|%s", "rssfeed")
+    logger().info("collecting|%s", "rssfeed")
     rssfeed.collect(store_func=_collect)
-    _get_logger().info("collecting|%s", "ychackernews")
+    logger().info("collecting|%s", "ychackernews")
     ychackernews.collect(store_func=_collect)
-    _get_logger().info("collecting|%s", "redditor")
+    logger().info("collecting|%s", "redditor")
     redditor.collect(store_func=_collect)
-    _get_logger().info("collecting|%s", "espresso")
+    logger().info("collecting|%s", "espresso")
     espresso.collect(sb_conn_str=sb_connection_str, store_func=_collect)
     # TODO: add collection from nextdoor
     # TODO: add collection from linkedin
@@ -94,7 +97,7 @@ def _collect(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
     if beans:            
         downloaded = _download(remotesack.filter_unstored_beans(beans))
         if downloaded:
-            _get_logger().info("collected|%s|%d", downloaded[0].source, len(downloaded))
+            logger().info("collected|%s|%d", downloaded[0].source, len(downloaded))
             index_queue.put_nowait(downloaded)
     if chatters:            
         trend_queue.put_nowait(chatters)
@@ -112,7 +115,7 @@ def _download(beans: list[Bean]) -> list[Bean]:
     return [bean for bean in beans if allowed_body(bean)]
 
 def run_indexing():
-    _get_logger().info("indexing")
+    logger().info("indexing")
     # local index queue
     while not index_queue.empty():   
         beans = index_queue.get_nowait()
@@ -121,7 +124,7 @@ def run_indexing():
         if not beans:   
             continue                        
         res = remotesack.store_beans(beans)
-        _get_logger().info("indexed|%s|%d", beans[0].source, res)
+        logger().info("indexed|%s|%d", beans[0].source, res)
         # send it out for trend analysis and augementation. these can happen in parallel
         # trimming down the embedding fields because otherwise writing embeddings back and for becomes a lot for persistence queue
         for bean in beans:
@@ -138,7 +141,7 @@ def _index(beans: list[Bean]):
             bean.categories = _find_categories(bean)
             bean.created = min(bean.created, bean.updated) # sometimes due to time zone issue the created dates look wierd. this is a patch
         except:
-            _get_logger().error("failed indexing|%s", bean.url)
+            logger().error("failed indexing|%s", bean.url)
     return [bean for bean in beans if bean.embedding]
 
 def _find_categories(bean: Bean):    
@@ -166,13 +169,13 @@ def _find_categories(bean: Bean):
     return list(set(ids)) if ids else None
 
 def run_clustering():
-    _get_logger().info("clustering")
+    logger().info("clustering")
     # TODO: in future optimize the beans that need to be clustered.
     # right now we are just clustering the whole database
     beans = _cluster(remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1}))   
     updates = [UpdateOne({K_URL: bean.url},{"$set": {K_CLUSTER_ID: bean.cluster_id}}) for bean in beans]
     update_count = _bulk_update(updates)
-    _get_logger().info("clustered|%d", update_count)
+    logger().info("clustered|%d", update_count)
 
 # current clustering approach
 # new beans (essentially beans without cluster gets priority for defining cluster)
@@ -202,7 +205,7 @@ def _cluster(beans: list[Bean]):
     return list(to_update.values())
 
 def run_trend_ranking():
-    _get_logger().info("trendranking")
+    logger().info("trendranking")
     batch = {}
     current_time = int(time.time())
     while not trend_queue.empty():
@@ -220,7 +223,7 @@ def run_trend_ranking():
     chatters=remotesack.get_latest_chatter_stats(urls)
     cluster_sizes=remotesack.count_related_beans(urls)
     res = _bulk_update([_make_trend_update(item, chatters, cluster_sizes, current_time) for item in items])
-    _get_logger().info("trendranked|%d", res)
+    logger().info("trendranked|%d", res)
 
 def _make_trend_update(item, chatters, cluster_sizes, updated):
     update = {
@@ -238,7 +241,7 @@ def _make_trend_update(item, chatters, cluster_sizes, updated):
     return UpdateOne({K_URL: item.url}, {"$set": update})
 
 def run_augmentation():
-    _get_logger().info("augmentating")
+    logger().info("augmentating")
     _make_update = lambda bean: UpdateOne(
         filter = {K_URL: bean.url}, 
         update={
@@ -253,7 +256,7 @@ def run_augmentation():
     while not aug_queue.empty():
         beans = _augment(aug_queue.get_nowait())
         res = remotesack.beanstore.bulk_write([_make_update(bean) for bean in beans], ordered=False, bypass_document_validation=True).modified_count
-        _get_logger().info("augmented|%s|%d", beans[0].source, res)
+        logger().info("augmented|%s|%d", beans[0].source, res)
         aug_queue.task_done()
     
 def _augment(beans: list[Bean]):
@@ -264,18 +267,15 @@ def _augment(beans: list[Bean]):
                 bean.summary = digest.summary
                 bean.title = digest.title
                 bean.tags = digest.tags
-        except:
-            _get_logger().error("failed augmenting|%s", bean.url)
+        except Exception as e:
+            logger().error("failed augmenting|%s|%s", bean.url, e)
     return beans     
 
 def run_cleanup():
-    _get_logger().info("cleaning up")
+    logger().info("cleaning up")
     bcount, ccount = remotesack.delete_old(window=30)
-    _get_logger().info("cleaned up|beans|%d", bcount)
-    _get_logger().info("cleaned up|chatters|%d", ccount)
-
-def _get_logger():
-    return logging.getLogger("orchestrator")
+    logger().info("cleaned up|beans|%d", bcount)
+    logger().info("cleaned up|chatters|%d", ccount)
 
 BULK_CHUNK_SIZE = 20000
 FIVE_MINUTES = 300
@@ -286,7 +286,7 @@ def _bulk_update(updates):
         update_count += _write_batch(updates, i)
     return update_count
 
-@retry(tries=3, delay=FIVE_MINUTES, max_delay=TEN_MINUTES, logger=_get_logger())
+@retry(tries=3, delay=FIVE_MINUTES, max_delay=TEN_MINUTES, logger=logger())
 def _write_batch(updates, start_index):
     return remotesack.beanstore.bulk_write(updates[start_index: start_index+BULK_CHUNK_SIZE], ordered=False, bypass_document_validation=True).modified_count
 

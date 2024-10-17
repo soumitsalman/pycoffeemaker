@@ -20,3 +20,4 @@ retry
 azure-servicebus
 transformers
 openai
+peft

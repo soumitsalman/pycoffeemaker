@@ -18,13 +18,23 @@ class Digest(BaseModel):
     summary: str = Field(description="A summary of the content")
     tags: list[str] = Field(description="A list of tags that describe the content")
 
-DIGESTOR_PROMPT = """TASK: Create a concise summary and title for the INPUT content. If the content is in 1st person, keep the narrative style as prose. In addition extract the names of the main entities such as: company, organization, person, catastrophic event, product, technology etc. as tags
-title should be 10 - 20 words, summary should be 100 - 200 words and tags (entities) should a string of comma separated phrases
-INPUT:
-```{kind}
-{text}
-```
-OUTPUT FORMAT: A json object with fields 'title', 'summary' and 'tags'"""
+# DIGESTOR_PROMPT = """<|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
+# <|start_header_id|>user<|end_header_id|>
+# TASK: Create a concise summary and title for the INPUT content. If the content is in 1st person, keep the narrative style as prose. In addition extract the names of the main entities such as: company, organization, person, catastrophic event, product, technology etc. as tags
+# title should be 10 - 20 words, summary should be 100 - 200 words and tags (entities) should a string of comma separated phrases
+# INPUT:\n```\n{text}\n```
+# OUTPUT FORMAT: A json object with fields 'title', 'summary' and 'tags'<|eot_id|>
+# <|start_header_id|>assistant<|end_header_id|>"""
+
+DIGESTOR_PROMPT = """<|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
+<|start_header_id|>user<|end_header_id|>
+TASK: 
+generate summary, title, tags.
+tags: company, organization, person, catastrophic event, product, technology, security vulnerability, stock ticker symbol, geographic location.
+INPUT:\n```\n{text}\n```
+OUTPUT FORMAT: A json object with fields 'title', 'summary' and 'tags'<|eot_id|>
+<|start_header_id|>assistant<|end_header_id|>"""
+    
 class LocalDigestor:
     model_path = None
     context_len = None
@@ -37,13 +47,14 @@ class LocalDigestor:
     @retry(tries=2, logger=logging.getLogger('local digestor'))
     def run(self, text: str) -> Digest:
         if not self.model:
-            self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=False, verbose=False)  
-        # TODO: start taking kind as input
-        resp = ic(self.model.create_completion(
-            prompt=DIGESTOR_PROMPT.format(kind="news", text=utils.truncate(text, self.context_len//2)), 
-            temperature=0.1, 
-            max_tokens=496, 
-            frequency_penalty=0.5)).choices[0].text
+            self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), n_batch=self.context_len, embedding=False, verbose=False)  
+        resp = self.model.create_completion(
+            prompt=DIGESTOR_PROMPT.format(text=utils.truncate(text, self.context_len//2)),
+            max_tokens=384, 
+            frequency_penalty=0.3,
+            temperature=0.2,
+            seed=42
+        )['choices'][0]['text']
         resp = json.loads(ic(resp[resp.find('{'):resp.rfind('}')+1]))
         return Digest(
             title=resp['title'],
