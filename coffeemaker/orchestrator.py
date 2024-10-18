@@ -59,7 +59,7 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
     sb_connection_str = sb_conn_str 
 
     global remotesack, categorystore,  category_eps, cluster_eps        
-    remotesack = Beansack(db_conn_str, BeansackEmbeddings(model_path=emb_path, context_len=4095))
+    remotesack = Beansack(db_conn_str, BeansackEmbeddings(model_path=emb_path, context_len=4096))
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
     category_eps = cat_eps
     cluster_eps = clus_eps

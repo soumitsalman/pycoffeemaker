@@ -47,7 +47,7 @@ class LocalDigestor:
     @retry(tries=2, logger=logging.getLogger('local digestor'))
     def run(self, text: str) -> Digest:
         if not self.model:
-            self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), n_batch=self.context_len, embedding=False, verbose=False)  
+            self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=False, verbose=False)  
         resp = self.model.create_completion(
             prompt=DIGESTOR_PROMPT.format(text=utils.truncate(text, self.context_len//2)),
             max_tokens=384, 
@@ -55,11 +55,11 @@ class LocalDigestor:
             temperature=0.2,
             seed=42
         )['choices'][0]['text']
-        resp = json.loads(ic(resp[resp.find('{'):resp.rfind('}')+1]))
+        resp = json.loads(resp[resp.find('{'):resp.rfind('}')+1])
         return Digest(
             title=resp['title'],
             summary=resp['summary'],
-            tags=[tag.strip() for tag in resp['tags'].split(',')]
+            tags=[tag.strip() for tag in resp['tags'].split(',')] if isinstance(resp['tags'], str) else resp['tags']
         )
     
     def __call__(self, text: str) -> str:

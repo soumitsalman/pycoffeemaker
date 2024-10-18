@@ -35,9 +35,9 @@ import random
 
 def write_datamodels(items, file_name: str = None):
     if items:
-        with open(f".test/{file_name or ic(items[0].source)}.json", 'w') as file:
+        with open(f".test/{file_name or items[0].source}.json", 'w') as file:
             json.dump([bean.model_dump(exclude_unset=True, exclude_none=True) for bean in items], file)
-        return len(items)
+        return ic(len(items))
             
 def write_text(text, file_name):
     with open(f".test/{file_name}", 'w') as file:
@@ -58,12 +58,13 @@ def test_collection():
 
     espresso.collect(orch.sb_connection_str, store_func=lambda beans: write_datamodels(orch._download(beans), "ESPRESSO-QUEUE"))
 
-def test_augment():
+def test_index_and_augment():
     sources = [
         "https://regtechtimes.com/feed/",
         "https://fedoramagazine.org/feed/"
     ]
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans)))
+    # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans)))
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(beans)))
   
 def test_search():
     query = "profession: pilot"
@@ -147,7 +148,7 @@ orch.initialize(
 start = time.time()
 # test_collection()
 # test_clustering()
-test_augment()
+test_index_and_augment()
 # test_whole_path_live()
 # test_search()
 # test_trend_ranking()

@@ -36,7 +36,7 @@ class BeansackEmbeddings(Embeddings):
     @retry(tries=3, logger=logging.getLogger("local embedder"))
     def embed(self, input):
         if not self.model:
-            self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), n_batch=self.context_len, embedding=True, verbose=False)
+            self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=True, verbose=False)
 
         result = self.model.create_embedding(_prep_input(input, self.context_len))
         if isinstance(input, str):
