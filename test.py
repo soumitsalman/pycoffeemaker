@@ -6,20 +6,17 @@ from dotenv import load_dotenv
 import logging
 
 logging.basicConfig(
-    level=logging.INFO, 
+    level=logging.WARNING, 
     datefmt="%Y-%m-%d %H:%M:%S",
     format="%(asctime)s|%(name)s|%(levelname)s|%(message)s"
 )
-logging.getLogger('httpx').setLevel(logging.ERROR)
-logging.getLogger('openai._base_client').setLevel(logging.ERROR)
-logging.getLogger('persistqueue').setLevel(logging.ERROR)
-logging.getLogger('persistqueue.serializers.pickle').setLevel(logging.ERROR)
-logging.getLogger('pymongo.client').setLevel(logging.ERROR)
-logging.getLogger('azure.servicebus._pyamqp._connection').setLevel(logging.ERROR)
-logging.getLogger('azure.servicebus._pyamqp.session').setLevel(logging.ERROR)
-logging.getLogger('azure.servicebus._pyamqp.link').setLevel(logging.ERROR)
-logging.getLogger('azure.servicebus._pyamqp.management_link').setLevel(logging.ERROR)
-logger = logging.getLogger(__name__)
+logging.getLogger("app").setLevel(logging.INFO)
+logging.getLogger("orchestrator").setLevel(logging.INFO)
+logging.getLogger("local digestor").setLevel(logging.INFO)
+logging.getLogger("remote digestor").setLevel(logging.INFO)
+logging.getLogger("local embedder").setLevel(logging.INFO)
+logging.getLogger("remote embedder").setLevel(logging.INFO)
+logging.getLogger("beansack").setLevel(logging.INFO)
     
 load_dotenv()
 
@@ -125,10 +122,9 @@ def test_whole_path_live():
     ychackernews.collect(store_func=orch._collect)
     # redditor.collect(store_func=orch._collect)
     # espresso.collect(orch.sb_connection_str, orch._collect)
-    orch.run_indexing()
+    orch.run_indexing_and_augmenting()
     orch.run_clustering()
     orch.run_trend_ranking()
-    orch.run_augmentation()
 
 orch.initialize(
     os.getenv("DB_CONNECTION_STRING"), 
@@ -148,9 +144,9 @@ orch.initialize(
 start = time.time()
 # test_collection()
 # test_clustering()
-test_index_and_augment()
-# test_whole_path_live()
+# test_index_and_augment()
+test_whole_path_live()
 # test_search()
 # test_trend_ranking()
-logger.info("execution time,%d", (time.time() - start))
+logging.getLogger("test").info("execution time|%s|%d", "__batch__", int(time.time() - start))
 

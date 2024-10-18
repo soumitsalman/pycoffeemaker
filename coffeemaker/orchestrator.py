@@ -114,23 +114,23 @@ def _download(beans: list[Bean]) -> list[Bean]:
                 bean.title = bean.title or res.title
     return [bean for bean in beans if allowed_body(bean)]
 
-def run_indexing():
-    logger().info("indexing")
+def run_indexing_and_augmenting():
+    logger().info("indexing and augmenting")
     # local index queue
     while not index_queue.empty():   
         beans = index_queue.get_nowait()
         beans = remotesack.filter_unstored_beans(beans) if beans else None
-        beans = _index(beans) if beans else None
+        beans = _augment(_index(beans)) if beans else None
         if not beans:   
             continue                        
         res = remotesack.store_beans(beans)
-        logger().info("indexed|%s|%d", beans[0].source, res)
+        logger().info("stored|%s|%d", beans[0].source, res)
         # send it out for trend analysis and augementation. these can happen in parallel
         # trimming down the embedding fields because otherwise writing embeddings back and for becomes a lot for persistence queue
         for bean in beans:
             bean.embedding = None        
         trend_queue.put_nowait(beans) 
-        aug_queue.put_nowait(beans)
+        # aug_queue.put_nowait(beans)
 
 def _index(beans: list[Bean]):   
     # extract digest and prepare for pushing to beansack
@@ -140,6 +140,8 @@ def _index(beans: list[Bean]):
             bean.embedding = embedder.embed(bean.digest())            
             bean.categories = _find_categories(bean)
             bean.created = min(bean.created, bean.updated) # sometimes due to time zone issue the created dates look wierd. this is a patch
+        # except Exception as e:
+            # logger().error("failed indexing|%s|%s", bean.url, e)
         except:
             logger().error("failed indexing|%s", bean.url)
     return [bean for bean in beans if bean.embedding]
@@ -216,7 +218,6 @@ def run_trend_ranking():
             if isinstance(items[0], Chatter):
                 remotesack.store_chatters(items) 
             batch.update({item.url: item for item in items})
-
     
     items = list(batch.values())
     urls = [item.url for item in items]
@@ -240,35 +241,35 @@ def _make_trend_update(item, chatters, cluster_sizes, updated):
             update[K_TRENDSCORE] += (ch.comments*3)
     return UpdateOne({K_URL: item.url}, {"$set": update})
 
-def run_augmentation():
-    logger().info("augmentating")
-    _make_update = lambda bean: UpdateOne(
-        filter = {K_URL: bean.url}, 
-        update={
-            "$set": {
-                K_TITLE: bean.title,
-                K_SUMMARY: bean.summary,
-                K_TAGS: bean.tags                
-            }
-        }
-    ) if bean.summary else DeleteOne(filter = {K_URL: bean.url})
+# def run_augmentation():
+#     logger().info("augmentating")
+#     _make_update = lambda bean: UpdateOne(
+#         filter = {K_URL: bean.url}, 
+#         update={
+#             "$set": {
+#                 K_TITLE: bean.title,
+#                 K_SUMMARY: bean.summary,
+#                 K_TAGS: bean.tags                
+#             }
+#         }
+#     ) if bean.summary else DeleteOne(filter = {K_URL: bean.url})
 
-    while not aug_queue.empty():
-        beans = _augment(aug_queue.get_nowait())
-        res = remotesack.beanstore.bulk_write([_make_update(bean) for bean in beans], ordered=False, bypass_document_validation=True).modified_count
-        logger().info("augmented|%s|%d", beans[0].source, res)
-        aug_queue.task_done()
+#     while not aug_queue.empty():
+#         beans = _augment(aug_queue.get_nowait())
+#         res = remotesack.beanstore.bulk_write([_make_update(bean) for bean in beans], ordered=False, bypass_document_validation=True).modified_count
+#         logger().info("augmented|%s|%d", beans[0].source, res)
+#         aug_queue.task_done()
     
 def _augment(beans: list[Bean]):
     for bean in beans: 
         try:
             digest = digestor.run(bean.text)
             if digest:
-                bean.summary = digest.summary
+                bean.summary = digest.summary if needs_summary(bean) else bean.summary
                 bean.title = digest.title
                 bean.tags = digest.tags
-        except Exception as e:
-            logger().error("failed augmenting|%s|%s", bean.url, e)
+        except:
+            logger().error("failed augmenting|%s", bean.url)
     return beans     
 
 def run_cleanup():
