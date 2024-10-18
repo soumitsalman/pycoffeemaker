@@ -28,11 +28,9 @@ class Digest(BaseModel):
 
 DIGESTOR_PROMPT = """<|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
 <|start_header_id|>user<|end_header_id|>
-TASK: 
-generate summary, title, tags.
-tags: company, organization, person, catastrophic event, product, technology, security vulnerability, stock ticker symbol, geographic location.
+TASK: generate summary, title, tags (e.g. company, organization, person, catastrophic event, product, technology, security vulnerability, stock ticker symbol, geographic location).
 INPUT:\n```\n{text}\n```
-OUTPUT FORMAT: A json object with fields 'title', 'summary' and 'tags'<|eot_id|>
+OUTPUT FORMAT: A json object with fields title (string), summary (string) and tags (string of comma separated phrases)<|eot_id|>
 <|start_header_id|>assistant<|end_header_id|>"""
     
 class LocalDigestor:
