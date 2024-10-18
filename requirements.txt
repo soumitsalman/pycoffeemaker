@@ -15,7 +15,6 @@ python-dotenv
 persist-queue
 scikit-learn
 praw
-gliner
 retry
 azure-servicebus
 transformers
