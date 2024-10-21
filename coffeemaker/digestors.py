@@ -14,7 +14,7 @@ class Digest(BaseModel):
     summary: str = Field(description="A summary of the content")
     tags: list[str] = Field(description="A list of tags that describe the content")
 
-DIGESTOR_PROMPT = """<|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
+DIGESTOR_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nresponse_format:json_object\n<|eot_id|>
 <|start_header_id|>user<|end_header_id|>
 TASK: generate summary, title, tags (e.g. company, organization, person, catastrophic event, product, technology, security vulnerability, stock ticker symbol, geographic location).
 INPUT:\n```\n{text}\n```
@@ -57,7 +57,7 @@ class RemoteDigestor:
     context_len = None
 
     def __init__(self, base_url: str, api_key: str, model_name: str, context_len: int = 8192):
-        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=10)
+        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=5, max_retries=2)
         self.model_name = model_name
         self.context_len = context_len
     
@@ -65,15 +65,13 @@ class RemoteDigestor:
     def run(self, text: str) -> Digest:
         resp = self.client.completions.create(
             model=self.model_name,
-            prompt=DIGESTOR_PROMPT.format(kind="news", text=utils.truncate(text, self.context_len//2)),
-            temperature=0.1,
-            max_tokens=496,
-            frequency_penalty=0.5,
-            stream=False,
-            seed=42
+            prompt=DIGESTOR_PROMPT.format(text=utils.truncate(text, self.context_len//2)),
+            temperature=0.2,
+            max_tokens=384,
+            frequency_penalty=0.3
         ).choices[0].text
 
-        resp = json.loads(resp[resp.find('{'):resp.rfind('}')+1])
+        resp = ic(json.loads(resp[resp.find('{'):resp.rfind('}')+1]))
         return Digest(
             title=resp['title'],
             summary=resp['summary'],

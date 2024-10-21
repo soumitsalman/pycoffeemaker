@@ -37,7 +37,11 @@ orch.initialize(
     os.getenv("SB_CONNECTION_STRING"), 
     WORKING_DIR, 
     os.getenv("EMBEDDER_PATH"),
-    os.getenv("LLM_PATH"),
+    # os.getenv("LLM_PATH"),
+    None,
+    os.getenv("LLM_BASE_URL"),
+    os.getenv("LLM_API_KEY"),
+    os.getenv("LLM_MODEL"),
     None, None, None,
     float(os.getenv('CATEGORY_EPS')),
     float(os.getenv('CLUSTER_EPS')))

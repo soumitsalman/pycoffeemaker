@@ -60,8 +60,8 @@ def test_index_and_augment():
         "https://regtechtimes.com/feed/",
         "https://fedoramagazine.org/feed/"
     ]
-    # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans)))
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(beans)))
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans[:2])))
+    # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(beans)))
   
 def test_search():
     query = "profession: pilot"
@@ -131,11 +131,11 @@ orch.initialize(
     os.getenv("SB_CONNECTION_STRING"),
     os.getenv("WORKING_DIR", "."), 
     os.getenv("EMBEDDER_PATH"),
-    os.getenv("LLM_PATH"),
-    None, None, None,
-    # os.getenv("LLM_BASE_URL"),
-    # os.getenv("LLM_API_KEY"),
-    # os.getenv("LLM_MODEL"),
+    # os.getenv("LLM_PATH"),
+    None,
+    os.getenv("LLM_BASE_URL"),
+    os.getenv("LLM_API_KEY"),
+    os.getenv("LLM_MODEL"),
     float(os.getenv('CATEGORY_EPS')),
     float(os.getenv('CLUSTER_EPS')))
    
@@ -144,8 +144,8 @@ orch.initialize(
 start = time.time()
 # test_collection()
 # test_clustering()
-# test_index_and_augment()
-test_whole_path_live()
+test_index_and_augment()
+# test_whole_path_live()
 # test_search()
 # test_trend_ranking()
 logging.getLogger("test").info("execution time|%s|%d", "__batch__", int(time.time() - start))
