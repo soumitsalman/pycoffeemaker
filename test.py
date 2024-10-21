@@ -60,7 +60,7 @@ def test_index_and_augment():
         "https://regtechtimes.com/feed/",
         "https://fedoramagazine.org/feed/"
     ]
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans[:2])))
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans)))
     # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(beans)))
   
 def test_search():

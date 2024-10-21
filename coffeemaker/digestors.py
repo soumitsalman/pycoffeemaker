@@ -2,6 +2,7 @@ import json
 import logging
 import math
 import os
+from typing import Optional
 from icecream import ic
 from openai import OpenAI
 from retry import retry
@@ -10,9 +11,9 @@ from llama_cpp import Llama
 from pydantic import BaseModel, Field
 
 class Digest(BaseModel):
-    title: str = Field(description="title of the content", default=None)
-    summary: str = Field(description="A summary of the content", default=None)
-    tags: list[str] = Field(description="A list of tags that describe the content", default=None)
+    title: Optional[str] = Field(description="title of the content", default=None)
+    summary: Optional[str] = Field(description="A summary of the content", default=None)
+    tags: Optional[list[str]] = Field(description="A list of tags that describe the content", default=None)
 
 DIGESTOR_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
 <|start_header_id|>user<|end_header_id|>
@@ -66,12 +67,12 @@ class RemoteDigestor:
         resp = self.client.completions.create(
             model=self.model_name,
             prompt=DIGESTOR_PROMPT.format(text=utils.truncate(text, self.context_len//2)),
-            temperature=0.2,
+            temperature=0,
             max_tokens=384,
             frequency_penalty=0.3
         ).choices[0].text
 
-        resp = ic(json.loads(resp[resp.find('{'):resp.rfind('}')+1]))
+        resp = json.loads(resp[resp.find('{'):resp.rfind('}')+1])
         return Digest(
             title=resp.get('title'),
             summary=resp.get('summary'),
