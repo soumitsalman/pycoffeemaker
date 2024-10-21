@@ -10,11 +10,11 @@ from llama_cpp import Llama
 from pydantic import BaseModel, Field
 
 class Digest(BaseModel):
-    title: str = Field(description="title of the content")
-    summary: str = Field(description="A summary of the content")
-    tags: list[str] = Field(description="A list of tags that describe the content")
+    title: str = Field(description="title of the content", default=None)
+    summary: str = Field(description="A summary of the content", default=None)
+    tags: list[str] = Field(description="A list of tags that describe the content", default=None)
 
-DIGESTOR_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nresponse_format:json_object\n<|eot_id|>
+DIGESTOR_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
 <|start_header_id|>user<|end_header_id|>
 TASK: generate summary, title, tags (e.g. company, organization, person, catastrophic event, product, technology, security vulnerability, stock ticker symbol, geographic location).
 INPUT:\n```\n{text}\n```
@@ -73,9 +73,9 @@ class RemoteDigestor:
 
         resp = ic(json.loads(resp[resp.find('{'):resp.rfind('}')+1]))
         return Digest(
-            title=resp['title'],
-            summary=resp['summary'],
-            tags=[tag.strip() for tag in resp['tags'].split(',')]
+            title=resp.get('title'),
+            summary=resp.get('summary'),
+            tags=[tag.strip() for tag in resp.get('tags', "").split(',')]
         )
         
     def __call__(self, kind: str, text: str) -> Digest:        
