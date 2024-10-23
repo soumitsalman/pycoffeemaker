@@ -177,7 +177,7 @@ def run_clustering():
     beans = _cluster(remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1}))   
     updates = [UpdateOne({K_URL: bean.url},{"$set": {K_CLUSTER_ID: bean.cluster_id}}) for bean in beans]
     update_count = _bulk_update(updates)
-    logger().info("clustered|%d", update_count)
+    logger().info("clustered|__batch__|%d", update_count)
 
 # current clustering approach
 # new beans (essentially beans without cluster gets priority for defining cluster)
@@ -224,7 +224,7 @@ def run_trend_ranking():
     chatters=remotesack.get_latest_chatter_stats(urls)
     cluster_sizes=remotesack.count_related_beans(urls)
     res = _bulk_update([_make_trend_update(item, chatters, cluster_sizes, current_time) for item in items])
-    logger().info("trendranked|%d", res)
+    logger().info("trendranked|__batch__|%d", res)
 
 def _make_trend_update(item, chatters, cluster_sizes, updated):
     update = {
