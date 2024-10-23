@@ -76,7 +76,7 @@ class RemoteDigestor:
         return Digest(
             title=resp.get('title'),
             summary=resp.get('summary'),
-            tags=[tag.strip() for tag in resp.get('tags', "").split(',')]
+            tags=[tag.strip() for tag in resp['tags'].split(',')] if isinstance(resp['tags'], str) else resp['tags']
         )
         
     def __call__(self, kind: str, text: str) -> Digest:        

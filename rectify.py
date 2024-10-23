@@ -26,7 +26,7 @@ def setup_categories():
                 K_TEXT: entry, 
                 "related": list({category_id(item) for item in path}),
                 K_DESCRIPTION: " >> ".join(path), 
-                K_EMBEDDING:  orch.embedder.embed( "topic: " + (" >> ".join(path))), 
+                K_EMBEDDING:  orch.remotesack.embedder.embed( "topic: " + (" >> ".join(path))), 
                 K_SOURCE: "__SYSTEM__"
             })
             return [id]
@@ -49,7 +49,14 @@ def setup_categories():
     with open("factory_settings.json", 'r') as file:
         _make_category_entry([], json.load(file)['categories'])
     orch.categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
-    orch.categorystore.insert_many(list({item[K_ID]: item for item in updates}.values()))       
+    orch.categorystore.insert_many(list({item[K_ID]: item for item in updates}.values()))   
+
+def embed_categories():
+    cats = orch.categorystore.find({K_EMBEDDING: {"$exists": False}})
+    ic(orch.categorystore.bulk_write(
+        [UpdateOne(filter={K_ID: cat[K_ID]}, update={"$set": {K_EMBEDDING: orch.remotesack.embedder.embed("topic: " + cat[K_TEXT])}}) for cat in cats],
+        ordered=False
+    ).modified_count)
 
 def rectify_categories():
     beans = orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_TITLE: 1, K_EMBEDDING: 1})
@@ -73,15 +80,21 @@ def rectify_ranking():
     orch.run_trend_ranking()
 
 orch.initialize(
-    os.getenv("DB_CONNECTION_STRING"), 
+    os.getenv("DB_CONNECTION_STRING"),
+    os.getenv("SB_CONNECTION_STRING"), 
     WORKING_DIR, 
-    os.getenv("EMBEDDER_FILE"),
-    os.getenv("GROQ_API_KEY"),   
-    float(os.getenv('CATEGORY_EPS'))
+    os.getenv("EMBEDDER_PATH"),    
+    None,
+    os.getenv("LLM_BASE_URL"),
+    os.getenv("LLM_API_KEY"),
+    os.getenv("LLM_MODEL"),
+    float(os.getenv('CATEGORY_EPS')),
+    float(os.getenv('CLUSTER_EPS'))
 )
 
 # _patch_upper_categories()
-setup_categories()
+# setup_categories()
+embed_categories()
 # rectify_categories()
 # orch.run_clustering()
 # rectify_ranking()

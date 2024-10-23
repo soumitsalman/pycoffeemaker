@@ -28,7 +28,7 @@ needs_download = lambda bean: not bean.text or len(bean.text.split()) < NEEDS_DO
 NEEDS_SUMMARY_BODY_LEN = 150
 needs_summary = lambda bean: len(bean.text.split()) >= NEEDS_SUMMARY_BODY_LEN
 
-MAX_CATEGORIES = 5
+MAX_CATEGORIES = 10
 
 # index queue is a non persistence queue because at this point nothing is stored. things need to be stored before they can be processed further
 # if storing fails in this round, it can succeed in the next
@@ -44,7 +44,6 @@ cluster_eps: float = None
 
 digestor: LocalDigestor = None
 models_dir: str = None
-
 
 def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_path: str, llm_base_url: str, llm_api_key: str, llm_model: str, cat_eps: float, clus_eps: float):
     queue_dir=working_dir+"/.processingqueue"    
@@ -138,10 +137,8 @@ def _index(beans: list[Bean]):
     for bean in beans:
         try:
             bean.embedding = embedder.embed(bean.digest())            
-            bean.categories = _find_categories(bean)
+            bean.tags, bean.categories = _find_categories(bean)
             bean.created = min(bean.created, bean.updated) # sometimes due to time zone issue the created dates look wierd. this is a patch
-        # except Exception as e:
-            # logger().error("failed indexing|%s|%s", bean.url, e)
         except:
             logger().error("failed indexing|%s", bean.url)
     return [bean for bean in beans if bean.embedding]
@@ -163,12 +160,22 @@ def _find_categories(bean: Bean):
         {"$match": { "search_score": {"$gte": 1-category_eps} }},
         {"$project": {K_EMBEDDING: 0}}
     ] 
-    ids = []
-    for cat in categorystore.aggregate(pipeline):
-        ids.append(cat[K_ID])
-        ids.extend(cat['related'])
+    res = categorystore.aggregate(pipeline)
+    texts = [cat[K_TEXT] for cat in res]
+    ids = [cat[K_ID] for cat in res]    
+    return ((texts if ic(len(texts)) > 0 else None), (ids if len(ids) > 0 else None))
 
-    return list(set(ids)) if ids else None
+def _augment(beans: list[Bean]):
+    for bean in beans: 
+        try:
+            digest = digestor.run(bean.text)
+            if digest:
+                bean.summary = digest.summary if needs_summary(bean) else (bean.summary or bean.text)
+                bean.title = digest.title or bean.title
+                bean.tags = list(set((bean.tags + digest.tags))) if (bean.tags and digest.tags) else (bean.tags or digest.tags)
+        except:
+            logger().error("failed augmenting|%s", bean.url)
+    return beans  
 
 def run_clustering():
     logger().info("clustering")
@@ -259,18 +266,6 @@ def _make_trend_update(item, chatters, cluster_sizes, updated):
 #         res = remotesack.beanstore.bulk_write([_make_update(bean) for bean in beans], ordered=False, bypass_document_validation=True).modified_count
 #         logger().info("augmented|%s|%d", beans[0].source, res)
 #         aug_queue.task_done()
-    
-def _augment(beans: list[Bean]):
-    for bean in beans: 
-        try:
-            digest = digestor.run(bean.text)
-            if digest:
-                bean.summary = digest.summary if needs_summary(bean) else bean.summary
-                bean.title = digest.title
-                bean.tags = digest.tags
-        except:
-            logger().error("failed augmenting|%s", bean.url)
-    return beans     
 
 def run_cleanup():
     logger().info("cleaning up")

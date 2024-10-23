@@ -57,11 +57,29 @@ def test_collection():
 
 def test_index_and_augment():
     sources = [
-        "https://regtechtimes.com/feed/",
-        "https://fedoramagazine.org/feed/"
+        "https://www.freethink.com/feed/all",
+        "https://www.testingcatalog.com/rss/",
+        "https://startupnews.fyi/feed/",
+        "https://spectrum.ieee.org/customfeeds/feed/all-topics/rss",
+        "https://dailyhodl.com/feed/",
+        "https://www.investors.com/feed/",
+        "https://www.datacenterknowledge.com/rss.xml",
+        "https://www.gamedeveloper.com/rss.xml",
+        "https://singularityhub.com/feed/",
+        "https://www.nextbigfuture.com/feed",        
+        "https://blog.mozilla.org/attack-and-defense/feed/",
+        "https://www.nccgroup.com/us/research-blog/feed/",
+        "https://blog.oversecured.com/feed.xml",
+        "https://rtx.meta.security/feed.xml",
+        "https://windows-internals.com/feed/",
+        "https://secret.club/feed.xml",
+        "https://research.securitum.com/feed/",
+        "https://feeds.feedburner.com/positiveTechnologiesResearchLab",
+        "https://microsoftedge.github.io/edgevr/feed.xml",
+        "https://github.blog/tag/github-security-lab/feed/"
     ]
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(beans)))
-    # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(beans)))
+    # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(orch._index(beans[:3]))))
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(orch._download(beans[:3]))))
   
 def test_search():
     query = "profession: pilot"
