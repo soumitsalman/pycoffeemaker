@@ -1,6 +1,8 @@
 technology
 technews
 tech
+devops
+HPC
 StockNews
 softwaredevelopment
 software
@@ -35,6 +37,7 @@ GlobalNews
 IntelligenceNews
 China_News
 tax
+investment
 startup
 startups
 Start_up
@@ -51,3 +54,16 @@ Entrepreneur
 EntrepreneurRideAlong
 Futurology
 SideProject
+generativeAI
+LargeLanguageModels
+careerguidance
+ElectionPolls
+threatintel
+careerchange
+AskHR
+softwarearchitecture
+newproducts
+PublicRelations
+flying
+AirPassengerRights
+pilots
