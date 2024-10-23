@@ -10,6 +10,7 @@ BLOG = "blog/journal"
 COMMENT = "social media comment"
 
 # names of important fields of collections
+K_CONTAINER_URL = "container_url"
 K_LIKES = "likes"
 K_COMMENTS = "comments"
 K_TRENDSCORE = "trend_score"
