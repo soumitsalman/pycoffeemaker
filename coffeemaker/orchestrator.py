@@ -163,7 +163,7 @@ def _find_categories(bean: Bean):
     res = categorystore.aggregate(pipeline)
     texts = [cat[K_TEXT] for cat in res]
     ids = [cat[K_ID] for cat in res]    
-    return ((texts if ic(len(texts)) > 0 else None), (ids if len(ids) > 0 else None))
+    return ((texts if len(texts) > 0 else None), (ids if len(ids) > 0 else None))
 
 def _augment(beans: list[Bean]):
     for bean in beans: 
