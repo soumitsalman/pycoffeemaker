@@ -7,11 +7,9 @@ from functools import reduce
 import operator
 from .embedding import *
 from .datamodels import *
-from bson import InvalidBSON
-from pymongo import MongoClient, UpdateMany, UpdateOne
+from .utils import *
 from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
-from icecream import ic
 
 TIMEOUT = 300000 # 3 mins
 
@@ -69,7 +67,7 @@ class Beansack:
     # this function checks for embeddings, updated time and any other rectification needed before inserting
     def _rectify_as_needed(self, items: list[Bean|Highlight]):
         # for each item if there is no embedding and create one from the text.
-        batch_time = int(datetime.now().timestamp())
+        batch_time = now()
         for item in items:
             if not item.embedding and self.embedder:
                 item.embedding = self.embedder.embed(item.digest())
@@ -94,7 +92,7 @@ class Beansack:
     #     return self.beanstore.bulk_write(writes).modified_count
       
     def delete_old(self, window: int):
-        time_filter = {K_UPDATED: { "$lt": get_timevalue(window) }}
+        time_filter = {K_UPDATED: { "$lt": ndays_ago(window) }}
         bean_count = self.beanstore.delete_many(time_filter).deleted_count
         chatter_count = self.chatterstore.delete_many(time_filter).deleted_count
         return (bean_count, chatter_count)
@@ -366,12 +364,8 @@ def _deserialize_chatters(cursor) -> list[Chatter]:
 def _get_logger():
     return logging.getLogger("beansack")
 
-def updated_in(last_ndays: int):
-    return {K_UPDATED: {"$gte": get_timevalue(last_ndays)}}
+def updated_after(last_ndays: int):
+    return {K_UPDATED: {"$gte": ndays_ago(last_ndays)}}
 
-def created_in(last_ndays: int):
-    return {K_CREATED: {"$gte": get_timevalue(last_ndays)}}
-
-def get_timevalue(last_ndays: int):
-    return int((datetime.now() - timedelta(days=last_ndays)).timestamp())
-
+def created_after(last_ndays: int):
+    return {K_CREATED: {"$gte": ndays_ago(last_ndays)}}
