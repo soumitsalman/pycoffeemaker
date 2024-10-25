@@ -1,9 +1,10 @@
 import os
+import time
 import feedparser
 from pybeansack.datamodels import Bean, NEWS
+from pybeansack.utils import now
 from .individual import *
-import time
-from icecream import ic
+from datetime import datetime as dt
 
 DEFAULT_FEEDS = os.path.dirname(os.path.abspath(__file__))+"/rssfeedsources.txt"
 
@@ -25,20 +26,23 @@ def collect_from(feed_url: str, content_kind = NEWS):
         # if we know that this feed is NOT in english, just skip for now. if language is not specified, assume it is english
         if not feed.get("language", "en-US").startswith("en-"):
             return []    
-        collection_time = int(time.time())
+        collection_time = now()
         # collect only the ones that is english. if language is not specified, assume it is english
         source_name = extract_source_name(feed)
         return [_to_bean(entry, source_name, content_kind, collection_time) for entry in feed.entries if entry.get("language", "en-US").startswith("en-")]
-    except:
+    except: # Exception as e:
+        # ic(e)
         return None
 
 def _to_bean(entry, source_name, kind, collection_time):
-    body, summary = _extract_body_and_summary(entry)    
-    created_time = int(time.mktime(entry.get("published_parsed") or entry.get("updated_parsed") or time.localtime()))
-    is_valid_tag = lambda tag: len(tag)>= MIN_TAG_LEN and len(tag) <= MAX_TAG_LEN and ("/" not in tag)    
+    body, summary = _extract_body_and_summary(entry)  
+    parsed_time = entry.get("published_parsed") or entry.get("updated_parsed")
+    created_time = int(time.mktime(parsed_time) if parsed_time else now())
+    # is_valid_tag = lambda tag: len(tag)>= MIN_TAG_LEN and len(tag) <= MAX_TAG_LEN and ("/" not in tag)    
     return Bean(
         url=entry.link,
         updated=collection_time,
+        collected=collection_time,
         source=source_name,
         title=entry.title,
         kind=kind,
@@ -46,7 +50,7 @@ def _to_bean(entry, source_name, kind, collection_time):
         summary=summary,
         author=entry.get('author'),
         created=created_time,
-        tags=[tag.term for tag in entry.get('tags', []) if is_valid_tag(tag.term)],
+        # tags=[tag.term for tag in entry.get('tags', []) if is_valid_tag(tag.term)],
         image_url=_extract_image_link(entry)
     )    
 

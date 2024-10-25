@@ -60,7 +60,8 @@ class Bean(BaseModel):
     text: Optional[str] = None
     image_url: Optional[str] = None
     author: Optional[str] = None    
-    created: Optional[int] = None   
+    created: Optional[int] = None 
+    collected: Optional[int] = None
     categories: Optional[list[str]] = None
     tags: Optional[str|list[str]] = None
     summary: Optional[str] = None

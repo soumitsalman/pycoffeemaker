@@ -2,7 +2,7 @@ import time
 import requests
 from .individual import *
 from pybeansack.datamodels import *
-from icecream import ic
+from pybeansack.utils import now
 
 TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
 COLLECTION_URL_TEMPLATE = "https://hacker-news.firebaseio.com/v0/item/%d.json"
@@ -11,7 +11,7 @@ YC = "ycombinator"
 
 def collect(store_func):
     entries = requests.get(TOP_STORIES_URL, headers={"User-Agent": USER_AGENT}).json()
-    collection_time = int(time.time())
+    collection_time = now()
     beans = [_extract(entry, collection_time) for entry in entries]
     beans = [bean for bean in beans if bean]
     store_func(beans)
@@ -24,6 +24,7 @@ def _extract(id: int, collection_time: int):
             Bean(            
                 url=url, # this is either a linked url or a direct post
                 updated=collection_time,
+                collected=collection_time,
                 source=extract_source(url)[0],
                 title=entry.get('title'),
                 kind=BLOG if 'url' in entry else POST,
@@ -33,6 +34,7 @@ def _extract(id: int, collection_time: int):
             Chatter(
                 url=url,
                 updated=collection_time,
+                collected=collection_time,
                 source=YC,
                 container_url=STORY_URL_TEMPLATE % id,
                 likes=entry.get('score'),

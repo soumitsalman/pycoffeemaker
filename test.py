@@ -45,7 +45,7 @@ def test_collection():
         "https://www.buzzhint.com/feed/"
     ]
     
-    # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._download_beans(beans[:5])))
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._load(beans[:5])))
     # redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="REDDIT"))
     # ychackernews.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="YC"))
 
@@ -53,39 +53,39 @@ def test_collection():
     #     to_json = lambda bean: ServiceBusMessage(json.dumps({K_ID: f"TEST:{bean.url}", K_SOURCE: "TEST", K_URL: bean.url, K_CREATED: int(time.time())}))
     #     rssfeed.collect(sources=sources, store_func=lambda beans: index_queue.send_messages([to_json(bean) for bean in beans]))
 
-    espresso.collect(orch.sb_connection_str, store_func=lambda beans: write_datamodels(orch._download(beans), "ESPRESSO-QUEUE"))
+    # espresso.collect(orch.sb_connection_str, store_func=lambda beans: write_datamodels(orch._download(beans), "ESPRESSO-QUEUE"))
 
 def test_index_and_augment():
     sources = [
-        "https://www.freethink.com/feed/all",
-        "https://www.testingcatalog.com/rss/",
-        "https://startupnews.fyi/feed/",
-        "https://spectrum.ieee.org/customfeeds/feed/all-topics/rss",
-        "https://dailyhodl.com/feed/",
-        "https://www.investors.com/feed/",
-        "https://www.datacenterknowledge.com/rss.xml",
-        "https://www.gamedeveloper.com/rss.xml",
-        "https://singularityhub.com/feed/",
-        "https://www.nextbigfuture.com/feed",        
-        "https://blog.mozilla.org/attack-and-defense/feed/",
-        "https://www.nccgroup.com/us/research-blog/feed/",
-        "https://blog.oversecured.com/feed.xml",
-        "https://rtx.meta.security/feed.xml",
-        "https://windows-internals.com/feed/",
-        "https://secret.club/feed.xml",
-        "https://research.securitum.com/feed/",
-        "https://feeds.feedburner.com/positiveTechnologiesResearchLab",
-        "https://microsoftedge.github.io/edgevr/feed.xml",
+        # "https://www.freethink.com/feed/all",
+        # "https://www.testingcatalog.com/rss/",
+        # "https://startupnews.fyi/feed/",
+        # "https://spectrum.ieee.org/customfeeds/feed/all-topics/rss",
+        # "https://dailyhodl.com/feed/",
+        # "https://www.investors.com/feed/",
+        # "https://www.datacenterknowledge.com/rss.xml",
+        # "https://www.gamedeveloper.com/rss.xml",
+        # "https://singularityhub.com/feed/",
+        # "https://www.nextbigfuture.com/feed",        
+        # "https://blog.mozilla.org/attack-and-defense/feed/",
+        # "https://www.nccgroup.com/us/research-blog/feed/",
+        # "https://blog.oversecured.com/feed.xml",
+        # "https://rtx.meta.security/feed.xml",
+        # "https://windows-internals.com/feed/",
+        # "https://secret.club/feed.xml",
+        # "https://research.securitum.com/feed/",
+        # "https://feeds.feedburner.com/positiveTechnologiesResearchLab",
+        # "https://microsoftedge.github.io/edgevr/feed.xml",
         "https://github.blog/tag/github-security-lab/feed/"
     ]
-    # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(orch._index(beans[:3]))))
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(orch._download(beans[:3]))))
+    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(orch._index(beans[:3]))))
+    # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(orch._download(beans[:3]))))
   
 def test_search():
     query = "profession: pilot"
     # write_datamodels(ic(orch.remotesack.query_unique_beans(filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID:0})), "QUERY_BEANS")
     # write_datamodels(ic(orch.remotesack.text_search_beans(query=query, filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID:0})), "TEXT_SEARCH")
-    write_datamodels(orch.remotesack.vector_search_beans(query=query, filter=updated_in(3), sort_by=LATEST, projection={K_EMBEDDING: 0, K_ID: 0}), "VECTOR_SEARCH")
+    write_datamodels(orch.remotesack.vector_search_beans(query=query, filter=updated_after(3), sort_by=LATEST, projection={K_EMBEDDING: 0, K_ID: 0}), "VECTOR_SEARCH")
 
 def test_clustering():  
     existing = orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1})    
@@ -101,7 +101,7 @@ def test_clustering():
         "http://feeds.feedburner.com/positiveTechnologiesResearchLab",
         "http://googleprojectzero.blogspot.com/feeds/posts/default"
     ]
-    rssfeed.collect(sources = sources, store_func=lambda beans: existing.extend(orch._index(orch._download(orch.remotesack.filter_unstored_beans(beans)))))
+    rssfeed.collect(sources = sources, store_func=lambda beans: existing.extend(orch._index(orch._load(orch.remotesack.filter_unstored_beans(beans)))))
     url_set = set()
     duplicate_urls = []
     for bean in orch._cluster(existing):
@@ -159,12 +159,12 @@ orch.initialize(
    
 
 ### TEST CALLS
-start = time.time()
-# test_collection()
+start = now()
+test_collection()
 # test_clustering()
 test_index_and_augment()
 # test_whole_path_live()
 # test_search()
 # test_trend_ranking()
-logging.getLogger("test").info("execution time|%s|%d", "__batch__", int(time.time() - start))
+logging.getLogger("test").info("execution time|%s|%d", "__batch__", int(now() - start))
 

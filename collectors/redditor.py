@@ -2,9 +2,8 @@ from itertools import chain
 import praw
 import os
 from pybeansack.datamodels import *
+from pybeansack.utils import now
 from .individual import *
-from icecream import ic
-import time
 
 REDDIT = "Reddit"
 STORY_URL_TEMPLATE = "https://www.reddit.com%s"
@@ -17,7 +16,7 @@ def collect(store_func):
         client_secret = os.getenv('REDDITOR_APP_SECRET'),
         user_agent = USER_AGENT
     )
-    collection_time = int(time.time())
+    collection_time = now()
     with open(SUBREDDITS_FILE, 'r') as file:
         subreddits = [line.strip() for line in file.readlines()]   
     store_func(list(chain(*(collect_subreddit(reddit, source, collection_time) for source in subreddits))))
@@ -37,6 +36,7 @@ def makedatamodel(post, collection_time):
         Bean(
             url=post.url,
             updated=collection_time,
+            collected=collection_time,
             source=extract_source(post.url)[0] if not post.is_self else f"r/{post.subreddit.display_name}",
             title=post.title,
             kind=POST if post.is_self else NEWS,
@@ -47,6 +47,7 @@ def makedatamodel(post, collection_time):
         Chatter(
             url=post.url,
             updated=collection_time,
+            collected=collection_time,
             source=REDDIT,
             container_url=STORY_URL_TEMPLATE%post.permalink,            
             channel=post.subreddit.display_name,

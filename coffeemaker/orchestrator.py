@@ -1,13 +1,11 @@
 from itertools import chain
 import logging
-import os
-import time
 from icecream import ic
-from pybeansack import utils
 from pybeansack.beansack import  Beansack
 from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
-from pymongo import DeleteOne, MongoClient, UpdateMany, UpdateOne
+from pybeansack.utils import now
+from pymongo import MongoClient, UpdateOne
 from pymongo.collection import Collection
 from collectors import espresso, individual, rssfeed, ychackernews, redditor
 from coffeemaker.digestors import *
@@ -94,51 +92,58 @@ def _collect(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
         chatters = [item[1] for item in items]
 
     if beans:            
-        downloaded = _download(remotesack.filter_unstored_beans(beans))
+        downloaded = _load(remotesack.filter_unstored_beans(beans))
         if downloaded:
             logger().info("collected|%s|%d", downloaded[0].source, len(downloaded))
             index_queue.put_nowait(downloaded)
     if chatters:            
         trend_queue.put_nowait(chatters)
 
-def _download(beans: list[Bean]) -> list[Bean]:
-    for bean in beans:           
+def _load(beans: list[Bean]) -> list[Bean]:
+    for bean in beans:   
+        # reset some of the fields 
+        bean.tags = None
+        bean.created = min(bean.created or bean.collected or bean.updated, now()) # sometimes due to time zone issue, the created date is in future
+
         if (bean.kind in [NEWS, BLOG]) and (not bean.image_url or needs_download(bean)):
             res = individual.load_from_url(bean.url)
-            if res and res.text:  # this is a decent indicator if loading from the url even worked 
-                bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()
+            if res:
                 bean.image_url = bean.image_url or res.top_image
                 bean.source = individual.site_name(res) or bean.source
-                bean.created = bean.created or int(min(res.publish_date.timestamp() if res.publish_date else time.time(), time.time()))
                 bean.title = bean.title or res.title
+                if res.publish_date:
+                    bean.created = min(bean.created, int(res.publish_date.timestamp()))
+                if res.text:  # this is a decent indicator if loading from the url even worked 
+                    bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()
+
     return [bean for bean in beans if allowed_body(bean)]
 
 def run_indexing_and_augmenting():
     logger().info("indexing and augmenting")
     # local index queue
-    while not index_queue.empty():   
-        beans = index_queue.get_nowait()
-        beans = remotesack.filter_unstored_beans(beans) if beans else None
-        beans = _augment(_index(beans)) if beans else None
+    while not index_queue.empty():  
+        beans = remotesack.filter_unstored_beans(index_queue.get_nowait()) 
         if not beans:   
-            continue                        
-        res = remotesack.store_beans(beans)
+            continue   
+              
+        res = remotesack.store_beans(_augment(_index(beans)))
         logger().info("stored|%s|%d", beans[0].source, res)
         # send it out for trend analysis and augementation. these can happen in parallel
         # trimming down the embedding fields because otherwise writing embeddings back and for becomes a lot for persistence queue
         for bean in beans:
-            bean.embedding = None        
+            bean.embedding = None   
+
         trend_queue.put_nowait(beans) 
-        # aug_queue.put_nowait(beans)
+
+_merge_tags = lambda bean, new_tags: list({tag.lower(): tag for tag in (bean.tags + new_tags)}.values()) if (bean.tags and new_tags) else (bean.tags or new_tags)
 
 def _index(beans: list[Bean]):   
     # extract digest and prepare for pushing to beansack
     embedder = remotesack.embedder
     for bean in beans:
         try:
-            bean.embedding = embedder.embed(bean.digest())            
-            bean.tags, bean.categories = _find_categories(bean)
-            bean.created = min(bean.created, bean.updated) # sometimes due to time zone issue the created dates look wierd. this is a patch
+            bean.embedding = embedder.embed(bean.digest())   
+            bean.tags = _merge_tags(bean, _find_categories(bean))
         except:
             logger().error("failed indexing|%s", bean.url)
     return [bean for bean in beans if bean.embedding]
@@ -161,18 +166,16 @@ def _find_categories(bean: Bean):
         {"$project": {K_EMBEDDING: 0}}
     ] 
     res = categorystore.aggregate(pipeline)
-    texts = [cat[K_TEXT] for cat in res]
-    ids = [cat[K_ID] for cat in res]    
-    return ((texts if len(texts) > 0 else None), (ids if len(ids) > 0 else None))
+    return [cat[K_TEXT] for cat in res]
 
 def _augment(beans: list[Bean]):
     for bean in beans: 
         try:
             digest = digestor.run(bean.text)
             if digest:
-                bean.summary = digest.summary if needs_summary(bean) else (bean.summary or bean.text)
+                bean.summary = digest.summary if needs_summary(bean) else bean.text
                 bean.title = digest.title or bean.title
-                bean.tags = list(set((bean.tags + digest.tags))) if (bean.tags and digest.tags) else (bean.tags or digest.tags)
+                bean.tags = _merge_tags(bean, digest.tags)
         except:
             logger().error("failed augmenting|%s", bean.url)
     return beans  
@@ -215,8 +218,7 @@ def _cluster(beans: list[Bean]):
 
 def run_trend_ranking():
     logger().info("trendranking")
-    batch = {}
-    current_time = int(time.time())
+    batch = {}    
     while not trend_queue.empty():
         # remove the duplicates in the batch
         # put them in database and queue the beans for trend_ranking
@@ -226,10 +228,12 @@ def run_trend_ranking():
                 remotesack.store_chatters(items) 
             batch.update({item.url: item for item in items})
     
+    
     items = list(batch.values())
     urls = [item.url for item in items]
     chatters=remotesack.get_latest_chatter_stats(urls)
     cluster_sizes=remotesack.count_related_beans(urls)
+    current_time = now()
     res = _bulk_update([_make_trend_update(item, chatters, cluster_sizes, current_time) for item in items])
     logger().info("trendranked|__batch__|%d", res)
 
@@ -247,25 +251,6 @@ def _make_trend_update(item, chatters, cluster_sizes, updated):
             update[K_COMMENTS] = ch.comments
             update[K_TRENDSCORE] += (ch.comments*3)
     return UpdateOne({K_URL: item.url}, {"$set": update})
-
-# def run_augmentation():
-#     logger().info("augmentating")
-#     _make_update = lambda bean: UpdateOne(
-#         filter = {K_URL: bean.url}, 
-#         update={
-#             "$set": {
-#                 K_TITLE: bean.title,
-#                 K_SUMMARY: bean.summary,
-#                 K_TAGS: bean.tags                
-#             }
-#         }
-#     ) if bean.summary else DeleteOne(filter = {K_URL: bean.url})
-
-#     while not aug_queue.empty():
-#         beans = _augment(aug_queue.get_nowait())
-#         res = remotesack.beanstore.bulk_write([_make_update(bean) for bean in beans], ordered=False, bypass_document_validation=True).modified_count
-#         logger().info("augmented|%s|%d", beans[0].source, res)
-#         aug_queue.task_done()
 
 def run_cleanup():
     logger().info("cleaning up")
