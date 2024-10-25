@@ -102,19 +102,20 @@ def _collect(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
 def _load(beans: list[Bean]) -> list[Bean]:
     for bean in beans:   
         # reset some of the fields 
-        bean.tags = None
-        bean.created = min(bean.created or bean.collected or bean.updated, now()) # sometimes due to time zone issue, the created date is in future
-
         if (bean.kind in [NEWS, BLOG]) and (not bean.image_url or needs_download(bean)):
             res = individual.load_from_url(bean.url)
             if res:
                 bean.image_url = bean.image_url or res.top_image
                 bean.source = individual.site_name(res) or bean.source
                 bean.title = bean.title or res.title
-                if res.publish_date:
-                    bean.created = min(bean.created, int(res.publish_date.timestamp()))
+                
+                if not bean.created and res.publish_date:
+                    bean.created = int(res.publish_date.timestamp())
                 if res.text:  # this is a decent indicator if loading from the url even worked 
                     bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()
+
+        bean.created = bean.collected if bean.created >= now() else bean.created # sometimes due to time zone issue, the created date is in future
+        bean.tags = None
 
     return [bean for bean in beans if allowed_body(bean)]
 
