@@ -6,13 +6,13 @@ from datetime import datetime, timedelta
 from functools import reduce
 import logging
 import operator
+from bson import SON
+from icecream import ic
 from .embedding import *
 from .datamodels import *
-from bson import InvalidBSON
-from pymongo import MongoClient, UpdateMany, UpdateOne
+from .utils import *
 from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
-from icecream import ic
 
 TIMEOUT = 300000 # 3 mins
 
@@ -28,9 +28,11 @@ DEFAULT_VECTOR_LIMIT = 100
 TRENDING = {K_TRENDSCORE: -1}
 LATEST = {K_UPDATED: -1}
 NEWEST = {K_CREATED: -1}
-TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_UPDATED: -1}
-LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
-NEWEST_AND_TRENDING = {K_CREATED: -1, K_TRENDSCORE: -1}
+NEWEST_AND_TRENDING = SON([(K_CREATED, -1), (K_TRENDSCORE, -1)])
+LATEST_AND_TRENDING = SON([(K_UPDATED, -1), (K_TRENDSCORE, -1)])
+# TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_UPDATED: -1}
+# LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
+# NEWEST_AND_TRENDING = {K_CREATED: -1, K_TRENDSCORE: -1}
 
 class Beansack:
     beanstore: Collection
@@ -70,7 +72,7 @@ class Beansack:
     # this function checks for embeddings, updated time and any other rectification needed before inserting
     def _rectify_as_needed(self, items: list[Bean|Highlight]):
         # for each item if there is no embedding and create one from the text.
-        batch_time = int(datetime.now().timestamp())
+        batch_time = now()
         for item in items:
             if not item.embedding and self.embedder:
                 item.embedding = self.embedder.embed(item.digest())
@@ -95,7 +97,7 @@ class Beansack:
     #     return self.beanstore.bulk_write(writes).modified_count
       
     def delete_old(self, window: int):
-        time_filter = {K_UPDATED: { "$lt": get_timevalue(window) }}
+        time_filter = {K_UPDATED: { "$lt": ndays_ago(window) }}
         bean_count = self.beanstore.delete_many(time_filter).deleted_count
         chatter_count = self.chatterstore.delete_many(time_filter).deleted_count
         return (bean_count, chatter_count)
@@ -136,7 +138,7 @@ class Beansack:
         return next(iter(result))['total_count'] if result else 0
     
     def get_unique_beans(self, filter, sort_by = None, skip = 0, limit = None, projection = None):
-        pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
+        pipeline = ic(self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False))
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
     
     def count_unique_beans(self, filter, limit = None):
@@ -369,12 +371,8 @@ def _deserialize_chatters(cursor) -> list[Chatter]:
 def _get_logger():
     return logging.getLogger("beansack")
 
-def updated_in(last_ndays: int):
-    return {K_UPDATED: {"$gte": get_timevalue(last_ndays)}}
+def updated_after(last_ndays: int):
+    return {K_UPDATED: {"$gte": ndays_ago(last_ndays)}}
 
-def created_in(last_ndays: int):
-    return {K_CREATED: {"$gte": get_timevalue(last_ndays)}}
-
-def get_timevalue(last_ndays: int):
-    return int((datetime.now() - timedelta(days=last_ndays)).timestamp())
-
+def created_after(last_ndays: int):
+    return {K_CREATED: {"$gte": ndays_ago(last_ndays)}}

@@ -1,6 +1,7 @@
+import logging
 from retry import retry
 import os
-from .utils import create_logger, truncate
+from .utils import truncate
 from llama_cpp import Llama
 from openai import OpenAI
 from abc import ABC, abstractmethod
@@ -32,19 +33,15 @@ class BeansackEmbeddings(Embeddings):
         self.model_path = model_path
         self.context_len = context_len    
     
-    @retry(tries=3, logger=create_logger("local embedder"))
+    @retry(tries=2, logger=logging.getLogger("local embedder"))
     def embed(self, input):
         if not self.model:
             self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=True, verbose=False)
 
         result = self.model.create_embedding(_prep_input(input, self.context_len))
         if isinstance(input, str):
-            return result.data[0].embedding
-        return [data.embedding for data in result.data]
-        # result = [self.model.create_embedding(text)['data'][0]['embedding'] for text in _prep_input(input, self.context_len)]
-        # if any(not res for res in result):
-        #     raise Exception("None value returned by embedder")
-        # return result[0] if isinstance(input, str) else result
+            return result['data'][0]['embedding']
+        return [data['embedding'] for data in result['data']]
     
 class RemoteEmbeddings(Embeddings):
     openai_client = None
@@ -56,7 +53,7 @@ class RemoteEmbeddings(Embeddings):
         self.model_name = model_name
         self.context_len = context_len    
        
-    @retry(tries=3, logger=create_logger("remote embedder"))
+    @retry(tries=3, logger=logging.getLogger("remote embedder"))
     def embed(self, input):
         result = self.openai_client.embeddings.create(model=self.model_name, input=_prep_input(input, self.context_len), encoding_format="float")
         if isinstance(input, str):
