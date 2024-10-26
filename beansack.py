@@ -30,9 +30,6 @@ LATEST = {K_UPDATED: -1}
 NEWEST = {K_CREATED: -1}
 NEWEST_AND_TRENDING = SON([(K_CREATED, -1), (K_TRENDSCORE, -1)])
 LATEST_AND_TRENDING = SON([(K_UPDATED, -1), (K_TRENDSCORE, -1)])
-# TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_UPDATED: -1}
-# LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
-# NEWEST_AND_TRENDING = {K_CREATED: -1, K_TRENDSCORE: -1}
 
 class Beansack:
     beanstore: Collection
@@ -138,7 +135,7 @@ class Beansack:
         return next(iter(result))['total_count'] if result else 0
     
     def get_unique_beans(self, filter, sort_by = None, skip = 0, limit = None, projection = None):
-        pipeline = ic(self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False))
+        pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
     
     def count_unique_beans(self, filter, limit = None):
