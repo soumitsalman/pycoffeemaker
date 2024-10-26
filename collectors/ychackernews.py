@@ -34,7 +34,6 @@ def _extract(id: int, collection_time: int):
             Chatter(
                 url=url,
                 updated=collection_time,
-                collected=collection_time,
                 source=YC,
                 container_url=STORY_URL_TEMPLATE % id,
                 likes=entry.get('score'),

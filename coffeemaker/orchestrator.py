@@ -114,7 +114,8 @@ def _load(beans: list[Bean]) -> list[Bean]:
                 if res.text:  # this is a decent indicator if loading from the url even worked 
                     bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()
 
-        bean.created = bean.collected if bean.created >= now() else bean.created # sometimes due to time zone issue, the created date is in future
+        # bean.created = bean.collected if bean.created >= now() else bean.created # sometimes due to time zone issue, the created date is in future
+        bean.created = bean.created or bean.collected
         bean.tags = None
 
     return [bean for bean in beans if allowed_body(bean)]

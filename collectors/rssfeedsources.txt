@@ -183,3 +183,7 @@ https://research.securitum.com/feed/
 https://feeds.feedburner.com/positiveTechnologiesResearchLab
 https://microsoftedge.github.io/edgevr/feed.xml
 https://github.blog/tag/github-security-lab/feed/
+https://hackread.com/feed/
+https://www.ftc.gov/feeds/blog-business.xml
+https://www.ftc.gov/feeds/press-release.xml
+https://journal.hexmos.com/rss/

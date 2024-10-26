@@ -47,7 +47,6 @@ def makedatamodel(post, collection_time):
         Chatter(
             url=post.url,
             updated=collection_time,
-            collected=collection_time,
             source=REDDIT,
             container_url=STORY_URL_TEMPLATE%post.permalink,            
             channel=post.subreddit.display_name,

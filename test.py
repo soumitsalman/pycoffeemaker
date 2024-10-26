@@ -46,8 +46,8 @@ def test_collection():
     ]
     
     rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._load(beans[:5])))
-    # redditor.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="REDDIT"))
-    # ychackernews.collect(store_func=lambda items: write_datamodels(orch._download_beans([item[0] for item in random.sample(items, k=20)]), file_name="YC"))
+    redditor.collect(store_func=lambda items: write_datamodels(orch._load([item[0] for item in random.sample(items, k=5)]), file_name="REDDIT"))
+    ychackernews.collect(store_func=lambda items: write_datamodels(orch._load([item[0] for item in random.sample(items, k=5)]), file_name="YC"))
 
     # with ServiceBusClient.from_connection_string(orch.sb_connection_str).get_queue_sender("index-queue") as index_queue:
     #     to_json = lambda bean: ServiceBusMessage(json.dumps({K_ID: f"TEST:{bean.url}", K_SOURCE: "TEST", K_URL: bean.url, K_CREATED: int(time.time())}))
@@ -162,7 +162,7 @@ orch.initialize(
 start = now()
 test_collection()
 # test_clustering()
-test_index_and_augment()
+# test_index_and_augment()
 # test_whole_path_live()
 # test_search()
 # test_trend_ranking()
