@@ -22,8 +22,8 @@ BEANS = "beans"
 CHATTERS = "chatters"
 SOURCES = "sources"
 
-DEFAULT_VECTOR_SEARCH_SCORE = 0.73
-DEFAULT_VECTOR_LIMIT = 100
+DEFAULT_VECTOR_SEARCH_SCORE = 0.75
+DEFAULT_VECTOR_LIMIT = 200
 
 TRENDING = {K_TRENDSCORE: -1}
 LATEST = {K_UPDATED: -1}
@@ -280,7 +280,7 @@ class Beansack:
                         "vector": embedding or self.embedder.embed_query(text),
                         "path":   K_EMBEDDING,
                         "filter": filter or {},
-                        "k":      limit,
+                        "k":      DEFAULT_VECTOR_LIMIT,
                     },
                     "returnStoredSource": True
                 }
@@ -303,7 +303,7 @@ class Beansack:
         return pipeline
     
     def _count_vector_search_pipeline(self, text, embedding, min_score, filter, limit):
-        pipline = self._vector_search_pipeline(text, embedding, min_score, filter, limit, None, None)
+        pipline = self._vector_search_pipeline(text, embedding, min_score, filter, None, None, limit, None)
         pipline.append({ "$count": "total_count"})
         return pipline
     
