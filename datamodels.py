@@ -51,6 +51,7 @@ K_HIGHLIGHTS = "highlights"
 K_IMAGEURL = "image_url"
 K_CREATED = "created"
 K_AUTHOR = "author"
+K_SEARCH_SCORE = "search_score"
 
 class Bean(BaseModel):
     url: str

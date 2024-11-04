@@ -55,7 +55,7 @@ class RemoteEmbeddings(Embeddings):
         self.context_len = context_len    
        
     @retry(tries=3, logger=logging.getLogger("remote embedder"))
-    @cached(max_size=100, ttl=1200)
+    @cached(max_size=100, ttl=600)
     def embed(self, input):
         result = self.openai_client.embeddings.create(model=self.model_name, input=_prep_input(input, self.context_len), encoding_format="float")
         if isinstance(input, str):

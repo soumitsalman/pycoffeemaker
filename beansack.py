@@ -23,7 +23,28 @@ CHATTERS = "chatters"
 SOURCES = "sources"
 
 DEFAULT_VECTOR_SEARCH_SCORE = 0.75
-DEFAULT_VECTOR_LIMIT = 200
+DEFAULT_VECTOR_SEARCH_LIMIT = 1000
+
+CLUSTER_GROUP = {
+    K_ID: "$cluster_id",
+    K_CLUSTER_ID: {"$first": "$cluster_id"},
+    K_URL: {"$first": "$url"},
+    K_TITLE: {"$first": "$title"},
+    K_SUMMARY: {"$first": "$summary"},
+    K_HIGHLIGHTS: {"$first": "$highlights"},
+    K_TAGS: {"$first": "$tags"},
+    K_CATEGORIES: {"$first": "$categories"},
+    K_SOURCE: {"$first": "$source"},
+    K_CHANNEL: {"$first": "$channel"},
+    K_UPDATED: {"$first": "$updated"},
+    K_CREATED: {"$first": "$created"},
+    K_LIKES: {"$first": "$likes"},
+    K_COMMENTS: {"$first": "$comments"},
+    K_TRENDSCORE: {"$first": "$trend_score"},
+    K_AUTHOR: {"$first": "$author"},
+    K_KIND: {"$first": "$kind"},
+    K_IMAGEURL: {"$first": "$image_url"}
+}
 
 TRENDING = {K_TRENDSCORE: -1}
 LATEST = {K_UPDATED: -1}
@@ -114,13 +135,13 @@ class Beansack:
             filter = None, 
             sort_by = None,
             skip = None,
-            limit = DEFAULT_VECTOR_LIMIT, 
+            limit = DEFAULT_VECTOR_SEARCH_LIMIT, 
             projection = None
         ) -> list[Bean]:
         pipline = self._vector_search_pipeline(query, embedding, min_score, filter, sort_by, skip, limit, projection)
         return _deserialize_beans(self.beanstore.aggregate(pipeline=pipline))
     
-    def count_vector_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_VECTOR_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_VECTOR_LIMIT) -> int:
+    def count_vector_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_VECTOR_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_VECTOR_SEARCH_LIMIT) -> int:
         pipeline = self._count_vector_search_pipeline(query, embedding, min_score, filter, limit)
         result = list(self.beanstore.aggregate(pipeline))
         return result[0]['total_count'] if result else 0
@@ -132,7 +153,7 @@ class Beansack:
     
     def count_text_search_beans(self, query: str, filter = None, limit = None):
         result = self.beanstore.aggregate(self._text_search_pipeline(query, filter=filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True))
-        return next(iter(result))['total_count'] if result else 0
+        return next(iter(result), {'total_count': 0})['total_count'] if result else 0
     
     def get_unique_beans(self, filter, sort_by = None, skip = 0, limit = None, projection = None):
         pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
@@ -211,28 +232,7 @@ class Beansack:
             pipeline.append({"$match": filter})
         if sort_by:
             pipeline.append({"$sort": sort_by})        
-        pipeline.append({
-            "$group": {
-                "_id": "$cluster_id",
-                K_CLUSTER_ID: {"$first": "$cluster_id"},
-                K_URL: {"$first": "$url"},
-                K_TITLE: {"$first": "$title"},
-                K_SUMMARY: {"$first": "$summary"},
-                K_HIGHLIGHTS: {"$first": "$highlights"},
-                K_TAGS: {"$first": "$tags"},
-                K_CATEGORIES: {"$first": "$categories"},
-                K_SOURCE: {"$first": "$source"},
-                K_CHANNEL: {"$first": "$channel"},
-                K_UPDATED: {"$first": "$updated"},
-                K_CREATED: {"$first": "$created"},
-                K_LIKES: {"$first": "$likes"},
-                K_COMMENTS: {"$first": "$comments"},
-                K_TRENDSCORE: {"$first": "$trend_score"},
-                K_AUTHOR: {"$first": "$author"},
-                K_KIND: {"$first": "$kind"},
-                K_IMAGEURL: {"$first": "$image_url"}
-            }
-        })
+        pipeline.append({"$group": CLUSTER_GROUP})
         if sort_by:
             pipeline.append({"$sort": sort_by})
         if skip:
@@ -252,23 +252,20 @@ class Beansack:
 
         pipeline = [
             {   "$match": match },            
-            {   "$addFields":  {"search_score": {"$meta": "textScore"}} },
-            {   "$match": { "search_score": {"$gte": len(text.split(sep=" ,.;:`'\"\n\t\r\f"))}} }  # this is hueristic to count the number of word match
+            {   "$addFields":  { K_SEARCH_SCORE: {"$meta": "textScore"}} },
+            {   "$match": { K_SEARCH_SCORE: {"$gte": len(text.split(sep=" ,.;:`'\"\n\t\r\f"))}} }  # this is hueristic to count the number of word match
         ]        
-
-        if not for_count:
-            sort = {"search_score": -1}
-            if sort_by:
-                sort.update(sort_by)
-            pipeline.append({"$sort": sort})
-
+        # means this is for retrieval of the actual contents
+        # in this case sort by the what is provided for sorting
+        if sort_by:
+            pipeline.append({"$sort": sort_by})
         if skip:
             pipeline.append({"$skip": skip})
         if limit:
             pipeline.append({"$limit": limit})
         if for_count:
             pipeline.append({"$count": "total_count"})
-        if not for_count and projection:
+        if projection:
             pipeline.append({"$project": projection})
         return pipeline
    
@@ -280,7 +277,7 @@ class Beansack:
                         "vector": embedding or self.embedder.embed_query(text),
                         "path":   K_EMBEDDING,
                         "filter": filter or {},
-                        "k":      DEFAULT_VECTOR_LIMIT,
+                        "k":      DEFAULT_VECTOR_SEARCH_LIMIT,
                     },
                     "returnStoredSource": True
                 }
@@ -291,7 +288,10 @@ class Beansack:
             {
                 "$match": { "search_score": {"$gte": min_score} }
             }
-        ]           
+        ]  
+        if sort_by:
+            pipeline.append({"$sort": sort_by})        
+        pipeline.append({"$group": CLUSTER_GROUP})         
         if sort_by:
             pipeline.append({"$sort": sort_by})
         if skip:
