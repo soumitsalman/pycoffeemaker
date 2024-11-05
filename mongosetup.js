@@ -80,32 +80,12 @@ db.beans.createIndex(
 
 db.beans.createIndex(
   {
-      categories: "text",
       tags: "text",
-      title: "text",
-      summary: "text",
-      text: "text"
+      title: "text"
   },
   {
       name: "beans_text_search"
   }
-);
-
-DELETE_TIME = 2592000 // 30 DAYS * 24 HOURS * 60 MINS * 60 SECONDS
-
-db.beans.createIndex(
-  { "updated": 1 },
-  {
-      name: "delete-old-beans",
-      expireAfterSeconds: DELETE_TIME
-  }
-);
-db.chatters.createIndex(
-    {"updated":1}, 
-    {
-        name: "delete-stale-chatters",
-        expireAfterSeconds: DELETE_TIME
-    }
 );
 
 db.chatters.createIndex(
