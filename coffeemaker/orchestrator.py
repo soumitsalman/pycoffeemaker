@@ -36,6 +36,7 @@ aug_queue: persistqueue.Queue = None
 
 remotesack: Beansack = None
 categorystore: Collection = None 
+baristastore: Collection = None
 sb_connection_str: str = None
 category_eps: float = None
 cluster_eps: float = None
@@ -43,7 +44,7 @@ cluster_eps: float = None
 digestor: LocalDigestor = None
 models_dir: str = None
 
-def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_path: str, llm_base_url: str, llm_api_key: str, llm_model: str, cat_eps: float, clus_eps: float):
+def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_base_url: str, llm_api_key: str, llm_model: str, cat_eps: float, clus_eps: float):
     queue_dir=working_dir+"/.processingqueue"    
 
     global index_queue, trend_queue, aug_queue
@@ -55,16 +56,17 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
     global sb_connection_str  
     sb_connection_str = sb_conn_str 
 
-    global remotesack, categorystore,  category_eps, cluster_eps        
+    global remotesack, categorystore, baristastore, category_eps, cluster_eps        
     remotesack = Beansack(db_conn_str, BeansackEmbeddings(model_path=emb_path, context_len=4096))
     categorystore = MongoClient(db_conn_str)['espresso']['categories']
+    baristastore = MongoClient(db_conn_str)['espresso']['baristas']
     category_eps = cat_eps
     cluster_eps = clus_eps
 
     global digestor
-    digestor = LocalDigestor(model_path=llm_path, context_len=8192) \
-        if llm_path else \
-            RemoteDigestor(base_url=llm_base_url, api_key=llm_api_key, model_name=llm_model, context_len=8192)
+    digestor = RemoteDigestor(base_url=llm_base_url, api_key=llm_api_key, model_name=llm_model, context_len=8192) \
+        if llm_base_url else \
+            LocalDigestor(model_path=llm_model, context_len=8192) 
 
 def run_collection():
     logger().info("collecting|%s", "rssfeed")

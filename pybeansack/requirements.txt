@@ -5,3 +5,4 @@ retry
 pydantic
 python-dotenv
 icecream
+memoization

@@ -20,3 +20,4 @@ azure-servicebus
 transformers
 openai
 peft
+memoization

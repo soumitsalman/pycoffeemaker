@@ -4,7 +4,10 @@
 
 from datetime import datetime, timedelta
 from functools import reduce
+import logging
 import operator
+from bson import SON
+from icecream import ic
 from .embedding import *
 from .datamodels import *
 from .utils import *
@@ -19,15 +22,35 @@ BEANS = "beans"
 CHATTERS = "chatters"
 SOURCES = "sources"
 
-DEFAULT_VECTOR_SEARCH_SCORE = 0.73
-DEFAULT_VECTOR_LIMIT = 100
+DEFAULT_VECTOR_SEARCH_SCORE = 0.75
+DEFAULT_VECTOR_SEARCH_LIMIT = 1000
+
+CLUSTER_GROUP = {
+    K_ID: "$cluster_id",
+    K_CLUSTER_ID: {"$first": "$cluster_id"},
+    K_URL: {"$first": "$url"},
+    K_TITLE: {"$first": "$title"},
+    K_SUMMARY: {"$first": "$summary"},
+    K_HIGHLIGHTS: {"$first": "$highlights"},
+    K_TAGS: {"$first": "$tags"},
+    K_CATEGORIES: {"$first": "$categories"},
+    K_SOURCE: {"$first": "$source"},
+    K_CHANNEL: {"$first": "$channel"},
+    K_UPDATED: {"$first": "$updated"},
+    K_CREATED: {"$first": "$created"},
+    K_LIKES: {"$first": "$likes"},
+    K_COMMENTS: {"$first": "$comments"},
+    K_TRENDSCORE: {"$first": "$trend_score"},
+    K_AUTHOR: {"$first": "$author"},
+    K_KIND: {"$first": "$kind"},
+    K_IMAGEURL: {"$first": "$image_url"}
+}
 
 TRENDING = {K_TRENDSCORE: -1}
 LATEST = {K_UPDATED: -1}
 NEWEST = {K_CREATED: -1}
-TRENDING_AND_LATEST = {K_TRENDSCORE: -1, K_UPDATED: -1}
-LATEST_AND_TRENDING = {K_UPDATED: -1, K_TRENDSCORE: -1}
-NEWEST_AND_TRENDING = {K_CREATED: -1, K_TRENDSCORE: -1}
+NEWEST_AND_TRENDING = SON([(K_CREATED, -1), (K_TRENDSCORE, -1)])
+LATEST_AND_TRENDING = SON([(K_UPDATED, -1), (K_TRENDSCORE, -1)])
 
 class Beansack:
     beanstore: Collection
@@ -101,7 +124,7 @@ class Beansack:
     ## GET AND SEARCH ##
     ####################
 
-    def get_beans(self, filter, skip = 0, limit = 0, sort_by = None, projection = None) -> list[Bean]:
+    def get_beans(self, filter, sort_by = None, skip = None, limit = None,  projection = None) -> list[Bean]:
         cursor = self.beanstore.find(filter = filter, projection = projection, sort=sort_by, skip = skip, limit=limit)
         return _deserialize_beans(cursor)
 
@@ -111,27 +134,28 @@ class Beansack:
             min_score = DEFAULT_VECTOR_SEARCH_SCORE, 
             filter = None, 
             sort_by = None,
-            limit = DEFAULT_VECTOR_LIMIT, 
+            skip = None,
+            limit = DEFAULT_VECTOR_SEARCH_LIMIT, 
             projection = None
         ) -> list[Bean]:
-        pipline = self._vector_search_pipeline(query, embedding, min_score, filter, limit, sort_by, projection)
+        pipline = self._vector_search_pipeline(query, embedding, min_score, filter, sort_by, skip, limit, projection)
         return _deserialize_beans(self.beanstore.aggregate(pipeline=pipline))
     
-    def count_vector_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_VECTOR_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_VECTOR_LIMIT) -> int:
+    def count_vector_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_VECTOR_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_VECTOR_SEARCH_LIMIT) -> int:
         pipeline = self._count_vector_search_pipeline(query, embedding, min_score, filter, limit)
         result = list(self.beanstore.aggregate(pipeline))
         return result[0]['total_count'] if result else 0
     
-    def text_search_beans(self, query: str, filter = None, sort_by = None, skip=0, limit=None, projection=None):
+    def text_search_beans(self, query: str, filter = None, sort_by = None, skip=None, limit=None, projection=None):
         return _deserialize_beans(
             self.beanstore.aggregate(
                 self._text_search_pipeline(query, filter=filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)))
     
     def count_text_search_beans(self, query: str, filter = None, limit = None):
         result = self.beanstore.aggregate(self._text_search_pipeline(query, filter=filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True))
-        return next(iter(result))['total_count'] if result else 0
+        return next(iter(result), {'total_count': 0})['total_count'] if result else 0
     
-    def query_unique_beans(self, filter, sort_by = None, skip = 0, limit = None, projection = None):
+    def get_unique_beans(self, filter, sort_by = None, skip = 0, limit = None, projection = None):
         pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
     
@@ -140,45 +164,31 @@ class Beansack:
         result = self.beanstore.aggregate(pipeline)
         return next(iter(result))['total_count'] if result else 0
     
-    def query_trending_tags(self, filter, skip = 0, limit = None):
-        match_filter = {
-            "tags": {"$exists": True}
-        }
+    def get_trending_tags(self, filter, skip = None, limit = None):
+        match_filter = {K_TAGS: {"$exists": True}}
         if filter:
             match_filter.update(filter)
         pipeline = [
             {"$match": match_filter},
-            {"$unwind": "$tags"},
+            {"$unwind": "$tags"}, 
             {
                 "$group": {
                     "_id": "$tags",
-                    "tags": {"$first": "$tags"},
-                    "url": {"$first": "$url"},
                     "cluster_id": {"$first": "$cluster_id"},
-                    "trend_score": {"$sum": "$trend_score"},
-                    "updated": {"$first": "$updated"}
+                    "trend_score": { "$sum": "$trend_score" },
+                    "updated": { "$max": "$updated" }
                 }
             },
-            {"$sort": LATEST_AND_TRENDING},
             {
-                "$group": {
-                    "_id": "$url",
-                    "tags": {"$first": "$tags"},
-                    "url": {"$first": "$url"},
-                    "cluster_id": {"$first": "$cluster_id"}, 
-                    "trend_score": {"$first": "$trend_score"},                    
-                    "updated": {"$first": "$updated"}
-                }
+                "$sort": TRENDING
             },
-            {"$sort": LATEST_AND_TRENDING},
             {
                 "$group": {
                     "_id": "$cluster_id",
-                    "tags": {"$first": "$tags"},
-                    "url": {"$first": "$url"},
-                    "cluster_id": {"$first": "$cluster_id"}, 
-                    "trend_score": {"$first": "$trend_score"},
-                    "updated": {"$first": "$updated"}
+                    "url": {"$first": "$cluster_id"},
+                    "tags": { "$first": "$_id" },
+                    "trend_score": { "$first": "$trend_score" },
+                    "updated": { "$first": "$updated" }
                 }
             },
             {"$sort": LATEST_AND_TRENDING}
@@ -222,28 +232,7 @@ class Beansack:
             pipeline.append({"$match": filter})
         if sort_by:
             pipeline.append({"$sort": sort_by})        
-        pipeline.append({
-            "$group": {
-                "_id": "$cluster_id",
-                K_CLUSTER_ID: {"$first": "$cluster_id"},
-                K_URL: {"$first": "$url"},
-                K_TITLE: {"$first": "$title"},
-                K_SUMMARY: {"$first": "$summary"},
-                K_HIGHLIGHTS: {"$first": "$highlights"},
-                K_TAGS: {"$first": "$tags"},
-                K_CATEGORIES: {"$first": "$categories"},
-                K_SOURCE: {"$first": "$source"},
-                K_CHANNEL: {"$first": "$channel"},
-                K_UPDATED: {"$first": "$updated"},
-                K_CREATED: {"$first": "$created"},
-                K_LIKES: {"$first": "$likes"},
-                K_COMMENTS: {"$first": "$comments"},
-                K_TRENDSCORE: {"$first": "$trend_score"},
-                K_AUTHOR: {"$first": "$author"},
-                K_KIND: {"$first": "$kind"},
-                K_IMAGEURL: {"$first": "$image_url"}
-            }
-        })
+        pipeline.append({"$group": CLUSTER_GROUP})
         if sort_by:
             pipeline.append({"$sort": sort_by})
         if skip:
@@ -263,34 +252,32 @@ class Beansack:
 
         pipeline = [
             {   "$match": match },            
-            {   "$addFields":  {"search_score": {"$meta": "textScore"}} },
-            {   "$match": { "search_score": {"$gte": len(text.split(sep=" ,.;:`'\"\n\t\r\f"))}} }  # this is hueristic to count the number of word match
+            {   "$addFields":  { K_SEARCH_SCORE: {"$meta": "textScore"}} },
+            {   "$match": { K_SEARCH_SCORE: {"$gte": len(text.split(sep=" ,.;:`'\"\n\t\r\f"))}} }  # this is hueristic to count the number of word match
         ]        
-
-        if not for_count:
-            sort = {"search_score": -1}
-            if sort_by:
-                sort.update(sort_by)
-            pipeline.append({"$sort": sort})
-
+        # means this is for retrieval of the actual contents
+        # in this case sort by the what is provided for sorting
+        if sort_by:
+            pipeline.append({"$sort": sort_by})
         if skip:
             pipeline.append({"$skip": skip})
         if limit:
             pipeline.append({"$limit": limit})
         if for_count:
             pipeline.append({"$count": "total_count"})
-        if not for_count and projection:
+        if projection:
             pipeline.append({"$project": projection})
         return pipeline
    
-    def _vector_search_pipeline(self, text, embedding, min_score, filter, limit, sort_by, projection):
-        pipeline = [
+    def _vector_search_pipeline(self, text, embedding, min_score, filter, sort_by, skip, limit, projection):        
+        pipeline = [            
             {
                 "$search": {
                     "cosmosSearch": {
                         "vector": embedding or self.embedder.embed_query(text),
                         "path":   K_EMBEDDING,
-                        "k":      limit,
+                        "filter": filter or {},
+                        "k":      DEFAULT_VECTOR_SEARCH_LIMIT,
                     },
                     "returnStoredSource": True
                 }
@@ -301,40 +288,32 @@ class Beansack:
             {
                 "$match": { "search_score": {"$gte": min_score} }
             }
-        ]       
-        if filter:
-            pipeline[0]["$search"]["cosmosSearch"]["filter"] = filter
+        ]  
+        if sort_by:
+            pipeline.append({"$sort": sort_by})        
+        pipeline.append({"$group": CLUSTER_GROUP})         
         if sort_by:
             pipeline.append({"$sort": sort_by})
+        if skip:
+            pipeline.append({"$skip": skip})
+        if limit:
+            pipeline.append({"$limit": limit})
         if projection:
             pipeline.append({"$project": projection})
         return pipeline
     
     def _count_vector_search_pipeline(self, text, embedding, min_score, filter, limit):
-        pipline = self._vector_search_pipeline(text, embedding, min_score, filter, limit, None, None)
+        pipline = self._vector_search_pipeline(text, embedding, min_score, filter, None, None, limit, None)
         pipline.append({ "$count": "total_count"})
         return pipline
+    
+    def get_chatter_stats(self, urls: str|list[str]) -> list[Chatter]:
+        """Retrieves the latest social media status from different mediums."""
+        pipeline = self._chatter_stats_pipeline(urls)
+        return _deserialize_chatters(self.chatterstore.aggregate(pipeline))
         
-    def get_latest_chatter_stats(self, urls: list[str]) -> list[Chatter]:
-        pipeline = [
-            {
-                "$match": { "url": {"$in": urls} }
-            },
-            {
-                "$sort": {"updated": -1}
-            },
-            {
-                "$group": {
-                    "_id": {
-                        "url": "$url",
-                        "container_url": "$container_url"
-                    },
-                    "updated":       {"$first": "$updated"},
-                    "url":           {"$first": "$url"},
-                    "likes":         {"$first": "$likes"},
-                    "comments":      {"$first": "$comments"}                
-                }
-            },
+    def get_consolidated_chatter_stats(self, urls: list[str]) -> list[Chatter]:
+        pipeline = self._chatter_stats_pipeline(urls) + [            
             {
                 "$group": {
                     "_id":           "$url",
@@ -345,6 +324,31 @@ class Beansack:
             }
         ]
         return _deserialize_chatters(self.chatterstore.aggregate(pipeline))
+    
+    def _chatter_stats_pipeline(self, urls: list[str]):
+        return [
+            {
+                "$match": { K_URL: {"$in": urls} if isinstance(urls, list) else urls }
+            },
+            {
+                "$sort": {K_UPDATED: -1}
+            },
+            {
+                "$group": {
+                    "_id": {
+                        "url": "$url",
+                        "container_url": "$container_url"
+                    },
+                    K_URL:           {"$first": "$url"},
+                    K_UPDATED:       {"$first": "$updated"},                
+                    K_SOURCE:        {"$first": "$source"},
+                    K_CHANNEL:       {"$first": "$channel"},
+                    K_CONTAINER_URL: {"$first": "$container_url"},
+                    K_LIKES:         {"$first": "$likes"},
+                    K_COMMENTS:      {"$first": "$comments"}                
+                }
+            }
+        ]
 
 ## local utilities for pymongo
 def _deserialize_beans(cursor) -> list[Bean]:
