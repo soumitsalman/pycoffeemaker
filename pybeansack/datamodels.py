@@ -54,6 +54,7 @@ K_AUTHOR = "author"
 K_SEARCH_SCORE = "search_score"
 
 class Bean(BaseModel):
+    id: str = Field(default=None, alias="_id")
     url: str
     updated: Optional[int] = None
     source: Optional[str] = None
@@ -71,7 +72,13 @@ class Bean(BaseModel):
     search_score: Optional[float|int] = None
     likes: Optional[int] = None
     comments: Optional[int] = None
-    trend_score: Optional[int] = None    
+    shares: Optional[int] = None
+    similar_count: Optional[int] = None
+    trend_score: Optional[int] = None 
+    total_likes: Optional[int] = None
+    total_comments: Optional[int] = None
+    total_shares: Optional[int] = None
+    total_similar: Optional[int] = None
     cluster_id: Optional[str] = None
 
     def digest(self):

@@ -6,7 +6,7 @@ from pybeansack.datamodels import BLOG, K_CREATED, K_SOURCE, K_UPDATED, K_URL, B
 
 def collect(sb_conn_str: str, store_func):
     collected = now()
-    with ServiceBusClient.from_connection_string(sb_conn_str).get_queue_receiver(queue_name="index-queue") as receiver:
+    with ServiceBusClient.from_connection_string(sb_conn_str).get_queue_receiver(queue_name="collect-queue") as receiver:
         for _ in range(100): # just a random max loop count
             received_msgs = receiver.receive_messages(max_message_count=2000, max_wait_time=1) # random number of batch count
             if not received_msgs:

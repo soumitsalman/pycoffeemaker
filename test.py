@@ -101,7 +101,7 @@ def test_clustering():
         "http://feeds.feedburner.com/positiveTechnologiesResearchLab",
         "http://googleprojectzero.blogspot.com/feeds/posts/default"
     ]
-    rssfeed.collect(sources = sources, store_func=lambda beans: existing.extend(orch._index(orch._load(orch.remotesack.filter_unstored_beans(beans)))))
+    rssfeed.collect(sources = sources, store_func=lambda beans: existing.extend(orch._index(orch._load(orch.remotesack.new_beans(beans)))))
     url_set = set()
     duplicate_urls = []
     for bean in orch._cluster(existing):
@@ -149,8 +149,6 @@ orch.initialize(
     os.getenv("SB_CONNECTION_STRING"),
     os.getenv("WORKING_DIR", "."), 
     os.getenv("EMBEDDER_PATH"),
-    # os.getenv("LLM_PATH"),
-    None,
     os.getenv("LLM_BASE_URL"),
     os.getenv("LLM_API_KEY"),
     os.getenv("LLM_MODEL"),
@@ -160,11 +158,10 @@ orch.initialize(
 
 ### TEST CALLS
 start = now()
-test_collection()
+# test_collection()
 # test_clustering()
 # test_index_and_augment()
-# test_whole_path_live()
+test_whole_path_live()
 # test_search()
 # test_trend_ranking()
 logging.getLogger("test").info("execution time|%s|%d", "__batch__", int(now() - start))
-

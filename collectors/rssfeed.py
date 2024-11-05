@@ -41,7 +41,8 @@ def _to_bean(entry, source_name, kind, collection_time):
     # is_valid_tag = lambda tag: len(tag)>= MIN_TAG_LEN and len(tag) <= MAX_TAG_LEN and ("/" not in tag)    
     return Bean(
         url=entry.link,
-        updated=collection_time,
+        # in case of rss feed, the created time is the same as the updated time during collection. if it is mentioned in a social media feed then the updated time will get change
+        updated=created_time, 
         collected=collection_time,
         source=source_name,
         title=entry.title,
@@ -50,7 +51,6 @@ def _to_bean(entry, source_name, kind, collection_time):
         summary=summary,
         author=entry.get('author'),
         created=created_time,
-        # tags=[tag.term for tag in entry.get('tags', []) if is_valid_tag(tag.term)],
         image_url=_extract_image_link(entry)
     )    
 

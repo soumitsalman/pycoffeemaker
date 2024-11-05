@@ -58,8 +58,9 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
 
     global remotesack, categorystore, baristastore, category_eps, cluster_eps        
     remotesack = Beansack(db_conn_str, BeansackEmbeddings(model_path=emb_path, context_len=4096))
-    categorystore = MongoClient(db_conn_str)['espresso']['categories']
-    baristastore = MongoClient(db_conn_str)['espresso']['baristas']
+    espressodb = MongoClient(db_conn_str)['espresso']
+    categorystore = espressodb['categories']
+    baristastore = espressodb['baristas']
     category_eps = cat_eps
     cluster_eps = clus_eps
 
@@ -75,8 +76,8 @@ def run_collection():
     ychackernews.collect(store_func=_collect)
     logger().info("collecting|%s", "redditor")
     redditor.collect(store_func=_collect)
-    logger().info("collecting|%s", "espresso")
-    espresso.collect(sb_conn_str=sb_connection_str, store_func=_collect)
+    # logger().info("collecting|%s", "espresso")
+    # espresso.collect(sb_conn_str=sb_connection_str, store_func=_collect)
     # TODO: add collection from nextdoor
     # TODO: add collection from linkedin
 
@@ -94,7 +95,7 @@ def _collect(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
         chatters = [item[1] for item in items]
 
     if beans:            
-        downloaded = _load(remotesack.filter_unstored_beans(beans))
+        downloaded = _load(remotesack.new_beans(beans))
         if downloaded:
             logger().info("collected|%s|%d", downloaded[0].source, len(downloaded))
             index_queue.put_nowait(downloaded)
@@ -116,7 +117,7 @@ def _load(beans: list[Bean]) -> list[Bean]:
                 if res.text:  # this is a decent indicator if loading from the url even worked 
                     bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()
 
-        # bean.created = bean.collected if bean.created >= now() else bean.created # sometimes due to time zone issue, the created date is in future
+        bean.id = bean.url
         bean.created = bean.created or bean.collected
         bean.tags = None
 
@@ -126,7 +127,7 @@ def run_indexing_and_augmenting():
     logger().info("indexing and augmenting")
     # local index queue
     while not index_queue.empty():  
-        beans = remotesack.filter_unstored_beans(index_queue.get_nowait()) 
+        beans = remotesack.new_beans(index_queue.get_nowait()) 
         if not beans:   
             continue   
               
@@ -177,18 +178,18 @@ def _augment(beans: list[Bean]):
         try:
             digest = digestor.run(bean.text)
             if digest:
-                bean.summary = digest.summary if needs_summary(bean) else bean.text
+                bean.summary = digest.summary or bean.text
                 bean.title = digest.title or bean.title
                 bean.tags = _merge_tags(bean, digest.tags)
         except:
             logger().error("failed augmenting|%s", bean.url)
-    return beans  
+    return [bean for bean in beans if bean.summary]  
 
 def run_clustering():
     logger().info("clustering")
     # TODO: in future optimize the beans that need to be clustered.
     # right now we are just clustering the whole database
-    beans = _cluster(remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1}))   
+    beans = _cluster(remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1, K_ID: 0}))   
     updates = [UpdateOne({K_URL: bean.url},{"$set": {K_CLUSTER_ID: bean.cluster_id}}) for bean in beans]
     update_count = _bulk_update(updates)
     logger().info("clustered|__batch__|%d", update_count)
@@ -235,7 +236,7 @@ def run_trend_ranking():
     
     items = list(batch.values())
     urls = [item.url for item in items]
-    chatters=remotesack.get_latest_chatter_stats(urls)
+    chatters=remotesack.get_consolidated_chatter_stats(urls)
     cluster_sizes=remotesack.count_related_beans(urls)
     current_time = now()
     res = _bulk_update([_make_trend_update(item, chatters, cluster_sizes, current_time) for item in items])
@@ -262,7 +263,7 @@ def run_cleanup():
     logger().info("cleaned up|beans|%d", bcount)
     logger().info("cleaned up|chatters|%d", ccount)
 
-BULK_CHUNK_SIZE = 20000
+BULK_CHUNK_SIZE = 10000
 FIVE_MINUTES = 300
 TEN_MINUTES = 600
 def _bulk_update(updates):

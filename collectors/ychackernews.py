@@ -23,7 +23,9 @@ def _extract(id: int, collection_time: int):
         return \
             Bean(            
                 url=url, # this is either a linked url or a direct post
-                updated=collection_time,
+                # initially the bean's updated time will be the same as the created time
+                # if there is a chatter that links to this, then the updated time will be changed to collection time of the chatter
+                updated=int(entry.get('time', collection_time)),
                 collected=collection_time,
                 source=extract_source(url)[0],
                 title=entry.get('title'),

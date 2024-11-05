@@ -62,12 +62,13 @@ class Beansack:
              
         client = MongoClient(
             conn_str, 
-            appname="PyCoffeemaker_or_Espresso", 
             timeoutMS=TIMEOUT,
             serverSelectionTimeoutMS=TIMEOUT,
             socketTimeoutMS=TIMEOUT,
             connectTimeoutMS=TIMEOUT,
-            retryWrites=True)        
+            retryWrites=True,
+            minPoolSize=10,
+            maxPoolSize=100)        
         self.beanstore: Collection = client[BEANSACK][BEANS]
         self.chatterstore: Collection = client[BEANSACK][CHATTERS]        
         self.sourcestore: Collection = client[BEANSACK][SOURCES]  
@@ -77,26 +78,28 @@ class Beansack:
     ## STORING AND INDEXING ##
     ##########################
     def store_beans(self, beans: list[Bean]) -> int:   
+        beans = self.index_beans(self.new_beans(beans)) 
         if beans:
-            beans = self._rectify_as_needed(beans) 
             res = self.beanstore.insert_many([bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans], ordered=False)            
             return len(res.inserted_ids)
         return 0
 
-    def filter_unstored_beans(self, beans: list[Bean]):
-        exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
-        return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
-        
+    def new_beans(self, beans: list[Bean]):
+        if beans:
+            exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
+            return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
+                
     # this function checks for embeddings, updated time and any other rectification needed before inserting
-    def _rectify_as_needed(self, items: list[Bean|Highlight]):
+    def index_beans(self, beans: list[Bean|Highlight]):
         # for each item if there is no embedding and create one from the text.
-        batch_time = now()
-        for item in items:
-            if not item.embedding and self.embedder:
-                item.embedding = self.embedder.embed(item.digest())
-            if not item.updated:
-                item.updated = batch_time
-        return items
+        if beans:
+            batch_time = now()
+            for bean in beans:
+                if not bean.embedding and self.embedder:
+                    bean.embedding = self.embedder.embed(bean.digest())
+                if not bean.updated:
+                    bean.updated = batch_time
+            return beans
 
     def store_chatters(self, chatters: list[Chatter]):
         if chatters:
@@ -124,7 +127,7 @@ class Beansack:
     ## GET AND SEARCH ##
     ####################
 
-    def get_beans(self, filter, sort_by = None, skip = None, limit = None,  projection = None) -> list[Bean]:
+    def get_beans(self, filter, sort_by = None, skip = 0, limit = 0,  projection = None) -> list[Bean]:
         cursor = self.beanstore.find(filter = filter, projection = projection, sort=sort_by, skip = skip, limit=limit)
         return _deserialize_beans(cursor)
 
@@ -146,25 +149,25 @@ class Beansack:
         result = list(self.beanstore.aggregate(pipeline))
         return result[0]['total_count'] if result else 0
     
-    def text_search_beans(self, query: str, filter = None, sort_by = None, skip=None, limit=None, projection=None):
+    def text_search_beans(self, query: str, filter = None, sort_by = None, skip=0, limit=0, projection=None):
         return _deserialize_beans(
             self.beanstore.aggregate(
                 self._text_search_pipeline(query, filter=filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)))
     
-    def count_text_search_beans(self, query: str, filter = None, limit = None):
+    def count_text_search_beans(self, query: str, filter = None, limit = 0):
         result = self.beanstore.aggregate(self._text_search_pipeline(query, filter=filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True))
         return next(iter(result), {'total_count': 0})['total_count'] if result else 0
     
-    def get_unique_beans(self, filter, sort_by = None, skip = 0, limit = None, projection = None):
+    def get_unique_beans(self, filter, sort_by = None, skip = 0, limit = 0, projection = None):
         pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
     
-    def count_unique_beans(self, filter, limit = None):
-        pipeline = self._unique_beans_pipeline(filter, sort_by=None, skip=None, limit=limit, projection=None, for_count=True)
+    def count_unique_beans(self, filter, limit = 0):
+        pipeline = self._unique_beans_pipeline(filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True)
         result = self.beanstore.aggregate(pipeline)
         return next(iter(result))['total_count'] if result else 0
     
-    def get_trending_tags(self, filter, skip = None, limit = None):
+    def get_trending_tags(self, filter, skip = 0, limit = 0):
         match_filter = {K_TAGS: {"$exists": True}}
         if filter:
             match_filter.update(filter)

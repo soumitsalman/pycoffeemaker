@@ -35,7 +35,9 @@ def makedatamodel(post, collection_time):
     return (
         Bean(
             url=post.url,
-            updated=collection_time,
+            # initially the bean's updated time will be the same as the created time
+            # if there is a chatter that links to this, then the updated time will be changed to collection time of the chatter
+            updated=int(post.created_utc),
             collected=collection_time,
             source=extract_source(post.url)[0] if not post.is_self else f"r/{post.subreddit.display_name}",
             title=post.title,
