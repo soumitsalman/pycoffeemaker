@@ -1,10 +1,11 @@
 from itertools import chain
 import json
+import logging
 import os
-import random
 import re
 from dotenv import load_dotenv
 from icecream import ic
+from datetime import datetime as dt
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR+"/.env")
@@ -12,6 +13,7 @@ WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
 
 from pybeansack.datamodels import *
 from pymongo import DeleteOne, InsertOne, UpdateOne
+from pybeansack.utils import *
 from coffeemaker import orchestrator as orch
 
 make_id = lambda text: re.sub(r'[^a-zA-Z0-9]', '-', text.lower())
@@ -50,8 +52,8 @@ def setup_categories():
         
     with open("factory_settings.json", 'r') as file:
         _make_category_entry([], json.load(file)['categories'])
-    orch.categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
-    orch.categorystore.insert_many(list({item[K_ID]: item for item in updates}.values()))   
+    # orch.categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
+    # orch.categorystore.insert_many(list({item[K_ID]: item for item in updates}.values()))   
     orch.localsack.store_categories(list({item[K_ID]: item for item in updates}.values()))
 
 def setup_baristas():   
@@ -91,10 +93,6 @@ def setup_baristas():
     orch.baristastore.delete_many({K_SOURCE: "__SYSTEM__"})
     orch.baristastore.insert_many(list({item[K_ID]: item for item in updates}.values())) 
 
-def port_categories():
-    res = orch.categorystore.find()
-    orch.localsack.store_categories(list(res))
-
 def embed_categories():
     cats = orch.categorystore.find({K_EMBEDDING: {"$exists": False}})
     ic(orch.categorystore.bulk_write(
@@ -120,8 +118,43 @@ def rectify_categories():
     return orch.remotesack.beanstore.bulk_write(updates, False).modified_count
 
 def rectify_ranking():
-    orch.trend_queue.put(orch.remotesack.get_beans(filter={}, projection={K_URL: 1, K_UPDATED: 1, K_TRENDSCORE: 1, K_LIKES: 1, K_COMMENTS: 1}))
+    orch.trend_queue.put(orch.remotesack.get_beans(filter={K_COLLECTED: {"$gte": int(ndays_ago(3).timestamp())}}, projection={K_URL: 1, K_UPDATED: 1, K_TRENDSCORE: 1, K_LIKES: 1, K_COMMENTS: 1}))
     orch.run_trend_ranking()
+
+def port_categories_to_localsack():
+    orch.localsack.store_categories(list(orch.categorystore.find()))
+
+def port_beans_to_localsack():
+    beans = orch.remotesack.get_beans(
+        filter={
+            K_EMBEDDING: {"$exists": True},
+            K_COLLECTED: {"$gte": int(ndays_ago(3).timestamp())}
+        },
+        projection={K_ID: 0, K_TEXT: 0}
+    )
+    print("porting beans|%d", len(beans))
+    for bean in beans:
+        if isinstance(bean.created, int):
+            bean.created = dt.fromtimestamp(bean.created)
+        if isinstance(bean.updated, int):
+            bean.updated = dt.fromtimestamp(bean.updated)
+        if isinstance(bean.collected, int):
+            bean.collected = dt.fromtimestamp(bean.collected)
+    orch.localsack.store_beans(beans)
+    print("finished porting beans")
+
+def port_chatters_to_localsack():
+    chatters = []
+    items = list(orch.remotesack.chatterstore.find(filter={K_UPDATED: {"$exists": True}}, sort={K_UPDATED: -1}))
+    print("porting chatters|%d", len(items))
+    for item in items:
+        if isinstance(item.get(K_UPDATED), int):
+            item[K_COLLECTED] = dt.fromtimestamp(item[K_UPDATED])
+        item["chatter_url"] = item[K_CONTAINER_URL]
+        chatters.append(Chatter(**item))
+
+    orch.localsack.store_chatters(chatters)
+    print("finished porting chatters")
 
 orch.initialize(
     os.getenv("DB_CONNECTION_STRING"),
@@ -135,7 +168,9 @@ orch.initialize(
     float(os.getenv('CLUSTER_EPS'))
 )
 
-port_categories()
+port_chatters_to_localsack()
+port_categories_to_localsack()
+port_beans_to_localsack()
 # _patch_upper_categories()
 # setup_categories()
 # embed_categories()

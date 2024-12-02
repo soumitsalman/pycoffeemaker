@@ -9,6 +9,7 @@ from retry import retry
 from pybeansack import utils
 from llama_cpp import Llama
 from pydantic import BaseModel, Field
+from newspaper import nlp
 
 class Digest(BaseModel):
     title: Optional[str] = Field(description="title of the content", default=None)
@@ -81,6 +82,18 @@ class RemoteDigestor:
         
     def __call__(self, kind: str, text: str) -> Digest:        
         return self.run(kind, text)
+    
+class NewspaperDigestor:       
+    def __init__(self, language: str = "en"):
+        nlp.load_stopwords(language)
+        
+    def run(self, text: str, title: str) -> Digest:        
+        summary_lines = [' '.join(line.strip().split("\n")) for line in nlp.summarize(title=title, text=text)]
+        return Digest(
+            title=title,
+            summary=' '.join(summary_lines),
+            tags=[] # leaving this empty intentionally because nlp.keywords() is dumb
+        )
 
 def combine_texts(texts: list[str], batch_size: int, delimiter: str = "```") -> list[str]:
     if utils.count_tokens(texts) > batch_size:

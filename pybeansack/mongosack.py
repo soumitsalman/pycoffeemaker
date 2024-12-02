@@ -22,9 +22,6 @@ BEANS = "beans"
 CHATTERS = "chatters"
 SOURCES = "sources"
 
-DEFAULT_VECTOR_SEARCH_SCORE = 0.75
-DEFAULT_VECTOR_SEARCH_LIMIT = 1000
-
 CLUSTER_GROUP = {
     K_ID: "$cluster_id",
     K_CLUSTER_ID: {"$first": "$cluster_id"},
@@ -78,13 +75,13 @@ class Beansack:
     ## STORING AND INDEXING ##
     ##########################
     def store_beans(self, beans: list[Bean]) -> int:   
-        beans = self.index_beans(self.new_beans(beans)) 
+        beans = self.index_beans(self.not_exists(beans)) 
         if beans:
             res = self.beanstore.insert_many([bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans], ordered=False)            
             return len(res.inserted_ids)
         return 0
 
-    def new_beans(self, beans: list[Bean]):
+    def not_exists(self, beans: list[Bean]):
         if beans:
             exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
             return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())

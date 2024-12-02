@@ -78,11 +78,11 @@ def test_index_and_augment():
         # "https://windows-internals.com/feed/",
         # "https://secret.club/feed.xml",
         # "https://research.securitum.com/feed/",
-        # "https://feeds.feedburner.com/positiveTechnologiesResearchLab",
+        "https://feeds.feedburner.com/positiveTechnologiesResearchLab",
         # "https://microsoftedge.github.io/edgevr/feed.xml",
         "https://github.blog/tag/github-security-lab/feed/"
     ]
-    rssfeed.collect(sources=sources, store_beans=lambda beans: write_datamodels(orch._augment(orch._index(beans[:3]))))
+    rssfeed.collect(sources=sources, store_beans=lambda beans: [print(bean.tags, "\n", bean.summary) for bean in orch._augment(orch._index(random.sample(beans, 3)))])
     # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(orch._download(beans[:3]))))
   
 def test_search():
@@ -92,58 +92,47 @@ def test_search():
     write_datamodels(orch.remotesack.vector_search_beans(query=query, filter=updated_after(3), sort_by=LATEST, projection={K_EMBEDDING: 0, K_ID: 0}), "VECTOR_SEARCH")
 
 def test_clustering():  
-    existing = orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL:1, K_TITLE: 1, K_CLUSTER_ID: 1, K_EMBEDDING: 1})    
+    def _collect(beans: list[Bean]):
+        ic(len(beans))
+        beans = orch.localsack.not_exists(beans)
+        if beans:
+            beans = orch._index(orch._download(random.sample(beans, min(3, ic(len(beans))))))
+            orch.localsack.store_beans(beans)
+            ic(orch._cluster([bean.url for bean in beans]))        
+    
     sources = [
-        "https://accessvector.net/rss.xml",
-        "https://androidoffsec.withgoogle.com/index.xml",
-        "https://www.runzero.com/blog/index.xml",
-        "https://blog.stratumsecurity.com/rss/",
-        "https://blog.assetnote.io/feed.xml",
-        "https://www.atredis.com/blog?format=rss",
-        "https://starlabs.sg/blog/index.xml",
-        "https://labs.watchtowr.com/rss/",
-        "http://feeds.feedburner.com/positiveTechnologiesResearchLab",
-        "http://googleprojectzero.blogspot.com/feeds/posts/default"
+        "https://www.ghacks.net/feed/",
+        "https://thenewstack.io/feed",
+        "https://scitechdaily.com/feed/"
     ]
-    rssfeed.collect(sources = sources, store_beans=lambda beans: existing.extend(orch._index(orch._download(orch.remotesack.new_beans(beans)))))
-    url_set = set()
-    duplicate_urls = []
-    for bean in orch._cluster(existing):
-        if bean.url in url_set:
-            duplicate_urls.append(bean.url)
-        else:
-            url_set.add(bean.url)
-    if duplicate_urls:
-        print(f"Duplicate URLs found: {duplicate_urls}")
-    else:
-        print("No duplicate URLs found.")
+    rssfeed.collect(store_beans=_collect, sources = sources)
 
 def test_clustering_live(): 
     orch.run_clustering()
 
-def test_trend_ranking():
-    selected_urls = [
-        "https://www.nature.com/articles/d41586-024-02526-y", 
-        "https://www.livescience.com/space/black-holes/final-parsec-problem-supermassive-black-holes-impossible-solution", 
-        "https://scitechdaily.com/hubble-captures-a-supernova-spiral-a-galaxys-tale-of-birth-beauty-and-explosions/", 
-        "https://www.livescience.com/space/cosmology/catastrophic-collision-between-milky-way-and-andromeda-galaxies-may-not-happen-after-all-new-study-hints", 
-        "https://www.iflscience.com/astronomers-place-5050-odds-on-andromeda-colliding-with-us-75543"
-    ]
-    items = orch.remotesack.get_beans(filter={K_URL: {"$in": selected_urls}})
-    urls = [item.url for item in items]
-    chatters=orch.remotesack.get_latest_chatter_stats(urls)
-    cluster_sizes=orch.remotesack.count_related_beans(urls)
-    ic([orch._make_trend_update(item, chatters, cluster_sizes) for item in items])
+def test_trend_ranking():    
+    # redditor.collect(
+    #     store_beans=lambda beans: print(len(beans), "beans collected from", beans[0].source),
+    #     store_chatters=orch._collect_chatters)
+    # ychackernews.collect(
+    #     store_beans=lambda beans: print(len(beans), "beans collected from", beans[0].source),
+    #     store_chatters=orch._collect_chatters)    
+    orch._trend_rank()
 
 def test_whole_path_live():    
     rssfeed.collect(
-        store_beans=lambda beans: orch._collect_beans(random.sample(beans, 3)),
-        sources=["https://www.buzzhint.com/feed/"])
+        store_beans=lambda beans: orch._collect_beans(random.sample(beans, 2)),
+        sources=[
+            "https://www.techradar.com/feeds/articletype/news",
+            "https://www.geekwire.com/feed/",
+            "https://investorplace.com/content-feed/",
+            "https://dev.to/feed"
+        ])
     redditor.collect(
-        store_beans=lambda beans: orch._collect_beans(random.sample(beans, 3)),
+        store_beans=lambda beans: orch._collect_beans(random.sample(beans, 2)),
         store_chatters=orch._collect_chatters)
     ychackernews.collect(
-        store_beans=lambda beans: orch._collect_beans(random.sample(beans, 3)),
+        store_beans=lambda beans: orch._collect_beans(random.sample(beans, 2)),
         store_chatters=orch._collect_chatters)
     
     orch.run_indexing_and_augmenting()
@@ -167,8 +156,9 @@ start = now()
 # test_collection()
 # test_clustering()
 # test_index_and_augment()
-test_whole_path_live()
+# test_whole_path_live()
 # test_search()
-# test_trend_ranking()
+test_trend_ranking()
 # orch.run_trend_ranking()
+orch.close()
 logging.getLogger("test").info("execution time|%s|%d", "__batch__", now() - start)
