@@ -2,35 +2,34 @@
 from bson import ObjectId
 from pydantic import BaseModel, Field
 from typing import Optional
+from datetime import datetime
 
-CHANNEL = "social media group/forum"
-POST = "social media post"
+# CHANNEL = "social media group/forum"
+POST = "post"
 NEWS = "news"
-BLOG = "blog/journal"
-COMMENT = "social media comment"
+BLOG = "blog"
+COMMENTS = "comments"
 
 # names of important fields of collections
 K_CONTAINER_URL = "container_url"
 K_LIKES = "likes"
 K_COMMENTS = "comments"
-K_TRENDSCORE = "trend_score"
+K_SHARES = "shares"
 
 class Chatter(BaseModel):
     # this is the url of bean it represents
     url: Optional[str] = None 
-    updated: Optional[int] = None
-    source: Optional[str] = None
-    text: Optional[str] = None
-    cid: Optional[str] = None
-    channel: Optional[str] = None
     # this is the url in context of the social media post that contains the bean represented 'url'
-    # when the bean itself is a post (instead of a news/article url) container url is the same as 'url'
-    container_url: Optional[str] = None 
-    likes: Optional[int] = None
-    likes_ratio: Optional[float] = None
-    comments: Optional[int] = None
-    subscribers: Optional[int] = None
-    trend_score: Optional[int] = None
+    # when the bean itself is a post (instead of a news/article url) container url is the same as 'url' 
+    chatter_url: Optional[str] = None
+    source: Optional[str] = None
+    channel: Optional[str] = None    
+    collected: Optional[datetime] = None
+   
+    likes: Optional[int] = Field(default=0)    
+    comments: Optional[int] = Field(default=0)
+    shares: Optional[int] = Field(default=0)
+    subscribers: Optional[int] = Field(default=0)
     
     def digest(self):
         return f"From: {self.source}\nBody: {self.text}"
@@ -52,33 +51,38 @@ K_IMAGEURL = "image_url"
 K_CREATED = "created"
 K_AUTHOR = "author"
 K_SEARCH_SCORE = "search_score"
+K_SIMILARS = "similars"
+K_LATEST_LIKES = "latest_likes"
+K_LATEST_COMMENTS = "latest_comments"
+K_LATEST_SHARES = "latest_shares"
+K_TRENDSCORE = "trend_score"
+
 
 class Bean(BaseModel):
     id: str = Field(default=None, alias="_id")
-    url: str
-    updated: Optional[int] = None
+    url: str    
     source: Optional[str] = None
     title: Optional[str] = None
     kind: Optional[str] = None
     text: Optional[str] = None
     image_url: Optional[str] = None
     author: Optional[str] = None    
-    created: Optional[int] = None 
-    collected: Optional[int] = None
+    created: Optional[datetime] = None 
+    collected: Optional[datetime] = None
+    updated: Optional[datetime] = None
     categories: Optional[list[str]] = None
     tags: Optional[list[str]|str] = None
     summary: Optional[str] = None
     embedding: Optional[list[float]] = None
     search_score: Optional[float|int] = None
-    likes: Optional[int] = None
-    comments: Optional[int] = None
-    shares: Optional[int] = None
-    similar_count: Optional[int] = None
-    trend_score: Optional[int] = None 
-    total_likes: Optional[int] = None
-    total_comments: Optional[int] = None
-    total_shares: Optional[int] = None
-    total_similar: Optional[int] = None
+    likes: Optional[int] = Field(default=0)
+    comments: Optional[int] = Field(default=0)
+    shares: Optional[int] = Field(default=0)
+    similars: Optional[int] = Field(default=1) # a bean is always similar to itself
+    latest_likes: Optional[int] = Field(default=0)
+    latest_comments: Optional[int] = Field(default=0)
+    latest_shares: Optional[int] = Field(default=0)
+    trend_score: Optional[int] = Field(default=1) # a bean is always similar to itself
     cluster_id: Optional[str] = None
 
     def digest(self):

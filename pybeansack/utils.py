@@ -33,5 +33,8 @@ def truncate(input: str, n_ctx) -> str:
 def count_tokens(input: str) -> int:
     return len(_encoding.encode(input))
 
-now = lambda: int(dt.now(tz=timezone.utc).timestamp())
-ndays_ago = lambda ndays: int((dt.now(tz=timezone.utc) - timedelta(days=ndays)).timestamp())
+# now = lambda: int(dt.now(tz=timezone.utc).timestamp())
+# ndays_ago = lambda ndays: int((dt.now(tz=timezone.utc) - timedelta(days=ndays)).timestamp())
+
+now = lambda: dt.now(tz=timezone.utc)
+ndays_ago = lambda ndays: now() - timedelta(days=ndays)

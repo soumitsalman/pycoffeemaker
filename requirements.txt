@@ -21,3 +21,4 @@ transformers
 openai
 peft
 memoization
+duckdb

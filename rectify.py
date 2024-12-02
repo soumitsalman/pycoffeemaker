@@ -15,6 +15,7 @@ from pymongo import DeleteOne, InsertOne, UpdateOne
 from coffeemaker import orchestrator as orch
 
 make_id = lambda text: re.sub(r'[^a-zA-Z0-9]', '-', text.lower())
+K_RELATED = "related"
 
 def setup_categories():   
     updates = []
@@ -25,9 +26,9 @@ def setup_categories():
             updates.append({
                 K_ID: id,
                 K_TEXT: entry, 
-                "related": list({make_id(item) for item in path}),
+                K_RELATED: list({make_id(item) for item in path}),
                 K_DESCRIPTION: " >> ".join(path), 
-                K_EMBEDDING:  orch.remotesack.embedder.embed( "topic: " + (" >> ".join(path))), 
+                K_EMBEDDING:  orch.remotesack.embedder.embed( "category: " + (" >> ".join(path))), 
                 K_SOURCE: "__SYSTEM__"
             })
             return [id]
@@ -41,7 +42,7 @@ def setup_categories():
                 updates.append({
                     K_ID: id,
                     K_TEXT: key,
-                    "related": related,
+                    K_RELATED: related,
                     K_SOURCE: "__SYSTEM__"
                 })
                 res.extend(related+[id])
@@ -51,6 +52,7 @@ def setup_categories():
         _make_category_entry([], json.load(file)['categories'])
     orch.categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
     orch.categorystore.insert_many(list({item[K_ID]: item for item in updates}.values()))   
+    orch.localsack.store_categories(list({item[K_ID]: item for item in updates}.values()))
 
 def setup_baristas():   
     updates = []
@@ -84,10 +86,14 @@ def setup_baristas():
     with open("factory_settings.json", 'r') as file:
         make_barista_entry(json.load(file)['categories'])
 
-    # with open(".test/baristas.json", 'w') as file:
-    #     json.dump(updates, file)
-    # orch.baristastore.delete_many({K_SOURCE: "__SYSTEM__"})
-    # orch.baristastore.insert_many(list({item[K_ID]: item for item in updates}.values())) 
+    with open(".test/baristas.json", 'w') as file:
+        json.dump(updates, file)
+    orch.baristastore.delete_many({K_SOURCE: "__SYSTEM__"})
+    orch.baristastore.insert_many(list({item[K_ID]: item for item in updates}.values())) 
+
+def port_categories():
+    res = orch.categorystore.find()
+    orch.localsack.store_categories(list(res))
 
 def embed_categories():
     cats = orch.categorystore.find({K_EMBEDDING: {"$exists": False}})
@@ -129,10 +135,11 @@ orch.initialize(
     float(os.getenv('CLUSTER_EPS'))
 )
 
+port_categories()
 # _patch_upper_categories()
 # setup_categories()
 # embed_categories()
 # rectify_categories()
 # orch.run_clustering()
-rectify_ranking()
+# rectify_ranking()
 # setup_baristas()

@@ -167,7 +167,6 @@ http://feeds.feedburner.com/positiveTechnologiesResearchLab
 http://googleprojectzero.blogspot.com/feeds/posts/default
 https://www.freethink.com/feed/all
 https://www.testingcatalog.com/rss/
-https://startupnews.fyi/feed/
 https://spectrum.ieee.org/customfeeds/feed/all-topics/rss
 https://dailyhodl.com/feed/
 https://www.investors.com/feed/

@@ -6,6 +6,7 @@
 .processingqueue
 .clustering
 .test
+.db
 .vscode
 __pycache__
 *.log

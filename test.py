@@ -22,7 +22,7 @@ load_dotenv()
 
 import json
 from datetime import datetime as dt
-from pybeansack.beansack import *
+from pybeansack.mongosack import *
 from pybeansack.datamodels import *
 from collectors import rssfeed, ychackernews, individual, redditor, espresso
 from coffeemaker import orchestrator as orch
@@ -30,10 +30,10 @@ from coffeemaker.digestors import *
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 import random
 
-def write_datamodels(items, file_name: str = None):
+def write_datamodels(items: list[Bean|Chatter], file_name: str = None):
     if items:
         with open(f".test/{file_name or items[0].source}.json", 'w') as file:
-            json.dump([bean.model_dump(exclude_unset=True, exclude_none=True) for bean in items], file)
+            json.dump([item.model_dump(exclude_unset=True, exclude_none=True) for item in items], file)
         return ic(len(items))
             
 def write_text(text, file_name):
@@ -45,9 +45,13 @@ def test_collection():
         "https://www.buzzhint.com/feed/"
     ]
     
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._load(beans[:5])))
-    redditor.collect(store_func=lambda items: write_datamodels(orch._load([item[0] for item in random.sample(items, k=5)]), file_name="REDDIT"))
-    ychackernews.collect(store_func=lambda items: write_datamodels(orch._load([item[0] for item in random.sample(items, k=5)]), file_name="YC"))
+    # rssfeed.collect(store_beans=lambda beans: write_datamodels(orch._download(beans[:5])), sources=sources)
+    redditor.collect(
+        store_beans=lambda items: print(len(items), "beans collected from", items[0].source),
+        store_chatters=orch._collect_chatters)
+    ychackernews.collect(
+        store_beans=lambda items: print(len(items), "beans collected from", items[0].source),
+        store_chatters=orch._collect_chatters)
 
     # with ServiceBusClient.from_connection_string(orch.sb_connection_str).get_queue_sender("index-queue") as index_queue:
     #     to_json = lambda bean: ServiceBusMessage(json.dumps({K_ID: f"TEST:{bean.url}", K_SOURCE: "TEST", K_URL: bean.url, K_CREATED: int(time.time())}))
@@ -78,7 +82,7 @@ def test_index_and_augment():
         # "https://microsoftedge.github.io/edgevr/feed.xml",
         "https://github.blog/tag/github-security-lab/feed/"
     ]
-    rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._augment(orch._index(beans[:3]))))
+    rssfeed.collect(sources=sources, store_beans=lambda beans: write_datamodels(orch._augment(orch._index(beans[:3]))))
     # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(orch._download(beans[:3]))))
   
 def test_search():
@@ -101,7 +105,7 @@ def test_clustering():
         "http://feeds.feedburner.com/positiveTechnologiesResearchLab",
         "http://googleprojectzero.blogspot.com/feeds/posts/default"
     ]
-    rssfeed.collect(sources = sources, store_func=lambda beans: existing.extend(orch._index(orch._load(orch.remotesack.new_beans(beans)))))
+    rssfeed.collect(sources = sources, store_beans=lambda beans: existing.extend(orch._index(orch._download(orch.remotesack.new_beans(beans)))))
     url_set = set()
     duplicate_urls = []
     for bean in orch._cluster(existing):
@@ -131,15 +135,17 @@ def test_trend_ranking():
     cluster_sizes=orch.remotesack.count_related_beans(urls)
     ic([orch._make_trend_update(item, chatters, cluster_sizes) for item in items])
 
-def test_whole_path_live():
-    # sources = [
-    #     "https://www.nationalreview.com/feed/",
-    #     "https://www.moneytalksnews.com/feed/"
-    # ]
-    # rssfeed.collect(sources=sources, store_func=orch._collect)
-    ychackernews.collect(store_func=orch._collect)
-    # redditor.collect(store_func=orch._collect)
-    # espresso.collect(orch.sb_connection_str, orch._collect)
+def test_whole_path_live():    
+    rssfeed.collect(
+        store_beans=lambda beans: orch._collect_beans(random.sample(beans, 3)),
+        sources=["https://www.buzzhint.com/feed/"])
+    redditor.collect(
+        store_beans=lambda beans: orch._collect_beans(random.sample(beans, 3)),
+        store_chatters=orch._collect_chatters)
+    ychackernews.collect(
+        store_beans=lambda beans: orch._collect_beans(random.sample(beans, 3)),
+        store_chatters=orch._collect_chatters)
+    
     orch.run_indexing_and_augmenting()
     orch.run_clustering()
     orch.run_trend_ranking()
@@ -164,4 +170,5 @@ start = now()
 test_whole_path_live()
 # test_search()
 # test_trend_ranking()
-logging.getLogger("test").info("execution time|%s|%d", "__batch__", int(now() - start))
+# orch.run_trend_ranking()
+logging.getLogger("test").info("execution time|%s|%d", "__batch__", now() - start)

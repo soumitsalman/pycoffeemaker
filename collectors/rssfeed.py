@@ -5,22 +5,22 @@ from pybeansack.datamodels import Bean, NEWS
 from pybeansack.utils import now
 from .individual import *
 from datetime import datetime as dt
+import asyncio
 
 DEFAULT_FEEDS = os.path.dirname(os.path.abspath(__file__))+"/rssfeedsources.txt"
 
 # reads the list of feeds from a file path and collects
 # if sources is a string then it will be treated as a file path or else it will be a an array
-def collect(sources: str|list[str] = DEFAULT_FEEDS, store_func = None):
+def collect(store_beans, sources: str|list[str] = DEFAULT_FEEDS):
     if isinstance(sources, str):
         # if sources are not provided, assume that there is sources_file provided
         with open(sources, 'r') as file:
             sources = file.readlines()
     # santize the urls and start collecting
     sources = [url.strip() for url in sources if url.strip()]
-    for url in sources:
-        store_func(collect_from(url))       
+    [store_beans(collect_from(url)) for url in sources]               
         
-def collect_from(feed_url: str, content_kind = NEWS):
+def collect_from(feed_url: str, kind = NEWS) -> list[Bean]:
     try:
         feed = feedparser.parse(feed_url, agent=USER_AGENT)
         # if we know that this feed is NOT in english, just skip for now. if language is not specified, assume it is english
@@ -28,29 +28,29 @@ def collect_from(feed_url: str, content_kind = NEWS):
             return []    
         collection_time = now()
         # collect only the ones that is english. if language is not specified, assume it is english
-        source_name = extract_source_name(feed)
-        return [_to_bean(entry, source_name, content_kind, collection_time) for entry in feed.entries if entry.get("language", "en-US").startswith("en-")]
+        source = extract_source_name(feed)
+        return [extract(entry, source, kind, collection_time) for entry in feed.entries if entry.get("language", "en-US").startswith("en-")]
     except: # Exception as e:
         # ic(e)
         return None
 
-def _to_bean(entry, source_name, kind, collection_time):
+def extract(entry, source, kind, collection_time) -> Bean:
     body, summary = _extract_body_and_summary(entry)  
     parsed_time = entry.get("published_parsed") or entry.get("updated_parsed")
-    created_time = int(time.mktime(parsed_time) if parsed_time else now())
+    created_time = dt.fromtimestamp(time.mktime(parsed_time)) if parsed_time else now()
     # is_valid_tag = lambda tag: len(tag)>= MIN_TAG_LEN and len(tag) <= MAX_TAG_LEN and ("/" not in tag)    
     return Bean(
         url=entry.link,
         # in case of rss feed, the created time is the same as the updated time during collection. if it is mentioned in a social media feed then the updated time will get change
-        updated=created_time, 
+        created=created_time,         
         collected=collection_time,
-        source=source_name,
+        updated=created_time,
+        source=source,
         title=entry.title,
         kind=kind,
         text=body,
         summary=summary,
-        author=entry.get('author'),
-        created=created_time,
+        author=entry.get('author'),        
         image_url=_extract_image_link(entry)
     )    
 

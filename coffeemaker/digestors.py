@@ -44,9 +44,9 @@ class LocalDigestor:
         )['choices'][0]['text']
         resp = json.loads(resp[resp.find('{'):resp.rfind('}')+1])
         return Digest(
-            title=resp['title'],
-            summary=resp['summary'],
-            tags=[tag.strip() for tag in resp['tags'].split(',')] if isinstance(resp['tags'], str) else resp['tags']
+            title=resp.get('title'),
+            summary=resp.get('summary'),
+            tags=[tag.strip() for tag in resp.get('tags', '').split(',')] if isinstance(resp.get('tags'), str) else resp.get('tags')
         )
     
     def __call__(self, text: str) -> str:

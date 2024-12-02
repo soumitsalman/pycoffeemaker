@@ -202,7 +202,7 @@ class Beansack:
             pipeline.append({"$limit": limit})   
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
   
-    def count_related_beans(self, urls: list[str]) -> dict:
+    def count_related_beans(self, urls: list[str]) -> list:
         pipeline = [            
             {
                 "$group": {

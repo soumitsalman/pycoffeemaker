@@ -1,7 +1,8 @@
 from itertools import chain
 import logging
 from icecream import ic
-from pybeansack.beansack import  Beansack
+from pybeansack.ducksack import Beansack as DuckSack
+from pybeansack.mongosack import Beansack as MongoSack
 from pybeansack.embedding import BeansackEmbeddings
 from pybeansack.datamodels import *
 from pybeansack.utils import now
@@ -13,6 +14,7 @@ import persistqueue
 import queue
 from sklearn.metrics.pairwise import euclidean_distances
 import numpy as np
+from datetime import datetime as dt
 
 logger = lambda: logging.getLogger("orchestrator")
 
@@ -34,10 +36,11 @@ index_queue: queue.Queue = None
 trend_queue: persistqueue.Queue = None
 aug_queue: persistqueue.Queue = None
 
-remotesack: Beansack = None
+remotesack: MongoSack = None
 categorystore: Collection = None 
 baristastore: Collection = None
 sb_connection_str: str = None
+localsack: DuckSack = None
 category_eps: float = None
 cluster_eps: float = None
 
@@ -56,11 +59,12 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
     global sb_connection_str  
     sb_connection_str = sb_conn_str 
 
-    global remotesack, categorystore, baristastore, category_eps, cluster_eps        
-    remotesack = Beansack(db_conn_str, BeansackEmbeddings(model_path=emb_path, context_len=4096))
+    global remotesack, categorystore, baristastore, localsack, category_eps, cluster_eps        
+    remotesack = MongoSack(db_conn_str, BeansackEmbeddings(model_path=emb_path, context_len=4096))
     espressodb = MongoClient(db_conn_str)['espresso']
     categorystore = espressodb['categories']
     baristastore = espressodb['baristas']
+    localsack = DuckSack(db_dir=working_dir+"/.db")
     category_eps = cat_eps
     cluster_eps = clus_eps
 
@@ -71,38 +75,29 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
 
 def run_collection():
     logger().info("collecting|%s", "rssfeed")
-    rssfeed.collect(store_func=_collect)
+    rssfeed.collect(store_beans=_collect_beans)
     logger().info("collecting|%s", "ychackernews")
-    ychackernews.collect(store_func=_collect)
+    ychackernews.collect(store_beans=_collect_beans, store_chatters=_collect_chatters)
     logger().info("collecting|%s", "redditor")
-    redditor.collect(store_func=_collect)
+    redditor.collect(store_beans=_collect_beans, store_chatters=_collect_chatters)
     # logger().info("collecting|%s", "espresso")
     # espresso.collect(sb_conn_str=sb_connection_str, store_func=_collect)
     # TODO: add collection from nextdoor
     # TODO: add collection from linkedin
 
-def _collect(items: list[Bean]|list[tuple[Bean, Chatter]]|list[Chatter]):
-    if not items:
-        return    
-    # download the articles for new beans
-    beans, chatters = None, None
-    if isinstance(items[0], Bean):
-        beans = items
-    if isinstance(items[0], Chatter):
-        chatters = items
-    if isinstance(items[0], tuple):
-        beans = [item[0] for item in items]
-        chatters = [item[1] for item in items]
-
+def _collect_beans(beans: list[Bean]):
     if beans:            
-        downloaded = _load(remotesack.new_beans(beans))
-        if downloaded:
-            logger().info("collected|%s|%d", downloaded[0].source, len(downloaded))
-            index_queue.put_nowait(downloaded)
-    if chatters:            
-        trend_queue.put_nowait(chatters)
+        new_beans = _download(remotesack.new_beans(beans))
+        if new_beans:
+            logger().info("collected|%s|%d", new_beans[0].source, len(new_beans))
+            index_queue.put_nowait(new_beans)            
 
-def _load(beans: list[Bean]) -> list[Bean]:
+def _collect_chatters(chatters: list[Chatter]):
+    if chatters:
+        localsack.store_chatters(chatters)
+        trend_queue.put_nowait([chatter.url for chatter in chatters])
+
+def _download(beans: list[Bean]) -> list[Bean]:
     for bean in beans:   
         # reset some of the fields 
         if (bean.kind in [NEWS, BLOG]) and (not bean.image_url or needs_download(bean)):
@@ -113,7 +108,7 @@ def _load(beans: list[Bean]) -> list[Bean]:
                 bean.title = bean.title or res.title
                 
                 if not bean.created and res.publish_date:
-                    bean.created = int(res.publish_date.timestamp())
+                    bean.created = dt.fromtimestamp(res.publish_date.timestamp())
                 if res.text:  # this is a decent indicator if loading from the url even worked 
                     bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()
 
@@ -127,31 +122,26 @@ def run_indexing_and_augmenting():
     logger().info("indexing and augmenting")
     # local index queue
     while not index_queue.empty():  
-        beans = remotesack.new_beans(index_queue.get_nowait()) 
-        if not beans:   
-            continue   
-              
-        res = remotesack.store_beans(_augment(_index(beans)))
-        logger().info("stored|%s|%d", beans[0].source, res)
-        # send it out for trend analysis and augementation. these can happen in parallel
-        # trimming down the embedding fields because otherwise writing embeddings back and for becomes a lot for persistence queue
-        for bean in beans:
-            bean.embedding = None   
-
-        trend_queue.put_nowait(beans) 
+        # beans = _augment(_index(remotesack.new_beans(index_queue.get_nowait())))
+        beans = _index(remotesack.new_beans(index_queue.get_nowait()))
+        index_queue.task_done()
+        if beans:
+            localsack.store_beans(beans)
+            res = remotesack.store_beans(beans)
+            trend_queue.put_nowait([bean.url for bean in beans])
+            logger().info("stored|%s|%d", beans[0].source, res)        
 
 _merge_tags = lambda bean, new_tags: list({tag.lower(): tag for tag in (bean.tags + new_tags)}.values()) if (bean.tags and new_tags) else (bean.tags or new_tags)
 
 def _index(beans: list[Bean]):   
-    # extract digest and prepare for pushing to beansack
-    embedder = remotesack.embedder
-    for bean in beans:
-        try:
-            bean.embedding = embedder.embed(bean.digest())   
-            bean.tags = _merge_tags(bean, _find_categories(bean))
-        except:
-            logger().error("failed indexing|%s", bean.url)
-    return [bean for bean in beans if bean.embedding]
+    if beans:
+        for bean in beans:
+            try:
+                bean.embedding = remotesack.embedder.embed(bean.digest())   
+                bean.tags = _merge_tags(bean, _find_categories(bean))
+            except:
+                logger().error("failed indexing|%s", bean.url)
+        return [bean for bean in beans if bean.embedding]
 
 def _find_categories(bean: Bean):    
     pipeline = [
@@ -174,16 +164,17 @@ def _find_categories(bean: Bean):
     return [cat[K_TEXT] for cat in res]
 
 def _augment(beans: list[Bean]):
-    for bean in beans: 
-        try:
-            digest = digestor.run(bean.text)
-            if digest:
-                bean.summary = digest.summary or bean.text
-                bean.title = digest.title or bean.title
-                bean.tags = _merge_tags(bean, digest.tags)
-        except:
-            logger().error("failed augmenting|%s", bean.url)
-    return [bean for bean in beans if bean.summary]  
+    if beans:
+        for bean in beans: 
+            try:
+                digest = digestor.run(bean.text)
+                if digest:
+                    bean.summary = digest.summary or bean.summary or bean.text
+                    bean.title = digest.title or bean.title
+                    bean.tags = _merge_tags(bean, digest.tags)
+            except:
+                logger().error("failed augmenting|%s", bean.url)
+        return [bean for bean in beans if bean.summary]  
 
 def run_clustering():
     logger().info("clustering")
@@ -223,39 +214,53 @@ def _cluster(beans: list[Bean]):
 
 def run_trend_ranking():
     logger().info("trendranking")
-    batch = {}    
+    urls = set()    
     while not trend_queue.empty():
         # remove the duplicates in the batch
         # put them in database and queue the beans for trend_ranking
-        items = trend_queue.get_nowait()
-        if items:
-            if isinstance(items[0], Chatter):
-                remotesack.store_chatters(items) 
-            batch.update({item.url: item for item in items})
-    
-    
-    items = list(batch.values())
-    urls = [item.url for item in items]
-    chatters=remotesack.get_consolidated_chatter_stats(urls)
-    cluster_sizes=remotesack.count_related_beans(urls)
-    current_time = now()
-    res = _bulk_update([_make_trend_update(item, chatters, cluster_sizes, current_time) for item in items])
+        urls.update(trend_queue.get_nowait())
+        trend_queue.task_done()
+
+    res = _bulk_update(_trend_rank(list(urls))) if urls else 0
     logger().info("trendranked|__batch__|%d", res)
 
-def _make_trend_update(item, chatters, cluster_sizes, updated):
-    update = {
-        K_UPDATED: updated,
-        K_TRENDSCORE: (next((cluster for cluster in cluster_sizes if cluster[K_URL] == item.url), {'cluster_size': 1})['cluster_size'] if cluster_sizes else 1)*10
-    }
-    ch = next((ch for ch in chatters if ch.url==item.url), None) if chatters else None
-    if ch:
-        if ch.likes:
-            update[K_LIKES] = ch.likes
-            update[K_TRENDSCORE] += ch.likes
-        if ch.comments:
-            update[K_COMMENTS] = ch.comments
-            update[K_TRENDSCORE] += (ch.comments*3)
-    return UpdateOne({K_URL: item.url}, {"$set": update})
+def _trend_rank(urls: list[str]) -> int:    
+    latest_chatters = localsack.get_latest_chatters(1)
+    latest_chatters_urls = {bean.url for bean in latest_chatters}
+    cluster_sizes = {item[K_URL]: item["cluster_size"] for item in remotesack.count_related_beans(urls)}
+    update_time = now()
+
+    calculate_trend_score = lambda bean: 1000*cluster_sizes.get(bean.url, 1) + 100*bean.latest_comments + 10*bean.latest_shares + bean.latest_likes
+    
+    updates = [UpdateOne(
+        filter={K_ID: bean.url}, 
+        update={
+            "$set": {
+                K_UPDATED: update_time,
+                K_LIKES: bean.likes,
+                K_COMMENTS: bean.comments,
+                K_SHARES: bean.shares,
+                K_SIMILARS: cluster_sizes.get(bean.url, 1),
+                K_LATEST_LIKES: bean.latest_likes,
+                K_LATEST_COMMENTS: bean.latest_comments,
+                K_LATEST_SHARES: bean.latest_shares,
+                K_TRENDSCORE: calculate_trend_score(bean)        
+            }
+        }
+    ) for bean in latest_chatters]    
+       
+    updates.extend([UpdateOne(
+        filter={K_ID: url}, 
+        update={
+            "$set": {
+                K_UPDATED: update_time,        
+                K_SIMILARS: cluster_sizes.get(url, 1),
+                K_TRENDSCORE: 1000*cluster_sizes.get(url, 1)
+            }
+        }
+    ) for url in urls if url not in latest_chatters_urls])
+    
+    return updates
 
 def run_cleanup():
     logger().info("cleaning up")
