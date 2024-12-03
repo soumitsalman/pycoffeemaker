@@ -7,6 +7,7 @@ requests
 pydantic
 feedparser
 newspaper3k
+nltk
 tldextract
 beautifulsoup4
 lxml_html_clean
