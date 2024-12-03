@@ -175,10 +175,10 @@ def run_clustering():
     logger().info("clustering|__batch__|%d", len(urls))
     clusters = _cluster(list(urls))
     # this will create some overlaps and overrides in cluster_id but that's fine since this is continuouly changing
-    updates = [UpdateMany(
-        filter = { K_ID: { "$in": val} }, 
-        update = { "$set": {K_CLUSTER_ID: key} }
-    ) for key, val in clusters.items()]
+    updates = []
+    for key, val in clusters.items():
+        updates.extend([UpdateOne({ K_ID: url }, { "$set": { K_CLUSTER_ID: key } }) for url in val])
+
     logger().info("clustered|__batch__|%d", _bulk_update(updates))
 
 # current clustering approach
