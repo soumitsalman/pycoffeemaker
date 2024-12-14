@@ -47,7 +47,7 @@ cluster_eps: float = None
 digestor: NewspaperDigestor = None
 models_dir: str = None
 
-def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_base_url: str, llm_api_key: str, llm_model: str, cat_eps: float, clus_eps: float):
+def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_base_url: str, llm_api_key: str, llm_path: str, cat_eps: float, clus_eps: float):
     queue_dir=working_dir+"/.processingqueue"    
 
     global index_queue, trend_queue, cluster_queue
@@ -69,11 +69,11 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
     cluster_eps = clus_eps
 
     global digestor
-    digestor = NewspaperDigestor()
+    # digestor = NewspaperDigestor()
     # NOTE: digestor is currently down
-    # digestor = RemoteDigestor(base_url=llm_base_url, api_key=llm_api_key, model_name=llm_model, context_len=8192) \
-    #     if llm_base_url else \
-    #         LocalDigestor(model_path=llm_model, context_len=8192) 
+    digestor = RemoteDigestor(base_url=llm_base_url, api_key=llm_api_key, model_name=llm_path, context_len=8192) \
+        if llm_base_url else \
+            LocalDigestor(model_path=llm_path, context_len=8192) 
 
 def run_collection():
     logger().info("collecting|%s", "rssfeed")
@@ -155,7 +155,7 @@ def _augment(beans: list[Bean]):
     if beans:
         for bean in beans:             
             try:
-                digest = digestor.run(bean.text, bean.title)
+                digest = digestor.run(bean.text)
                 if digest:
                     bean.summary = digest.summary or bean.summary or bean.text
                     bean.title = digest.title or bean.title

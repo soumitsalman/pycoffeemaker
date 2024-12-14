@@ -16,12 +16,23 @@ class Digest(BaseModel):
     summary: Optional[str] = Field(description="A summary of the content", default=None)
     tags: Optional[list[str]] = Field(description="A list of tags that describe the content", default=None)
 
-DIGESTOR_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
-<|start_header_id|>user<|end_header_id|>
+# DIGESTOR_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
+# <|start_header_id|>user<|end_header_id|>
+# TASK: generate summary, title, tags (e.g. company, organization, person, catastrophic event, product, technology, security vulnerability, stock ticker symbol, geographic location).
+# INPUT:\n```\n{text}\n```
+# OUTPUT FORMAT: A json object with fields title (string), summary (string) and tags (string of comma separated phrases)<|eot_id|>
+# <|start_header_id|>assistant<|end_header_id|>"""
+DIGESTOR_PROMPT = """<|im_start|>system\n\nresponse_format:json_object<|im_end|>
+
+<|im_start|>user
+
 TASK: generate summary, title, tags (e.g. company, organization, person, catastrophic event, product, technology, security vulnerability, stock ticker symbol, geographic location).
 INPUT:\n```\n{text}\n```
-OUTPUT FORMAT: A json object with fields title (string), summary (string) and tags (string of comma separated phrases)<|eot_id|>
-<|start_header_id|>assistant<|end_header_id|>"""
+OUTPUT FORMAT: A json object with fields title (string), summary (string) and tags (string of comma separated phrases)
+
+<|im_end|>
+
+<|im_start|>assistant\n\n"""
     
 class LocalDigestor:
     model_path = None
@@ -40,7 +51,7 @@ class LocalDigestor:
             prompt=DIGESTOR_PROMPT.format(text=utils.truncate(text, self.context_len//2)),
             max_tokens=384, 
             frequency_penalty=0.3,
-            temperature=0.2,
+            temperature=0.3,
             seed=42
         )['choices'][0]['text']
         resp = json.loads(resp[resp.find('{'):resp.rfind('}')+1])
