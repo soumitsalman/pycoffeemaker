@@ -142,7 +142,8 @@ def _index(beans: list[Bean]):
         for bean in beans:
             try:
                 bean.embedding = remotesack.embedder.embed(bean.digest())   
-                bean.tags = _merge_tags(bean, _find_categories(bean))
+                # NOTE: disabling categories for now
+                # bean.tags = _merge_tags(bean, _find_categories(bean))
                 bean.cluster_id = bean.url # this is a temporary cluster id for beans that are not clustered yet
             except:
                 logger().error("failed indexing|%s", bean.url)
