@@ -80,10 +80,11 @@ class Bean(BaseModel):
     comments: Optional[int] = Field(default=0)
     shares: Optional[int] = Field(default=0)
     similars: Optional[int] = Field(default=1) # a bean is always similar to itself
-    latest_likes: Optional[int] = Field(default=0)
-    latest_comments: Optional[int] = Field(default=0)
-    latest_shares: Optional[int] = Field(default=0)
+    # latest_likes: Optional[int] = Field(default=0)
+    # latest_comments: Optional[int] = Field(default=0)
+    # latest_shares: Optional[int] = Field(default=0)
     trend_score: Optional[int] = Field(default=1) # a bean is always similar to itself
+    shared_in: Optional[list[str]] = None
     cluster_id: Optional[str] = None
 
     def digest(self):
@@ -118,4 +119,16 @@ class Source(BaseModel):
     kind: str
     name: str
     cid: Optional[str] = None
+
+class ChatterAnalysis(BaseModel):
+    url: str
+    likes: Optional[int] = None
+    comments: Optional[int] = None
+    shares: Optional[int] = None
+    shared_in: Optional[list[str]] = None
+    latest_likes: Optional[int] = None
+    latest_comments: Optional[int] = None
+    latest_shares: Optional[int] = None
+    latest_shared_in: Optional[list[str]] = None
+    trend_score: Optional[int] = None
     

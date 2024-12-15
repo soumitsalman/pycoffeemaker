@@ -100,18 +100,39 @@ WHERE distance_score <= {max_distance}
 ORDER BY distance_score
 """
 SQL_TOTAL_CHATTERS = """
-SELECT url, SUM(likes) as likes, SUM(comments) as comments, COUNT(chatter_url) as shares
+SELECT url, 
+    SUM(likes) as likes, 
+    SUM(comments) as comments, 
+    COUNT(chatter_url) as shares,
+    ARRAY_AGG(DISTINCT source) FILTER (WHERE source IS NOT NULL) || ARRAY_AGG(DISTINCT channel) FILTER (WHERE channel IS NOT NULL) as shared_in
+
 FROM(
-    SELECT url, chatter_url, MAX(collected) as collected, MAX(likes) as likes, MAX(comments) as comments 
+    SELECT url, 
+        chatter_url, 
+        MAX(collected) as collected, 
+        MAX(likes) as likes, 
+        MAX(comments) as comments, 
+        FIRST(source) as source, 
+        FIRST(channel) as channel
     FROM chatters 
     GROUP BY url, chatter_url
 ) 
 GROUP BY url
 """
 sql_total_chatters_ndays_ago = lambda last_ndays: f"""
-SELECT url, SUM(likes) as likes, SUM(comments) as comments, COUNT(chatter_url) as shares
+SELECT url, 
+    SUM(likes) as likes, 
+    SUM(comments) as comments, 
+    COUNT(chatter_url) as shares,
+    ARRAY_AGG(DISTINCT source) FILTER (WHERE source IS NOT NULL) || ARRAY_AGG(DISTINCT channel) FILTER (WHERE channel IS NOT NULL) as shared_in
 FROM(
-    SELECT url, chatter_url, MAX(collected) as collected, MAX(likes) as likes, MAX(comments) as comments 
+    SELECT url, 
+        chatter_url, 
+        MAX(collected) as collected, 
+        MAX(likes) as likes, 
+        MAX(comments) as comments, 
+        FIRST(source) as source, 
+        FIRST(channel) as channel
     FROM chatters 
     WHERE collected < CURRENT_TIMESTAMP - INTERVAL '{last_ndays} days'
     GROUP BY url, chatter_url
@@ -199,7 +220,7 @@ class Beansack:
         ]
         self.db.executemany(SQL_INSERT_CHATTERS, chatters_data)
 
-    def get_latest_chatters(self, last_ndays: int) -> list[Bean]:
+    def get_latest_chatters(self, last_ndays: int) -> list[ChatterAnalysis]:
         total = self.db.query(SQL_TOTAL_CHATTERS)
         ndays_ago = self.db.query(sql_total_chatters_ndays_ago(last_ndays))
         result = self.db.query("""
@@ -207,23 +228,27 @@ class Beansack:
                 total.url as url, 
                 total.likes as likes, 
                 total.comments as comments, 
-                total.shares as shares,                            
+                total.shares as shares,
+                total.shared_in as shared_id,                            
                 total.likes - COALESCE(ndays_ago.likes, 0) as latest_likes, 
                 total.comments - COALESCE(ndays_ago.comments, 0) as latest_comments, 
                 total.shares - COALESCE(ndays_ago.shares, 0) as latest_shares, 
+                ndays_ago.shared_in as latest_shared_in,
             FROM total
             LEFT JOIN ndays_ago ON total.url = ndays_ago.url
             WHERE latest_likes <> 0 OR latest_comments <> 0 OR latest_shares <> 0
         """)
         result.show()
-        return [Bean(
+        return [ChatterAnalysis(
             url=chatter[0],
             likes=chatter[1],
             comments=chatter[2],
             shares=chatter[3],
-            latest_likes=chatter[4],
-            latest_comments=chatter[5],
-            latest_shares=chatter[6],
+            shared_in=chatter[4],
+            latest_likes=chatter[5],
+            latest_comments=chatter[6],
+            latest_shares=chatter[7],
+            latest_shared_in=chatter[8],
             slots=True
         ) for chatter in result.fetchall()]
     

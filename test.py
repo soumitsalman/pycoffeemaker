@@ -149,8 +149,7 @@ orch.initialize(
     os.getenv("LLM_MODEL"),
     float(os.getenv('CATEGORY_EPS')),
     float(os.getenv('CLUSTER_EPS')))
-   
-
+  
 ### TEST CALLS
 start = now()
 # test_collection()

@@ -196,6 +196,7 @@ def _cluster(urls: list[str]) -> dict[str, list[str]]:
 def run_trend_ranking():
     logger().info("trend ranking")
     trends = _trend_rank()
+    update_time = now()
     updates = [UpdateOne(
         filter={K_ID: trend.url}, 
         update={
@@ -204,23 +205,25 @@ def run_trend_ranking():
                 K_LIKES: trend.likes,
                 K_COMMENTS: trend.comments,
                 K_SHARES: trend.shares,
+                "shared_id": trend.shared_id,
                 K_LATEST_LIKES: trend.latest_likes,
                 K_LATEST_COMMENTS: trend.latest_comments,
                 K_LATEST_SHARES: trend.latest_shares,
-                K_TRENDSCORE: trend.trend_score        
+                K_TRENDSCORE: trend.trend_score,
+                K_UPDATED: update_time      
             }
         }
     ) for trend in trends] 
     logger().info("trend ranked|__batch__|%d", _bulk_update(updates))
 
 def _trend_rank():  
-    update_time = now()
+    
     calculate_trend_score = lambda bean: 100*bean.latest_comments + 10*bean.latest_shares + bean.latest_likes
 
     trends = localsack.get_latest_chatters(1)
     for trend in trends:
         trend.trend_score = calculate_trend_score(trend)
-        trend.updated = update_time
+        # trend.updated = update_time
        
     # NOTE: disabling trend ranking for items that are not in social media yet
     # latest_chatters_urls = {bean.url for bean in beans}
