@@ -1,6 +1,6 @@
 {
     "categories": {
-        "Artificial Intelligence (AI)": [
+        "Artificial Intelligence": [
             "Generative AI",
             "Neural Networks",
             "NLP",
@@ -40,28 +40,52 @@
             "AI Deepfakes"
         ],
         "Software Engineering": {
-            "SDLC": [
+            "DevOps & SDLC": [
                 "Quality Assurance",
                 "Software Deployment",
                 "Software Programming",
                 "Software Testing",
                 "Software Systems Design",
-                "Software Architecture"                
+                "Software Architecture",  
+                "Code Review",
+                "CI/CD",
+                "Source Code Repository",
+                "DevOps Engineering",
+                "Build System",
+                "Code Editor & IDE",
+                "Code Compilers",
+                "Code Generator",
+                "Source Code Scanning",
+                "Site Reliability Engineering (SRE)",  
+                "Software Development Life Cycle",
+                "DevOps Tools",
+                "DevOps Platforms",
+                "DevOps Services",
+                "DevOps Automation",
+                "DevOps Monitoring",
+                "DevOps Security",
+                "DevOps Performance"
             ],
-            "Frontend Development": [
+            "Application Development": [
                 "Frontend Development",
                 "UX/UI Design & Development",
                 "Web Development",
-                "App Development"
-            ],
-            "Backend Development": [
+                "App Development",
                 "Backend Development",
-                "Site Reliability Engineering (SRE)"
+                "Web, API and Server Hosting and Deployment"                
             ],
-            "Open Source Software (OSS)": [
-                "Open Source Software (OSS)"
+            "Open Source Software": [
+                "Open Source Software Development",
+                "Open Source Software Projects",
+                "Open Source Software Libraries",
+                "Open Source Software Frameworks",
+                "Open Source Software Tools",
+                "Open Source Software Communities",
+                "Open Source Software Documentation",
+                "Open Source Software Licensing",
+                "Open Source Software Governance"
             ],
-            "Computer Programming": [
+            "Programming Languages & Frameworks": [
                 "Lowlevel Programming",
                 "Assembly Language Programming",
                 "Multi Threaded Programming",
@@ -71,16 +95,28 @@
                 "Rust",
                 "Go",
                 "Python",
+                "Java",
+                "C#",
+                "Mojo/Modular",
                 "Javascript",
                 "Library & Framework",
                 "Algorithms",
                 "Batch Processing"
             ],
             "Database Systems": [
-                "DB Management",
+                "Database Management",
                 "Database Engineering",
                 "Database Design",
-                "Message Queue"
+                "Message Queue",
+                "Database Administration",
+                "Database Security",
+                "Database Performance",
+                "Database Migration",
+                "Database Replication",
+                "Database Backup",
+                "Database Recovery",
+                "Database Monitoring",
+                "Database Optimization"
             ],
             "Operating Systems": [
                 "Memory Management",
@@ -91,7 +127,14 @@
                 "Process Management",
                 "Kernel",
                 "Boot Loader",
-                "BIOS"
+                "BIOS",
+                "Virtual Machine",
+                "Virtualization",
+                "Linux Server",
+                "Windows Server",
+                "Unix Server",
+                "BSD Server",
+                "Minix Server"
             ],
             "Cloud Computing": [
                 "Kubernetes",
@@ -104,19 +147,11 @@
                 "Digital Ocean",
                 "GCP",
                 "GPU Cloud",
-                "Serverless Computing"
-            ],
-            "DevOps": [
-                "Code Review",
-                "CI/CD",
-                "Source Code Repository",
-                "DevOps Engineering",
-                "Build System",
-                "Code Editor & IDE",
-                "Code Compilers",
-                "Code Generator",
-                "Source Code Scanning"
-            ]            
+                "Serverless Computing",
+                "Runpod",
+                "Digital Ocean",
+                "Fly.io"
+            ]  
         },        
         "Cybersecurity": [
             "Network Security",
@@ -127,13 +162,15 @@
             "Product Security",
             "Infrastructure Security",
             "Enterprise Security",
-            "Data Breaches",
-            "Threat Intelligence",
+            "Data Breach",
+            "Network Breach",
+            "Cybersecurity Breach",
+            "Cyber Threat Intelligence",
             "Malware",
             "Ransomware",
-            "Cyber Attacks",
-            "Cybersecurity Threats",
-            "Phishing Attacks",
+            "Cyber Attack",
+            "Cybersecurity Threat",
+            "Phishing Attack",
             "Vulnerability Management",
             "DDoS Attacks",
             "Incident Response",
@@ -157,7 +194,7 @@
             "IoT Security"
         ],
         "HPC & Datacenters": {
-            "Hardware": [
+            "Microprocessors & Computing Hardware": [
                 "GPU",
                 "CPU",
                 "TPU",
@@ -175,10 +212,6 @@
                 "Transistors",
                 "Microelectronics",
                 "Nanotechnology"
-            ],
-            "Hardware Software CoDesign": [
-                "Performance Optimization",
-                "Advanced Computing Systems"
             ],
             "Quantum Computing": [
                 "Supercomputers",
@@ -223,16 +256,23 @@
                 "Data Center Design",
                 "Managed Services",
                 "Green Data Centers",
-                "Edge Computing"
+                "Edge Computing",
+                "Advanced Computing Systems",
+                "High Performance Computing"
             ]
         },
         "Business & Finance": {
-            "Stock Market & Trading": [
+            "Stock Market": [
                 "Financial Markets",
                 "Market Fluctuations",
                 "Stock Exchange",
                 "Currency Exchange",
-                "Dividend"
+                "Dividend",
+                "Initial Public Offering (IPO)",
+                "Stock Market Trends",
+                "Stock Market Analysis",                
+                "Stock Market Forecasts",
+                "Stock Market Predictions"
             ],
             "Local & Global Economy": [
                 "Economic Policies",
@@ -246,7 +286,12 @@
                 "Global Trade",
                 "Financial Regulations",
                 "Economic Growth",
-                "Economic Indicators"
+                "Economic Indicators",
+                "Real Estate & Housing Market",
+                "Consumer & Retail Market",
+                "Oil & Gas Market",
+                "Tourism & Hospitality Market",
+                "Emerging Markets"            
             ],
             "Banking & Finance": [
                 "Corporate Finance",
@@ -258,33 +303,27 @@
                 "Gold",
                 "Silver Reserve"
             ],
-            "Investment Strategy": [
+            "Entrepreneurship Strategy": [
                 "Investment Trends",
                 "Economic Forecasts",
                 "Financial Report",
                 "Financial Analysis",
                 "Corporate Earnings",
                 "Earnings Report",
-                "Earnings per Share"
-            ],
-            "Business Strategy": [
+                "Earnings per Share",
                 "Business Mergers",
                 "Business Strategies",
                 "Business Innovation",
-                "Mergers & Acquisitions"
-            ],
-            "Markets": [
-                "Real Estate & Housing",
-                "Consumer & Retail",
-                "Oil & Gas Market",
-                "Technology Market",
-                "Transportation & Logistics",
-                "Tourism & Hospitality",
-                "Emerging Markets"
+                "Mergers & Acquisitions",
+                "Networking Strategies",
+                "Brand Management",
+                "Product Positioning",
+                "Business Model Innovation",
+                "Initial Public Offering (IPO)"
             ]
         },
         "Environment & Clean Energy": {
-            "Environment & Climate Change": [
+            "Climate Change": [
                 "Extreme Weather",
                 "Cataclysms",
                 "Environmental Science",
@@ -333,13 +372,31 @@
                 "Wind Turbines",
                 "Biofuels",
                 "Energy Policy",
-                "Grid Integration"
-            ],
-            "Green Technologies": [
+                "Grid Integration",
+                "Green Technologies",
                 "Low Carbon Energy",
                 "Energy Conservation",
                 "Hydroelectric Dams",
                 "Renewable Energy Incentives"
+            ],
+            "Solar Energy": [
+                "Solar Panels",
+                "Solar Power",
+                "Solar Energy",
+                "Solar Technology",
+                "Solar Energy Systems",
+                "Solar Energy Storage",
+                "Solar Energy Efficiency",
+                "Solar Energy Policy",
+                "Solar Energy Market",
+                "Solar Energy Trends",
+                "Solar Energy Incentives",
+                "Solar Energy Regulations",
+                "Solar Energy Standards",
+                "Solar Energy Certification",
+                "Solar Energy Installation",
+                "Solar Energy Maintenance",
+                "Solar Energy Recycling"
             ]
         },
         "Government & Politics": {
@@ -349,49 +406,32 @@
                 "Political Parties",
                 "Legislative Process",
                 "Executive Orders",
-                "Supreme Court Decisions",
-                "Political Campaigns",
+                "Supreme Court Decisions",                
                 "Public Policy",
-                "Voter Rights",
                 "Political Polarization",
                 "Immigration Policy",
                 "Healthcare Reform",
                 "Economic Policy",
-                "Foreign Relations",
                 "Taxation",
                 "Civil Rights",
-                "Electoral College",
                 "Political Advocacy",
                 "Government Shutdowns",
                 "Political Scandals",
                 "Senate & Congress",
                 "US Circuit & Appeals Courts",
-                "City Council & Mayor",
-                "Election Campaign",
-                "Election Fundraising",
-                "Presidential Nominations",
-                "Law enforcement agency"
+                "City Council & Mayor",                
+                "Law enforcement agency",
+                "Government Corruption",
+                "Economic Development"
             ],
             "Political Movements": [
-                "Regional Diplomacy",
-                "Geopolitical Tensions",
-                "Trade Agreements",
-                "National Security",
                 "Political Reform",
-                "Economic Development",
                 "Territorial Disputes",
                 "Government Corruption",
-                "Electoral Systems",
                 "Human Rights Issues",
-                "Foreign Aid",
-                "Security Alliances",
-                "Political Parties",
-                "Leadership Changes",
-                "Military Strategy",
                 "Public Protests",
                 "Political Activism",
                 "Policy Reforms",
-                "International Relations",
                 "Civil Unrest",
                 "Labor Activism",
                 "Civil Rights Movement",
@@ -412,18 +452,33 @@
                 "Military Strategy & Operations"
             ],
             "Elections": [
+                "Political Campaigns",
+                "Voter Rights",
                 "Federal Elections",
                 "Election Campaigns",
                 "Electoral Systems",
                 "Election Fundraising",
-                "Presidential Nominations"
+                "Presidential Nominations",
+                "Election Fundraising",
+                "Electoral College",
+                "Election Polls",
+                "Election Results",
+                "Political Parties"
             ],
-            "International Relations & Diplomacy": [
+            "International Relations": [
                 "United Nations",
                 "Global Policies",
                 "International Treaties",
                 "Cross Border Relations",
-                "Global Diplomacy"
+                "Global Diplomacy",
+                "Foreign Relations",
+                "Regional Diplomacy",
+                "Geopolitical Tensions",
+                "Trade Agreements",
+                "National Security",
+                "Foreign Aid",
+                "Security Alliances"
+                
             ]   
         },
         "Cryptocurrency & Blockchain": {
@@ -490,12 +545,16 @@
                 "Psychological WellBeing",
                 "Mindfulness"
             ],
-            "Diseases & Epidemics": [
+            "Medical Science & Discoveries": [
+                "Diseases & Epidemics",
                 "Neurodegenerative Diseases",
                 "Epidemics & Outbreaks",
-                "Cancer"
-            ],
-            "Medical Science & Drug Discoveries": [
+                "Cancer",
+                "Alzheimer's Disease",
+                "Lung Disease",
+                "Silicosis",
+                "Genomics",
+                "Biotechnology",
                 "Medical Research",
                 "Medical Technology",
                 "Vaccine Development",
@@ -537,43 +596,42 @@
                 "Agricultural Pesticides"
             ]
         },
-        "Entrepreneurship & StartUps": {
+        "Startups & VCs": {
             "Venture Capital & Funding": [
-                "Venture Capital",
-                "StartUp Funding",
+                "Venture Capital",                
                 "Angel Investors",
                 "Seed Funding",
-                "Series A Funding",
+                "Series A, Series B, Series C Funding",
                 "Funding Rounds",
-                "Investment Trends",
                 "Pitch Decks",
                 "StartUp Valuation",
                 "Equity Financing",
                 "Crowdfunding",
-                "Funding Sources"
+                "Funding Sources",
+                "Investment Opportunities"
             ],
-            "Entrepreneurship": [
+            "Startups": [
                 "StartUp Incubators",
                 "StartUp Accelerators",
                 "StartUp Growth",
-                "StartUp Exits",
-                "Acquisitions",
-                "Initial Public Offering (IPO)",
+                "StartUp Exits",                  
                 "StartUp Ecosystem",
                 "StartUp Success Stories",
-                "Investment Opportunities",
                 "StartUp Partnerships",
-                "Business Model Innovation",
                 "StartUp Challenges",
                 "StartUp Mentors",
                 "StartUp Accelerator Programs",
-                "Growth Hacking",
+                "StartUp Funding",
                 "StartUp Scalability",
+                "Growth Hacking",
                 "Tech Startups",
                 "Biomedical Startups",
-                "Networking Strategies",
-                "Brand Management",
-                "Product Positioning"
+                "Fintech Startups",
+                "AI Startups",
+                "Blockchain Startups",
+                "Cybersecurity Startups",
+                "Robotics Startups",
+                "Clean Energy Startups"
             ]
         },
         "Gadgets & IoT": {
@@ -581,13 +639,25 @@
                 "Smart Phones",
                 "Tablets",
                 "Laptops",
-                "PC",
+                "Personal Computers",
                 "Wearable Technology",
                 "Smartwatches",
                 "Fitness Tracker",
                 "Portable Chargers",
                 "Digital Cameras",
-                "Smartphone Accessories"
+                "Smartphone Accessories",
+                "Sound Systems",
+                "Boombox",
+                "Bluetooth Speakers",
+                "Headphones",
+                "Earbuds",
+                "Microphone",
+                "Consumer Tech Trends",
+                "Tech Product Reviews",
+                "New Product Release",
+                "End of Production",
+                "Electronic Gadgets Innovations",
+                "Wearable Technology Innovations"
             ],
             "Smarthome & IoT": [
                 "Home Automation",
@@ -598,21 +668,6 @@
                 "IoT Devices",
                 "Home Security Systems",
                 "Smart Appliances"
-            ],
-            "Audio Devices": [
-                "Sound Systems",
-                "Boombox",
-                "Bluetooth Speakers",
-                "Headphones",
-                "Earbuds",
-                "Microphone"
-            ],
-            "Consumer Tech Trends": [
-                "Tech Product Reviews",
-                "New Product Release",
-                "End of Production",
-                "Electronic Gadgets Innovations",
-                "Wearable Technology Innovations"
             ]
         },
         "Video Games & Virtual Reality": [
@@ -630,23 +685,17 @@
             "Aviation & Airplanes": [
                 "Aircraft Innovations",
                 "Aviation Safety",
-                "Airline Industry Trends",
-                "Commercial Airliners",
                 "Flight Technology Advances",
                 "Sustainable Aviation",
                 "Air Traffic Control",
                 "Pilot Training Developments",
-                "Airport Infrastructure",
-                "Airplane Passenger Experience",
                 "Drone Technology",
-                "Global Air Travel Recovery",
                 "Aviation Regulations",
                 "Aircraft Maintenance",
                 "Electric Planes",
-                "Flight Delays & Cancellations",
-                "International Aviation Policies",
                 "Private Jets",
-                "Plane Crashes & Emergency Landings"
+                "Plane Crashes & Emergency Landings",
+                "Airport Infrastructure"
             ],
             "Rockets & Aerospace": [
                 "Rocket Development",
@@ -671,32 +720,6 @@
                 "Space Agency",
                 "Aerospace",
                 "Astronauts"
-            ],
-            "Astronomy & Cosmology": [
-                "Space Telescopes",
-                "Asteroids",
-                "Planets",
-                "Cosmic Phenomena",
-                "Meteors & Comets",
-                "Astronomical Discoveries",
-                "Cosmic Phenomena",
-                "Exoplanet Research",
-                "Black Holes",
-                "Dark Matter",
-                "Dark Energy",
-                "Space Telescopes",
-                "Galactic Structures",
-                "Nebulae",
-                "Pulsars",
-                "Quasars",
-                "Stellar Evolution",
-                "Cosmic Microwave Background",
-                "Supernovae",
-                "Interstellar Travel",
-                "Gravitational Waves",
-                "Milky Way Galaxy",
-                "MultiMessenger Astronomy",
-                "Theoretical Cosmology"
             ]
         },
         "Robotics & Manufacturing": {
@@ -781,6 +804,32 @@
                 "Signal Processing",
                 "Optical Pulses"
             ],
+            "Astronomy & Cosmology": [
+                "Space Telescopes",
+                "Asteroids",
+                "Planets",
+                "Cosmic Phenomena",
+                "Meteors & Comets",
+                "Astronomical Discoveries",
+                "Cosmic Phenomena",
+                "Exoplanet Research",
+                "Black Holes",
+                "Dark Matter",
+                "Dark Energy",
+                "Space Telescopes",
+                "Galactic Structures",
+                "Nebulae",
+                "Pulsars",
+                "Quasars",
+                "Stellar Evolution",
+                "Cosmic Microwave Background",
+                "Supernovae",
+                "Interstellar Travel",
+                "Gravitational Waves",
+                "Milky Way Galaxy",
+                "MultiMessenger Astronomy",
+                "Theoretical Cosmology"
+            ],
             "Chemistry & Material Sciences": [
                 "Organic Chemistry",
                 "Inorganic Chemistry",
@@ -830,7 +879,7 @@
                 "Ecological Adaptations"
             ]
         },
-        "Career & Professional Development": {            
+        "Career & Professional Skills": {            
             "Career Growth": [
                 "Career Planning",
                 "Professional Growth",
@@ -845,7 +894,15 @@
                 "Coaching & Mentoring",
                 "Growth Mindset",
                 "Learning & Development Strategies",
-                "Worklife Balance"
+                "Worklife Balance",
+                "Continuous Improvement",
+                "Setting Personal Benchmarks",
+                "Overcoming Career Plateaus",
+                "Building Resilience",
+                "Managing Work Stress",
+                "Workplace Communication",
+                "Time Management Skills",
+                "Emotional Intelligence"
             ],
             "Career Mobility": [
                 "Job Search Techniques",
@@ -869,145 +926,38 @@
                 "Equity & Stock Options",
                 "Financial Planning for Career Growth"
             ],
-            "Performance Management": [
-                "Performance Reviews",
-                "Self Assessment Techniques",
-                "Feedback Integration",
-                "Continuous Improvement",
-                "Setting Personal Benchmarks",
-                "Overcoming Career Plateaus",
-                "Building Resilience",
-                "Managing Work Stress",
-                "Workplace Communication",
-                "Time Management Skills",
-                "Emotional Intelligence"
-            ]
-        },
-        "Automotive & Logistics": {
-            "Automotive Industry": [
-                "Automotive market trends",
-                "Car manufacturing",
-                "Electric vehicles (EVs)",
-                "Hybrid vehicles",
-                "Automotive industry regulations",
-                "Automotive supply chain",
-                "Automotive mergers & acquisitions",
-                "Automotive startups",
-                "Automotive recalls",
-                "Vehicle safety standards",
-                "Autonomous Vehicle Safety Issue",
-                "Automotive brands",
-                "Automotive marketing"
-            ],
-            "Logistics": [
-                "Fleet management",                
-                "Commercial vehicles",
-                "Transportation logistics",
-                "Lastmile delivery",
-                "Freight transportation",
-                "Logistics technology",
-                "Vehicle telematics",
-                "Routing & scheduling",
-                "Transportation management systems (TMS)",
-                "Autonomous Trucks"
-            ],
-            "Automotive Technology & Innovation": [
-                "Electric vehicle technology",
-                "Hybrid technology",
-                "Autonomous driving technology",
-                "Driver assistance systems",
-                "V2X communication",
-                "Car entertainment systems",
-                "Telematics",
-                "Connected cars",
-                "Vehicle software",
-                "Battery technology",
-                "Charging infrastructure",
-                "Vehicle design",
-                "3D printing in automotive",
-                "Automotive safety technology",
-                "Smart vehicle technology",
-                "Vehicle diagnostics",
-                "Driver assistance systems",
-                "Fleet management",
-                "Autonomous Vehicles",
-                "Self driving cars",
-                "Self driving technology",
-                "Simulation Systems",
-                "Vehicle to everything (V2X) communication",
-                "Electric Vehicles (EVs)",
-                "Vehicle Carbon emissions",
-                "Fuel efficiency",
-                "Hybrid vehicles",
-                "Green automotive technology",
-                "Alternative fuels",
-                "Hydrogen vehicles"
-            ],
-            "Motorsports": [
-                "Formula 1",
-                "NASCAR",
-                "Rally racing",
-                "Le Mans",
-                "MotoGP",
-                "Electric racing",
-                "Motorsport events",
-                "Racing teams",
-                "Race car engineering",
-                "Motorsport regulations",
-                "Motorsport sponsorship",
-                "Racing circuits"
-            ],
-            "Automotive Maintenance & Repair": [
-                "Vehicle maintenance",
-                "Auto repair",
-                "Car parts & accessories",
-                "Tire maintenance",
-                "Oil changes",
-                "Brake systems",
-                "Transmission repair",
-                "Car diagnostics",
-                "Auto body repair",
-                "Engine tuning",
-                "Car detailing",
-                "DIY car repairs",
-                "Automotive repair tools"
-            ],
-            "Car Culture & Community": [
-                "Car shows & expos",
-                "Car clubs",
-                "Classic cars",
-                "Vintage vehicles",
-                "Car customization",
-                "Aftermarket parts",
-                "Car reviews",
-                "Auto enthusiasts",
-                "Car photography",
-                "Road trips",
-                "Car meetups",
-                "Car racing culture"
-            ]
-        },        
-        "Management & Leadership": {
-            "Operations Management": [
-                "Supply Chain Management",
-                "Inventory Management",
-                "Process Optimization",
-                "Lean Manufacturing",
-                "Six Sigma",
-                "Total Quality Management (TQM)",
-                "Capacity Planning",
-                "Production Scheduling",
-                "Workforce Management",
-                "Operational Efficiency",
-                "Cost Reduction Strategies",
-                "Logistics Management",
-                "Operations Strategy",
-                "Service Operations Management",
-                "Process Automation",
-                "Change Management in Operations",
-                "Operational Risk Management"
-            ],
-            "Project Management": [
+            "Program & Project Management": [
+                "Program Planning",
+                "Program Governance",
+                "Program Risk Management",
+                "Program Budgeting",
+                "Program Lifecycle Management",
+                "Portfolio Management",
+                "Strategic Goals Alignment",
+                "Program Communication",
+                "Stakeholder Management in Programs",
+                "Program Monitoring & Evaluation",
+                "Benefits Realization Management",
+                "Program Resource Management",
+                "Change Management in Programs",
+                "Program Delivery Frameworks",
+                "Program Performance Metrics",
+                "Execution Strategy",
+                "Performance Management",
+                "Operational Execution",
+                "Execution Planning & Scheduling",
+                "Task Management",
+                "Execution Risk Management",
+                "Execution Monitoring & Control",
+                "Execution Tools & Technologies",
+                "Execution Best Practices",
+                "RealTime Execution Analytics",
+                "Continuous Improvement in Execution",
+                "Execution Alignment with Strategy",
+                "Resource Management in Execution",
+                "Effective Decision Making in Execution",
+                "Execution Communication",
+                "Execution Review & Feedback",
                 "Project Planning",
                 "Project Scheduling",
                 "Project Budgeting",
@@ -1026,23 +976,6 @@
                 "Gantt Charts",
                 "Critical Path Method (CPM)",
                 "Earned Value Management (EVM)"
-            ],
-            "Program Management": [
-                "Program Planning",
-                "Program Governance",
-                "Program Risk Management",
-                "Program Budgeting",
-                "Program Lifecycle Management",
-                "Portfolio Management",
-                "Strategic Goals Alignment",
-                "Program Communication",
-                "Stakeholder Management in Programs",
-                "Program Monitoring & Evaluation",
-                "Benefits Realization Management",
-                "Program Resource Management",
-                "Change Management in Programs",
-                "Program Delivery Frameworks",
-                "Program Performance Metrics"
             ],
             "Product Management": [
                 "Product Lifecycle Management (PLM)",
@@ -1063,25 +996,25 @@
                 "Cross Functional Collaboration",
                 "Product Strategy Alignment with Business Goals"
             ],
-            "Execution Management": [
-                "Execution Strategy",
-                "Performance Management",
-                "Operational Execution",
-                "Execution Planning & Scheduling",
-                "Task Management",
-                "Execution Risk Management",
-                "Execution Monitoring & Control",
-                "Execution Tools & Technologies",
-                "Execution Best Practices",
-                "RealTime Execution Analytics",
-                "Continuous Improvement in Execution",
-                "Execution Alignment with Strategy",
-                "Resource Management in Execution",
-                "Effective Decision Making in Execution",
-                "Execution Communication",
-                "Execution Review & Feedback"
+            "Supply Chains Management": [
+                "Supply Chain Management",
+                "Inventory Management",
+                "Process Optimization",
+                "Lean Manufacturing",
+                "Six Sigma",
+                "Total Quality Management (TQM)",
+                "Capacity Planning",
+                "Production Scheduling",
+                "Operational Efficiency",
+                "Cost Reduction Strategies",
+                "Logistics Management",
+                "Operations Strategy",
+                "Service Operations Management",
+                "Process Automation",
+                "Change Management in Operations",
+                "Operational Risk Management"
             ],
-            "Leadership": [
+            "Leadership & People Management": [
                 "Leadership Styles",
                 "Team Building",
                 "Strategic Planning",
@@ -1094,15 +1027,88 @@
                 "Leadership Development",
                 "Risk Management",
                 "Business Strategy",
-                "Project Management",
                 "Organizational Culture",
                 "Coaching & Mentoring",
                 "Innovation Management",
                 "Crisis Management",
                 "Succession Planning",
                 "Operational Efficiency",
-                "Leadership Communication"
+                "Leadership Communication",                
+                "Workforce Planning & Management",
+                "Performance Reviews",
+                "Self Assessment Techniques",
+                "Feedback Integration"
             ]
-        }
+        },
+        "Automotive": {
+            "Smart Automotive": [                
+                "Electric vehicles (EVs)",
+                "Hybrid vehicles",
+                "Automotive industry regulations",
+                "Vehicle safety standards",
+                "Autonomous Vehicle Safety Issue",
+                "Autonomous driving technology",
+                "Driver assistance systems",
+                "V2X communication",
+                "Car entertainment systems",
+                "Telematics",
+                "Connected cars",
+                "Vehicle software",
+                "Car Battery technology",
+                "Charging infrastructure",
+                "Vehicle design",
+                "Automotive safety technology",
+                "Smart vehicle technology",
+                "Vehicle diagnostics",
+                "Autonomous Vehicles",
+                "Self driving cars",
+                "Self driving technology",
+                "Autonomous Vehicle Simulation Systems",
+                "Vehicle to everything (V2X) communication",
+                "Electric Vehicles (EVs)",
+                "Green automotive technology",
+                "Hydrogen vehicles"
+            ],
+            "Automotive Maintenance & Repair": [
+                "Automotive recalls",
+                "Car manufacturing",
+                "Vehicle maintenance",
+                "Auto repair",
+                "Car parts & accessories",
+                "Tire maintenance",
+                "Oil changes",
+                "Brake systems",
+                "Transmission repair",
+                "Car diagnostics",
+                "Auto body repair",
+                "Engine tuning",
+                "Car detailing",
+                "DIY car repairs",
+                "Automotive repair tools"
+            ]
+        },
+        "Logistics & Transportation": [
+            "Private Jets",
+            "Plane Crashes & Emergency Landings",
+            "Airport Infrastructure",
+            "Airplane Passenger Experience",
+            "Airline Industry Trends",
+            "Commercial Airliners",
+            "International Aviation Policies",
+            "Global Air Travel Recovery",
+            "Fleet management",                
+            "Commercial vehicles",
+            "Transportation logistics",
+            "Lastmile delivery",
+            "Freight transportation",
+            "Logistics technology",
+            "Vehicle telematics",
+            "Routing & scheduling",
+            "Transportation management systems (TMS)",
+            "Autonomous Trucks",
+            "Impact of transportation and logistics on supply chain",
+            "Flight logistics",
+            "Flight delays & cancellations"
+        ]        
     }        
 }

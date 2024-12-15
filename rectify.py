@@ -11,8 +11,9 @@ CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR+"/.env")
 WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
 
+from collectors import ychackernews, redditor
 from pybeansack.datamodels import *
-from pymongo import DeleteOne, InsertOne, UpdateOne
+from pymongo import DeleteOne, InsertOne, MongoClient, UpdateOne
 from pybeansack.utils import *
 from coffeemaker import orchestrator as orch
 
@@ -57,41 +58,53 @@ def setup_categories():
     orch.localsack.store_categories(list({item[K_ID]: item for item in updates}.values()))
 
 def setup_baristas():   
-    updates = []
-    def make_barista_entry(entry):        
-        if isinstance(entry, str):
-            barista = {
-                K_ID: make_id(entry),
-                K_TITLE: entry, 
-                K_DESCRIPTION: "Trending news, blogs and posts on {entry}.",
-                K_TAGS: [entry],                
-                "owner": "__SYSTEM__"
-            }
-            updates.append(barista)
-            return barista[K_TAGS]
-        if isinstance(entry, list):
-            return list(chain(*(make_barista_entry(item) for item in entry)))
-        if isinstance(entry, dict):
-            res = []
-            for key, value in entry.items():
-                barista = {
-                    K_ID: make_id(key),
-                    K_TITLE: key,
-                    K_DESCRIPTION: "Trending news, blogs and posts on {entry}.",
-                    K_TAGS: list(set(make_barista_entry(value))) + [key],
-                    "owner": "__SYSTEM__"
-                }
-                updates.append(barista)
-                res.extend(barista[K_TAGS])
-            return res    
+    baristas = MongoClient(os.getenv("DB_CONNECTION_STRING"))['espresso']['baristas']
+    updates = [
+        {
+            K_ID: "hackernews", 
+            K_TITLE: "Hackernews (by Y Combinator)", 
+            K_DESCRIPTION: "News, blogs and posts shared in Y Combinator's Hackernews.", 
+            K_SOURCE: ychackernews.YC,
+            "owner": "__SYSTEM__"
+        },
+        {
+            K_ID: "reddit", 
+            K_TITLE: "Reddit", 
+            K_DESCRIPTION: "News, blogs and posts shared in Reddit.", 
+            K_SOURCE: redditor.REDDIT,
+            "owner": "__SYSTEM__"
+        }
+    ]
+    # updates = []
+    # def make_barista_entry(entry) -> list[str]:        
+    #     if isinstance(entry, str):
+    #         return [entry]
+    #     if isinstance(entry, list):
+    #         return list(chain(*(make_barista_entry(item) for item in entry)))
+    #     if isinstance(entry, dict):
+    #         res = []
+    #         for key, value in entry.items():
+    #             tags = list(set([key] + make_barista_entry(value)))
+    #             barista = {
+    #                 K_ID: make_id(key),
+    #                 K_TITLE: key,
+    #                 K_DESCRIPTION: f"News, blogs and posts on {', '.join(tags)}.",
+    #                 K_TAGS: tags,
+    #                 K_EMBEDDING: orch.remotesack.embedder.embed(f"News, blogs and posts on domain/genre/topics such as {', '.join(tags)}."),
+    #                 "owner": "__SYSTEM__"
+    #             }
+    #             updates.append(barista)
+    #             res.extend(tags)
+    #         return res    
         
-    with open("factory_settings.json", 'r') as file:
-        make_barista_entry(json.load(file)['categories'])
+    # with open("factory_settings.json", 'r') as file:
+    #     make_barista_entry(json.load(file)['categories'])
 
-    with open(".test/baristas.json", 'w') as file:
-        json.dump(updates, file)
-    orch.baristastore.delete_many({K_SOURCE: "__SYSTEM__"})
-    orch.baristastore.insert_many(list({item[K_ID]: item for item in updates}.values())) 
+    # with open(".test/baristas.json", 'w') as file:
+    #     json.dump(updates, file)
+    
+    # baristas.delete_many({"owner": "__SYSTEM__"})
+    baristas.insert_many(list({item[K_ID]: item for item in updates}.values())) 
 
 def embed_categories():
     cats = orch.categorystore.find({K_EMBEDDING: {"$exists": False}})
@@ -168,13 +181,13 @@ orch.initialize(
     float(os.getenv('CLUSTER_EPS'))
 )
 
-port_chatters_to_localsack()
-port_categories_to_localsack()
-port_beans_to_localsack()
+# port_chatters_to_localsack()
+# port_categories_to_localsack()
+# port_beans_to_localsack()
 # _patch_upper_categories()
 # setup_categories()
 # embed_categories()
 # rectify_categories()
 # orch.run_clustering()
 # rectify_ranking()
-# setup_baristas()
+setup_baristas()

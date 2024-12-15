@@ -37,8 +37,6 @@ index_queue: queue.Queue = None
 cluster_queue: persistqueue.Queue = None
 
 remotesack: MongoSack = None
-categorystore: Collection = None 
-baristastore: Collection = None
 sb_connection_str: str = None
 localsack: DuckSack = None
 category_eps: float = None
@@ -53,7 +51,6 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
     global index_queue, trend_queue, cluster_queue
 
     index_queue = queue.Queue() # local queue
-    # trend_queue = persistqueue.Queue(queue_dir+"/trend", tempdir=queue_dir)
     cluster_queue = persistqueue.Queue(queue_dir+"/cluster", tempdir=queue_dir) 
 
     global sb_connection_str  
@@ -61,16 +58,11 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
 
     global remotesack, categorystore, baristastore, localsack, category_eps, cluster_eps        
     remotesack = MongoSack(db_conn_str, BeansackEmbeddings(model_path=emb_path, context_len=4096))
-    # espressodb = MongoClient(db_conn_str)['espresso']
-    # categorystore = espressodb['categories']
-    # baristastore = espressodb['baristas']
     localsack = DuckSack(db_dir=working_dir+"/.db")
     category_eps = cat_eps
     cluster_eps = clus_eps
 
     global digestor
-    # digestor = NewspaperDigestor()
-    # NOTE: digestor is currently down
     digestor = RemoteDigestor(base_url=llm_base_url, api_key=llm_api_key, model_name=llm_path, context_len=8192) \
         if llm_base_url else \
             LocalDigestor(model_path=llm_path, context_len=8192) 
