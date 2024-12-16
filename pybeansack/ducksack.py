@@ -229,7 +229,7 @@ class Beansack:
                 total.likes as likes, 
                 total.comments as comments, 
                 total.shares as shares,
-                total.shared_in as shared_id,                            
+                total.shared_in as shared_in,                            
                 total.likes - COALESCE(ndays_ago.likes, 0) as latest_likes, 
                 total.comments - COALESCE(ndays_ago.comments, 0) as latest_comments, 
                 total.shares - COALESCE(ndays_ago.shares, 0) as latest_shares, 

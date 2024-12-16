@@ -131,7 +131,6 @@ def rectify_categories():
     return orch.remotesack.beanstore.bulk_write(updates, False).modified_count
 
 def rectify_ranking():
-    orch.trend_queue.put(orch.remotesack.get_beans(filter={K_COLLECTED: {"$gte": int(ndays_ago(3).timestamp())}}, projection={K_URL: 1, K_UPDATED: 1, K_TRENDSCORE: 1, K_LIKES: 1, K_COMMENTS: 1}))
     orch.run_trend_ranking()
 
 def port_categories_to_localsack():
@@ -189,5 +188,5 @@ orch.initialize(
 # embed_categories()
 # rectify_categories()
 # orch.run_clustering()
-# rectify_ranking()
-setup_baristas()
+rectify_ranking()
+# setup_baristas()

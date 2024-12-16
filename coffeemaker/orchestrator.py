@@ -193,11 +193,10 @@ def run_trend_ranking():
         filter={K_ID: trend.url}, 
         update={
             "$set": {
-                K_UPDATED: trend.updated,
                 K_LIKES: trend.likes,
                 K_COMMENTS: trend.comments,
                 K_SHARES: trend.shares,
-                "shared_id": trend.shared_id,
+                "shared_in": trend.shared_in,
                 K_LATEST_LIKES: trend.latest_likes,
                 K_LATEST_COMMENTS: trend.latest_comments,
                 K_LATEST_SHARES: trend.latest_shares,
