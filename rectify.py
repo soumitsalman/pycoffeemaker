@@ -11,10 +11,11 @@ CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR+"/.env")
 WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
 
-from collectors import ychackernews, redditor
-from pybeansack.datamodels import *
-from pymongo import DeleteOne, InsertOne, MongoClient, UpdateOne
-from pybeansack.utils import *
+from pymongo import MongoClient, UpdateOne
+
+from coffeemaker.collectors import ychackernews, redditor
+from coffeemaker.pybeansack.datamodels import *
+from coffeemaker.pybeansack.utils import *
 from coffeemaker import orchestrator as orch
 
 make_id = lambda text: re.sub(r'[^a-zA-Z0-9]', '-', text.lower())

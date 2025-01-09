@@ -6,7 +6,7 @@ from typing import Optional
 from icecream import ic
 from openai import OpenAI
 from retry import retry
-from pybeansack import utils
+from coffeemaker.pybeansack import utils
 from llama_cpp import Llama
 from pydantic import BaseModel, Field
 from newspaper import nlp

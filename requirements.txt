@@ -18,6 +18,7 @@ scikit-learn
 praw
 retry
 azure-servicebus
+azure-monitor-opentelemetry
 transformers
 openai
 peft

@@ -1,10 +1,10 @@
-from itertools import chain
+from typing import Callable
 import praw
 import os
 from datetime import datetime as dt
-from pybeansack.datamodels import *
-from pybeansack.utils import now
-from .individual import *
+from coffeemaker.pybeansack.datamodels import *
+from coffeemaker.pybeansack.utils import now
+from coffeemaker.collectors.individual import *
 
 REDDIT = "Reddit"
 STORY_URL_TEMPLATE = "https://www.reddit.com%s"
@@ -26,6 +26,17 @@ def collect(store_beans, store_chatters):
         if items:
             store_beans([item[0] for item in items])
             store_chatters([item[1] for item in items])
+            
+def collect_functions() -> list[Callable]:    
+    collection_time = now()
+    with open(SUBREDDITS_FILE, 'r') as file:
+        subreddits = [line.strip() for line in file.readlines() if line.strip()]  
+    reddit = praw.Reddit(
+        client_id = os.getenv('REDDITOR_APP_ID'), 
+        client_secret = os.getenv('REDDITOR_APP_SECRET'),
+        user_agent = USER_AGENT
+    )
+    return [lambda: (collect_subreddit, reddit, source, collection_time) for source in subreddits]
 
 def collect_subreddit(client, name, collection_time) -> list[tuple[Bean, Chatter]]:    
     try:

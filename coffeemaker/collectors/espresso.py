@@ -1,8 +1,8 @@
 import json
-from pybeansack.utils import now
 from azure.servicebus import ServiceBusClient
-from collectors.individual import extract_source
-from pybeansack.datamodels import BLOG, K_CREATED, K_SOURCE, K_UPDATED, K_URL, Bean
+from coffeemaker.pybeansack.utils import now
+from coffeemaker.collectors.individual import extract_source
+from coffeemaker.pybeansack.datamodels import BLOG, K_CREATED, K_SOURCE, K_UPDATED, K_URL, Bean
 
 def collect(sb_conn_str: str, store_func):
     collected = now()

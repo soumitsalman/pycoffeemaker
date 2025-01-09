@@ -1,43 +1,39 @@
-import logging
 import os
-from datetime import datetime as dt, timezone
-from dotenv import load_dotenv
+import random
+from datetime import datetime as dt
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(CURR_DIR+"/.env")
 WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
+
+from dotenv import load_dotenv
+load_dotenv(CURR_DIR+"/.env")
+
+import logging
 logging.basicConfig(
-    filename=f"{WORKING_DIR}/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
     level=logging.WARNING, 
-    datefmt="%Y-%m-%d %H:%M:%S",
-    format="%(asctime)s|%(name)s|%(levelname)s|%(message)s"
-)
-logging.getLogger("app").setLevel(logging.INFO)
-logging.getLogger("orchestrator").setLevel(logging.INFO)
-logging.getLogger("local digestor").setLevel(logging.INFO)
-logging.getLogger("remote digestor").setLevel(logging.INFO)
-logging.getLogger("local embedder").setLevel(logging.INFO)
-logging.getLogger("remote embedder").setLevel(logging.INFO)
-logging.getLogger("beansack").setLevel(logging.INFO)
+    filename=f"{WORKING_DIR}/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
+    format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
+logger = logging.getLogger("app")
+logger.setLevel(logging.INFO)
 
 from coffeemaker import orchestrator as orch
 
-orch.initialize(
-    os.getenv("DB_CONNECTION_STRING"),
-    os.getenv("SB_CONNECTION_STRING"), 
-    WORKING_DIR, 
-    os.getenv("EMBEDDER_PATH"),    
-    os.getenv("LLM_BASE_URL"),
-    os.getenv("LLM_API_KEY"),
-    os.getenv("LLM_MODEL"),
-    float(os.getenv('CATEGORY_EPS')),
-    float(os.getenv('CLUSTER_EPS')))
+if __name__ == "__main__":    
+    start_time = dt.now()
+    batch_id = start_time.strftime('%Y-%m-%d %H')
+    
+    logger.info("started", extra={"source": batch_id, "num_items": 0})
+    orch.logger.setLevel(logging.INFO)
+    
+    orch.initialize(
+        os.getenv("DB_CONNECTION_STRING"),
+        os.getenv("SB_CONNECTION_STRING"), 
+        WORKING_DIR, 
+        os.getenv("EMBEDDER_PATH"),    
+        os.getenv("LLM_PATH"),
+        float(os.getenv('CATEGORY_EPS')),
+        float(os.getenv('CLUSTER_EPS')))
+    num_items = orch.run(batch_id)
+    
+    logger.info("finished", extra={"source": batch_id, "num_items": num_items, "execution_time": dt.now()-start_time})
 
-start_time = dt.now()
-orch.run_cleanup()
-orch.run_collection()
-orch.run_indexing_and_augmenting()
-orch.run_clustering()
-orch.run_trend_ranking()
-orch.close()
-logging.getLogger("app").info("execution time|%s|%d", "__batch__", int((dt.now()-start_time).total_seconds()))

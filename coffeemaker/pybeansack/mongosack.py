@@ -15,6 +15,8 @@ from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 
 TIMEOUT = 300000 # 3 mins
+FIVE_MINUTES = 300
+TEN_MINUTES = 600
 
 # names of db and collections
 BEANSACK = "beansack"
@@ -103,22 +105,15 @@ class Beansack:
             res = self.chatterstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in chatters])
             return len(res.inserted_ids or [])
 
-    # TODO: enable later. this is temporarily disabled
-    # def update_beans(self, urls: list[str|list[str]], updates: list[dict]) -> int:
-    #     # if update is a single dict then it will apply to all beans with the specified urls
-    #     # or else update is a list of equal length, and we will do a bulk_write of update one
-    #     if len(urls) != len(updates):
-    #         logger.warning("Bulk update discrepency: len(urls) [%d] != len(updates) [%d]", len(urls), len(updates))
-        
-    #     makeupdate = lambda filter, set_fields: UpdateOne({K_URL: filter}, set_fields) if isinstance(filter, str) else UpdateMany({K_URL: {"$in": filter}}, set_fields)       
-    #     writes = list(map(makeupdate, urls, [{"$set": fields} for fields in updates]))
-    #     return self.beanstore.bulk_write(writes).modified_count
+    
+    @retry(tries=3, delay=FIVE_MINUTES, max_delay=TEN_MINUTES, logger=logging.getLogger("mongosack"))
+    def update_beans(self, updates):
+        return self.beanstore.bulk_write(updates, ordered=False, bypass_document_validation=True).matched_count
       
     def delete_old(self, window: int):
         time_filter = {K_UPDATED: { "$lt": ndays_ago(window) }}
-        bean_count = self.beanstore.delete_many(time_filter).deleted_count
-        chatter_count = self.chatterstore.delete_many(time_filter).deleted_count
-        return (bean_count, chatter_count)
+        return self.beanstore.delete_many(time_filter).deleted_count
+        # TODO: add delete for bookmarked bean
 
     ####################
     ## GET AND SEARCH ##

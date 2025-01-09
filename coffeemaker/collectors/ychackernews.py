@@ -1,8 +1,10 @@
+import asyncio
 from datetime import datetime as dt
+from typing import Callable
 import requests
-from .individual import *
-from pybeansack.datamodels import *
-from pybeansack.utils import now
+from coffeemaker.collectors.individual import *
+from coffeemaker.pybeansack.datamodels import *
+from coffeemaker.pybeansack.utils import now
 
 TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
 COLLECTION_URL_TEMPLATE = "https://hacker-news.firebaseio.com/v0/item/%d.json"
@@ -15,6 +17,11 @@ def collect(store_beans, store_chatters):
     items = [extract(entry, collection_time) for entry in entries]
     store_beans([item[0] for item in items if item])
     store_chatters([item[1] for item in items if item])
+    
+def collect_functions() -> list[Callable]   :
+    entries = requests.get(TOP_STORIES_URL, headers={"User-Agent": USER_AGENT}).json()
+    collection_time = now()    
+    return [lambda: [extract(entry, collection_time) for entry in entries]]
 
 def extract(id: int, collection_time: int):
     try:

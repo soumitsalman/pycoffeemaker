@@ -1,11 +1,11 @@
 import os
 import time
+from typing import Callable
 import feedparser
-from pybeansack.datamodels import Bean, NEWS
-from pybeansack.utils import now
-from .individual import *
+from coffeemaker.pybeansack.datamodels import Bean, NEWS
+from coffeemaker.pybeansack.utils import now
+from coffeemaker.collectors.individual import *
 from datetime import datetime as dt
-import asyncio
 
 DEFAULT_FEEDS = os.path.dirname(os.path.abspath(__file__))+"/rssfeedsources.txt"
 
@@ -18,7 +18,16 @@ def collect(store_beans, sources: str|list[str] = DEFAULT_FEEDS):
             sources = file.readlines()
     # santize the urls and start collecting
     sources = [url.strip() for url in sources if url.strip()]
-    [store_beans(collect_from(url)) for url in sources]               
+    [store_beans(collect_from(url)) for url in sources]  
+    
+def collect_functions(sources: str|list[str] = DEFAULT_FEEDS) -> list[Callable]:
+    if isinstance(sources, str):
+        # if sources are not provided, assume that there is sources_file provided
+        with open(sources, 'r') as file:
+            sources = file.readlines()
+    # santize the urls and start collecting
+    sources = [url.strip() for url in sources if url.strip()]
+    return [lambda: (collect_from, url) for url in sources]
         
 def collect_from(feed_url: str, kind = NEWS) -> list[Bean]:
     try:

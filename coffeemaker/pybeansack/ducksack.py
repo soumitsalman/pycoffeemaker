@@ -177,10 +177,13 @@ class Beansack:
         ]
         self.db.executemany(SQL_INSERT_BEANS, beans_data)
 
-    def not_exists(self, beans: list[Bean]) -> list[Bean]:
-        if beans:
-            exists = {item[0] for item in self.db.query(f"SELECT url FROM beans WHERE {sql_where_urls([bean.url for bean in beans])}").fetchall()}
-            return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
+    # def not_exists(self, beans: list[Bean]) -> list[Bean]:
+    #     if beans:
+    #         exists = {item[0] for item in self.db.query(f"SELECT url FROM beans WHERE {sql_where_urls([bean.url for bean in beans])}").fetchall()}
+    #         return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
+
+    def exists(self, beans: list[Bean]) -> list[str]:
+        return {item[0] for item in self.db.query(f"SELECT url FROM beans WHERE {sql_where_urls([bean.url for bean in beans])}").fetchall()}
 
     def search_beans(self, embedding: list[float], min_score: float = DEFAULT_VECTOR_SEARCH_SCORE, limit: int = 0) -> list[Bean]:
         result = self.db.sql(sql_search_beans(embedding, min_score))
@@ -220,9 +223,12 @@ class Beansack:
         ]
         self.db.executemany(SQL_INSERT_CHATTERS, chatters_data)
 
-    def get_latest_chatters(self, last_ndays: int) -> list[ChatterAnalysis]:
+    def get_latest_chatters(self, last_ndays: int, urls: list[str] = None) -> list[ChatterAnalysis]:
         total = self.db.query(SQL_TOTAL_CHATTERS)
         ndays_ago = self.db.query(sql_total_chatters_ndays_ago(last_ndays))
+        if urls:
+            total = total.filter(sql_where_urls(urls))
+            ndays_ago = ndays_ago.filter(sql_where_urls(urls))
         result = self.db.query("""
             SELECT 
                 total.url as url, 
@@ -238,7 +244,6 @@ class Beansack:
             LEFT JOIN ndays_ago ON total.url = ndays_ago.url
             WHERE latest_likes <> 0 OR latest_comments <> 0 OR latest_shares <> 0
         """)
-        result.show()
         return [ChatterAnalysis(
             url=chatter[0],
             likes=chatter[1],
