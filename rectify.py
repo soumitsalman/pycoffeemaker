@@ -132,7 +132,7 @@ def rectify_categories():
     return orch.remotesack.beanstore.bulk_write(updates, False).modified_count
 
 def rectify_ranking():
-    orch.run_trend_ranking()
+    orch.trend_rank_beans()
 
 def port_categories_to_localsack():
     orch.localsack.store_categories(list(orch.categorystore.find()))

@@ -1,3 +1,4 @@
+import asyncio
 import duckdb
 from .datamodels import *
 from .utils import *
@@ -154,14 +155,16 @@ class Beansack:
         if not os.path.exists(db_dir):
             os.makedirs(db_dir)
 
-        self.db = duckdb.connect(f"{db_dir}/beansack.db").cursor()  
-        self.db.execute(SQL_INSTALL_VSS)      
-        self.db.execute(SQL_CREATE_BEANS)        
-        self.db.execute(SQL_CREATE_CHATTERS)
-        self.db.execute(SQL_CREATE_CATEGORIES)
+        self.db = duckdb.connect(f"{db_dir}/beansack.db", read_only=False) \
+            .execute(SQL_INSTALL_VSS) \
+            .execute(SQL_CREATE_BEANS) \
+            .execute(SQL_CREATE_CHATTERS) \
+            .execute(SQL_CREATE_CATEGORIES) \
+            .commit()
         # not adding categories vector index and beans vector index for now since vss in duckdb is unstable
 
     def store_beans(self, beans: list[Bean]):
+        local_conn = self.db.cursor()
         beans_data = [
             (
                 bean.url,
@@ -175,21 +178,19 @@ class Beansack:
                 bean.embedding
             ) for bean in beans
         ]
-        self.db.executemany(SQL_INSERT_BEANS, beans_data)
-
-    # def not_exists(self, beans: list[Bean]) -> list[Bean]:
-    #     if beans:
-    #         exists = {item[0] for item in self.db.query(f"SELECT url FROM beans WHERE {sql_where_urls([bean.url for bean in beans])}").fetchall()}
-    #         return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
+        local_conn.executemany(SQL_INSERT_BEANS, beans_data).commit()
 
     def exists(self, beans: list[Bean]) -> list[str]:
-        return {item[0] for item in self.db.query(f"SELECT url FROM beans WHERE {sql_where_urls([bean.url for bean in beans])}").fetchall()}
+        local_conn = self.db.cursor()
+        results = local_conn.query(f"SELECT url FROM beans WHERE {sql_where_urls([bean.url for bean in beans])}").fetchall()
+        return {item[0] for item in results}
 
     def search_beans(self, embedding: list[float], min_score: float = DEFAULT_VECTOR_SEARCH_SCORE, limit: int = 0) -> list[Bean]:
-        result = self.db.sql(sql_search_beans(embedding, min_score))
+        local_conn = self.db.cursor()
+        result = local_conn.sql(sql_search_beans(embedding, min_score))
         if limit:
             result = result.limit(limit)
-        result.show()
+        # result.show()
         return [Bean(
             url=bean[0],
             created=bean[1],
@@ -201,7 +202,8 @@ class Beansack:
         ) for bean in result.fetchall()]
     
     def search_similar_beans(self, url: str, max_distance: float, limit: int = 0) -> list[str]:        
-        result = self.db.query(sql_search_similar_beans(url, max_distance))
+        local_conn = self.db.cursor()
+        result = local_conn.query(sql_search_similar_beans(url, max_distance))
         if limit:
             result = result.limit(limit)
         # result.show()
@@ -221,15 +223,17 @@ class Beansack:
                 chatter.subscribers
             ) for chatter in chatters
         ]
-        self.db.executemany(SQL_INSERT_CHATTERS, chatters_data)
+        local_conn = self.db.cursor()
+        local_conn.executemany(SQL_INSERT_CHATTERS, chatters_data).commit()
 
     def get_latest_chatters(self, last_ndays: int, urls: list[str] = None) -> list[ChatterAnalysis]:
-        total = self.db.query(SQL_TOTAL_CHATTERS)
-        ndays_ago = self.db.query(sql_total_chatters_ndays_ago(last_ndays))
+        local_conn = self.db.cursor()
+        total = local_conn.query(SQL_TOTAL_CHATTERS)
+        ndays_ago = local_conn.query(sql_total_chatters_ndays_ago(last_ndays))
         if urls:
             total = total.filter(sql_where_urls(urls))
             ndays_ago = ndays_ago.filter(sql_where_urls(urls))
-        result = self.db.query("""
+        result = local_conn.query("""
             SELECT 
                 total.url as url, 
                 total.likes as likes, 
@@ -277,10 +281,12 @@ class Beansack:
                 category.get('embedding')
             ) for category in categories
         ]
-        self.db.executemany(SQL_INSERT_CATEGORIES, categories_data)
+        local_conn = self.db.cursor()
+        local_conn.executemany(SQL_INSERT_CATEGORIES, categories_data).commit()
 
     def search_categories(self, embedding: list[float], min_score: float = DEFAULT_VECTOR_SEARCH_SCORE, limit: int = 0) -> list[str]:
-        result = self.db.query(sql_search_categories(embedding, min_score))
+        local_conn = self.db.cursor()
+        result = local_conn.query(sql_search_categories(embedding, min_score))
         if limit:
             result = result.limit(limit)
         # result.show()

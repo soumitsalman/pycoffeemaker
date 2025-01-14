@@ -43,7 +43,7 @@ class LocalDigestor:
         self.model_path = model_path
         self.context_len = context_len
 
-    @retry(tries=2, logger=logging.getLogger('local digestor'))
+    @retry(tries=2, logger=logging.getLogger("local digestor"))
     def run(self, text: str) -> Digest:
         if not self.model:
             self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=False, verbose=False)  

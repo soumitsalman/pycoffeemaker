@@ -1,6 +1,7 @@
+import asyncio
 import os
 import time
-from typing import Callable
+from typing import Callable, Coroutine
 import feedparser
 from coffeemaker.pybeansack.datamodels import Bean, NEWS
 from coffeemaker.pybeansack.utils import now
@@ -11,37 +12,35 @@ DEFAULT_FEEDS = os.path.dirname(os.path.abspath(__file__))+"/rssfeedsources.txt"
 
 # reads the list of feeds from a file path and collects
 # if sources is a string then it will be treated as a file path or else it will be a an array
-def collect(store_beans, sources: str|list[str] = DEFAULT_FEEDS):
+def collect(process_collection: Callable, sources: str|list[str] = DEFAULT_FEEDS):
     if isinstance(sources, str):
-        # if sources are not provided, assume that there is sources_file provided
         with open(sources, 'r') as file:
-            sources = file.readlines()
-    # santize the urls and start collecting
-    sources = [url.strip() for url in sources if url.strip()]
-    [store_beans(collect_from(url)) for url in sources]  
-    
-def collect_functions(sources: str|list[str] = DEFAULT_FEEDS) -> list[Callable]:
-    if isinstance(sources, str):
-        # if sources are not provided, assume that there is sources_file provided
-        with open(sources, 'r') as file:
-            sources = file.readlines()
-    # santize the urls and start collecting
-    sources = [url.strip() for url in sources if url.strip()]
-    return [lambda: (collect_from, url) for url in sources]
+            sources = [line.strip() for line in file.readlines() if line.strip()]
+
+    [process_collection(collect_url(url)) for url in sources]
         
-def collect_from(feed_url: str, kind = NEWS) -> list[Bean]:
+async def collect_async(process_collection: Callable, sources: str|list[str] = DEFAULT_FEEDS):
+    if isinstance(sources, str):
+        with open(sources, 'r') as file:
+            sources = [line.strip() for line in file.readlines() if line.strip()]
+    tasks = (asyncio.create_task(
+        process_collection(asyncio.to_thread(collect_url, url)),
+        name=url
+    ) for url in sources)
+    await asyncio.gather(*tasks)         
+        
+def collect_url(feed_url: str, kind = NEWS) -> list[Bean]|None:
     try:
         feed = feedparser.parse(feed_url, agent=USER_AGENT)
         # if we know that this feed is NOT in english, just skip for now. if language is not specified, assume it is english
-        if not feed.get("language", "en-US").startswith("en-"):
-            return []    
-        collection_time = now()
-        # collect only the ones that is english. if language is not specified, assume it is english
-        source = extract_source_name(feed)
-        return [extract(entry, source, kind, collection_time) for entry in feed.entries if entry.get("language", "en-US").startswith("en-")]
+        if feed.get("language", "en-US").startswith("en-"):
+            collection_time = now()
+            # collect only the ones that is english. if language is not specified, assume it is english
+            source = extract_source_name(feed)
+            return [extract(entry, source, kind, collection_time) for entry in feed.entries if entry.get("language", "en-US").startswith("en-")]
     except: # Exception as e:
         # ic(e)
-        return None
+        pass
 
 def extract(entry, source, kind, collection_time) -> Bean:
     body, summary = _extract_body_and_summary(entry)  
@@ -65,7 +64,7 @@ def extract(entry, source, kind, collection_time) -> Bean:
 
 def extract_source_name(feed):
     if feed.entries:
-        res = load_from_url(feed.entries[0].link)
+        res = collect_url(feed.entries[0].link)
         return site_name(res) or extract_source(feed.entries[0].link)[0]
 
 # 'links': 
@@ -102,8 +101,8 @@ def _extract_body_and_summary(entry) -> tuple[str, str]:
         body_html = entry.dc_content
     elif 'content' in entry:        
         body_html = entry.content[0]['value'] if isinstance(entry.content, list) else entry.content    
-    body = load_from_html(body_html)
-    summary = load_from_html(entry.get('summary'))    
+    body = collect_html(body_html)
+    summary = collect_html(entry.get('summary'))    
     
     # now time for some heuristics when there is no <dc:content> or <content>
     if len(body or "") < len(summary or ""):

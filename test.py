@@ -1,11 +1,17 @@
+import asyncio
 import os
 from dotenv import load_dotenv
 load_dotenv()
 
 import logging
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
-logger = logging.getLogger("TEST")
+logging.basicConfig(level=logging.ERROR, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
+logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
+logging.getLogger("orchestrator").setLevel(logging.INFO)
+logging.getLogger("jieba").propagate = False
+logging.getLogger("local digestor").propagate = False
+logging.getLogger("local embedder").propagate = False
+logging.getLogger("__package__").propagate = False
 
 import json
 from datetime import datetime as dt
@@ -28,17 +34,18 @@ def write_text(text, file_name):
         file.write(text)
 
 def test_collection():
-    sources = [
-        "https://www.buzzhint.com/feed/"
-    ]
+    orch.run_collection()
+    # sources = [
+    #     "https://www.buzzhint.com/feed/"
+    # ]
     
-    rssfeed.collect(store_beans=lambda items: print(len(items), "beans collected from", items[0].source), sources=sources)
-    redditor.collect(
-        store_beans=lambda items: print(len(items), "beans collected from", items[0].source),
-        store_chatters=orch.store_chatters)
-    ychackernews.collect(
-        store_beans=lambda items: print(len(items), "beans collected from", items[0].source),
-        store_chatters=orch.store_chatters)
+    # rssfeed.collect(store_beans=lambda items: print(len(items), "beans collected from", items[0].source), sources=sources)
+    # redditor.collect(
+    #     store_beans=lambda items: print(len(items), "beans collected from", items[0].source),
+    #     store_chatters=orch.store_chatters)
+    # ychackernews.collect(
+    #     store_beans=lambda items: print(len(items), "beans collected from", items[0].source),
+    #     store_chatters=orch.store_chatters)
 
     # with ServiceBusClient.from_connection_string(orch.sb_connection_str).get_queue_sender("index-queue") as index_queue:
     #     to_json = lambda bean: ServiceBusMessage(json.dumps({K_ID: f"TEST:{bean.url}", K_SOURCE: "TEST", K_URL: bean.url, K_CREATED: int(time.time())}))
@@ -83,7 +90,7 @@ def test_clustering():
         ic(len(beans))
         beans = orch.localsack.not_exists(beans)
         if beans:
-            beans = orch._index(orch.download_beans(random.sample(beans, min(3, ic(len(beans))))))
+            beans = orch._index(orch.deep_collect(random.sample(beans, min(3, ic(len(beans))))))
             orch.localsack.store_beans(beans)
             ic(orch._cluster([bean.url for bean in beans]))        
     
@@ -95,7 +102,7 @@ def test_clustering():
     rssfeed.collect(store_beans=_collect, sources = sources)
 
 def test_clustering_live(): 
-    orch.run_clustering()
+    orch.cluster_beans()
 
 def test_trend_ranking():    
     # redditor.collect(
@@ -108,7 +115,7 @@ def test_trend_ranking():
 
 def test_whole_path_live():    
     rssfeed.collect(
-        store_beans=lambda beans: orch.collect_beans(random.sample(beans, 2)),
+        store_beans=lambda beans: orch.extract_new(random.sample(beans, 2)),
         sources=[
             "https://www.techradar.com/feeds/articletype/news",
             "https://www.geekwire.com/feed/",
@@ -116,17 +123,22 @@ def test_whole_path_live():
             "https://dev.to/feed"
         ])
     redditor.collect(
-        store_beans=lambda beans: orch.collect_beans(random.sample(beans, 2)),
+        store_beans=lambda beans: orch.extract_new(random.sample(beans, 2)),
         store_chatters=orch.store_chatters)
     ychackernews.collect(
-        store_beans=lambda beans: orch.collect_beans(random.sample(beans, 2)),
+        store_beans=lambda beans: orch.extract_new(random.sample(beans, 2)),
         store_chatters=orch.store_chatters)
     
     orch.run_indexing_and_augmenting()
-    orch.run_clustering()
-    orch.run_trend_ranking()
+    orch.cluster_beans()
+    orch.trend_rank_beans()
 
 if __name__ == "__main__":
+    start_time = dt.now()
+    run_id = start_time.strftime('%Y-%m-%d %H')
+    
+    logger.info("starting", extra={"source": run_id, "num_items": 0})
+    
     orch.initialize(
         os.getenv("DB_CONNECTION_STRING"),
         os.getenv("SB_CONNECTION_STRING"), 
@@ -136,44 +148,14 @@ if __name__ == "__main__":
         float(os.getenv('CATEGORY_EPS')),
         float(os.getenv('CLUSTER_EPS')))
     
-    start_time = dt.now()
-    total_new_beans = 0
-    
+    # asyncio.run(orch.run_collection_async())
+    asyncio.run(orch.run_async())
     # test_collection()
+    # test_collection_async()
     # test_clustering()
     # test_index_and_augment()
     # test_whole_path_live()
     # test_search()
-    test_trend_ranking()
+    # test_trend_ranking()
+    logger.info("execution time", extra={"source": run_id, "num_items": dt.now()-start_time})
     
-    # num_items = orch.cleanup()
-    # logger.info("cleaned up", extra={"source": "__batch__", "num_items": num_items})
-    
-    # run_collection()
-    
-    # num_items = orch.update_trend_rank(None, start_time)
-    # logger.info("trend ranked", extra={"source": "__batch__", "num_items": num_items})
-    
-    # while not collected_beans_queue.empty():
-    #     beans = orch.store_beans(
-    #         orch.augment_beans(
-    #             orch.index_beans(
-    #                 orch.new_beans(collected_beans_queue.get()))))
-    #     if beans:
-    #         total_new_beans += len(beans)
-    #         urls = [bean.url for bean in beans]
-    #         logger.info("stored", extra={"source": beans[0].source, "num_items": len(beans)})
-            
-            
-    #         num_items = orch.update_clusters(orch.cluster_beans(urls))
-    #         logger.info("clustered", extra={"source": beans[0].source, "num_items": num_items})
-            
-    #         num_items = orch.update_trend_rank(orch.trend_rank_beans(urls), start_time)
-    #         logger.info("trend ranked", extra={"source": beans[0].source, "num_items": num_items})
-
-    # orch.close()
-    logger.info("finished", extra={"source": "__batch__", "num_items": total_new_beans, "execution_time": dt.now()-start_time})
-  
-
-
-

@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime as dt
-from typing import Callable
+from typing import Callable, Coroutine
 import requests
 from coffeemaker.collectors.individual import *
 from coffeemaker.pybeansack.datamodels import *
@@ -11,19 +11,24 @@ COLLECTION_URL_TEMPLATE = "https://hacker-news.firebaseio.com/v0/item/%d.json"
 STORY_URL_TEMPLATE = "https://news.ycombinator.com/item?id=%d"
 YC = "ycombinator"
 
-def collect(store_beans, store_chatters):
-    entries = requests.get(TOP_STORIES_URL, headers={"User-Agent": USER_AGENT}).json()
-    collection_time = now()
-    items = [extract(entry, collection_time) for entry in entries]
-    store_beans([item[0] for item in items if item])
-    store_chatters([item[1] for item in items if item])
+# def collect():
+#     entries = requests.get(TOP_STORIES_URL, headers={"User-Agent": USER_AGENT}).json()
+#     collection_time = now()
+#     yield [extract(entry, collection_time) for entry in entries]
     
-def collect_functions() -> list[Callable]   :
+def collect(process_collection: Callable):
+    process_collection(_collect())
+
+async def collect_async(process_collection: Callable):          
+    await process_collection(asyncio.to_thread(_collect))
+    
+def _collect():
     entries = requests.get(TOP_STORIES_URL, headers={"User-Agent": USER_AGENT}).json()
     collection_time = now()    
-    return [lambda: [extract(entry, collection_time) for entry in entries]]
+    items =  [extract(entry, collection_time) for entry in entries]
+    return [item for item in items if item]
 
-def extract(id: int, collection_time: int):
+def extract(id: int, collection_time: int) -> tuple[Bean, Chatter]:
     try:
         entry = requests.get(COLLECTION_URL_TEMPLATE % id, timeout=2).json()  
         url = entry.get('url', STORY_URL_TEMPLATE % id)
@@ -39,7 +44,7 @@ def extract(id: int, collection_time: int):
                 source=extract_source(url)[0],
                 title=entry.get('title'),
                 kind=BLOG if 'url' in entry else POST,
-                text=load_from_html(entry['text']) if 'text' in entry else "", # load if it has a text which usually applies to posts
+                text=collect_html(entry['text']) if 'text' in entry else "", # load if it has a text which usually applies to posts
                 author=entry.get('by')                
             ), 
             Chatter(
@@ -52,6 +57,5 @@ def extract(id: int, collection_time: int):
             )
         )
     except:
-        return None
-        # logger.warning("Failed loading from %s. Error: %s", COLLECTION_URL_TEMPLATE%id, str(err))
+        pass
 

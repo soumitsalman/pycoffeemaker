@@ -1,3 +1,4 @@
+import asyncio
 from typing import Callable
 import praw
 import os
@@ -11,46 +12,49 @@ STORY_URL_TEMPLATE = "https://www.reddit.com%s"
 SUBREDDITS_FILE = os.path.dirname(os.path.abspath(__file__))+"/redditsources.txt"
 MAX_LIMIT = 20
 
-def collect(store_beans, store_chatters):
+def collect(process_collection: Callable, subreddits: str|list[str] = SUBREDDITS_FILE):    
+    if isinstance(subreddits, str):
+        with open(subreddits, 'r') as file:
+            subreddits = [line.strip() for line in file.readlines() if line.strip()]  
+             
     reddit = praw.Reddit(
         client_id = os.getenv('REDDITOR_APP_ID'), 
         client_secret = os.getenv('REDDITOR_APP_SECRET'),
         user_agent = USER_AGENT
-    )
-    collection_time = now()
-    with open(SUBREDDITS_FILE, 'r') as file:
-        subreddits = [line.strip() for line in file.readlines()]   
+    )    
+    [process_collection(collect_subreddit(reddit, source)) for source in subreddits]
 
-    for source in subreddits:
-        items = collect_subreddit(reddit, source, collection_time)
-        if items:
-            store_beans([item[0] for item in items])
-            store_chatters([item[1] for item in items])
-            
-def collect_functions() -> list[Callable]:    
-    collection_time = now()
-    with open(SUBREDDITS_FILE, 'r') as file:
-        subreddits = [line.strip() for line in file.readlines() if line.strip()]  
-    reddit = praw.Reddit(
+async def collect_async(process_collection: Callable, subreddits: str|list[str] = SUBREDDITS_FILE):    
+    if isinstance(subreddits, str):
+        with open(subreddits, 'r') as file:
+            subreddits = [line.strip() for line in file.readlines() if line.strip()]  
+    client = praw.Reddit(
         client_id = os.getenv('REDDITOR_APP_ID'), 
         client_secret = os.getenv('REDDITOR_APP_SECRET'),
         user_agent = USER_AGENT
-    )
-    return [lambda: (collect_subreddit, reddit, source, collection_time) for source in subreddits]
+    )   
+    tasks = (asyncio.create_task(
+        process_collection(asyncio.to_thread(collect_subreddit, client, source)),
+        name=source
+    ) for source in subreddits)
+    await asyncio.gather(*tasks)
 
-def collect_subreddit(client, name, collection_time) -> list[tuple[Bean, Chatter]]:    
+def collect_subreddit(client, name) -> list[tuple[Bean, Chatter]]:    
     try:
+        collection_time = now()
         return [extract(post, collection_time) for post in client.subreddit(name).hot(limit=MAX_LIMIT) if not is_non_text(post.url)]
     except:
-        return None
+        pass
 
-def collect_user(client, name, collection_time):    
-    user = client.redditor(name)
-    return [extract(post, collection_time) for post in user.submissions.new(limit=MAX_LIMIT) if not is_non_text(post.url)]
-
+def collect_user(client, name): 
+    try:
+        collection_time = now()
+        return [extract(post, collection_time) for post in client.redditor(name).submissions.new(limit=MAX_LIMIT) if not is_non_text(post.url)]
+    except:
+        pass
+    
 def extract(post, collection_time) -> tuple[Bean, Chatter]: 
     subreddit = f"r/{post.subreddit.display_name}"
-
     return (
         Bean(
             url=post.url,
@@ -61,7 +65,7 @@ def extract(post, collection_time) -> tuple[Bean, Chatter]:
             source=subreddit if post.is_self else (extract_source(post.url)[0] or subreddit),
             title=post.title,
             kind=POST if post.is_self else NEWS,
-            text=post.selftext.strip(),
+            text=post.selftext,
             author=post.author.name if post.author else None
         ),
         Chatter(

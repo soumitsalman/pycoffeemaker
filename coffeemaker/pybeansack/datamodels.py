@@ -122,13 +122,13 @@ class Source(BaseModel):
 
 class ChatterAnalysis(BaseModel):
     url: str
-    likes: Optional[int] = None
-    comments: Optional[int] = None
-    shares: Optional[int] = None
+    likes: Optional[int] = 0
+    comments: Optional[int] = 0
+    shares: Optional[int] = 0
     shared_in: Optional[list[str]] = None
-    latest_likes: Optional[int] = None
-    latest_comments: Optional[int] = None
-    latest_shares: Optional[int] = None
+    latest_likes: Optional[int] = 0
+    latest_comments: Optional[int] = 0
+    latest_shares: Optional[int] = 0
     latest_shared_in: Optional[list[str]] = None
-    trend_score: Optional[int] = None
+    trend_score: Optional[int] = 0
     
