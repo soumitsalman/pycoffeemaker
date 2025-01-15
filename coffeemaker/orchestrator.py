@@ -100,7 +100,7 @@ async def queue_for_indexing_async(items: Coroutine):
     if chatters:
         localsack.store_chatters(chatters)
     if beans := await asyncio.to_thread(deep_collect, beans):
-        await collected_queue_async.put_nowait(beans)   
+        collected_queue_async.put_nowait(beans)   
         logger.info("collected", extra={"source": beans[0].source, "num_items": len(beans)})      
     
 def deep_collect(beans: list[Bean]) -> list[Bean]:
@@ -292,7 +292,7 @@ async def run_async() -> int:
         beans = store_beans(
             augment_beans(
                 embed_beans(
-                    new_beans(await collected_queue_async.get_nowait()))))
+                    new_beans(collected_queue_async.get_nowait()))))
         collected_queue_async.task_done()
         if beans:
             total_new_beans += len(beans)
