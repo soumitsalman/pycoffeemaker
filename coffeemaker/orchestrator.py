@@ -1,14 +1,9 @@
-
+from concurrent.futures import ThreadPoolExecutor
 import random
 from icecream import ic
 import logging
-logger = logging.getLogger("orchestrator")
-
-# import queue
 import asyncio
 from typing import Callable, Coroutine
-import newspaper
-import queue
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.embedding import BeansackEmbeddings
@@ -18,6 +13,8 @@ from coffeemaker.collectors import espresso, individual, rssfeed, ychackernews, 
 from coffeemaker.digestors import *
 from datetime import datetime as dt
 from pymongo import UpdateOne
+
+log = logging.getLogger(__name__)
 
 # if a bean.text is less than 75 words, it is not worth indexing
 ALLOWED_BODY_LEN = 50   
@@ -34,9 +31,6 @@ MAX_CATEGORIES = 10
 run_id: str = None
 run_start_time: datetime = None
 
-collected_queue: queue.Queue = None
-collected_queue_async: asyncio.Queue = None
-
 remotesack: MongoSack = None
 localsack: DuckSack = None
 category_eps: float = None
@@ -47,13 +41,6 @@ digestor: NewspaperDigestor = None
 models_dir: str = None
 
 def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_path: str, cat_eps: float, clus_eps: float):
-    global collected_queue, collected_queue_async
-    collected_queue = queue.Queue()
-    collected_queue_async = asyncio.Queue()    
-    
-    # global sb_connection_str  
-    # sb_connection_str = sb_conn_str 
-    
     global embedder, digestor
     embedder = BeansackEmbeddings(model_path=emb_path, context_len=4096)
     digestor = LocalDigestor(model_path=llm_path, context_len=8192) 
@@ -77,32 +64,6 @@ def new_beans(beans: list[Bean]) -> list[Bean]:
                 new_items[bean.url] = bean
         return list(new_items.values())
     
-def extract_new(items: list[Bean]|list[tuple[Bean, Chatter]]) -> tuple[list[Bean]|None, list[Chatter]|None]:
-    beans, chatters = None, None
-    if items:
-        if isinstance(items[0], Bean):
-            beans = items
-        else:
-            beans = [chunk[0] for chunk in items]
-            chatters = [chunk[1] for chunk in items]                               
-    return new_beans(beans), chatters
-
-def queue_for_indexing(items: list[Bean]|list[tuple[Bean, Chatter]]):
-    beans, chatters = extract_new(items)      
-    if chatters:
-        localsack.store_chatters(chatters)
-    if beans := deep_collect(beans):        
-        collected_queue.put_nowait(beans)   
-        logger.info("collected", extra={"source": beans[0].source, "num_items": len(beans)})  
-        
-async def queue_for_indexing_async(items: Coroutine):
-    beans, chatters = extract_new(await items)  
-    if chatters:
-        localsack.store_chatters(chatters)
-    if beans := await asyncio.to_thread(deep_collect, beans):
-        collected_queue_async.put_nowait(beans)   
-        logger.info("collected", extra={"source": beans[0].source, "num_items": len(beans)})      
-    
 def deep_collect(beans: list[Bean]) -> list[Bean]:
     new_beans, beans = [], beans or []
     for bean in beans:
@@ -118,6 +79,21 @@ def deep_collect(beans: list[Bean]) -> list[Bean]:
             new_beans.append(bean)          
     return new_beans
 
+def extract_new(items: list[Bean]|list[tuple[Bean, Chatter]]) -> tuple[list[Bean]|None, list[Chatter]|None]:
+    beans, chatters = None, None
+    if items:
+        if isinstance(items[0], Bean):
+            beans = items
+        else:
+            beans = [chunk[0] for chunk in items]
+            chatters = [chunk[1] for chunk in items] 
+
+    if chatters:
+        localsack.store_chatters(chatters)
+    if beans := deep_collect(new_beans(beans)):
+        log.info("collected", extra={"source": beans[0].source, "num_items": len(beans)})      
+        return beans
+
 merge_tags = lambda bean, new_tags: list({tag.lower(): tag for tag in ((bean.tags + new_tags) if (bean.tags and new_tags) else (bean.tags or new_tags))}.values())
 
 def embed_beans(beans: list[Bean]) -> list[Bean]|None:   
@@ -126,7 +102,7 @@ def embed_beans(beans: list[Bean]) -> list[Bean]|None:
         try:
             bean.embedding = embedder.embed(bean.digest())  
         except:
-            logger.error("failed embedding", extra={"source": bean.source, "num_items": 1})
+            log.error("failed embedding", extra={"source": bean.source, "num_items": 1})
     return [bean for bean in beans if bean.embedding]
 
 def find_categories(bean: Bean):    
@@ -142,14 +118,14 @@ def augment_beans(beans: list[Bean]) -> list[Bean]|None:
                 bean.title = digest.title or bean.title
                 bean.tags = merge_tags(bean, digest.tags)
         except:
-            logger.error("failed augmenting", extra={"source": bean.source, "num_items": 1})
+            log.error("failed augmenting", extra={"source": bean.source, "num_items": 1})
     return [bean for bean in beans if bean.summary]  
     
 def store_beans(beans: list[Bean]) -> list[Bean]|None:
     if beans:
         localsack.store_beans(beans)
         remotesack.store_beans(beans)
-        logger.info("stored", extra={"source": beans[0].source, "num_items": len(beans)})  
+        log.info("stored", extra={"source": beans[0].source, "num_items": len(beans)})  
     return beans
         
 def store_chatters(chatters: list[Chatter]) -> list[Chatter]|None:
@@ -179,7 +155,7 @@ def cluster_beans(beans: list[Bean]):
     if beans:
         clusters = find_clusters([bean.url for bean in beans])
         num_items = update_clusters(clusters)
-        logger.info("clustered", extra={"source": beans[0].source, "num_items": num_items})    
+        log.info("clustered", extra={"source": beans[0].source, "num_items": num_items})    
             
 def find_trend_ranks(urls: list[str] = None) -> list[ChatterAnalysis]|None:
     calculate_trend_score = lambda bean: 100*(bean.latest_comments or 0) + 10*(bean.latest_shares or 0) + (bean.latest_likes or 0)
@@ -211,37 +187,46 @@ def trend_rank_beans(beans: list[Bean] = None):
     trends = find_trend_ranks([bean.url for bean in beans] if beans else None)
     if trends:
         num_items = update_trend_ranks(trends, run_start_time or now())
-        logger.info("trend ranked", extra={"source": beans[0].source if beans else run_id, "num_items": num_items})
+        log.info("trend ranked", extra={"source": beans[0].source if beans else run_id, "num_items": num_items})
 
 def cleanup():
     # TODO: add delete from localsack
     num_items = remotesack.delete_old(window=30)
-    logger.info("cleaned up", extra={"source": run_id, "num_items": num_items})
+    log.info("cleaned up", extra={"source": run_id, "num_items": num_items})
 
 def close():
     localsack.close()
     
-def run_collection():      
-    logger.info("collecting", extra={"source": "rssfeed", "num_items": 0})
-    rssfeed.collect(queue_for_indexing)
-    logger.info("collecting", extra={"source": "ychackernews", "num_items": 0})
-    ychackernews.collect(queue_for_indexing)
-    logger.info("collecting", extra={"source": "redditor", "num_items": 0})
-    redditor.collect(queue_for_indexing)
+def run_collection():   
+    collected = []
+    trigger_collection = lambda items: collected.append(extract_new(items))
+    log.info("collecting", extra={"source": "rssfeed", "num_items": 0})
+    rssfeed.collect(trigger_collection)
+    log.info("collecting", extra={"source": "ychackernews", "num_items": 0})
+    ychackernews.collect(trigger_collection)
+    log.info("collecting", extra={"source": "redditor", "num_items": 0})
+    redditor.collect(trigger_collection)
     # logger().info("collecting|%s", "espresso")
     # espresso.collect(sb_conn_str=sb_connection_str, store_func=_collect)
     # TODO: add collection from nextdoor
     # TODO: add collection from linkedin
+    return collected
 
-async def run_collection_async():    
-    tasks = []    
-    logger.info("collecting", extra={"source": "rssfeed", "num_items": 0})
-    tasks.append(asyncio.create_task(rssfeed.collect_async(queue_for_indexing_async)))
-    logger.info("collecting", extra={"source": "ychackernews", "num_items": 0})
-    tasks.append(asyncio.create_task(ychackernews.collect_async(queue_for_indexing_async)))
-    logger.info("collecting", extra={"source": "redditor", "num_items": 0})
-    tasks.append(asyncio.create_task(redditor.collect_async(queue_for_indexing_async)))
-    await asyncio.gather(*tasks)
+async def run_collection_async():  
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor() as executor:
+        futures = []
+        trigger_collection = lambda collector: futures.append(loop.run_in_executor(executor, collector))
+        
+        log.info("collecting", extra={"source": "rssfeed", "num_items": 0})
+        rssfeed.register_collectors(trigger_collection)
+        log.info("collecting", extra={"source": "ychackernews", "num_items": 0})
+        ychackernews.register_collectors(trigger_collection)
+        log.info("collecting", extra={"source": "redditor", "num_items": 0})
+        redditor.register_collectors(trigger_collection)
+        collections = await asyncio.gather(*futures)
+        collected = list(executor.map(extract_new, collections))
+    return collected
   
 # 1. schedule a clean up
 # 2. start collection
@@ -260,45 +245,48 @@ def run():
     run_start_time = now()
     run_id = run_start_time.strftime("%Y-%m-%d %H")
     
-    run_collection() 
+    collected = run_collection() 
     cleanup()        
     trend_rank_beans()
     
     total_new_beans = 0
-    while not collected_queue.empty():
+    for beans in collected:
         beans = store_beans(
             augment_beans(
                 embed_beans(
-                    new_beans(collected_queue.get_nowait()))))
-        collected_queue.task_done()
+                    new_beans(beans))))
         if beans:
             total_new_beans += len(beans)
             cluster_beans(beans)                
             trend_rank_beans(beans)
-    logger.info("finished", extra={"source": run_id, "num_items": total_new_beans})
-
+    log.info("finished", extra={"source": run_id, "num_items": total_new_beans})
 
 async def run_async() -> int:
     global run_id, run_start_time
     run_start_time = now()
     run_id = run_start_time.strftime("%Y-%m-%d %H")  
 
-    await run_collection_async()   
-    cleanup()        
-    trend_rank_beans()
-    
-    total_new_beans = 0
-    while not collected_queue_async.empty():
-        beans = store_beans(
-            augment_beans(
-                embed_beans(
-                    new_beans(collected_queue_async.get_nowait()))))
-        collected_queue_async.task_done()
-        if beans:
-            total_new_beans += len(beans)
-            cluster_beans(beans)                
-            trend_rank_beans(beans)
-    logger.info("finished", extra={"source": run_id, "num_items": total_new_beans})   
-    
-    
-    
+    collected = await run_collection_async()
+
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor() as executor:
+        futures = []
+        add_task = lambda task: futures.append(loop.run_in_executor(executor, task))
+
+        add_task(cleanup)
+        add_task(trend_rank_beans)
+
+        total_new_beans = 0
+        for beans in collected:
+            beans = store_beans(
+                augment_beans(
+                    embed_beans(
+                        new_beans(beans))))
+            if beans:
+                total_new_beans += len(beans)
+                add_task(lambda beans=beans: cluster_beans(beans))                
+                add_task(lambda beans=beans: trend_rank_beans(beans))
+            await asyncio.gather(*futures)
+
+        log.info("finished", extra={"source": run_id, "num_items": total_new_beans})   
+  

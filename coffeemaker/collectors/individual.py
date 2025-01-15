@@ -4,14 +4,13 @@ from bs4 import BeautifulSoup
 from icecream import ic
 import tldextract
 from memoization import cached
-
-USER_AGENT = "Cafecito-Coffeemaker"
+from . import USER_AGENT, TIMEOUT
 
 def collect_url(url: str):
     if is_non_text(url):
         return None
     try:
-        article = newspaper.Article(url)
+        article = newspaper.Article(url, browser_user_agent=USER_AGENT, request_timeout=TIMEOUT)
         article.download()
         article.parse()
         return article if article.text else None

@@ -1,10 +1,8 @@
 import asyncio
 import os
-import random
 from datetime import datetime as dt
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
-
 
 from dotenv import load_dotenv
 load_dotenv(CURR_DIR+"/.env")
@@ -16,13 +14,17 @@ logging.basicConfig(
     level=logging.WARNING, 
     filename=f"{WORKING_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
     format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
-logger = logging.getLogger("app")
-logger.setLevel(logging.INFO)
-logging.getLogger("orchestrator").setLevel(logging.INFO)
+log = logging.getLogger("app")
+log.setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("local digestor").propagate = False
 logging.getLogger("local embedder").propagate = False
-logging.getLogger("__package__").propagate = False
+logging.getLogger("prawcore").propagate = False
+logging.getLogger("dammit").propagate = False
+logging.getLogger("UnicodeDammit").propagate = False
+logging.getLogger("urllib3").propagate = False
+logging.getLogger("connectionpool").propagate = False
 
 from coffeemaker import orchestrator as orch
 
@@ -30,7 +32,7 @@ if __name__ == "__main__":
     start_time = dt.now()
     batch_id = start_time.strftime('%Y-%m-%d %H')
     
-    logger.info("starting", extra={"source": batch_id, "num_items": 0})
+    log.info("starting", extra={"source": batch_id, "num_items": 0})
     
     orch.initialize(
         os.getenv("DB_CONNECTION_STRING"),
@@ -43,5 +45,5 @@ if __name__ == "__main__":
     asyncio.run(orch.run_async())
     orch.close()
     
-    logger.info("execution time", extra={"source": batch_id, "num_items": dt.now()-start_time})
+    log.info("execution time", extra={"source": batch_id, "num_items": int((dt.now()-start_time).total_seconds())})
 

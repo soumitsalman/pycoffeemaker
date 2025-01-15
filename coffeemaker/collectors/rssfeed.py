@@ -1,46 +1,54 @@
-import asyncio
+import logging
+from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor
 import os
 import time
 from typing import Callable, Coroutine
 import feedparser
+import requests
 from coffeemaker.pybeansack.datamodels import Bean, NEWS
 from coffeemaker.pybeansack.utils import now
 from coffeemaker.collectors.individual import *
 from datetime import datetime as dt
+from . import USER_AGENT, TIMEOUT
 
 DEFAULT_FEEDS = os.path.dirname(os.path.abspath(__file__))+"/rssfeedsources.txt"
+log = logging.getLogger(__name__)
 
 # reads the list of feeds from a file path and collects
 # if sources is a string then it will be treated as a file path or else it will be a an array
 def collect(process_collection: Callable, sources: str|list[str] = DEFAULT_FEEDS):
     if isinstance(sources, str):
         with open(sources, 'r') as file:
-            sources = [line.strip() for line in file.readlines() if line.strip()]
-
+            sources = [line for line in file.readlines() if line.strip()]
     [process_collection(collect_url(url)) for url in sources]
+
+def register_collectors(register: Callable, sources: str|list[str] = DEFAULT_FEEDS):
+    if isinstance(sources, str):
+        with open(sources, 'r') as file:
+            sources = [line for line in file.readlines() if line.strip()]
+    [register(lambda url=url: collect_url(url)) for url in sources]
         
 async def collect_async(process_collection: Callable, sources: str|list[str] = DEFAULT_FEEDS):
     if isinstance(sources, str):
         with open(sources, 'r') as file:
             sources = [line.strip() for line in file.readlines() if line.strip()]
-    tasks = (asyncio.create_task(
-        process_collection(asyncio.to_thread(collect_url, url)),
-        name=url
-    ) for url in sources)
-    await asyncio.gather(*tasks)         
+
+    with ThreadPoolExecutor() as executor:
+        collections = executor.map(collect_url, sources)
+        executor.map(process_collection, collections)
         
 def collect_url(feed_url: str, kind = NEWS) -> list[Bean]|None:
     try:
-        feed = feedparser.parse(feed_url, agent=USER_AGENT)
-        # if we know that this feed is NOT in english, just skip for now. if language is not specified, assume it is english
-        if feed.get("language", "en-US").startswith("en-"):
-            collection_time = now()
-            # collect only the ones that is english. if language is not specified, assume it is english
-            source = extract_source_name(feed)
-            return [extract(entry, source, kind, collection_time) for entry in feed.entries if entry.get("language", "en-US").startswith("en-")]
-    except: # Exception as e:
-        # ic(e)
-        pass
+        resp = requests.get(feed_url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+        feed = feedparser.parse(BytesIO(resp.content))
+        collection_time = now()
+        # collect only the ones that is english. if language is not specified, assume it is english
+        source = extract_source_name(feed)
+        return [extract(entry, source, kind, collection_time) for entry in feed.entries]
+    except Exception as e:
+        print(e)
+        log.warning("collection failed", extra={"source": feed_url, "num_items": 1})
 
 def extract(entry, source, kind, collection_time) -> Bean:
     body, summary = _extract_body_and_summary(entry)  
