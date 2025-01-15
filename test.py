@@ -150,6 +150,7 @@ if __name__ == "__main__":
     
     # asyncio.run(orch.run_collection_async())
     asyncio.run(orch.run_async())
+    orch.close()
     # test_collection()
     # test_collection_async()
     # test_clustering()

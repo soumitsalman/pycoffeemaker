@@ -41,6 +41,7 @@ if __name__ == "__main__":
         float(os.getenv('CATEGORY_EPS')),
         float(os.getenv('CLUSTER_EPS')))
     asyncio.run(orch.run_async())
+    orch.close()
     
     logger.info("execution time", extra={"source": batch_id, "num_items": dt.now()-start_time})
 

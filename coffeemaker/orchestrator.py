@@ -92,14 +92,16 @@ def queue_for_indexing(items: list[Bean]|list[tuple[Bean, Chatter]]):
     if chatters:
         localsack.store_chatters(chatters)
     if beans := deep_collect(beans):        
-        collected_queue.put(beans)   
+        collected_queue.put_nowait(beans)   
+        logger.info("collected", extra={"source": beans[0].source, "num_items": len(beans)})  
         
 async def queue_for_indexing_async(items: Coroutine):
     beans, chatters = extract_new(await items)  
     if chatters:
         localsack.store_chatters(chatters)
     if beans := await asyncio.to_thread(deep_collect, beans):
-        await collected_queue_async.put(beans)        
+        await collected_queue_async.put_nowait(beans)   
+        logger.info("collected", extra={"source": beans[0].source, "num_items": len(beans)})      
     
 def deep_collect(beans: list[Bean]) -> list[Bean]:
     new_beans, beans = [], beans or []
@@ -113,8 +115,7 @@ def deep_collect(beans: list[Bean]) -> list[Bean]:
                 bean.created = bean.created or res.publish_date
                 bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()            
         if allowed_body(bean):
-            new_beans.append(bean)
-    logger.info("collected", extra={"source": beans[0].source, "num_items": len(beans)})   
+            new_beans.append(bean)          
     return new_beans
 
 merge_tags = lambda bean, new_tags: list({tag.lower(): tag for tag in ((bean.tags + new_tags) if (bean.tags and new_tags) else (bean.tags or new_tags))}.values())
@@ -259,56 +260,45 @@ def run():
     run_start_time = now()
     run_id = run_start_time.strftime("%Y-%m-%d %H")
     
-    try:
-        run_collection() 
-        cleanup()        
-        trend_rank_beans()
-        
-        total_new_beans = 0
-        while not collected_queue.empty():
-            beans = store_beans(
-                augment_beans(
-                    embed_beans(
-                        new_beans(collected_queue.get()))))
-            collected_queue.task_done()
-            if beans:
-                total_new_beans += len(beans)
-                cluster_beans(beans)                
-                trend_rank_beans(beans)
-        logger.info("finished", extra={"source": run_id, "num_items": total_new_beans})
+    run_collection() 
+    cleanup()        
+    trend_rank_beans()
+    
+    total_new_beans = 0
+    while not collected_queue.empty():
+        beans = store_beans(
+            augment_beans(
+                embed_beans(
+                    new_beans(collected_queue.get_nowait()))))
+        collected_queue.task_done()
+        if beans:
+            total_new_beans += len(beans)
+            cluster_beans(beans)                
+            trend_rank_beans(beans)
+    logger.info("finished", extra={"source": run_id, "num_items": total_new_beans})
 
-    except Exception as e:
-        logger.error("failed", extra={"source": run_id, "num_items": 0})
-        print(e.with_traceback(e.__traceback__))
-    finally:
-        close()
 
 async def run_async() -> int:
     global run_id, run_start_time
     run_start_time = now()
-    run_id = run_start_time.strftime("%Y-%m-%d %H")    
+    run_id = run_start_time.strftime("%Y-%m-%d %H")  
+
+    await run_collection_async()   
+    cleanup()        
+    trend_rank_beans()
     
-    try:
-        await run_collection_async()   
-        cleanup()        
-        trend_rank_beans()
-        
-        total_new_beans = 0
-        while not collected_queue_async.empty():
-            beans = store_beans(
-                augment_beans(
-                    embed_beans(
-                        new_beans(await collected_queue_async.get()))))
-            collected_queue_async.task_done()
-            if beans:
-                total_new_beans += len(beans)
-                cluster_beans(beans)                
-                trend_rank_beans(beans)
-        logger.info("finished", extra={"source": run_id, "num_items": total_new_beans})        
-                
-    except Exception as e:
-        logger.error("failed", extra={"source": run_id, "num_items": 0})
-        print(e.with_traceback(e.__traceback__))
-    finally:
-        close()
+    total_new_beans = 0
+    while not collected_queue_async.empty():
+        beans = store_beans(
+            augment_beans(
+                embed_beans(
+                    new_beans(await collected_queue_async.get_nowait()))))
+        collected_queue_async.task_done()
+        if beans:
+            total_new_beans += len(beans)
+            cluster_beans(beans)                
+            trend_rank_beans(beans)
+    logger.info("finished", extra={"source": run_id, "num_items": total_new_beans})   
+    
+    
     
