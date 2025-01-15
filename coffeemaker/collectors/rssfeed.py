@@ -26,14 +26,13 @@ def collect(process_collection: Callable, sources: str|list[str] = DEFAULT_FEEDS
 def register_collectors(register: Callable, sources: str|list[str] = DEFAULT_FEEDS):
     if isinstance(sources, str):
         with open(sources, 'r') as file:
-            sources = [line for line in file.readlines() if line.strip()]
+            sources = [line.strip() for line in file.readlines() if line.strip()]
     [register(lambda url=url: collect_url(url)) for url in sources]
         
 async def collect_async(process_collection: Callable, sources: str|list[str] = DEFAULT_FEEDS):
     if isinstance(sources, str):
         with open(sources, 'r') as file:
             sources = [line.strip() for line in file.readlines() if line.strip()]
-
     with ThreadPoolExecutor() as executor:
         collections = executor.map(collect_url, sources)
         executor.map(process_collection, collections)

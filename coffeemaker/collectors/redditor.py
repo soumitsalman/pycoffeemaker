@@ -29,7 +29,6 @@ def collect(process_collection: Callable, subreddits: str|list[str] = SUBREDDITS
     if isinstance(subreddits, str):
         with open(subreddits, 'r') as file:
             subreddits = [line.strip() for line in file.readlines() if line.strip()]  
-             
     client = create_client()
     [process_collection(collect_subreddit(client, source)) for source in subreddits]
 
