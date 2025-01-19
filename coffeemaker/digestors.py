@@ -22,11 +22,11 @@ class Digest(BaseModel):
 # INPUT:\n```\n{text}\n```
 # OUTPUT FORMAT: A json object with fields title (string), summary (string) and tags (string of comma separated phrases)<|eot_id|>
 # <|start_header_id|>assistant<|end_header_id|>"""
-DIGESTOR_PROMPT = """<|im_start|>system\n\nresponse_format:json_object<|im_end|>
+DIGESTOR_PROMPT = """<|im_start|>system\n\nresponse_format:json_object | language:en_US<|im_end|>
 
 <|im_start|>user
 
-TASK: generate summary, title, tags (e.g. company, organization, person, catastrophic event, product, technology, security vulnerability, stock ticker symbol, geographic location).
+TASK: translate the content into english and generate summary, title, tags (such as company, organization, person). 
 INPUT:\n```\n{text}\n```
 OUTPUT FORMAT: A json object with fields title (string), summary (string) and tags (string of comma separated phrases)
 

@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 import time
 from typing import Callable, Coroutine
+from urllib.parse import urlparse
 import feedparser
 import requests
 from coffeemaker.pybeansack.datamodels import Bean, NEWS
@@ -39,14 +40,16 @@ async def collect_async(process_collection: Callable, sources: str|list[str] = D
         
 def collect_url(feed_url: str, kind = NEWS) -> list[Bean]|None:
     try:
-        resp = requests.get(feed_url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
-        feed = feedparser.parse(BytesIO(resp.content))
+        # resp = requests.get(feed_url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+        # resp.raise_for_status()
+        # feed = feedparser.parse(BytesIO(resp.content))
+        feed = feedparser.parse(feed_url)
         collection_time = now()
         # collect only the ones that is english. if language is not specified, assume it is english
-        source = extract_source_name(feed)
+        source = extract_source(feed.feed.get('link', feed_url))
         return [extract(entry, source, kind, collection_time) for entry in feed.entries]
     except Exception as e:
-        print(e)
+        print(feed_url, e)
         log.warning("collection failed", extra={"source": feed_url, "num_items": 1})
 
 def extract(entry, source, kind, collection_time) -> Bean:
@@ -69,10 +72,10 @@ def extract(entry, source, kind, collection_time) -> Bean:
         image_url=_extract_image_link(entry)
     )    
 
-def extract_source_name(feed):
-    if feed.entries:
-        res = collect_url(feed.entries[0].link)
-        return site_name(res) or extract_source(feed.entries[0].link)[0]
+# def extract_source_name(feed):
+#     if feed.entries:
+#         res = collect_url(feed.entries[0].link)
+#         return site_name(res) or extract_source(feed.entries[0].link)[0]
 
 # 'links': 
 # [{'href': 'https://www.iflscience.com/iflscience-the-big-questions-can-we-make-dogs-live-longer-75450',

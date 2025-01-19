@@ -21,8 +21,7 @@ def create_client():
         client_id = os.getenv('REDDITOR_APP_ID'), 
         client_secret = os.getenv('REDDITOR_APP_SECRET'),
         user_agent = USER_AGENT,
-        ratelimit_seconds = TIMEOUT,
-        timeout = TIMEOUT
+        timeout = TIMEOUT,
     )
 
 def collect(process_collection: Callable, subreddits: str|list[str] = SUBREDDITS_FILE):    
@@ -53,7 +52,7 @@ def collect_subreddit(client, name) -> list[tuple[Bean, Chatter]]:
         collection_time = now()
         return [extract(post, collection_time) for post in client.subreddit(name).hot(limit=MAX_LIMIT) if not is_non_text(post.url)]
     except Exception as e:
-        print(e)
+        print(name, e)
         log.warning("collection failed", extra={"source": name, "num_items": 1})
 
 def collect_user(client, name): 
@@ -72,7 +71,7 @@ def extract(post, collection_time) -> tuple[Bean, Chatter]:
             collected=collection_time,
             updated=collection_time,
             # this is done because sometimes is_self value is wrong
-            source=subreddit if post.is_self else (extract_source(post.url)[0] or subreddit),
+            source=subreddit if post.is_self else (extract_source(post.url) or subreddit),
             title=post.title,
             kind=POST if post.is_self else NEWS,
             text=post.selftext,

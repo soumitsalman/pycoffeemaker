@@ -4,6 +4,7 @@ from .datamodels import *
 from .utils import *
 import os
 from icecream import ic
+from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 
 SQL_INSTALL_VSS = """
 INSTALL vss;
@@ -81,7 +82,7 @@ INSERT INTO categories (id, text, related, description, embedding) VALUES (?, ?,
 ON CONFLICT DO NOTHING
 """
 
-sql_where_urls = lambda urls: "url IN (" + ','.join([f"'{url}'" for url in urls]) + ")"
+sql_where_urls = lambda urls: "url IN (" + ', '.join(f"'{url}'" for url in urls) + ")"
 
 sql_search_beans = lambda embedding, min_score: f"""
 SELECT url, created, collected, updated, kind, array_cosine_similarity(embedding, {embedding}::FLOAT[1024]) as search_score
@@ -148,20 +149,21 @@ ORDER BY search_score DESC
 """
 
 class Beansack:
+    backup_conn_str: str
+    db_filepath: str
     db: duckdb.DuckDBPyConnection
-    categories_db: duckdb.DuckDBPyConnection
 
-    def __init__(self, db_dir: str):
+    def __init__(self, db_dir: str, backup_conn_str: str = os.getenv("AZSTORAGE_CONNECTION_STRING")):
         if not os.path.exists(db_dir):
             os.makedirs(db_dir)
-
-        self.db = duckdb.connect(f"{db_dir}/beansack.db", read_only=False) \
+        self.db_filepath = f"{db_dir}/beansack.db"
+        self.db = duckdb.connect(self.db_filepath, read_only=False) \
             .execute(SQL_INSTALL_VSS) \
             .execute(SQL_CREATE_BEANS) \
             .execute(SQL_CREATE_CHATTERS) \
             .execute(SQL_CREATE_CATEGORIES) \
             .commit()
-        # not adding categories vector index and beans vector index for now since vss in duckdb is unstable
+        self.backup_conn_str = backup_conn_str
 
     def store_beans(self, beans: list[Bean]):
         local_conn = self.db.cursor()
@@ -182,8 +184,8 @@ class Beansack:
 
     def exists(self, beans: list[Bean]) -> list[str]:
         local_conn = self.db.cursor()
-        results = local_conn.query(f"SELECT url FROM beans WHERE {sql_where_urls([bean.url for bean in beans])}").fetchall()
-        return {item[0] for item in results}
+        query = local_conn.sql("SELECT url FROM beans").filter(sql_where_urls([bean.url for bean in beans]))
+        return {item[0] for item in query.fetchall()}
 
     def search_beans(self, embedding: list[float], min_score: float = DEFAULT_VECTOR_SEARCH_SCORE, limit: int = 0) -> list[Bean]:
         local_conn = self.db.cursor()
@@ -294,4 +296,15 @@ class Beansack:
 
     def close(self):
         self.db.close()
+        self.backup_azblob()
+
+    def backup_azblob(self):
+        if self.backup_conn_str:
+            try:
+                client = BlobClient.from_connection_string(self.backup_conn_str, "backup", "beansack.db")
+                with open(self.db_filepath, "rb") as data:
+                    client.upload_blob(data, overwrite=True)
+                print("Successfully backed up to Azure Blob Storage")
+            except Exception as e:
+                print("Failed backup to Azure Blob Storage", e)
   

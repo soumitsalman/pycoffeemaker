@@ -1,27 +1,34 @@
-import asyncio
 import os
 from dotenv import load_dotenv
+import requests
 load_dotenv()
 
 import logging
-logging.basicConfig(level=logging.ERROR, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
 logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
-logging.getLogger("orchestrator").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("local digestor").propagate = False
 logging.getLogger("local embedder").propagate = False
-logging.getLogger("__package__").propagate = False
+logging.getLogger("prawcore").propagate = False
+logging.getLogger("praw").propagate = False
+logging.getLogger("dammit").propagate = False
+logging.getLogger("UnicodeDammit").propagate = False
+logging.getLogger("urllib3").propagate = False
+logging.getLogger("connectionpool").propagate = False
 
 import json
+import asyncio
 from datetime import datetime as dt
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.datamodels import *
-from coffeemaker.collectors import rssfeed, ychackernews, individual, redditor, espresso
+from coffeemaker.collectors import rssfeed, ychackernews, individual, redditor, espresso, TIMEOUT, USER_AGENT
 from coffeemaker import orchestrator as orch
 from coffeemaker.digestors import *
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 import random
+from bs4 import BeautifulSoup
 
 def write_datamodels(items: list[Bean|Chatter], file_name: str = None):
     if items:
@@ -34,10 +41,27 @@ def write_text(text, file_name):
         file.write(text)
 
 def test_collection():
-    orch.run_collection()
+    # orch.run_collection()
+    # urls = [
+    #     "https://www.huffpost.com/entry/vivek-ramaswamy-ohio-senate_n_6788136ee4b0ebaad44e9932",
+    #     "https://financebuzz.com/hotel-etiquette-rules-7"
+    # ]
+    # for url in urls:
+    #     res = individual.collect_url(url)
+    #     ic(res.text)
+        
+    #     response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+    #     soup = BeautifulSoup(response.text, 'html.parser')
+    #     primary_cli_items = soup.find_all("div", class_=["primary-cli", "slideshow-container"])        
+    #     ic("\n\n".join(item.get_text(strip=True) for item in primary_cli_items))
     # sources = [
+    #     "https://feeds.washingtonpost.com/rss/national",
     #     "https://www.buzzhint.com/feed/"
     # ]
+    # collected = lambda beans: logger.info("collected", extra={"source": beans[0][0].source if isinstance(beans[0], tuple) else beans[0].source, "num_items": len(beans)}) if beans else None
+    # rssfeed.collect(collected, sources=sources)
+    # redditor.collect(collected)
+    asyncio.run(orch.run_collection_async())
     
     # rssfeed.collect(store_beans=lambda items: print(len(items), "beans collected from", items[0].source), sources=sources)
     # redditor.collect(
@@ -76,7 +100,9 @@ def test_index_and_augment():
         # "https://microsoftedge.github.io/edgevr/feed.xml",
         "https://github.blog/tag/github-security-lab/feed/"
     ]
-    rssfeed.collect(sources=sources, store_beans=lambda beans: [print(bean.tags, "\n", bean.summary) for bean in orch._augment(orch._index(random.sample(beans, 3)))])
+    collected = lambda beans: print(f"collected {len(beans)} from {beans[0].source}" if beans else "no beans collected")
+    rssfeed.collect(collected, sources=sources)
+    redditor.collect(collected)
     # rssfeed.collect(sources=sources, store_func=lambda beans: write_datamodels(orch._index(orch._download(beans[:3]))))
   
 def test_search():
@@ -141,7 +167,7 @@ if __name__ == "__main__":
     
     orch.initialize(
         os.getenv("DB_CONNECTION_STRING"),
-        os.getenv("SB_CONNECTION_STRING"), 
+        os.getenv("AZSTORAGE_CONNECTION_STRING"), 
         os.getenv("WORKING_DIR", "."), 
         os.getenv("EMBEDDER_PATH"),    
         os.getenv("LLM_PATH"),
@@ -149,7 +175,9 @@ if __name__ == "__main__":
         float(os.getenv('CLUSTER_EPS')))
     
     # asyncio.run(orch.run_collection_async())
-    asyncio.run(orch.run_async())
+    # asyncio.run(orch.run_async())
+    test_collection()
+    # asyncio.run(orch.run_async())
     orch.close()
     # test_collection()
     # test_collection_async()

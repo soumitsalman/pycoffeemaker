@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(
     level=logging.WARNING, 
     filename=f"{WORKING_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
-    format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
+    format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s")
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
@@ -30,13 +30,13 @@ from coffeemaker import orchestrator as orch
 
 if __name__ == "__main__":    
     start_time = dt.now()
-    batch_id = start_time.strftime('%Y-%m-%d %H')
+    batch_id = "batch "+start_time.strftime('%Y-%m-%d %H')
     
     log.info("starting", extra={"source": batch_id, "num_items": 0})
     
     orch.initialize(
         os.getenv("DB_CONNECTION_STRING"),
-        os.getenv("SB_CONNECTION_STRING"), 
+        os.getenv("AZSTORAGE_CONNECTION_STRING"), 
         WORKING_DIR, 
         os.getenv("EMBEDDER_PATH"),    
         os.getenv("LLM_PATH"),

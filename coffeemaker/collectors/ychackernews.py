@@ -48,7 +48,7 @@ def extract(id: int, collection_time: int) -> tuple[Bean, Chatter]:
                 created=created,                
                 collected=collection_time,
                 updated=collection_time,
-                source=extract_source(url)[0],
+                source=extract_source(url) or YC,
                 title=entry.get('title'),
                 kind=BLOG if 'url' in entry else POST,
                 text=collect_html(entry['text']) if 'text' in entry else "", # load if it has a text which usually applies to posts

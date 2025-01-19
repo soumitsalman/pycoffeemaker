@@ -20,3 +20,4 @@ azure-servicebus
 peft
 memoization
 duckdb
+azure-storage-blob

@@ -40,7 +40,7 @@ embedder: BeansackEmbeddings = None
 digestor: NewspaperDigestor = None
 models_dir: str = None
 
-def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: str, llm_path: str, cat_eps: float, clus_eps: float):
+def initialize(db_conn_str: str, storage_conn_str: str, working_dir: str, emb_path: str, llm_path: str, cat_eps: float, clus_eps: float):
     global embedder, digestor
     embedder = BeansackEmbeddings(model_path=emb_path, context_len=4096)
     digestor = LocalDigestor(model_path=llm_path, context_len=8192) 
@@ -53,15 +53,18 @@ def initialize(db_conn_str: str, sb_conn_str: str, working_dir: str, emb_path: s
     
 def new_beans(beans: list[Bean]) -> list[Bean]:
     if beans:
-        exists = localsack.exists(beans)
         new_items = {}
-        for bean in beans:
-            if bean.url not in exists:
-                bean.id = bean.url
-                bean.created = bean.created or bean.collected
-                bean.tags = None
-                bean.cluster_id = bean.url
-                new_items[bean.url] = bean
+        try:
+            exists = localsack.exists(beans)
+            for bean in beans:
+                if bean.url not in exists:
+                    bean.id = bean.url
+                    bean.created = bean.created or bean.collected
+                    bean.tags = None
+                    bean.cluster_id = bean.url
+                    new_items[bean.url] = bean
+        except Exception as e:
+            print(e)
         return list(new_items.values())
     
 def deep_collect(beans: list[Bean]) -> list[Bean]:
@@ -71,7 +74,7 @@ def deep_collect(beans: list[Bean]) -> list[Bean]:
             res = individual.collect_url(bean.url)
             if res:
                 bean.image_url = bean.image_url or res.top_image
-                bean.source = individual.site_name(res) or bean.source
+                bean.source = bean.source or individual.site_name(res)
                 bean.title = bean.title or res.title
                 bean.created = bean.created or res.publish_date
                 bean.text = (res.text if len(res.text) > len(bean.text or "") else bean.text).strip()            
@@ -114,7 +117,7 @@ def augment_beans(beans: list[Bean]) -> list[Bean]|None:
         try:
             digest = digestor.run(bean.text)
             if digest:
-                bean.summary = digest.summary or bean.summary or bean.text if needs_summary(bean) else bean.text
+                bean.summary = digest.summary or bean.summary or bean.text 
                 bean.title = digest.title or bean.title
                 bean.tags = merge_tags(bean, digest.tags)
         except:
@@ -264,9 +267,10 @@ def run():
 async def run_async() -> int:
     global run_id, run_start_time
     run_start_time = now()
-    run_id = run_start_time.strftime("%Y-%m-%d %H")  
+    run_id = "batch "+run_start_time.strftime("%Y-%m-%d %H")  
 
-    collected = await run_collection_async()
+    # collected = await run_collection_async()
+    collected = run_collection() 
 
     loop = asyncio.get_event_loop()
     with ThreadPoolExecutor() as executor:

@@ -1,3 +1,4 @@
+from urllib.parse import urlparse
 import newspaper
 import re
 from bs4 import BeautifulSoup
@@ -26,9 +27,12 @@ def is_non_text(url: str):
         re.search(r'(v\.redd\.it|i\.redd\.it|www\.reddit\.com\/gallery|youtube\.com|youtu\.be)', url)
 
 @cached(max_size=2000)
-def extract_source(url):
+def extract_domain(url):
     extracted = tldextract.extract(url)
     return extracted.domain, extracted.registered_domain
+
+def extract_source(url):
+    return urlparse(url).netloc
 
 def site_name(article: newspaper.Article):
     if article and ('og' in article.meta_data):

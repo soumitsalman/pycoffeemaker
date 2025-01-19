@@ -80,7 +80,6 @@ https://climatecrisis247.com/feed/
 https://www.slashgear.com/feed/
 https://thenextweb.com/feed
 https://www.teslarati.com/feed/
-https://www.environmentenergyleader.com/feed/
 https://theaircurrent.com/feed/
 https://www.flightaware.com/squawks/rss/general/7_days/popular
 https://www.popularmechanics.com/rss/science.xml
@@ -209,10 +208,17 @@ http://feeds.bbci.co.uk/news/science_and_environment/rss.xml
 http://feeds.bbci.co.uk/news/technology/rss.xml
 https://phys.org/rss-feed/
 https://www.mercurynews.com/feed/
-https://feeds.washingtonpost.com/rss/national?itid=lk_inline_manual_31
-https://feeds.washingtonpost.com/rss/world?itid=lk_inline_manual_35
+https://feeds.washingtonpost.com/rss/national
+https://feeds.washingtonpost.com/rss/world
 https://www.newscientist.com/section/news/feed/
 https://www.newscientist.com/subject/earth/feed/
 https://www.sciencenews.org/feed
 https://www.twz.com/feed
 https://medicalxpress.com/rss-feed/breaking/
+https://medium.com/feed/faa
+https://lobste.rs/rss
+https://lobste.rs/newest.rss
+https://www.techmeme.com/feed.xml
+https://www.ft.com/rss/home
+http://feeds.feedburner.com/feedburner/Talos
+https://research.checkpoint.com/feed/
