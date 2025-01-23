@@ -1,6 +1,6 @@
 import asyncio
 import duckdb
-from .datamodels import *
+from .models import *
 from .utils import *
 import os
 from icecream import ic

@@ -22,7 +22,7 @@ import json
 import asyncio
 from datetime import datetime as dt
 from coffeemaker.pybeansack.mongosack import *
-from coffeemaker.pybeansack.datamodels import *
+from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import rssfeed, ychackernews, individual, redditor, espresso, TIMEOUT, USER_AGENT
 from coffeemaker import orchestrator as orch
 from coffeemaker.digestors import *

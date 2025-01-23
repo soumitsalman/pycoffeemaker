@@ -21,3 +21,6 @@ peft
 memoization
 duckdb
 azure-storage-blob
+crawl4ai
+nest-asyncio
+asyncpraw

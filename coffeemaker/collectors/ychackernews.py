@@ -4,7 +4,7 @@ from datetime import datetime as dt
 from typing import Callable, Coroutine
 import requests
 from coffeemaker.collectors.individual import *
-from coffeemaker.pybeansack.datamodels import *
+from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.utils import now
 from . import USER_AGENT, TIMEOUT
 

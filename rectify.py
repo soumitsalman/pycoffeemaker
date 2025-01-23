@@ -14,7 +14,7 @@ WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
 from pymongo import MongoClient, UpdateOne
 
 from coffeemaker.collectors import ychackernews, redditor
-from coffeemaker.pybeansack.datamodels import *
+from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.utils import *
 from coffeemaker import orchestrator as orch
 

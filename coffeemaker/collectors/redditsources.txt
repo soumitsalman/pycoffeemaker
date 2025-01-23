@@ -67,3 +67,6 @@ PublicRelations
 flying
 AirPassengerRights
 pilots
+MachineLearning
+Python
+linux

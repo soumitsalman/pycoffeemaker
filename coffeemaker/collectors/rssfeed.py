@@ -7,7 +7,7 @@ from typing import Callable, Coroutine
 from urllib.parse import urlparse
 import feedparser
 import requests
-from coffeemaker.pybeansack.datamodels import Bean, NEWS
+from coffeemaker.pybeansack.models import Bean, NEWS
 from coffeemaker.pybeansack.utils import now
 from coffeemaker.collectors.individual import *
 from datetime import datetime as dt

@@ -7,7 +7,7 @@ from typing import Callable, Coroutine
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.embedding import BeansackEmbeddings
-from coffeemaker.pybeansack.datamodels import *
+from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.utils import now
 from coffeemaker.collectors import espresso, individual, rssfeed, ychackernews, redditor
 from coffeemaker.digestors import *

@@ -6,6 +6,7 @@ from datetime import datetime
 
 # CHANNEL = "social media group/forum"
 POST = "post"
+JOB = "job"
 NEWS = "news"
 BLOG = "blog"
 COMMENTS = "comments"
@@ -60,7 +61,7 @@ K_TRENDSCORE = "trend_score"
 
 
 class Bean(BaseModel):
-    id: str = Field(default=None, alias="_id")
+    id: str = Field(default=None, alias="_id", serialization_alias="_id")
     url: str    
     source: Optional[str] = None
     title: Optional[str] = None
@@ -75,20 +76,16 @@ class Bean(BaseModel):
     tags: Optional[list[str]|str] = None
     summary: Optional[str] = None
     embedding: Optional[list[float]] = None
-    search_score: Optional[float|int] = None
+    
     likes: Optional[int] = Field(default=0)
     comments: Optional[int] = Field(default=0)
     shares: Optional[int] = Field(default=0)
     similars: Optional[int] = Field(default=1) # a bean is always similar to itself
-    # latest_likes: Optional[int] = Field(default=0)
-    # latest_comments: Optional[int] = Field(default=0)
-    # latest_shares: Optional[int] = Field(default=0)
     trend_score: Optional[int] = Field(default=1) # a bean is always similar to itself
     shared_in: Optional[list[str]] = None
     cluster_id: Optional[str] = None
 
-    def digest(self):
-        return f"{self.kind} from {self.source}\n{self.title}\n{self.text}"
+    search_score: Optional[float|int] = None
     
 
 K_ID = "_id"
@@ -113,7 +110,6 @@ class Highlight(BaseModel):
         populate_by_name = True
         arbitrary_types_allowed=True
 
-    
 class Source(BaseModel):
     url: str
     kind: str

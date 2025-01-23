@@ -9,7 +9,7 @@ import operator
 from bson import SON
 from icecream import ic
 from .embedding import *
-from .datamodels import *
+from .models import *
 from .utils import *
 from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
