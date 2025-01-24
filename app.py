@@ -18,23 +18,19 @@ log = logging.getLogger("app")
 log.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
-logging.getLogger("local digestor").propagate = False
-logging.getLogger("local embedder").propagate = False
-logging.getLogger("prawcore").propagate = False
+logging.getLogger("digestor.local").propagate = False
+logging.getLogger("embedder.local").propagate = False
+logging.getLogger("asyncprawcore").propagate = False
+logging.getLogger("asyncpraw").propagate = False
 logging.getLogger("dammit").propagate = False
 logging.getLogger("UnicodeDammit").propagate = False
 logging.getLogger("urllib3").propagate = False
 logging.getLogger("connectionpool").propagate = False
 
-from coffeemaker import orchestrator as orch
+from coffeemaker.orchestrator import Orchestrator
 
 if __name__ == "__main__":    
-    start_time = dt.now()
-    batch_id = "batch "+start_time.strftime('%Y-%m-%d %H')
-    
-    log.info("starting", extra={"source": batch_id, "num_items": 0})
-    
-    orch.initialize(
+    orch = Orchestrator(
         os.getenv("DB_CONNECTION_STRING"),
         os.getenv("AZSTORAGE_CONNECTION_STRING"), 
         WORKING_DIR, 
@@ -45,5 +41,4 @@ if __name__ == "__main__":
     asyncio.run(orch.run_async())
     orch.close()
     
-    log.info("execution time", extra={"source": batch_id, "num_items": int((dt.now()-start_time).total_seconds())})
-
+ 

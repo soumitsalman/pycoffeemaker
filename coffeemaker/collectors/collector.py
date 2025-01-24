@@ -206,6 +206,7 @@ async def _fetch_json(session: aiohttp.ClientSession, url: str) -> dict:
 class AsyncCollector:
     md_generator: DefaultMarkdownGenerator
     web_crawler: AsyncWebCrawler
+    collection_time: datetime
 
     def __init__(self):        
         self.md_generator = DefaultMarkdownGenerator(options=MD_OPTIONS)
@@ -220,8 +221,9 @@ class AsyncCollector:
                 verbose=False
             )
         )
-    async def start(self):
+    async def warmup(self):
         await self.web_crawler.start()
+        self.collection_time = now()
 
     async def close(self):
         await self.web_crawler.close()
@@ -279,17 +281,16 @@ class AsyncCollector:
 
     ### rss feed related utilities  ###
     async def collect_rssfeed(self, url: str, default_kind: str = NEWS) -> list[Bean]:
-        collection_time = now()
         try:
             feed = feedparser.parse(url)
             if not feed.entries: return
             source = AsyncCollector.extract_source(feed.feed.get('link') or feed.entries[0].link)
-            return [self._from_rssfeed(entry, source, default_kind, collection_time) for entry in feed.entries]
+            return [self._from_rssfeed(entry, source, default_kind) for entry in feed.entries]
         except Exception as e:
             log.warning("collection failed", extra={"source": url, "num_items": 1})
             print("collection failed", url, e)            
 
-    def _from_rssfeed(self, entry: feedparser.FeedParserDict, source: str, default_kind: str, collection_time: datetime) -> tuple[Bean, Chatter]:
+    def _from_rssfeed(self, entry: feedparser.FeedParserDict, source: str, default_kind: str) -> tuple[Bean, Chatter]:
         published_time = entry.get("published_parsed") or entry.get("updated_parsed")
         created_time = datetime.fromtimestamp(time.mktime(published_time)) if published_time else now()
         body_html = AsyncCollector._extract_body(entry)
@@ -299,8 +300,8 @@ class AsyncCollector:
                 url=entry.link,
                 # in case of rss feed, the created time is the same as the updated time during collection. if it is mentioned in a social media feed then the updated time will get change
                 created=created_time,         
-                collected=collection_time,
-                updated=created_time,
+                collected=self.collection_time,
+                updated=self.collection_time,
                 source=source,
                 title=entry.title,
                 kind=default_kind,
@@ -312,7 +313,7 @@ class AsyncCollector:
                 url=entry.link,
                 source=source,
                 chatter_url=entry.get('wfw_commentrss'),
-                collected=collection_time,
+                collected=self.collection_time,
                 comments=entry.slash_comments
             ) if 'slash_comments' in entry else None
         )
@@ -357,7 +358,6 @@ class AsyncCollector:
     
     ### reddit related utilities ###
     async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
-        collection_time = now()
         try:
             async with asyncpraw.Reddit(
                 check_for_updates=True,
@@ -370,22 +370,22 @@ class AsyncCollector:
                 rate_limit_seconds=RATELIMIT_WAIT,
             ) as client:
                 subreddit = await client.subreddit(subreddit_name)
-                return [self._from_reddit(post, default_kind, collection_time) 
+                return [self._from_reddit(post, default_kind) 
                         async for post in subreddit.hot(limit=20) 
                         if not AsyncCollector._exclude_url(post.url)]
         except Exception as e:
             log.warning("collection failed", extra={"source": subreddit_name, "num_items": 1})
             print(f"collection failed",subreddit_name, e)
 
-    def _from_reddit(self, post, default_kind, collection_time) -> tuple[Bean, Chatter]: 
+    def _from_reddit(self, post, default_kind) -> tuple[Bean, Chatter]: 
         subreddit = f"r/{post.subreddit.display_name}"
         url = AsyncCollector._extract_submission_url(post)
         return (
             Bean(
                 url=url,
                 created=datetime.fromtimestamp(post.created_utc),
-                collected=collection_time,
-                updated=collection_time,
+                collected=self.collection_time,
+                updated=self.collection_time,
                 # this is done because sometimes is_self value is wrong
                 source=extract_base_url(post.url) or subreddit or REDDIT,
                 title=post.title,
@@ -402,7 +402,7 @@ class AsyncCollector:
                 chatter_url=reddit_submission_permalink(post.permalink),            
                 source=REDDIT,                        
                 channel=subreddit,
-                collected=collection_time,
+                collected=self.collection_time,
                 likes=post.score,
                 comments=post.num_comments
             )
@@ -418,30 +418,29 @@ class AsyncCollector:
     
     ### hackernews related utilities ###
     async def collect_ychackernews(self, default_kind: str = BLOG) -> list[tuple[Bean, Chatter]]:
-        collection_time = now()
         try:
             async with aiohttp.ClientSession() as session:
                 entry_ids = await asyncio.gather(*[_fetch_json(session, ids_url) for ids_url in HACKERNEWS_STORIES])
                 entry_ids = set(chain(*entry_ids))
                 stories = await asyncio.gather(*[_fetch_json(session, hackernews_story_metadata(id)) for id in entry_ids])
-                return [self._from_hackernews_story(story, default_kind, collection_time) for story in stories if not AsyncCollector._exclude_url(story.get('url'))]
+                return [self._from_hackernews_story(story, default_kind) for story in stories if not AsyncCollector._exclude_url(story.get('url'))]
         except Exception as e:
             log.warning("collection failed", extra={"source": HACKERNEWS, "num_items": 1})
             print("collection failed", HACKERNEWS, e)
         
-    def _from_hackernews_story(self, story: dict, default_kind: str, collection_time: datetime) -> tuple[Bean, Chatter]:
+    def _from_hackernews_story(self, story: dict, default_kind: str) -> tuple[Bean, Chatter]:
         # either its a shared url or it is a text
         id = story['id']
         url = story.get('url') or hackernews_story_permalink(id)
-        created = datetime.fromtimestamp(story['time']) if 'time' in story else collection_time
+        created = datetime.fromtimestamp(story['time']) if 'time' in story else self.collection_time
         return (
             Bean(            
                 url=url, # this is either a linked url or a direct post
                 # initially the bean's updated time will be the same as the created time
                 # if there is a chatter that links to this, then the updated time will be changed to collection time of the chatter
                 created=created,                
-                collected=collection_time,
-                updated=collection_time,
+                collected=self.collection_time,
+                updated=self.collection_time,
                 source=extract_base_url(url),
                 title=story.get('title'),
                 kind=POST if not 'url' in story else default_kind, # blog, post or job
@@ -455,7 +454,7 @@ class AsyncCollector:
             Chatter(
                 url=url,
                 chatter_url=hackernews_story_permalink(id),
-                collected=collection_time,
+                collected=self.collection_time,
                 source=HACKERNEWS,
                 channel=str(id),
                 likes=story.get('score'),

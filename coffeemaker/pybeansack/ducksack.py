@@ -149,11 +149,10 @@ ORDER BY search_score DESC
 """
 
 class Beansack:
-    backup_conn_str: str
     db_filepath: str
     db: duckdb.DuckDBPyConnection
 
-    def __init__(self, db_dir: str, backup_conn_str: str = os.getenv("AZSTORAGE_CONNECTION_STRING")):
+    def __init__(self, db_dir: str):
         if not os.path.exists(db_dir):
             os.makedirs(db_dir)
         self.db_filepath = f"{db_dir}/beansack.db"
@@ -163,7 +162,6 @@ class Beansack:
             .execute(SQL_CREATE_CHATTERS) \
             .execute(SQL_CREATE_CATEGORIES) \
             .commit()
-        self.backup_conn_str = backup_conn_str
 
     def store_beans(self, beans: list[Bean]):
         local_conn = self.db.cursor()
@@ -298,10 +296,9 @@ class Beansack:
         self.db.close()
         self.backup_azblob()
 
-    def backup_azblob(self):
-        if not self.backup_conn_str: return
+    def backup_azblob(self, conn_str: str):
         try:
-            client = BlobClient.from_connection_string(self.backup_conn_str, "backup", "beansack.db")
+            client = BlobClient.from_connection_string(conn_str, "backup", "beansack.db")
             with open(self.db_filepath, "rb") as data:
                 client.upload_blob(data, overwrite=True)            
         except Exception as e:

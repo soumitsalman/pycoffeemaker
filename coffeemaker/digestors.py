@@ -39,12 +39,12 @@ class LocalDigestor:
     context_len = None
     model = None
     
-    def __init__(self, model_path: str, context_len: int = 8192):
+    def __init__(self, model_path: str, context_len: int = 16384):
         self.model_path = model_path
         self.context_len = context_len
         self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count()-1, embedding=False, verbose=False)  
 
-    @retry(tries=2, logger=logging.getLogger("local digestor"))
+    @retry(tries=2, logger=logging.getLogger("digestor.local"))
     def run(self, text: str) -> Digest:
         resp = self.model.create_completion(
             prompt=DIGESTOR_PROMPT.format(text=utils.truncate(text, self.context_len//2)),
@@ -73,7 +73,7 @@ class RemoteDigestor:
         self.model_name = model_name
         self.context_len = context_len
     
-    @retry(tries=2, delay=5, logger=logging.getLogger("remote digestor"))
+    @retry(tries=2, delay=5, logger=logging.getLogger("digestor.remote"))
     def run(self, text: str) -> Digest:
         resp = self.client.completions.create(
             model=self.model_name,

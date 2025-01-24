@@ -1,6 +1,5 @@
 import os
 from dotenv import load_dotenv
-import requests
 load_dotenv()
 
 import logging
@@ -9,10 +8,10 @@ logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
-logging.getLogger("local digestor").propagate = False
-logging.getLogger("local embedder").propagate = False
-logging.getLogger("prawcore").propagate = False
-logging.getLogger("praw").propagate = False
+logging.getLogger("digestor.local").propagate = False
+logging.getLogger("embedder.local").propagate = False
+logging.getLogger("asyncprawcore").propagate = False
+logging.getLogger("asyncpraw").propagate = False
 logging.getLogger("dammit").propagate = False
 logging.getLogger("UnicodeDammit").propagate = False
 logging.getLogger("urllib3").propagate = False
@@ -24,18 +23,10 @@ from datetime import datetime as dt
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import collector, rssfeed, ychackernews, individual, redditor, espresso
-from coffeemaker import orchestrator as orch
+from coffeemaker.orchestrator import Orchestrator
 from coffeemaker.digestors import *
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 import random
-from bs4 import BeautifulSoup
-
-
-            
-# def write_text(text, file_name):
-#     with open(f".test/{file_name}", 'w') as file:
-#         file.write(text)
-
 import re, json, random
 
 def url_to_filename(url: str) -> str:
@@ -57,7 +48,15 @@ def save_models(items: list[Bean|Chatter], file_name: str = None):
             json.dump([item.model_dump(exclude_unset=True, exclude_none=True) for item in items], file)
         return ic(len(items))
 
-
+def _create_orchestrator():
+    return Orchestrator(
+        os.getenv("DB_CONNECTION_STRING"),
+        None, 
+        os.getenv("WORKING_DIR", "."), 
+        os.getenv("EMBEDDER_PATH"),    
+        os.getenv("LLM_PATH"),
+        float(os.getenv('CATEGORY_EPS')),
+        float(os.getenv('CLUSTER_EPS')))
 
 def test_collection():
     # orch.run_collection()
@@ -178,20 +177,12 @@ def test_whole_path_live():
     orch.cluster_beans()
     orch.trend_rank_beans()
 
-if __name__ == "__main__":
-    start_time = dt.now()
-    run_id = start_time.strftime('%Y-%m-%d %H')
-    
-    logger.info("starting", extra={"source": run_id, "num_items": 0})
-    orch.initialize(
-        os.getenv("DB_CONNECTION_STRING"),
-        None, 
-        os.getenv("WORKING_DIR", "."), 
-        os.getenv("EMBEDDER_PATH"),    
-        os.getenv("LLM_PATH"),
-        float(os.getenv('CATEGORY_EPS')),
-        float(os.getenv('CLUSTER_EPS')))
+def test_run_async():
+    orch = _create_orchestrator()
     asyncio.run(orch.run_async())
     orch.close()
+
+if __name__ == "__main__":
+    test_run_async()
 
     
