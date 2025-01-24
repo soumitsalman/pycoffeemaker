@@ -30,7 +30,6 @@ gamingnews
 altcoin_news
 CyberNews
 RobotNews
-hackernews
 ChatbotNews
 ConflictNews
 GlobalNews

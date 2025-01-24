@@ -31,15 +31,13 @@ class BeansackEmbeddings(Embeddings):
     context_len = None
     model = None
 
-    def __init__(self, model_path: str, context_len: int):        
+    def __init__(self, model_path: str, context_len: int):    
         self.model_path = model_path
-        self.context_len = context_len    
+        self.context_len = context_len
+        self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count()-1, embedding=True, verbose=False)
     
-    @retry(tries=2, logger=logging.getLogger("local embedder"))
+    @retry(tries=2, logger=logging.getLogger("embedder.local"))
     def embed(self, input):
-        if not self.model:
-            self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=True, verbose=False)
-
         result = self.model.create_embedding(_prep_input(input, self.context_len))
         if isinstance(input, str):
             return result['data'][0]['embedding']
@@ -55,7 +53,7 @@ class RemoteEmbeddings(Embeddings):
         self.model_name = model_name
         self.context_len = context_len    
        
-    @retry(tries=3, logger=logging.getLogger("remote embedder"))
+    @retry(tries=3, logger=logging.getLogger("embedder.remote"))
     @cached(max_size=100, ttl=600)
     def embed(self, input):
         result = self.openai_client.embeddings.create(model=self.model_name, input=_prep_input(input, self.context_len), encoding_format="float")

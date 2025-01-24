@@ -23,22 +23,41 @@ import asyncio
 from datetime import datetime as dt
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
-from coffeemaker.collectors import rssfeed, ychackernews, individual, redditor, espresso, TIMEOUT, USER_AGENT
+from coffeemaker.collectors import collector, rssfeed, ychackernews, individual, redditor, espresso
 from coffeemaker import orchestrator as orch
 from coffeemaker.digestors import *
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 import random
 from bs4 import BeautifulSoup
 
-def write_datamodels(items: list[Bean|Chatter], file_name: str = None):
+
+            
+# def write_text(text, file_name):
+#     with open(f".test/{file_name}", 'w') as file:
+#         file.write(text)
+
+import re, json, random
+
+def url_to_filename(url: str) -> str:
+    return "./.test/" + re.sub(r'[^a-zA-Z0-9]', '-', url)
+
+def save_markdown(url, markdown):
+    filename = url_to_filename(url)+".md"
+    with open(filename, 'w') as file:
+        file.write(markdown)
+
+def save_json(url, items):
+    filename = url_to_filename(url)+".json"
+    with open(filename, 'w') as file:
+        json.dump(items, file)
+
+def save_models(items: list[Bean|Chatter], file_name: str = None):
     if items:
         with open(f".test/{file_name or items[0].source}.json", 'w') as file:
             json.dump([item.model_dump(exclude_unset=True, exclude_none=True) for item in items], file)
         return ic(len(items))
-            
-def write_text(text, file_name):
-    with open(f".test/{file_name}", 'w') as file:
-        file.write(text)
+
+
 
 def test_collection():
     # orch.run_collection()
@@ -109,7 +128,7 @@ def test_search():
     query = "profession: pilot"
     # write_datamodels(ic(orch.remotesack.query_unique_beans(filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID:0})), "QUERY_BEANS")
     # write_datamodels(ic(orch.remotesack.text_search_beans(query=query, filter=timewindow_filter(3), sort_by=LATEST, limit=3, projection={K_EMBEDDING: 0, K_ID:0})), "TEXT_SEARCH")
-    write_datamodels(orch.remotesack.vector_search_beans(query=query, filter=updated_after(3), sort_by=LATEST, projection={K_EMBEDDING: 0, K_ID: 0}), "VECTOR_SEARCH")
+    save_models(orch.remotesack.vector_search_beans(query=query, filter=updated_after(3), sort_by=LATEST, projection={K_EMBEDDING: 0, K_ID: 0}), "VECTOR_SEARCH")
 
 def test_clustering():  
     def _collect(beans: list[Bean]):
@@ -164,27 +183,15 @@ if __name__ == "__main__":
     run_id = start_time.strftime('%Y-%m-%d %H')
     
     logger.info("starting", extra={"source": run_id, "num_items": 0})
-    
     orch.initialize(
         os.getenv("DB_CONNECTION_STRING"),
-        os.getenv("AZSTORAGE_CONNECTION_STRING"), 
+        None, 
         os.getenv("WORKING_DIR", "."), 
         os.getenv("EMBEDDER_PATH"),    
         os.getenv("LLM_PATH"),
         float(os.getenv('CATEGORY_EPS')),
         float(os.getenv('CLUSTER_EPS')))
-    
-    # asyncio.run(orch.run_collection_async())
-    # asyncio.run(orch.run_async())
-    test_collection()
-    # asyncio.run(orch.run_async())
+    asyncio.run(orch.run_async())
     orch.close()
-    # test_collection()
-    # test_collection_async()
-    # test_clustering()
-    # test_index_and_augment()
-    # test_whole_path_live()
-    # test_search()
-    # test_trend_ranking()
-    logger.info("execution time", extra={"source": run_id, "num_items": dt.now()-start_time})
+
     

@@ -42,11 +42,10 @@ class LocalDigestor:
     def __init__(self, model_path: str, context_len: int = 8192):
         self.model_path = model_path
         self.context_len = context_len
+        self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count()-1, embedding=False, verbose=False)  
 
     @retry(tries=2, logger=logging.getLogger("local digestor"))
     def run(self, text: str) -> Digest:
-        if not self.model:
-            self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=False, verbose=False)  
         resp = self.model.create_completion(
             prompt=DIGESTOR_PROMPT.format(text=utils.truncate(text, self.context_len//2)),
             max_tokens=384, 

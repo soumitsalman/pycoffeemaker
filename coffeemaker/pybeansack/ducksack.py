@@ -299,12 +299,11 @@ class Beansack:
         self.backup_azblob()
 
     def backup_azblob(self):
-        if self.backup_conn_str:
-            try:
-                client = BlobClient.from_connection_string(self.backup_conn_str, "backup", "beansack.db")
-                with open(self.db_filepath, "rb") as data:
-                    client.upload_blob(data, overwrite=True)
-                print("Successfully backed up to Azure Blob Storage")
-            except Exception as e:
-                print("Failed backup to Azure Blob Storage", e)
+        if not self.backup_conn_str: return
+        try:
+            client = BlobClient.from_connection_string(self.backup_conn_str, "backup", "beansack.db")
+            with open(self.db_filepath, "rb") as data:
+                client.upload_blob(data, overwrite=True)            
+        except Exception as e:
+            print("Failed backup to Azure Blob Storage", e)
   
