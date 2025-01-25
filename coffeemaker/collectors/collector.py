@@ -420,7 +420,7 @@ class AsyncCollector:
                 collected=current_time,
                 updated=current_time,
                 # this is done because sometimes is_self value is wrong
-                source=extract_base_url(post.url) or subreddit or REDDIT,
+                source=subreddit if post.is_self else (extract_domain(post.url) or REDDIT),
                 title=post.title,
                 kind=POST if post.is_self else default_kind,
                 text=post.selftext,
