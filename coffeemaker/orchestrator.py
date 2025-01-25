@@ -286,9 +286,9 @@ class Orchestrator:
             log.info("stored", extra={"source": source, "num_items": len(beans)})                
             # sync in fine for now
             clustered_count = self.cluster_beans(beans)
-            log.info("clustered", extra={"source": source, "num_items": clustered_count})
+            if clustered_count > 1: log.info("clustered", extra={"source": source, "num_items": clustered_count})
             ranked_count = self.trend_rank_beans(beans)
-            log.info("trend ranked", extra={"source": source, "num_items": ranked_count or 0})
+            if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})
         
             self.index_queue.task_done()
             
