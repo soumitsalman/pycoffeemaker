@@ -276,7 +276,7 @@ class Orchestrator:
             ranking_tasks.append(asyncio.to_thread(self.trend_rank_beans, source, beans))
 
         await asyncio.gather(*ranking_tasks)
-        log.info("finished", extra={"source": self.run_id, "num_items": total_new_beans}) 
+        log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 
 
     # 1. schedule a clean up
     # 2. start collection
@@ -303,6 +303,7 @@ class Orchestrator:
         collections_task = asyncio.create_task(self.run_collections_async())
         downloading_task = asyncio.create_task(self.run_downloading_async())
         indexing_task = asyncio.create_task(self.run_indexing_async())
+
         await collections_task
         await self.download_queue.put(END_OF_STREAM)
 

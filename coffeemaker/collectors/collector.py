@@ -162,7 +162,7 @@ MD_AND_METADATA_COLLECTION_CONFIG = CrawlerRunConfig(
     # mean_delay=0.05,
     wait_for_images=False,
     
-    semaphore_count=os.cpu_count()*4,
+    semaphore_count=1,
 
     # page interaction
     scan_full_page=False,
