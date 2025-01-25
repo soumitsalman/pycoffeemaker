@@ -1,5 +1,3 @@
-# https://www.techmeme.com/feed.xml", # this is collection from other sources. so just look for the sources
-# https://www.ft.com/rss/home" # cant access without subscription
 https://newatlas.com/index.rss
 https://www.channele2e.com/feed/topic/latest
 https://www.ghacks.net/feed/
@@ -15,7 +13,7 @@ https://crypto.news/feed/
 https://api.quantamagazine.org/feed/
 https://securityintelligence.com/feed/
 https://lifehacker.com/feed/rss
-https://Extremetech.com/feed
+https://www.extremetech.com/feed
 https://theubj.com/feed/
 https://www.darkreading.com/rss.xml
 https://www.theverge.com/rss/index.xml
@@ -66,9 +64,8 @@ https://www.infoworld.com/feed/
 https://www.networkworld.com/feed/
 https://www.hpcwire.com/feed/
 https://www.propublica.org/feeds/propublica/main
-# https://www.theinformation.com/feed # throws a fit
 https://www.pymnts.com/feed/
-# https://cointelegraph.com/feed # throws a fit
+https://cointelegraph.com/feed
 https://www.livescience.com/feeds/all
 https://www.neowin.net/news/rss/
 https://www.nature.com/nature.rss
@@ -76,14 +73,13 @@ https://organicallyhuman.com/feed/
 https://viral-chatter.com/feed/
 https://bgr.com/feed/
 https://nationalinterest.org/feed
-# https://insideevs.com/rss/articles/all/ # getting 403
+https://insideevs.com/rss/articles/all/
 https://climatecrisis247.com/feed/
 https://www.slashgear.com/feed/
 https://thenextweb.com/feed
 https://www.teslarati.com/feed/
 https://theaircurrent.com/feed/
 https://www.popularmechanics.com/rss/all.xml/
-# https://www.popularmechanics.com/rss/product-reviews.xml # seems empty
 https://www.topspeed.com/feed/
 https://krebsonsecurity.com/feed/
 https://electrek.co/feed/
@@ -144,7 +140,6 @@ https://theconversation.com/articles.atom?language=en
 https://driversdrift.com/feed/
 https://underknown.com/feed/
 https://www.pastchronicle.com/feed/
-# https://www.techopedia.com/feed # techopedia
 https://www.phonearena.com/feed/reviews
 https://accessvector.net/rss.xml
 https://androidoffsec.withgoogle.com/index.xml
@@ -215,10 +210,44 @@ https://research.checkpoint.com/feed/
 https://vintageaviationnews.com/feed
 https://www.cbsnews.com/latest/rss/main
 https://www.cbsnews.com/latest/rss/us
-# https://aeroxplorer.com/rss.xml # its a dud
+https://aeroxplorer.com/rss.xml
 https://www.gatechecked.com/feed
 https://airlinegeeks.com/feed/
 https://avgeekery.com/feed/
 https://www.aviation24.be/feed/
 https://www.claimsjournal.com/feed/
-
+https://blog.burntsushi.net/index.xml
+https://matklad.github.io/feed.xml
+https://blog.yoshuawuyts.com/rss.xml
+https://kerkour.com/feed.xml
+https://feedpress.me/512pixels
+https://9to5google.com/feed/
+https://9to5mac.com/feed/
+https://dronedj.com/feed/
+https://electrek.co/feed/
+https://spaceexplored.com/feed
+https://this-week-in-rust.org/atom.xml
+https://blog.rust-lang.org/feed.xml
+https://blog.rust-lang.org/inside-rust/feed.xml
+https://abenezer.org/blog/hyrum-law-in-golang
+https://www.darknavy.org/index.xml
+https://blog.dfsec.com/feed.xml
+https://gamozolabs.github.io/feed.xml
+https://guidovranken.com/feed/
+https://blog.impalabs.com/feed.xml
+https://www.mdsec.co.uk/feed/
+https://swarm.ptsecurity.com/feed/
+https://portswigger.net/research/rss
+https://blog.ret2.io/feed.xml
+https://codeanlabs.com/blog/category/research/feed/
+https://rhinosecuritylabs.com/feed/
+https://ssd-disclosure.com/feed/
+https://blog.stratumsecurity.com/rss/
+https://labs.taszk.io/blog/index.xml
+https://terriblesoftware.org/feed/
+https://www.piratewires.com/api/rss
+https://blogs.microsoft.com/feed/
+https://www.thetraininglady.com/feed/
+https://msftnewsnow.com/feed/
+https://azure.microsoft.com/en-us/blog/feed/
+https://msftnewsnow.com/feed/

@@ -8,7 +8,6 @@ from urllib.parse import urljoin, urlparse
 from datetime import datetime
 import time
 import aiohttp
-import requests
 import feedparser
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator, PruningContentFilter
 import asyncpraw
@@ -31,6 +30,18 @@ HACKERNEWS_NEW_STORIES = "https://hacker-news.firebaseio.com/v0/newstories.json"
 HACKERNEWS_ASK_STORIES = "https://hacker-news.firebaseio.com/v0/askstories.json"
 HACKERNEWS_SHOW_STORIES = "https://hacker-news.firebaseio.com/v0/showstories.json"
 HACKERNEWS_STORIES = [HACKERNEWS_TOP_STORIES, HACKERNEWS_NEW_STORIES, HACKERNEWS_ASK_STORIES, HACKERNEWS_SHOW_STORIES]
+
+RSS_REQUEST_HEADERS = {
+    "User-Agent": USER_AGENT,
+    'Accept-encoding': 'gzip, deflate',
+    'A-IM': 'feed',
+    'Accept': "application/atom+xml,application/rdf+xml,application/rss+xml,application/x-netcdf,application/xml;q=0.9,text/xml;q=0.2,*/*;q=0.1"
+}
+JSON_REQUEST_HEADERS = {
+    "User-Agent": USER_AGENT,
+    'Accept-encoding': 'gzip, deflate',
+    'Accept': "application/json,text/json"
+}
 
 EXCLUDED_URL_PATTERNS = [
     r'\.(png|jpeg|jpg|gif|webp|mp4|avi|mkv|mp3|wav|pdf)$',
@@ -125,7 +136,7 @@ MD_COLLECTION_CONFIG = CrawlerRunConfig(
     page_timeout=TIMEOUT*1000, # since timeout is in milliseconds
     max_range=TIMEOUT,
     wait_for_images=False,
-    semaphore_count=1,
+    semaphore_count=os.cpu_count()*4,
 
     # page interaction
     scan_full_page=False,
@@ -162,7 +173,7 @@ MD_AND_METADATA_COLLECTION_CONFIG = CrawlerRunConfig(
     # mean_delay=0.05,
     wait_for_images=False,
     
-    semaphore_count=1,
+    semaphore_count=os.cpu_count()*4,
 
     # page interaction
     scan_full_page=False,
@@ -199,55 +210,80 @@ def parse_date(date: str) -> datetime:
     try: return date_parser(date)
     except: return None
 
+def NOT_READY_guess_type(url: str, default_kind: str = None, **kwargs) -> str:
+    """This is entirely heuristic to figure out if the url contains a news or a blog"""
+    look_into = [url, extract_base_url(url), extract_domain(url)] + (kwargs.values() if kwargs else [])
+    look_into = [item for item in look_into if item]
+
+    BLOG_DOMAINS = ["medium.com",  "substack", "wordpress", "blogspot", ".dev", ".io", ".blog", ".to", ]
+    
+    DEFINITELY_BLOG = ["medium.com", "dev.to", "x" "substack.", "wordpress.", ".dev", "dev.to", "developers.", "github.io"]
+    if "medium.com" in look_into: return BLOG
+    
+
+    if "reddit.com" in url: return POST
+    if "hacker-news.firebaseio.com" in url: return POST
+    if "ycombinator.com" in url: return POST
+    return NEWS
+
 async def _fetch_json(session: aiohttp.ClientSession, url: str) -> dict:
     async with session.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT) as response:
         if response.status == 200: return await response.json()
 
 class AsyncCollector:
-    md_generator: DefaultMarkdownGenerator
-    web_crawler: AsyncWebCrawler
-    collection_time: datetime
+    md_generator: DefaultMarkdownGenerator = None
 
-    def __init__(self):        
+    def __init__(self):  
         self.md_generator = DefaultMarkdownGenerator(options=MD_OPTIONS)
-        self.web_crawler = AsyncWebCrawler(
-            config=BrowserConfig(
-                headless=True,
-                ignore_https_errors=False,
-                java_script_enabled=False,
-                user_agent=USER_AGENT,
-                light_mode=True,
-                text_mode=True,
-                verbose=False
-            )
-        )
-    async def warmup(self):
-        await self.web_crawler.start()
-        self.collection_time = now()
 
+    @property
+    def web_crawler(self):
+        if not hasattr(self, '_web_crawler'):
+            self._web_crawler = AsyncWebCrawler(
+                config=BrowserConfig(
+                    headless=True,
+                    ignore_https_errors=False,
+                    java_script_enabled=False,
+                    user_agent=USER_AGENT,
+                    light_mode=True,
+                    text_mode=True,
+                    verbose=False
+                )
+            )
+        return self._web_crawler
+
+    @property
+    def reddit_client(self):
+        if not hasattr(self, '_reddit_client'):
+            self._reddit_client = asyncpraw.Reddit(
+                check_for_updates=True,
+                client_id=os.getenv("REDDIT_APP_ID"),
+                client_secret=os.getenv("REDDIT_APP_SECRET"),
+                user_agent=USER_AGENT+" (by u/randomizer_000)",
+                username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
+                password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
+                timeout=TIMEOUT,
+                rate_limit_seconds=RATELIMIT_WAIT,
+            )
+        return self._reddit_client
+    
     async def close(self):
         await self.web_crawler.close()
+        await self.reddit_client.close()
 
     ### generic url collection utilities ###
     async def collect_url(self, url: str, collect_metadata: bool = False) -> dict:
         """Collects the body of the url as a markdown"""
-        result = await self.web_crawler.arun(url=url, config=AsyncCollector._run_config(collect_metadata))
+        config = AsyncCollector._run_config(collect_metadata)
+        result = await self.web_crawler.arun(url=url, config=config)
         return AsyncCollector._package_result(result)
 
     async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
         """Collects the bodies of the urls as markdowns"""
         config = AsyncCollector._run_config(collect_metadata)
-        async def collect_and_parse(url: str):
-            try:
-                resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
-                if resp.status_code != 200: return None
-                if html := resp.text: 
-                    return AsyncCollector._package_result(await self.web_crawler.arun(url="raw:"+html, config=config))
-            except Exception as err:
-                print(f"ERROR FETCHING HTML: {url}", err)
+        results = await self.web_crawler.arun_many(urls=urls, config=config)
+        return [AsyncCollector._package_result(result) if result.status_code == 200 else None for result in results]
 
-        return await asyncio.gather(*[collect_and_parse(url) for url in urls])
-    
     async def collect_beans(self, beans: list[Bean], collect_metadata: bool = False) -> list[Bean]:
         """Collects the bodies of the beans as markdowns"""
         results = await self.collect_urls([bean.url for bean in beans], collect_metadata)
@@ -282,17 +318,23 @@ class AsyncCollector:
     ### rss feed related utilities  ###
     async def collect_rssfeed(self, url: str, default_kind: str = NEWS) -> list[Bean]:
         try:
-            feed = feedparser.parse(url)
-            if not feed.entries: return
-            source = AsyncCollector.extract_source(feed.feed.get('link') or feed.entries[0].link)
-            return [self._from_rssfeed(entry, source, default_kind) for entry in feed.entries]
+            async with aiohttp.ClientSession() as session:
+                resp = await session.get(url, headers=RSS_REQUEST_HEADERS, timeout=TIMEOUT)
+                resp.raise_for_status()
+                feed = feedparser.parse(await resp.text())
+                if not feed.entries: return
+
+                source = AsyncCollector.extract_source(feed.feed.get('link') or feed.entries[0].link)
+                collected = [self._from_rssfeed(entry, source, default_kind) for entry in feed.entries]
+            return collected
         except Exception as e:
             log.warning("collection failed", extra={"source": url, "num_items": 1})
-            print("collection failed", url, e)            
+            ic(e.__class__.__name__, e) # NOTE: this is for local debugging
 
     def _from_rssfeed(self, entry: feedparser.FeedParserDict, source: str, default_kind: str) -> tuple[Bean, Chatter]:
+        current_time = now()
         published_time = entry.get("published_parsed") or entry.get("updated_parsed")
-        created_time = datetime.fromtimestamp(time.mktime(published_time)) if published_time else now()
+        created_time = datetime.fromtimestamp(time.mktime(published_time)) if published_time else current_time
         body_html = AsyncCollector._extract_body(entry)
         body = f"# {entry.title}\n\n{self._generate_markdown(body_html)}" if body_html else None
         return (
@@ -300,8 +342,8 @@ class AsyncCollector:
                 url=entry.link,
                 # in case of rss feed, the created time is the same as the updated time during collection. if it is mentioned in a social media feed then the updated time will get change
                 created=created_time,         
-                collected=self.collection_time,
-                updated=self.collection_time,
+                collected=current_time,
+                updated=current_time,
                 source=source,
                 title=entry.title,
                 kind=default_kind,
@@ -313,7 +355,7 @@ class AsyncCollector:
                 url=entry.link,
                 source=source,
                 chatter_url=entry.get('wfw_commentrss'),
-                collected=self.collection_time,
+                collected=current_time,
                 comments=entry.slash_comments
             ) if 'slash_comments' in entry else None
         )
@@ -359,20 +401,10 @@ class AsyncCollector:
     ### reddit related utilities ###
     async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
         try:
-            async with asyncpraw.Reddit(
-                check_for_updates=True,
-                client_id=os.getenv("REDDIT_APP_ID"),
-                client_secret=os.getenv("REDDIT_APP_SECRET"),
-                user_agent=USER_AGENT+" (by u/randomizer_000)",
-                username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
-                password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
-                timeout=TIMEOUT,
-                rate_limit_seconds=RATELIMIT_WAIT,
-            ) as client:
-                subreddit = await client.subreddit(subreddit_name)
-                return [self._from_reddit(post, default_kind) 
-                        async for post in subreddit.hot(limit=20) 
-                        if not AsyncCollector._exclude_url(post.url)]
+            subreddit = await self.reddit_client.subreddit(subreddit_name)
+            return [self._from_reddit(post, default_kind) 
+                    async for post in subreddit.hot(limit=20) 
+                    if not AsyncCollector._exclude_url(post.url)]
         except Exception as e:
             log.warning("collection failed", extra={"source": subreddit_name, "num_items": 1})
             print(f"collection failed",subreddit_name, e)
@@ -380,12 +412,13 @@ class AsyncCollector:
     def _from_reddit(self, post, default_kind) -> tuple[Bean, Chatter]: 
         subreddit = f"r/{post.subreddit.display_name}"
         url = AsyncCollector._extract_submission_url(post)
+        current_time = now()
         return (
             Bean(
                 url=url,
                 created=datetime.fromtimestamp(post.created_utc),
-                collected=self.collection_time,
-                updated=self.collection_time,
+                collected=current_time,
+                updated=current_time,
                 # this is done because sometimes is_self value is wrong
                 source=extract_base_url(post.url) or subreddit or REDDIT,
                 title=post.title,
@@ -402,7 +435,7 @@ class AsyncCollector:
                 chatter_url=reddit_submission_permalink(post.permalink),            
                 source=REDDIT,                        
                 channel=subreddit,
-                collected=self.collection_time,
+                collected=current_time,
                 likes=post.score,
                 comments=post.num_comments
             )
@@ -423,24 +456,26 @@ class AsyncCollector:
                 entry_ids = await asyncio.gather(*[_fetch_json(session, ids_url) for ids_url in HACKERNEWS_STORIES])
                 entry_ids = set(chain(*entry_ids))
                 stories = await asyncio.gather(*[_fetch_json(session, hackernews_story_metadata(id)) for id in entry_ids])
-                return [self._from_hackernews_story(story, default_kind) for story in stories if not AsyncCollector._exclude_url(story.get('url'))]
+                collected = [self._from_hackernews_story(story, default_kind) for story in stories if not AsyncCollector._exclude_url(story.get('url'))]
+            return collected
         except Exception as e:
             log.warning("collection failed", extra={"source": HACKERNEWS, "num_items": 1})
-            print("collection failed", HACKERNEWS, e)
+            ic(e.__class__.__name__, e)
         
     def _from_hackernews_story(self, story: dict, default_kind: str) -> tuple[Bean, Chatter]:
         # either its a shared url or it is a text
+        current_time = now()
         id = story['id']
         url = story.get('url') or hackernews_story_permalink(id)
-        created = datetime.fromtimestamp(story['time']) if 'time' in story else self.collection_time
+        created = datetime.fromtimestamp(story['time']) if 'time' in story else current_time
         return (
             Bean(            
                 url=url, # this is either a linked url or a direct post
                 # initially the bean's updated time will be the same as the created time
                 # if there is a chatter that links to this, then the updated time will be changed to collection time of the chatter
                 created=created,                
-                collected=self.collection_time,
-                updated=self.collection_time,
+                collected=current_time,
+                updated=current_time,
                 source=extract_base_url(url),
                 title=story.get('title'),
                 kind=POST if not 'url' in story else default_kind, # blog, post or job
@@ -454,7 +489,7 @@ class AsyncCollector:
             Chatter(
                 url=url,
                 chatter_url=hackernews_story_permalink(id),
-                collected=self.collection_time,
+                collected=current_time,
                 source=HACKERNEWS,
                 channel=str(id),
                 likes=story.get('score'),

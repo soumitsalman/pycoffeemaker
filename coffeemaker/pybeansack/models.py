@@ -86,6 +86,11 @@ class Bean(BaseModel):
     cluster_id: Optional[str] = None
 
     search_score: Optional[float|int] = None
+
+    def digest(self) -> str:
+        if not self.summary: return self.text or self.title
+        tag_text = {"\n\nTags: "+(", ".join(self.tags))} if self.tags else ""
+        return f"# {self.title}\n\n{self.summary}{tag_text}"
     
 
 K_ID = "_id"

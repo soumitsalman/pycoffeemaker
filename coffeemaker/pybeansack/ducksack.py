@@ -294,7 +294,6 @@ class Beansack:
 
     def close(self):
         self.db.close()
-        self.backup_azblob()
 
     def backup_azblob(self, conn_str: str):
         try:
