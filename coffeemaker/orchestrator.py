@@ -64,8 +64,8 @@ class Orchestrator:
     digestor: NewspaperDigestor = None
 
     def __init__(self, db_conn_str: str, storage_conn_str: str, working_dir: str, emb_path: str, llm_path: str, cat_eps: float, clus_eps: float): 
-        self.embedder = BeansackEmbeddings(model_path=emb_path, context_len=4096)
-        self.digestor = LocalDigestor(model_path=llm_path, context_len=16384) 
+        self.embedder = BeansackEmbeddings(model_path=emb_path)
+        self.digestor = LocalDigestor(model_path=llm_path) 
 
         self.az_storage_conn_str = storage_conn_str
         self.remotesack = MongoSack(db_conn_str, self.embedder)
@@ -206,10 +206,8 @@ class Orchestrator:
         async with TaskGroup() as tg:
             log.info("collecting", extra={"source": "rssfeed", "num_items": 0})
             [tg.create_task(self.collect_async(source, self.scraper.collect_rssfeed(source)), name=source) for source in feed_urls]
-            await asyncio.sleep(TIMEOUT) # wait out to give the network a chance to recover
             log.info("collecting", extra={"source": REDDIT, "num_items": 0})
             [tg.create_task(self.collect_async(source, self.scraper.collect_subreddit(source)), name=source) for source in subreddits]
-            await asyncio.sleep(TIMEOUT) # wait out to give the network a chance to recover
             log.info("collecting", extra={"source": HACKERNEWS, "num_items": 0})
             tg.create_task(self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews()), name=HACKERNEWS)
 
@@ -300,53 +298,26 @@ class Orchestrator:
         self.run_start_time = now()
         self.run_id = self.run_start_time.strftime("%Y-%m-%d %H")
 
+        # start the collection and downloading parallelly
+        # so that if there is a wait in the collection cycle, downloading can still ruh
         collections_task = asyncio.create_task(self.run_collections_async())
         downloading_task = asyncio.create_task(self.run_downloading_async())
         indexing_task = asyncio.create_task(self.run_indexing_async())
-        
         await collections_task
         await self.download_queue.put(END_OF_STREAM)
+
+        # i can run cleanup and trend ranking here because all these need is the collection, not the download
         # i don't need to put these on thread 
         # because by this time downloading and indexing are already running
         self.cleanup()
         self.trend_rank_beans(None, None)
 
+        # wait for the downloading to finish then close the indexing queue and the scraper
         await downloading_task
         await self.index_queue.put(END_OF_STREAM)
-        await indexing_task
-
         await self.scraper.close()
 
-
-# async def run_async() -> int:
-#     global run_id, run_start_time
-#     run_start_time = now()
-#     run_id = "batch "+run_start_time.strftime("%Y-%m-%d %H")  
-
-#     # collected = await run_collection_async()
-#     collected = run_collection() 
-
-#     loop = asyncio.get_event_loop()
-#     with ThreadPoolExecutor() as executor:
-#         futures = []
-#         add_task = lambda task: futures.append(loop.run_in_executor(executor, task))
-
-#         add_task(cleanup)
-#         add_task(trend_rank_beans)
-
-#         total_new_beans = 0
-#         for beans in collected:
-#             beans = store_beans(
-#                 augment_beans(
-#                     embed_beans(
-#                         new_beans(beans))))
-#             if beans:
-#                 total_new_beans += len(beans)
-#                 add_task(lambda beans=beans: cluster_beans(beans))                
-#                 add_task(lambda beans=beans: trend_rank_beans(beans))
-#             await asyncio.gather(*futures)
-
-          
+        await indexing_task
 
 ### NOTE: commenting out sync version for now
 # def run_collection():   

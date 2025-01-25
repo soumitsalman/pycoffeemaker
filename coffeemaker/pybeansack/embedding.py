@@ -31,10 +31,10 @@ class BeansackEmbeddings(Embeddings):
     context_len = None
     model = None
 
-    def __init__(self, model_path: str, context_len: int):    
+    def __init__(self, model_path: str, context_len: int = 8192):    
         self.model_path = model_path
         self.context_len = context_len
-        self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count()-1, embedding=True, verbose=False)
+        self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=True, verbose=False)
     
     @retry(tries=2, logger=logging.getLogger("embedder.local"))
     def embed(self, input):
