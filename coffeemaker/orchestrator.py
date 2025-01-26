@@ -157,14 +157,13 @@ class Orchestrator:
         return self.update_clusters(clusters)
                 
     def find_trend_ranks(self, urls: list[str] = None) -> list[ChatterAnalysis]|None:
-        calculate_trend_score = lambda bean: 100*(bean.latest_comments or 0) + 10*(bean.latest_shares or 0) + (bean.latest_likes or 0)
+        calculate_trend_score = lambda chatter_delta: 100*(chatter_delta.comments_change or 0) + 10*(chatter_delta.shares_change or 0) + (chatter_delta.likes_change or 0)
         trends = self.localsack.get_latest_chatters(1, urls)
         for trend in trends:
             trend.trend_score = calculate_trend_score(trend)
         return trends
 
     def update_trend_ranks(self, trends: list[ChatterAnalysis]):
-        current_time = now()
         updates = [UpdateOne(
             filter={K_ID: trend.url}, 
             update={
@@ -173,14 +172,14 @@ class Orchestrator:
                     K_COMMENTS: trend.comments,
                     K_SHARES: trend.shares,
                     "shared_in": trend.shared_in,
-                    K_LATEST_LIKES: trend.latest_likes,
-                    K_LATEST_COMMENTS: trend.latest_comments,
-                    K_LATEST_SHARES: trend.latest_shares,
+                    K_LATEST_LIKES: trend.likes_change,
+                    K_LATEST_COMMENTS: trend.comments_change,
+                    K_LATEST_SHARES: trend.shares_change,
                     K_TRENDSCORE: trend.trend_score,
-                    K_UPDATED: current_time      
+                    K_UPDATED: trend.last_collected      
                 }
             }
-        ) for trend in trends] 
+        ) for trend in trends if trend.trend_score] 
         return self.remotesack.update_beans(updates)
         
     def trend_rank_beans(self, beans: list[Bean] = None):
@@ -286,7 +285,7 @@ class Orchestrator:
             log.info("stored", extra={"source": source, "num_items": len(beans)})                
             # sync in fine for now
             clustered_count = self.cluster_beans(beans)
-            if clustered_count > 1: log.info("clustered", extra={"source": source, "num_items": clustered_count})
+            if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
             ranked_count = self.trend_rank_beans(beans)
             if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})
         

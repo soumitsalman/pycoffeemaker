@@ -105,6 +105,7 @@ SQL_TOTAL_CHATTERS = """
 SELECT url, 
     SUM(likes) as likes, 
     SUM(comments) as comments, 
+    MAX(collected) as collected,
     COUNT(chatter_url) as shares,
     ARRAY_AGG(DISTINCT source) FILTER (WHERE source IS NOT NULL) || ARRAY_AGG(DISTINCT channel) FILTER (WHERE channel IS NOT NULL) as shared_in
 
@@ -125,6 +126,7 @@ sql_total_chatters_ndays_ago = lambda last_ndays: f"""
 SELECT url, 
     SUM(likes) as likes, 
     SUM(comments) as comments, 
+    MAX(collected) as collected,
     COUNT(chatter_url) as shares,
     ARRAY_AGG(DISTINCT source) FILTER (WHERE source IS NOT NULL) || ARRAY_AGG(DISTINCT channel) FILTER (WHERE channel IS NOT NULL) as shared_in
 FROM(
@@ -238,26 +240,28 @@ class Beansack:
                 total.url as url, 
                 total.likes as likes, 
                 total.comments as comments, 
+                total.collected as last_collected,
                 total.shares as shares,
                 total.shared_in as shared_in,                            
-                total.likes - COALESCE(ndays_ago.likes, 0) as latest_likes, 
-                total.comments - COALESCE(ndays_ago.comments, 0) as latest_comments, 
-                total.shares - COALESCE(ndays_ago.shares, 0) as latest_shares, 
-                ndays_ago.shared_in as latest_shared_in,
+                total.likes - COALESCE(ndays_ago.likes, 0) as likes_change, 
+                total.comments - COALESCE(ndays_ago.comments, 0) as comments_change, 
+                total.shares - COALESCE(ndays_ago.shares, 0) as shares_change, 
+                ndays_ago.shared_in as shared_in_change,
             FROM total
             LEFT JOIN ndays_ago ON total.url = ndays_ago.url
-            WHERE latest_likes <> 0 OR latest_comments <> 0 OR latest_shares <> 0
+            WHERE likes_change <> 0 OR comments_change <> 0 OR shares_change <> 0
         """)
         return [ChatterAnalysis(
             url=chatter[0],
             likes=chatter[1],
             comments=chatter[2],
-            shares=chatter[3],
-            shared_in=chatter[4],
-            latest_likes=chatter[5],
-            latest_comments=chatter[6],
-            latest_shares=chatter[7],
-            latest_shared_in=chatter[8],
+            last_collected=chatter[3],
+            shares=chatter[4],
+            shared_in=chatter[5],
+            likes_change=chatter[6],
+            comments_change=chatter[7],
+            shares_change=chatter[8],
+            shared_in_change=chatter[9],
             slots=True
         ) for chatter in result.fetchall()]
     

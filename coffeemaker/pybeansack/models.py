@@ -127,9 +127,10 @@ class ChatterAnalysis(BaseModel):
     comments: Optional[int] = 0
     shares: Optional[int] = 0
     shared_in: Optional[list[str]] = None
-    latest_likes: Optional[int] = 0
-    latest_comments: Optional[int] = 0
-    latest_shares: Optional[int] = 0
-    latest_shared_in: Optional[list[str]] = None
+    last_collected: Optional[datetime] = None
+    likes_change: Optional[int] = 0
+    comments_change: Optional[int] = 0
+    shares_change: Optional[int] = 0
+    shared_in_change: Optional[list[str]] = None
     trend_score: Optional[int] = 0
     

@@ -343,7 +343,7 @@ class AsyncCollector:
                 # in case of rss feed, the created time is the same as the updated time during collection. if it is mentioned in a social media feed then the updated time will get change
                 created=created_time,         
                 collected=current_time,
-                updated=current_time,
+                updated=created_time,
                 source=source,
                 title=entry.title,
                 kind=default_kind,
@@ -413,12 +413,13 @@ class AsyncCollector:
         subreddit = f"r/{post.subreddit.display_name}"
         url = AsyncCollector._extract_submission_url(post)
         current_time = now()
+        created_time = datetime.fromtimestamp(post.created_utc)
         return (
             Bean(
                 url=url,
-                created=datetime.fromtimestamp(post.created_utc),
+                created=created_time,
                 collected=current_time,
-                updated=current_time,
+                updated=created_time,
                 # this is done because sometimes is_self value is wrong
                 source=subreddit if post.is_self else (extract_domain(post.url) or REDDIT),
                 title=post.title,
@@ -467,15 +468,15 @@ class AsyncCollector:
         current_time = now()
         id = story['id']
         url = story.get('url') or hackernews_story_permalink(id)
-        created = datetime.fromtimestamp(story['time']) if 'time' in story else current_time
+        created_time = datetime.fromtimestamp(story['time']) if 'time' in story else current_time
         return (
             Bean(            
                 url=url, # this is either a linked url or a direct post
                 # initially the bean's updated time will be the same as the created time
                 # if there is a chatter that links to this, then the updated time will be changed to collection time of the chatter
-                created=created,                
+                created=created_time,                
                 collected=current_time,
-                updated=current_time,
+                updated=created_time,
                 source=extract_base_url(url),
                 title=story.get('title'),
                 kind=POST if not 'url' in story else default_kind, # blog, post or job
