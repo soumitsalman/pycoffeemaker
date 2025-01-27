@@ -311,25 +311,29 @@ class Orchestrator:
         self.index_queue = Queue()
         self.run_id = now().strftime("%Y-%m-%d %H")
 
+        # 1. start all the scrapers
+        # 2. once the chatter collection is done
+        # 3. clean up and trend rank the database
+        # 4. then kick off indexing
+        # 5. wait for the downloading to finish and then put the end of stream for indexing
+        # 6. wait for indexing to finish
+        await self.scraper.web_crawler.start() # this is very important otherwise people die
+        collection_task = asyncio.create_task(self.run_collections_async())
+        downloading_task = asyncio.create_task(self.run_downloading_async())
+        
+        await collection_task
         # clean up the old stuff from the db before adding new crap
-        # start the collection and let it finish otherwise too many open requests
-        await self.run_collections_async()
         self.cleanup()
-        # trend rank the whole db after the new chatter data
         ranked_count = self.trend_rank_beans()
         log.info("trend ranked", extra={"source": self.run_id, "num_items": ranked_count})
 
-        await self.scraper.web_crawler.start() # this is very important otherwise people die
-        # kick off indexing since its a compute intensive task
-        downloading_task = asyncio.create_task(self.run_downloading_async())
-        indexing_task = asyncio.create_task(self.run_indexing_async())
+        indexing_task = asyncio.create_task(self.run_indexing_async())       
 
         await downloading_task
         await self.index_queue.put(END_OF_STREAM)
-        await indexing_task
         await self.scraper.close() # this is for closing out the open sessions
-
-  
+        await indexing_task
+        
 ### NOTE: commenting out sync version for now
 # def run_collection():   
 #     collected = []

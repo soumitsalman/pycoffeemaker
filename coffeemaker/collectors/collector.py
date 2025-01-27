@@ -42,10 +42,17 @@ JSON_REQUEST_HEADERS = {
     'Accept-encoding': 'gzip, deflate',
     'Accept': "application/json,text/json"
 }
+HTML_REQUEST_HEADERS = {
+    "User-Agent": USER_AGENT,
+    'Accept-encoding': 'gzip, deflate',
+    'Accept': "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5,application/signed-exchange;v=b3;q=0.9"
+}
 
 EXCLUDED_URL_PATTERNS = [
     r'\.(png|jpeg|jpg|gif|webp|mp4|avi|mkv|mp3|wav|pdf)$',
     r'(v\.redd\.it|i\.redd\.it|www\.reddit\.com\/gallery|youtube\.com|youtu\.be)',
+    r'\/video(s)?\/',
+    r'\/image(s)?\/',
 ]
 
 # GENERIC URL COLLECTOR CONFIG
@@ -133,8 +140,6 @@ MD_COLLECTION_CONFIG = CrawlerRunConfig(
     cache_mode=CacheMode.ENABLED,
 
     # navigation & timing
-    page_timeout=TIMEOUT*1000, # since timeout is in milliseconds
-    max_range=TIMEOUT,
     wait_for_images=False,
     semaphore_count=os.cpu_count(),
 
@@ -168,11 +173,7 @@ MD_AND_METADATA_COLLECTION_CONFIG = CrawlerRunConfig(
     cache_mode=CacheMode.BYPASS,
 
     # navigation & timing
-    page_timeout=TIMEOUT*1000, # since timeout is in milliseconds
-    # max_range=TIMEOUT,
-    # mean_delay=0.05,
-    wait_for_images=False,
-    
+    wait_for_images=False,    
     semaphore_count=os.cpu_count(),
 
     # page interaction
@@ -209,6 +210,10 @@ def extract_domain(url: str) -> str:
 def parse_date(date: str) -> datetime:
     try: return date_parser(date)
     except: return None
+
+# general utilities
+def _excluded_url(url: str):
+    return (not url) or any(re.search(pattern, url) for pattern in EXCLUDED_URL_PATTERNS)
 
 def NOT_READY_guess_type(url: str, default_kind: str = None, **kwargs) -> str:
     """This is entirely heuristic to figure out if the url contains a news or a blog"""
@@ -277,10 +282,28 @@ class AsyncCollector:
         config = AsyncCollector._run_config(collect_metadata)
         result = await self.web_crawler.arun(url=url, config=config)
         return AsyncCollector._package_result(result)
+    
+    async def _collect_html(self, session: aiohttp.ClientSession, url: str, config: CrawlerRunConfig):
+        try:
+            if _excluded_url(url): return
+
+            response = await session.get(url, headers=HTML_REQUEST_HEADERS, timeout=TIMEOUT)
+            if response.status == 200:
+                html_body = await response.text()
+                result = await self.web_crawler.arun(url="raw:"+html_body, config=config)
+                return AsyncCollector._package_result(result)
+        except Exception as e:
+            ic(e.__class__.__name__, e)
 
     async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
         """Collects the bodies of the urls as markdowns"""
+        # config = AsyncCollector._run_config(collect_metadata)
+        # async with aiohttp.ClientSession() as session:
+        #     results = await asyncio.gather(*[self._collect_html(session, url, config) for url in urls])
+        # return results
+        
         config = AsyncCollector._run_config(collect_metadata)
+        # disable collection of excluded urls
         results = await self.web_crawler.arun_many(urls=urls, config=config)
         return [(AsyncCollector._package_result(result) if (isinstance(result, CrawlResult) and result.status_code == 200) else None) for result in results]
 
@@ -404,7 +427,7 @@ class AsyncCollector:
             subreddit = await self.reddit_client.subreddit(subreddit_name)
             return [self._from_reddit(post, default_kind) 
                     async for post in subreddit.hot(limit=20) 
-                    if not AsyncCollector._exclude_url(post.url)]
+                    if not _excluded_url(post.url)]
         except Exception as e:
             log.warning("collection failed", extra={"source": subreddit_name, "num_items": 1})
             print(f"collection failed",subreddit_name, e)
@@ -457,7 +480,7 @@ class AsyncCollector:
                 entry_ids = await asyncio.gather(*[_fetch_json(session, ids_url) for ids_url in HACKERNEWS_STORIES])
                 entry_ids = set(chain(*entry_ids))
                 stories = await asyncio.gather(*[_fetch_json(session, hackernews_story_metadata(id)) for id in entry_ids])
-                collected = [self._from_hackernews_story(story, default_kind) for story in stories if not AsyncCollector._exclude_url(story.get('url'))]
+                collected = [self._from_hackernews_story(story, default_kind) for story in stories if not _excluded_url(story.get('url'))]
             return collected
         except Exception as e:
             log.warning("collection failed", extra={"source": HACKERNEWS, "num_items": 1})
@@ -498,6 +521,4 @@ class AsyncCollector:
             )
         )
     
-    # general utilities
-    def _exclude_url(url: str):
-        return (not url) or any(re.search(pattern, url) for pattern in EXCLUDED_URL_PATTERNS)
+    
