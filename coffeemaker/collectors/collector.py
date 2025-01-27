@@ -136,7 +136,7 @@ MD_COLLECTION_CONFIG = CrawlerRunConfig(
     page_timeout=TIMEOUT*1000, # since timeout is in milliseconds
     max_range=TIMEOUT,
     wait_for_images=False,
-    semaphore_count=os.cpu_count()*4,
+    semaphore_count=os.cpu_count(),
 
     # page interaction
     scan_full_page=False,
@@ -173,7 +173,7 @@ MD_AND_METADATA_COLLECTION_CONFIG = CrawlerRunConfig(
     # mean_delay=0.05,
     wait_for_images=False,
     
-    semaphore_count=os.cpu_count()*4,
+    semaphore_count=os.cpu_count(),
 
     # page interaction
     scan_full_page=False,
@@ -282,7 +282,7 @@ class AsyncCollector:
         """Collects the bodies of the urls as markdowns"""
         config = AsyncCollector._run_config(collect_metadata)
         results = await self.web_crawler.arun_many(urls=urls, config=config)
-        return [AsyncCollector._package_result(result) if result.status_code == 200 else None for result in results]
+        return [(AsyncCollector._package_result(result) if (isinstance(result, CrawlResult) and result.status_code == 200) else None) for result in results]
 
     async def collect_beans(self, beans: list[Bean], collect_metadata: bool = False) -> list[Bean]:
         """Collects the bodies of the beans as markdowns"""
