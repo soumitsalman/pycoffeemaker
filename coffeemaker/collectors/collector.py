@@ -1,4 +1,3 @@
-
 import asyncio
 from itertools import chain
 import json
@@ -9,12 +8,13 @@ from datetime import datetime
 import time
 import aiohttp
 import feedparser
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator, PruningContentFilter
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator
+from newspaper import Article
 import asyncpraw
 import tldextract
 from dateutil.parser import parse as date_parser
 import re
-from coffeemaker.collectors import USER_AGENT, TIMEOUT, RATELIMIT_WAIT
+from coffeemaker.collectors import USER_AGENT, TIMEOUT, RATELIMIT_WAIT, individual
 from coffeemaker.pybeansack.models import *
 from icecream import ic
 
@@ -283,29 +283,52 @@ class AsyncCollector:
         result = await self.web_crawler.arun(url=url, config=config)
         return AsyncCollector._package_result(result)
     
-    async def _collect_html(self, session: aiohttp.ClientSession, url: str, config: CrawlerRunConfig):
-        try:
-            if _excluded_url(url): return
+    # async def _collect_html(self, session: aiohttp.ClientSession, url: str, config: CrawlerRunConfig):
+    #     try:
+    #         if _excluded_url(url): return
 
-            response = await session.get(url, headers=HTML_REQUEST_HEADERS, timeout=TIMEOUT)
-            if response.status == 200:
-                html_body = await response.text()
-                result = await self.web_crawler.arun(url="raw:"+html_body, config=config)
-                return AsyncCollector._package_result(result)
+    #         response = await session.get(url, headers=HTML_REQUEST_HEADERS, timeout=TIMEOUT)
+    #         if response.status == 200:
+    #             html_body = await response.text()
+    #             result = await self.web_crawler.arun(url="raw:"+html_body, config=config)
+    #             return AsyncCollector._package_result(result)
+    #     except Exception as e:
+    #         ic(e.__class__.__name__, e)
+
+    # async def _collect_url(self, url: str, session: aiohttp.ClientSession, config: CrawlerRunConfig) -> dict:
+    #     if _excluded_url(url): return
+    #     try:
+    #         resp = await session.get(url, headers=HTML_REQUEST_HEADERS, timeout=TIMEOUT)            
+    #         resp.raise_for_status()
+    #         result = await self.web_crawler.arun(url="raw:"+await resp.text(), config=config)
+    #         if isinstance(result, CrawlResult): return AsyncCollector._package_result(result)
+    #     except Exception as e:
+    #         ic(e.__class__.__name__, e)
+
+    async def _collect_http_response(self, response: aiohttp.ClientResponse, config: CrawlerRunConfig) -> dict:
+        try:
+            response.raise_for_status()
+            result = await self.web_crawler.arun(url="raw:"+(await response.text()), config=config)
+            if isinstance(result, CrawlResult): return AsyncCollector._package_result(result)
         except Exception as e:
             ic(e.__class__.__name__, e)
 
     async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
         """Collects the bodies of the urls as markdowns"""
-        # config = AsyncCollector._run_config(collect_metadata)
-        # async with aiohttp.ClientSession() as session:
-        #     results = await asyncio.gather(*[self._collect_html(session, url, config) for url in urls])
-        # return results
-        
         config = AsyncCollector._run_config(collect_metadata)
-        # disable collection of excluded urls
-        results = await self.web_crawler.arun_many(urls=urls, config=config)
-        return [(AsyncCollector._package_result(result) if (isinstance(result, CrawlResult) and result.status_code == 200) else None) for result in results]
+        try:
+            async with aiohttp.ClientSession() as session:
+                responses = await asyncio.gather(*[session.get(url, headers=HTML_REQUEST_HEADERS, timeout=TIMEOUT) for url in urls])
+            return await asyncio.gather(*[self._collect_http_response(resp, config) for resp in responses])
+        except Exception as e:
+            ic(e.__class__.__name__, e)
+            return [None]*len(urls)
+
+    # async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
+    #     """Collects the bodies of the urls as markdowns"""
+    #     config = AsyncCollector._run_config(collect_metadata)
+    #     results = await self.web_crawler.arun_many(urls=urls, config=config)
+    #     return [(AsyncCollector._package_result(result) if (isinstance(result, CrawlResult) and result.status_code == 200) else None) for result in results]
 
     async def collect_beans(self, beans: list[Bean], collect_metadata: bool = False) -> list[Bean]:
         """Collects the bodies of the beans as markdowns"""

@@ -260,6 +260,8 @@ class Orchestrator:
         if downloaded_beans:
             await self.index_queue.put((source, downloaded_beans))
             log.info("downloaded", extra={"source": source, "num_items": len(downloaded_beans)})
+            with open(now().strftime(".test/downloaded %Y-%m-%d %H-%M-%S")+".json", "w") as f:
+                json.dump([bean.model_dump_json() for bean in downloaded_beans], f)
         if len(downloaded_beans) < len(beans):
             log.info("downloading failed", extra={"source": source, "num_items": len(beans)-len(downloaded_beans)})
         
