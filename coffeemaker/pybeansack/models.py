@@ -81,7 +81,7 @@ class Bean(BaseModel):
     comments: Optional[int] = Field(default=0)
     shares: Optional[int] = Field(default=0)
     similars: Optional[int] = Field(default=1) # a bean is always similar to itself
-    trend_score: Optional[int] = Field(default=1) # a bean is always similar to itself
+    trend_score: Optional[int] = Field(default=0) # a bean is always similar to itself
     shared_in: Optional[list[str]] = None
     cluster_id: Optional[str] = None
 

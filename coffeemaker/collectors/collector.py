@@ -20,7 +20,6 @@ from icecream import ic
 
 log = logging.getLogger(__name__)
 
-
 REDDIT = "Reddit"
 
 HACKERNEWS = "ycombinator"
@@ -117,7 +116,7 @@ METADATA_EXTRACTION_SCHEMA = {
         {"name": "meta_title", "type": "attribute", "selector": "meta[property='og:title'], meta[name='og:title']", "attribute": "content"},
         {"name": "published_time", "type": "attribute", "selector": "meta[property='rnews:datePublished'], meta[property='article:published_time'], meta[name='OriginalPublicationDate'], meta[itemprop='datePublished'], meta[property='og:published_time'], meta[name='article_date_original'], meta[name='publication_date'], meta[name='sailthru.date'], meta[name='PublishDate'], meta[property='pubdate']", "attribute": "content"},
         {"name": "top_image", "type": "attribute", "selector": "meta[property='og:image'], meta[property='og:image:url'], meta[name='og:image:url'], meta[name='og:image']", "attribute": "content"},
-        {"name": "type", "type": "attribute", "selector": "meta[property='og:type']", "attribute": "content"},
+        {"name": "kind", "type": "attribute", "selector": "meta[property='og:type']", "attribute": "content"},
         {"name": "author", "type": "attribute", "selector": "meta[name='author'], meta[name='dc.creator'], meta[name='byl'], meta[name='byline']", "attribute": "content"},
         {"name": "site_name", "type": "attribute", "selector": "meta[name='og:site_name'], meta[property='og:site_name']", "attribute": "content"},
         # all link selectors
@@ -215,21 +214,21 @@ def parse_date(date: str) -> datetime:
 def _excluded_url(url: str):
     return (not url) or any(re.search(pattern, url) for pattern in EXCLUDED_URL_PATTERNS)
 
-def NOT_READY_guess_type(url: str, default_kind: str = None, **kwargs) -> str:
-    """This is entirely heuristic to figure out if the url contains a news or a blog"""
-    look_into = [url, extract_base_url(url), extract_domain(url)] + (kwargs.values() if kwargs else [])
-    look_into = [item for item in look_into if item]
+POST_URLS = ["reddit.com", "redd.it", "linkedin.com", "x.com", "twitter.com", "ycombinator.com"]
+BLOG_URLS = ["medium.com",  "substack.", "wordpress.", "blogspot.", "newsletter.", "developers.", "blogs.", "blog.", ".blog", ".so", ".dev", ".io",  ".to", ".rs", ".tech", ".ai", "/blog" ]
+BLOG_SITENAMES = ["blog", "magazine", "newsletter", "weekly"]
+NEWS_SITENAMES = ["daily", "wire", "times", "today",  "news", "the "]
 
-    BLOG_DOMAINS = ["medium.com",  "substack", "wordpress", "blogspot", ".dev", ".io", ".blog", ".to", ]
-    
-    DEFINITELY_BLOG = ["medium.com", "dev.to", "x" "substack.", "wordpress.", ".dev", "dev.to", "developers.", "github.io"]
-    if "medium.com" in look_into: return BLOG
-    
+def guess_type(url: str, source: str) -> str:
+    """This is entirely heuristic to figure out if the url contains a news or a blog.
+    This is the dumbest shit I ever wrote but it gets the job done for now."""
 
-    if "reddit.com" in url: return POST
-    if "hacker-news.firebaseio.com" in url: return POST
-    if "ycombinator.com" in url: return POST
-    return NEWS
+    url, source = url.lower(), source.lower()
+    if any(domain for domain in POST_URLS if domain in url): return POST
+    if any(domain for domain in BLOG_URLS if domain in url): return BLOG
+    if any(sitename for sitename in BLOG_SITENAMES if sitename in source): return BLOG
+    if any(sitename for sitename in NEWS_SITENAMES if sitename in source): return NEWS
+    if "/news/" in url: return NEWS
 
 async def _fetch_json(session: aiohttp.ClientSession, url: str) -> dict:
     async with session.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT) as response:
@@ -392,7 +391,7 @@ class AsyncCollector:
                 updated=created_time,
                 source=source,
                 title=entry.title,
-                kind=default_kind,
+                kind=guess_type(entry.link, source) or default_kind,
                 text=body,
                 author=entry.get('author'),        
                 image_url=AsyncCollector._extract_main_image(entry)
@@ -457,9 +456,23 @@ class AsyncCollector:
 
     def _from_reddit(self, post, default_kind) -> tuple[Bean, Chatter]: 
         subreddit = f"r/{post.subreddit.display_name}"
-        url = AsyncCollector._extract_submission_url(post)
         current_time = now()
         created_time = datetime.fromtimestamp(post.created_utc)
+
+        if post.is_self:    
+            url = reddit_submission_permalink(post.permalink)
+            source = subreddit
+            kind = POST
+        else:
+            source = extract_base_url(post.url)
+            if source:
+                url = post.url
+                kind = guess_type(url, source) or default_kind
+            else: # sometimes the links are itself a reddit post
+                url = reddit_submission_permalink(post.url)
+                kind = POST
+                source = subreddit
+        
         return (
             Bean(
                 url=url,
@@ -467,9 +480,9 @@ class AsyncCollector:
                 collected=current_time,
                 updated=created_time,
                 # this is done because sometimes is_self value is wrong
-                source=subreddit if post.is_self else (extract_domain(post.url) or REDDIT),
+                source=source,
                 title=post.title,
-                kind=POST if post.is_self else default_kind,
+                kind=kind,
                 text=post.selftext,
                 author=post.author.name if post.author else None,
                 # fill in the defaults
@@ -512,9 +525,18 @@ class AsyncCollector:
     def _from_hackernews_story(self, story: dict, default_kind: str) -> tuple[Bean, Chatter]:
         # either its a shared url or it is a text
         current_time = now()
-        id = story['id']
-        url = story.get('url') or hackernews_story_permalink(id)
         created_time = datetime.fromtimestamp(story['time']) if 'time' in story else current_time
+
+        id = story['id']
+        if 'url' in story:
+            url = story['url']
+            kind = guess_type(url, HACKERNEWS) or default_kind
+            source = extract_base_url(url)
+        else:
+            url = hackernews_story_permalink(id)
+            kind = POST
+            source = HACKERNEWS
+                    
         return (
             Bean(            
                 url=url, # this is either a linked url or a direct post
@@ -523,9 +545,9 @@ class AsyncCollector:
                 created=created_time,                
                 collected=current_time,
                 updated=created_time,
-                source=extract_base_url(url),
+                source=source,
                 title=story.get('title'),
-                kind=POST if not 'url' in story else default_kind, # blog, post or job
+                kind=kind, # blog, post or job
                 text=self._generate_markdown(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
                 author=story.get('by'),
                 # fill in the defaults
