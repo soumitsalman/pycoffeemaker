@@ -24,13 +24,14 @@ log = logging.getLogger(__name__)
 # NEEDS_SUMMARY_BODY_LEN = 150
 # needs_summary = lambda bean: len(bean.text.split()) >= NEEDS_SUMMARY_BODY_LEN
 THROTTLE_TIMEOUT = 2 # seconds
-MIN_WORDS_THRESHOLD = 100
+MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 100
+MIN_WORDS_THRESHOLD_FOR_INDEXING = 70
 MAX_CATEGORIES = 5
 END_OF_STREAM = "END_OF_STREAM"
 
-is_text_above_threshold = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD
+is_text_above_threshold = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD_FOR_DOWNLOADING
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
-is_indexable = lambda bean: bean.text and (bean.kind == POST or is_text_above_threshold(bean)) # it has to have some text to be indexed
+is_indexable = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD_FOR_INDEXING # it has to have some text and the text has to be large enough
 is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean)) # if it is a post dont download it or if the body is large enough
 storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
 indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
