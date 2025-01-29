@@ -208,14 +208,17 @@ class Orchestrator:
 
         async with TaskGroup() as tg:
             log.info("collecting", extra={"source": REDDIT, "num_items": 0})
-            [tg.create_task(self.collect_async(source, self.scraper.collect_subreddit(source)), name=source) for source in subreddits]
-            await asyncio.sleep(THROTTLE_TIMEOUT) # this throttle is needed to ease the woos of overwhelming number of request sockets
+            await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
+            # [tg.create_task(self.collect_async(source, self.scraper.collect_subreddit(source)), name=source) for source in subreddits]
+            # await asyncio.sleep(THROTTLE_TIMEOUT) # this throttle is needed to ease the woos of overwhelming number of request sockets
             log.info("collecting", extra={"source": HACKERNEWS, "num_items": 0})
-            tg.create_task(self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews()), name=HACKERNEWS)
-            await asyncio.sleep(THROTTLE_TIMEOUT) # this throttle is needed to ease the woos of overwhelming number of request sockets
+            await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
+            # tg.create_task(self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews()), name=HACKERNEWS)
+            # await asyncio.sleep(THROTTLE_TIMEOUT) # this throttle is needed to ease the woos of overwhelming number of request sockets
             log.info("collecting", extra={"source": "rssfeed", "num_items": 0})
-            [tg.create_task(self.collect_async(source, self.scraper.collect_rssfeed(source)), name=source) for source in rssfeeds]
-
+            await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
+            # [tg.create_task(self.collect_async(source, self.scraper.collect_rssfeed(source)), name=source) for source in rssfeeds]
+            
         await self.download_queue.put(END_OF_STREAM)
 
     async def collect_async(self, source: str, collect: Awaitable[list[tuple[Bean, Chatter]]]):
@@ -319,8 +322,7 @@ class Orchestrator:
         # 5. wait for the downloading to finish and then put the end of stream for indexing
         # 6. wait for indexing to finish
         await self.scraper.web_crawler.start() # this is very important otherwise people die
-        collection_task = asyncio.create_task(self.run_collections_async())
-        downloading_task = asyncio.create_task(self.run_downloading_async())
+        collection_task = asyncio.create_task(self.run_collections_async())        
         
         await collection_task
         # clean up the old stuff from the db before adding new crap
@@ -328,6 +330,7 @@ class Orchestrator:
         ranked_count = self.trend_rank_beans()
         log.info("trend ranked", extra={"source": self.run_id, "num_items": ranked_count})
 
+        downloading_task = asyncio.create_task(self.run_downloading_async())
         indexing_task = asyncio.create_task(self.run_indexing_async())       
 
         await downloading_task
