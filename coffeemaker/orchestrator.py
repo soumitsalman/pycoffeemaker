@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 # NEEDS_SUMMARY_BODY_LEN = 150
 # needs_summary = lambda bean: len(bean.text.split()) >= NEEDS_SUMMARY_BODY_LEN
 THROTTLE_TIMEOUT = 5 # seconds
+BATCH_SIZE = 100
 MIN_WORDS_THRESHOLD = 150
 MIN_WORDS_THRESHOLD_FOR_INDEXING = 70
 MAX_CATEGORIES = 5
@@ -49,6 +50,11 @@ def log_runtime(func):
 def _read_sources(file: str) -> list[str]:
     with open(file, 'r') as file:
         return [line.strip() for line in file.readlines() if line.strip()]
+
+async def _enqueue_beans(queue: Queue, source: str, beans: list[Bean]):
+    for i in range(0, len(beans), BATCH_SIZE):
+        batch = beans[i:i+BATCH_SIZE]
+        await queue.put((source, batch))
 
 class Orchestrator:
     run_id: str = None
@@ -207,17 +213,15 @@ class Orchestrator:
         subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
 
         async with TaskGroup() as tg:
-            log.info("collecting", extra={"source": REDDIT, "num_items": 0})
-            # await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
+            log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
             [tg.create_task(self.collect_async(source, self.scraper.collect_subreddit(source)), name=source) for source in subreddits]
-            await asyncio.sleep(THROTTLE_TIMEOUT) # this throttle is needed to ease the woos of overwhelming number of request sockets
+            await asyncio.sleep(THROTTLE_TIMEOUT) # NOTE: this throttle is needed to ease the woos of overwhelming number of request sockets
             
-            log.info("collecting", extra={"source": HACKERNEWS, "num_items": 0})
-            # TODO: doing an await here before rss feed is that by this time the socket is overwhelmed
+            log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
+            # NOTE: doing an await here before rss feed is that by this time the socket is overwhelmed
             await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
-            
-            log.info("collecting", extra={"source": "rssfeed", "num_items": 0})
-            # await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
+
+            log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
             [tg.create_task(self.collect_async(source, self.scraper.collect_rssfeed(source)), name=source) for source in rssfeeds]
             
         await self.download_queue.put(END_OF_STREAM)
@@ -234,12 +238,11 @@ class Orchestrator:
         beans = self.new_beans([bean for bean in beans if bean]) if beans else None
         needs_download = downloadables(beans)
         if needs_download:
-            await self.download_queue.put((source, needs_download))
+            await _enqueue_beans(self.download_queue, source, needs_download)
             beans = [bean for bean in beans if bean not in needs_download]
-        
         if not beans: return
-        
-        await self.index_queue.put((source, beans))
+
+        await _enqueue_beans(self.index_queue, source, beans)
         log.info("collected", extra={"source": source, "num_items": len(beans)})
 
     @log_runtime
@@ -251,7 +254,8 @@ class Orchestrator:
                 if not items: continue
 
                 source, beans = items
-                tg.create_task(self.download_async(source, beans), name="downloading: "+source)
+                # tg.create_task(self.download_async(source, beans), name="downloading: "+source)
+                await self.download_async(source, beans)
                 self.download_queue.task_done()
 
         await self.index_queue.put(END_OF_STREAM)
@@ -269,33 +273,35 @@ class Orchestrator:
     @log_runtime
     async def run_indexing_async(self):
         total_new_beans = 0
-        while True:
-            items = await self.index_queue.get()
-            if items == END_OF_STREAM: break
-            if not items: continue
-            
-            source, beans = items
-            if not beans: continue
+        async with TaskGroup() as tg:
+            while True:
+                items = await self.index_queue.get()
+                if items == END_OF_STREAM: break
+                if not items: continue
+                
+                source, beans = items
+                if not beans: continue
 
-            # changing the sequence so that it embeds the digest/summary instead of the whole text
-            # since the digest/summary is smaller and got generated through a text-gen model so it is more clean
-            beans = self.store_beans(
-                self.embed_beans(
-                    self.augment_beans(
-                        self.new_beans(beans))))  
-            if not beans: continue
-            
-            total_new_beans += len(beans)
-            log.info("stored", extra={"source": source, "num_items": len(beans)})                
-            # sync in fine for now
-            clustered_count = self.cluster_beans(beans)
-            if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
-            ranked_count = self.trend_rank_beans(beans)
-            if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})
-        
-            self.index_queue.task_done()
+                # changing the sequence so that it embeds the digest/summary instead of the whole text
+                # since the digest/summary is smaller and got generated through a text-gen model so it is more clean
+                beans = self.store_beans(
+                    self.embed_beans(
+                        self.augment_beans(
+                            self.new_beans(beans))))  
+                if not beans: continue
+                
+                total_new_beans += len(beans)
+                log.info("stored", extra={"source": source, "num_items": len(beans)})  
+                tg.create_task(self._cluster_and_rank(source, beans), name="cluster and rank: "+source)
+                self.index_queue.task_done()
             
         log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 
+    
+    async def _cluster_and_rank(self, source: str, beans: list[Bean]):
+        clustered_count = self.cluster_beans(beans)
+        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
+        ranked_count = self.trend_rank_beans(beans)
+        if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})
 
     # 1. schedule a clean up
     # 2. start collection
@@ -321,7 +327,7 @@ class Orchestrator:
         # 4. then kick off indexing
         # 5. wait for the downloading to finish and then put the end of stream for indexing
         # 6. wait for indexing to finish
-        await self.scraper.web_crawler.start() # this is very important otherwise people die
+        # await self.scraper.web_crawler.start() # this is very important otherwise people die
         await self.run_collections_async()        
 
         # clean up the old stuff from the db before adding new crap
@@ -336,41 +342,4 @@ class Orchestrator:
         await self.index_queue.put(END_OF_STREAM)
         await self.scraper.close() # this is for closing out the open sessions
         await indexing_task
-        
-### NOTE: commenting out sync version for now
-# def run_collection():   
-#     collected = []
-#     trigger_collection = lambda items: collected.append(extract_new(items))
-#     log.info("collecting", extra={"source": "rssfeed", "num_items": 0})
-#     rssfeed.collect(trigger_collection)
-#     log.info("collecting", extra={"source": "ychackernews", "num_items": 0})
-#     ychackernews.collect(trigger_collection)
-#     log.info("collecting", extra={"source": "redditor", "num_items": 0})
-#     redditor.collect(trigger_collection)
-#     # logger().info("collecting|%s", "espresso")
-#     # espresso.collect(sb_conn_str=sb_connection_str, store_func=_collect)
-#     # TODO: add collection from nextdoor
-#     # TODO: add collection from linkedin
-#     return collected
-
-# def run():
-#     global run_id, run_start_time
-#     run_start_time = now()
-#     run_id = run_start_time.strftime("%Y-%m-%d %H")
-    
-#     collected = run_collection() 
-#     cleanup()        
-#     trend_rank_beans()
-    
-#     total_new_beans = 0
-#     for beans in collected:
-#         beans = store_beans(
-#             augment_beans(
-#                 embed_beans(
-#                     new_beans(beans))))
-#         if beans:
-#             total_new_beans += len(beans)
-#             cluster_beans(beans)                
-#             trend_rank_beans(beans)
-#     log.info("finished", extra={"source": run_id, "num_items": total_new_beans})
-# http.get(url_file_stream_or_string, etag, modified, agent, referrer, handlers, request_headers, result)
+  

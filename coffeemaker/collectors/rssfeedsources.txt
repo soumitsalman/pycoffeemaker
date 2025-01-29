@@ -1,3 +1,9 @@
+https://feeds.bloomberg.com/markets/news.rss
+https://feeds.bloomberg.com/economics/news.rss
+https://feeds.bloomberg.com/wealth/news.rss
+https://feeds.bloomberg.com/technology/news.rss
+https://feeds.bloomberg.com/green/news.rss
+https://feeds.bloomberg.com/businessweek/news.rss
 https://newatlas.com/index.rss
 https://www.channele2e.com/feed/topic/latest
 https://www.ghacks.net/feed/
@@ -122,7 +128,6 @@ https://www.ictworks.org/feed/
 https://fedoramagazine.org/feed/
 https://mashable.com/feeds/rss/all
 https://www.cybersecuritydive.com/feeds/news/
-https://regtechtimes.com/feed/
 https://www.laptopmag.com/feeds/all
 https://mediafeed.org/feed/
 https://www.cryptopolitan.com/feed/
