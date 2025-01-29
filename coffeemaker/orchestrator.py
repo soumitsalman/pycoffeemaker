@@ -212,17 +212,25 @@ class Orchestrator:
         rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
         subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
 
-        async with TaskGroup() as tg:
-            log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
-            [tg.create_task(self.collect_async(source, self.scraper.collect_subreddit(source)), name=source) for source in subreddits]
-            await asyncio.sleep(THROTTLE_TIMEOUT) # NOTE: this throttle is needed to ease the woos of overwhelming number of request sockets
-            
-            log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-            # NOTE: doing an await here before rss feed is that by this time the socket is overwhelmed
-            await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
+        # awaiting on each group so that os is not overwhelmed by sockets
+        log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
+        await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
+        log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
+        await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
+        log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
+        await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
 
-            log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
-            [tg.create_task(self.collect_async(source, self.scraper.collect_rssfeed(source)), name=source) for source in rssfeeds]
+        # async with TaskGroup() as tg:
+        #     log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
+        #     [tg.create_task(self.collect_async(source, self.scraper.collect_subreddit(source)), name=source) for source in subreddits]
+        #     await asyncio.sleep(THROTTLE_TIMEOUT) # NOTE: this throttle is needed to ease the woos of overwhelming number of request sockets
+            
+        #     log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
+        #     # NOTE: doing an await here before rss feed is that by this time the socket is overwhelmed
+        #     await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
+
+        #     log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
+        #     [tg.create_task(self.collect_async(source, self.scraper.collect_rssfeed(source)), name=source) for source in rssfeeds]
             
         await self.download_queue.put(END_OF_STREAM)
 
