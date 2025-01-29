@@ -300,16 +300,13 @@ class Orchestrator:
                 
                 total_new_beans += len(beans)
                 log.info("stored", extra={"source": source, "num_items": len(beans)})  
-                tg.create_task(self._cluster_and_rank(source, beans), name="cluster and rank: "+source)
+                clustered_count = self.cluster_beans(beans)
+                if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
+                ranked_count = self.trend_rank_beans(beans)
+                if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})                
                 self.index_queue.task_done()
             
         log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 
-    
-    async def _cluster_and_rank(self, source: str, beans: list[Bean]):
-        clustered_count = self.cluster_beans(beans)
-        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
-        ranked_count = self.trend_rank_beans(beans)
-        if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})
 
     # 1. schedule a clean up
     # 2. start collection
