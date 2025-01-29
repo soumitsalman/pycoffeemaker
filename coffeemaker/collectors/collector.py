@@ -11,6 +11,7 @@ import feedparser
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator
 from newspaper import Article
 import asyncpraw
+import requests
 import tldextract
 from dateutil.parser import parse as date_parser
 import re
@@ -214,8 +215,8 @@ def parse_date(date: str) -> datetime:
 def _excluded_url(url: str):
     return (not url) or any(re.search(pattern, url) for pattern in EXCLUDED_URL_PATTERNS)
 
-POST_URLS = ["reddit.com", "redd.it", "linkedin.com", "x.com", "twitter.com", "ycombinator.com"]
-BLOG_URLS = ["medium.com",  "substack.", "wordpress.", "blogspot.", "newsletter.", "developers.", "blogs.", "blog.", ".blog", ".so", ".dev", ".io",  ".to", ".rs", ".tech", ".ai", "/blog" ]
+POST_DOMAINS = ["reddit", "redd", "linkedin", "x", "twitter", "facebook", "ycombinator"]
+BLOG_URLS = ["medium.com",  "substack.", "wordpress.", "blogspot.", "newsletter.", "developers.", "blogs.", "blog.", ".so/", ".dev/", ".io/",  ".to/", ".rs/", ".tech/", ".ai/", ".blog/", "/blog/" ]
 BLOG_SITENAMES = ["blog", "magazine", "newsletter", "weekly"]
 NEWS_SITENAMES = ["daily", "wire", "times", "today",  "news", "the "]
 
@@ -223,11 +224,16 @@ def guess_type(url: str, source: str) -> str:
     """This is entirely heuristic to figure out if the url contains a news or a blog.
     This is the dumbest shit I ever wrote but it gets the job done for now."""
 
-    url, source = url.lower(), source.lower()
-    if any(domain for domain in POST_URLS if domain in url): return POST
-    if any(domain for domain in BLOG_URLS if domain in url): return BLOG
+    domain_name = extract_domain(url).lower()
+    if any(True for post_domain in POST_DOMAINS if domain_name == post_domain): return POST
+
+    stripped_url = url.lower().split("?")[0]
+    if any(True for blog_url in BLOG_URLS if blog_url in stripped_url): return BLOG
+
+    source = source.lower()
     if any(sitename for sitename in BLOG_SITENAMES if sitename in source): return BLOG
     if any(sitename for sitename in NEWS_SITENAMES if sitename in source): return NEWS
+
     if "/news/" in url: return NEWS
 
 async def _fetch_json(session: aiohttp.ClientSession, url: str) -> dict:
@@ -304,7 +310,23 @@ class AsyncCollector:
     #     except Exception as e:
     #         ic(e.__class__.__name__, e)
 
-    async def _collect_http_response(self, response: aiohttp.ClientResponse, config: CrawlerRunConfig) -> dict:
+    # async def _fetch_urls(self, urls: list[str]) -> list[aiohttp.ClientResponse]:
+    #     responses = []
+    #     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=TIMEOUT)) as session:
+    #         for i in range(0, len(urls), COLLECTION_THROTTLE):
+    #             batch = urls[i:i+COLLECTION_THROTTLE]
+    #             responses.extend(await asyncio.gather(*[session.get(url, headers=HTML_REQUEST_HEADERS) for url in batch]))
+    #     return responses
+    
+    # async def _package_http_responses(self, responses: list[aiohttp.ClientResponse], collect_metadata: bool = False) -> list[dict]:
+    #     config = AsyncCollector._run_config(collect_metadata)
+    #     results = []
+    #     for i in range(0, len(responses), COLLECTION_THROTTLE):
+    #         batch = responses[i:i+COLLECTION_THROTTLE]
+    #         results.extend(await asyncio.gather(*[self._package_http_response(resp, config) for resp in batch]))
+    #     return results
+
+    async def _package_http_response(self, response: aiohttp.ClientResponse, config: CrawlerRunConfig) -> dict:
         try:
             response.raise_for_status()
             result = await self.web_crawler.arun(url="raw:"+(await response.text()), config=config)
@@ -314,14 +336,19 @@ class AsyncCollector:
 
     async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
         """Collects the bodies of the urls as markdowns"""
+        # NOTE: serializing this cause otherwise shit dies
         config = AsyncCollector._run_config(collect_metadata)
-        try:
-            async with aiohttp.ClientSession() as session:
-                responses = await asyncio.gather(*[session.get(url, headers=HTML_REQUEST_HEADERS, timeout=TIMEOUT) for url in urls])
-            return await asyncio.gather(*[self._collect_http_response(resp, config) for resp in responses])
-        except Exception as e:
-            ic(e.__class__.__name__, e)
-            return [None]*len(urls)
+        bodies = []
+        for url in urls:
+            body = None
+            try:
+                response = requests.get(url, headers=HTML_REQUEST_HEADERS, timeout=5)
+                response.raise_for_status()
+                body = AsyncCollector._package_result(await self.web_crawler.arun(url="raw:"+response.text, config=config))
+            except Exception as e:
+                ic(e.__class__.__name__, e)
+            bodies.append(body)
+        return bodies
 
     # async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
     #     """Collects the bodies of the urls as markdowns"""

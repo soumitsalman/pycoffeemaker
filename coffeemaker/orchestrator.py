@@ -23,13 +23,13 @@ log = logging.getLogger(__name__)
 # # if a bean.summary is less than 150 words, it is not worth summarizing again
 # NEEDS_SUMMARY_BODY_LEN = 150
 # needs_summary = lambda bean: len(bean.text.split()) >= NEEDS_SUMMARY_BODY_LEN
-THROTTLE_TIMEOUT = 2 # seconds
-MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 100
+THROTTLE_TIMEOUT = 5 # seconds
+MIN_WORDS_THRESHOLD = 150
 MIN_WORDS_THRESHOLD_FOR_INDEXING = 70
 MAX_CATEGORIES = 5
 END_OF_STREAM = "END_OF_STREAM"
 
-is_text_above_threshold = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD_FOR_DOWNLOADING
+is_text_above_threshold = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
 is_indexable = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD_FOR_INDEXING # it has to have some text and the text has to be large enough
 is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean)) # if it is a post dont download it or if the body is large enough
@@ -208,16 +208,17 @@ class Orchestrator:
 
         async with TaskGroup() as tg:
             log.info("collecting", extra={"source": REDDIT, "num_items": 0})
-            await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
-            # [tg.create_task(self.collect_async(source, self.scraper.collect_subreddit(source)), name=source) for source in subreddits]
-            # await asyncio.sleep(THROTTLE_TIMEOUT) # this throttle is needed to ease the woos of overwhelming number of request sockets
+            # await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
+            [tg.create_task(self.collect_async(source, self.scraper.collect_subreddit(source)), name=source) for source in subreddits]
+            await asyncio.sleep(THROTTLE_TIMEOUT) # this throttle is needed to ease the woos of overwhelming number of request sockets
+            
             log.info("collecting", extra={"source": HACKERNEWS, "num_items": 0})
+            # TODO: doing an await here before rss feed is that by this time the socket is overwhelmed
             await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
-            # tg.create_task(self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews()), name=HACKERNEWS)
-            # await asyncio.sleep(THROTTLE_TIMEOUT) # this throttle is needed to ease the woos of overwhelming number of request sockets
+            
             log.info("collecting", extra={"source": "rssfeed", "num_items": 0})
-            await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
-            # [tg.create_task(self.collect_async(source, self.scraper.collect_rssfeed(source)), name=source) for source in rssfeeds]
+            # await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
+            [tg.create_task(self.collect_async(source, self.scraper.collect_rssfeed(source)), name=source) for source in rssfeeds]
             
         await self.download_queue.put(END_OF_STREAM)
 
@@ -251,7 +252,6 @@ class Orchestrator:
 
                 source, beans = items
                 tg.create_task(self.download_async(source, beans), name="downloading: "+source)
-                
                 self.download_queue.task_done()
 
         await self.index_queue.put(END_OF_STREAM)
@@ -264,7 +264,7 @@ class Orchestrator:
             await self.index_queue.put((source, downloaded_beans))
             log.info("downloaded", extra={"source": source, "num_items": len(downloaded_beans)})
         if len(downloaded_beans) < len(beans):
-            log.info("downloading failed", extra={"source": source, "num_items": len(beans)-len(downloaded_beans)})
+            log.info("download failed", extra={"source": source, "num_items": len(beans)-len(downloaded_beans)})
         
     @log_runtime
     async def run_indexing_async(self):
@@ -322,9 +322,8 @@ class Orchestrator:
         # 5. wait for the downloading to finish and then put the end of stream for indexing
         # 6. wait for indexing to finish
         await self.scraper.web_crawler.start() # this is very important otherwise people die
-        collection_task = asyncio.create_task(self.run_collections_async())        
-        
-        await collection_task
+        await self.run_collections_async()        
+
         # clean up the old stuff from the db before adding new crap
         self.cleanup()
         ranked_count = self.trend_rank_beans()
