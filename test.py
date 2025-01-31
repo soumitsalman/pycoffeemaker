@@ -8,8 +8,8 @@ logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
-logging.getLogger("digestor.local").propagate = False
-logging.getLogger("embedder.local").propagate = False
+logging.getLogger("coffeemaker.digestors").propagate = False
+logging.getLogger("coffeemaker.pybeansack.embedders").propagate = False
 logging.getLogger("asyncprawcore").propagate = False
 logging.getLogger("asyncpraw").propagate = False
 logging.getLogger("dammit").propagate = False
@@ -50,12 +50,11 @@ def save_models(items: list[Bean|Chatter], file_name: str = None):
 
 def _create_orchestrator():
     return Orchestrator(
-        os.getenv("DB_CONNECTION_STRING"),
+        os.getenv("LOCAL_DB_CONNECTION_STRING"),
+        os.getenv("LOCAL_DB_PATH"),
         None, 
-        os.getenv("WORKING_DIR", "."), 
         os.getenv("EMBEDDER_PATH"),    
         os.getenv("LLM_PATH"),
-        float(os.getenv('CATEGORY_EPS')),
         float(os.getenv('CLUSTER_EPS')))
 
 def test_collection():
@@ -177,6 +176,22 @@ def test_whole_path_live():
     orch.cluster_beans()
     orch.trend_rank_beans()
 
+def test_digestor():
+    input_text = """Quantum is adding incremental, in-place system scaling with dynamic, automatic data leveling to its Myriad all-flash file system, along with 122.88 TB Solidigm SSD support.
+Myriad is a containerized, scale-out file system stack using key-value technology, based on NVMe SSD drives and supporting SMB and NFS protocols. The software provides inline compression and deduplication. It also supports Nvidia’s GPUdirect and has a parallel file system client. This, we’re told, is optimized for AI/ML model training and inferencing, high-performance computing (HPC) visualization and modeling, and video rendering workloads. 
+The new scalability features is designed to let customers start with as few as five partially populated NVMe Storage Server nodes, then expand in increments of one or more nodes at a time with the additional storage available in minutes, with no need for admin intervention, and no impact or interruption to user operation. Quantum says customers will be able to continue adding nodes as their needs grow, increasing capacity while maintaining linear performance with automatic data leveling across all nodes as new Storage Server nodes are added.
+Ben Jarvis, Quantum
+Ben Jarvis
+Ben Jarvis, Quantum Technical Director, said: “With the ability to add bare-metal storage nodes one at a time and have them online in just minutes with support for dynamic n+m data protection and data leveling, Myriad stands apart from traditional NAS systems.
+These capabilities give customers the best of all worlds: high immediate usable capacity and the freedom to seamlessly expand their storage as requirements evolve, maintaining high performance and reliability for mission-critical data sharing – whether via SMB, NFS or using our direct client for GPU workflows – while supporting cutting-edge AI/ML pipelines and data-intensive HPC workloads.”
+The latest Myriad release adds support for 400 GbE RDMA infrastructure, up to ten NVMe Storage Server Nodes, and new drive options including 61.44 TB and 122.88 TB Solidigm D5-P5336 QLC drives. A server node takes up 1RU and holds up to ten NVMe SSDs. That means 1.23 PB of raw capacity using Solidigm’s 122.88 TB drives, with 80 percent usable via Myriad’s n+2 erasure coding. Support for 20-node configurations is coming and customers can upgrade in single-node increments.
+Roger Corell, Solidigm
+Roger Corell
+Roger Corell, Senior Director, AI and Leadership Marketing at Solidigm, said: “Quantum’s Myriad file system exemplifies the ability to seamlessly adopt critical storage technologies like the Solidigm 61.44 TB and 122.88 TB NVMe drives using QLC technology … This adaptability helps organizations integrate cutting-edge advancements into their infrastructure, selecting the best technology available while massively consolidating rack space and realizing power and cooling savings."""
+
+    digestor = TransformerDigestor(os.getenv("LLM_PATH"))
+    ic(digestor.run(input_text))
+
 def test_run_async():
     orch = _create_orchestrator()
     asyncio.run(orch.run_async())
@@ -184,5 +199,5 @@ def test_run_async():
 
 if __name__ == "__main__":
     test_run_async()
-
+    # test_digestor()
     

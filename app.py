@@ -18,8 +18,8 @@ log = logging.getLogger("app")
 log.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
-logging.getLogger("digestor.local").propagate = False
-logging.getLogger("embedder.local").propagate = False
+logging.getLogger("coffeemaker.digestors").propagate = False
+logging.getLogger("coffeemaker.pybeansack.embedders").propagate = False
 logging.getLogger("asyncprawcore").propagate = False
 logging.getLogger("asyncpraw").propagate = False
 logging.getLogger("dammit").propagate = False
@@ -31,12 +31,11 @@ from coffeemaker.orchestrator import Orchestrator
 
 if __name__ == "__main__":    
     orch = Orchestrator(
-        os.getenv("DB_CONNECTION_STRING"),
+        os.getenv("REMOTE_DB_CONNECTION_STRING"),
+        os.getenv("LOCAL_DB_PATH"),
         os.getenv("AZSTORAGE_CONNECTION_STRING"), 
-        WORKING_DIR, 
         os.getenv("EMBEDDER_PATH"),    
         os.getenv("LLM_PATH"),
-        float(os.getenv('CATEGORY_EPS')),
         float(os.getenv('CLUSTER_EPS')))
     asyncio.run(orch.run_async())
     orch.close()

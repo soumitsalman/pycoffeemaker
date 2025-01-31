@@ -1,4 +1,5 @@
-llama-cpp-python
+# llama-cpp-python
+sentence-transformers
 pymongo
 tiktoken
 retry

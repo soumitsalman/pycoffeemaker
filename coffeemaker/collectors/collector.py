@@ -193,6 +193,16 @@ MD_AND_METADATA_COLLECTION_CONFIG = CrawlerRunConfig(
     verbose=False
 )
 
+BROWSER_CONFIG = BrowserConfig(
+    headless=True,
+    ignore_https_errors=False,
+    java_script_enabled=False,
+    user_agent=USER_AGENT,
+    light_mode=True,
+    text_mode=True,
+    verbose=False
+)
+
 # general utilities
 now = lambda: datetime.now()
 reddit_submission_permalink = lambda permalink: f"https://www.reddit.com{permalink}"
@@ -242,25 +252,10 @@ async def _fetch_json(session: aiohttp.ClientSession, url: str) -> dict:
 
 class AsyncCollector:
     _md_generator: DefaultMarkdownGenerator = None
-    _browser_config = BrowserConfig(
-        headless=True,
-        ignore_https_errors=False,
-        java_script_enabled=False,
-        user_agent=USER_AGENT,
-        light_mode=True,
-        text_mode=True,
-        verbose=False
-    )
     _run_config = lambda collect_metadata: MD_AND_METADATA_COLLECTION_CONFIG if collect_metadata else MD_COLLECTION_CONFIG
 
     def __init__(self):  
         self._md_generator = DefaultMarkdownGenerator(options=MD_OPTIONS)
-
-    # @property
-    # def web_crawler(self):
-    #     if not hasattr(self, '_web_crawler'):
-    #         self._web_crawler = AsyncWebCrawler(config=AsyncCollector._browser_config)
-    #     return self._web_crawler
 
     @property
     def reddit_client(self):
@@ -278,14 +273,13 @@ class AsyncCollector:
         return self._reddit_client
     
     async def close(self):
-        # await self.web_crawler.close()
-        await self.reddit_client.close()
+        await self._reddit_client.close()
     
     ### generic url collection utilities ###
     async def collect_url(self, url: str, collect_metadata: bool = False) -> dict:
         """Collects the body of the url as a markdown"""
         if _excluded_url(url): return
-        async with AsyncWebCrawler(config=AsyncCollector._browser_config) as crawler:
+        async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
             parsed_result = await crawler.arun(url=url, config=AsyncCollector._run_config(collect_metadata))
             result = AsyncCollector._package_result(parsed_result)
         return result
@@ -316,7 +310,7 @@ class AsyncCollector:
 
     async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
         """Collects the bodies of the urls as markdowns"""        
-        async with AsyncWebCrawler(config=AsyncCollector._browser_config) as crawler:
+        async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
             config = AsyncCollector._run_config(collect_metadata)
             async def _collect(url: str):
                 if _excluded_url(url): return
@@ -523,7 +517,7 @@ class AsyncCollector:
         # TODO: add a check to remove "advertisement"
         for i, line in enumerate(lines):
             if line.startswith("# "):
-                return "\n".join(lines[i:])
+                return "\n".join(lines[i+1:])
         return markdown
     
     extract_source = lambda url: extract_domain(url) or extract_base_url(url)

@@ -5,12 +5,13 @@ import asyncio
 from asyncio import Queue, TaskGroup
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
-from coffeemaker.pybeansack.embedding import BeansackEmbeddings
+from coffeemaker.pybeansack import embedders
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.utils import now
 from coffeemaker.collectors.collector import AsyncCollector, HACKERNEWS, REDDIT
-from coffeemaker.digestors import *
+from coffeemaker import digestors
 from pymongo import UpdateOne
+import os
 
 log = logging.getLogger(__name__)
 
@@ -23,12 +24,13 @@ log = logging.getLogger(__name__)
 # # if a bean.summary is less than 150 words, it is not worth summarizing again
 # NEEDS_SUMMARY_BODY_LEN = 150
 # needs_summary = lambda bean: len(bean.text.split()) >= NEEDS_SUMMARY_BODY_LEN
-THROTTLE_TIMEOUT = 5 # seconds
+
 BATCH_SIZE = 100
+END_OF_STREAM = "END_OF_STREAM"
+MAX_CLUSTER_SIZE=20
+
 MIN_WORDS_THRESHOLD = 150
 MIN_WORDS_THRESHOLD_FOR_INDEXING = 70
-MAX_CATEGORIES = 5
-END_OF_STREAM = "END_OF_STREAM"
 
 is_text_above_threshold = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
@@ -69,17 +71,16 @@ class Orchestrator:
     category_eps: float = None
     cluster_eps: float = None
 
-    embedder: BeansackEmbeddings = None
-    digestor: NewspaperDigestor = None
+    embedder = None
+    digestor = None
 
-    def __init__(self, db_conn_str: str, storage_conn_str: str, working_dir: str, emb_path: str, llm_path: str, cat_eps: float, clus_eps: float): 
-        self.embedder = BeansackEmbeddings(model_path=emb_path, context_len=512)
-        self.digestor = LocalDigestor(model_path=llm_path) 
+    def __init__(self, remote_db_conn_str: str, local_db_path: str, storage_conn_str: str, emb_path: str, llm_path: str, clus_eps: float): 
+        self.embedder = embedders.from_path(emb_path)
+        self.digestor = digestors.from_path(llm_path)
 
         self.az_storage_conn_str = storage_conn_str
-        self.remotesack = MongoSack(db_conn_str, self.embedder)
-        self.localsack = DuckSack(db_dir=working_dir+"/.db")
-        self.category_eps = cat_eps
+        self.remotesack = MongoSack(remote_db_conn_str, self.embedder)
+        self.localsack = DuckSack(local_db_path)
         self.cluster_eps = clus_eps    
         self.scraper = AsyncCollector()
         
@@ -108,23 +109,28 @@ class Orchestrator:
 
         return [bean for bean in beans if bean.embedding]
 
-    def find_categories(self, bean: Bean):    
-        return self.localsack.search_categories(bean.embedding, self.category_eps, MAX_CATEGORIES)
+    # def find_baristas(self, bean: Bean):    
+    #     return self.localsack.search_categories(bean.embedding, self.category_eps)
 
-    def augment_beans(self, beans: list[Bean]) -> list[Bean]|None:
+    def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:
         if not beans: return beans
         
         for bean in beans:             
             try:
-                bean.summary = bean.text # this is the default if things fail
+                # this is the default if things fail
                 if is_text_above_threshold(bean):
                     digest = self.digestor.run(bean.text)
                     if digest:
                         bean.summary = digest.summary or bean.summary
                         bean.title = digest.title or bean.title
                         bean.tags = merge_tags(bean, digest.tags)
-            except: log.error("failed augmenting", extra={"source": bean.url, "num_items": 1})
-        
+                else:
+                    bean.summary = bean.text
+
+            except Exception as e:                 
+                log.error("failed augmenting", extra={"source": bean.url, "num_items": 1})
+                ic(e.__class__.__name__, e)
+
         return [bean for bean in beans if bean.summary]  
         
     def store_beans(self, beans: list[Bean]) -> list[Bean]|None:
@@ -148,8 +154,8 @@ class Orchestrator:
     # if a new bean is found related to the query new bean, then it should be skipped for finding related beans for itself
     # keep running this loop through the whole collection until there is no bean without cluster id left
     # every time we find a cluster (a set of related beans) we add it to the update collection and return
-    def find_clusters(self, urls: list[str]) -> dict[str, list[str]]:
-        return {url: self.localsack.search_similar_beans(url, self.cluster_eps) for url in urls}
+    # def find_clusters(self, urls: list[str]) -> dict[str, list[str]]:
+    #     return {url: self.localsack.search_bean_cluster(url, self.cluster_eps, limit=100) for url in urls}
 
     def update_clusters(self, clusters: dict[str, list[str]]):    
         updates = []
@@ -160,7 +166,9 @@ class Orchestrator:
     def cluster_beans(self, beans: list[Bean]):
         if not beans: return
         
-        clusters = self.find_clusters([bean.url for bean in beans])
+        # clusters = self.find_clusters([bean.url for bean in beans])
+        clusters = {bean.url: self.localsack.search_bean_cluster(bean.url, self.category_eps, limit=MAX_CLUSTER_SIZE) for bean in beans}
+
         return self.update_clusters(clusters)
                 
     def find_trend_ranks(self, urls: list[str] = None) -> list[ChatterAnalysis]|None:
@@ -209,29 +217,17 @@ class Orchestrator:
     @log_runtime
     async def run_collections_async(self):
         current_directory = os.path.dirname(os.path.abspath(__file__))
-        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
-        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
+        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))[6:9]
+        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))[9:12]
 
         # awaiting on each group so that os is not overwhelmed by sockets
-        log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
-        await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
         log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
-
-        # async with TaskGroup() as tg:
-        #     log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
-        #     [tg.create_task(self.collect_async(source, self.scraper.collect_subreddit(source)), name=source) for source in subreddits]
-        #     await asyncio.sleep(THROTTLE_TIMEOUT) # NOTE: this throttle is needed to ease the woos of overwhelming number of request sockets
-            
-        #     log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        #     # NOTE: doing an await here before rss feed is that by this time the socket is overwhelmed
-        #     await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
-
-        #     log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
-        #     [tg.create_task(self.collect_async(source, self.scraper.collect_rssfeed(source)), name=source) for source in rssfeeds]
-            
+        # await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
+        log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
+        await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
+        
         await self.download_queue.put(END_OF_STREAM)
 
     async def collect_async(self, source: str, collect: Awaitable[list[tuple[Bean, Chatter]]]):
@@ -294,7 +290,7 @@ class Orchestrator:
                 # since the digest/summary is smaller and got generated through a text-gen model so it is more clean
                 beans = self.store_beans(
                     self.embed_beans(
-                        self.augment_beans(
+                        self.digest_beans(
                             self.new_beans(beans))))  
                 if not beans: continue
                 
@@ -304,6 +300,7 @@ class Orchestrator:
                 if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
                 ranked_count = self.trend_rank_beans(beans)
                 if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})                
+                
                 self.index_queue.task_done()
             
         log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 

@@ -1,4 +1,7 @@
 llama-cpp-python
+bitsandbytes
+transformers
+unsloth
 numpy
 pymongo
 tiktoken

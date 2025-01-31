@@ -1,5 +1,5 @@
+from abc import ABC, abstractmethod
 import json
-import logging
 import math
 import os
 from typing import Optional
@@ -7,14 +7,25 @@ from icecream import ic
 from openai import OpenAI
 from retry import retry
 from coffeemaker.pybeansack import utils
-from llama_cpp import Llama
 from pydantic import BaseModel, Field
-from newspaper import nlp
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Digest(BaseModel):
     title: Optional[str] = Field(description="title of the content", default=None)
     summary: Optional[str] = Field(description="A summary of the content", default=None)
     tags: Optional[list[str]] = Field(description="A list of tags that describe the content", default=None)
+
+    def from_json_text(text: str):        
+        text = json.loads(text[text.find('{'):text.rfind('}')+1])
+        return Digest(
+            title=text.get('title'),
+            summary=text.get('summary'),
+            tags=[tag.strip() for tag in text.get('tags', '').split(',')] if isinstance(text.get('tags'), str) else text.get('tags')
+        )
+
+
 
 # DIGESTOR_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
 # <|start_header_id|>user<|end_header_id|>
@@ -33,18 +44,28 @@ OUTPUT FORMAT: A json object with fields title (string), summary (string) and ta
 <|im_end|>
 
 <|im_start|>assistant\n\n"""
-    
-class LocalDigestor:
+
+class Digestor(ABC):
+    @abstractmethod
+    def run(self, text: str) -> Digest:
+        raise NotImplementedError("Subclass must implement abstract method")
+
+    def __call__(self, text: str) -> Digest:
+        return self.run(text)
+
+class LlamaCppDigestor:
     model_path = None
     context_len = None
     model = None
     
     def __init__(self, model_path: str, context_len: int = 16384):
+        from llama_cpp import Llama
+
         self.model_path = model_path
         self.context_len = context_len
-        self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=False, verbose=False)  
+        self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_gpu_layers=-1, n_threads=os.cpu_count(), embedding=False, verbose=False)  
 
-    @retry(tries=2, logger=logging.getLogger("digestor.local"))
+    @retry(tries=2, logger=logger)
     def run(self, text: str) -> Digest:
         resp = self.model.create_completion(
             prompt=DIGESTOR_PROMPT.format(text=utils.truncate(text, self.context_len//2)),
@@ -53,12 +74,7 @@ class LocalDigestor:
             temperature=0.3,
             seed=42
         )['choices'][0]['text']
-        resp = json.loads(resp[resp.find('{'):resp.rfind('}')+1])
-        return Digest(
-            title=resp.get('title'),
-            summary=resp.get('summary'),
-            tags=[tag.strip() for tag in resp.get('tags', '').split(',')] if isinstance(resp.get('tags'), str) else resp.get('tags')
-        )
+        return Digest.from_json_text(resp)
     
     def __call__(self, text: str) -> str:
         return self.run(text)
@@ -73,7 +89,7 @@ class RemoteDigestor:
         self.model_name = model_name
         self.context_len = context_len
     
-    @retry(tries=2, delay=5, logger=logging.getLogger("digestor.remote"))
+    @retry(tries=2, delay=5, logger=logger)
     def run(self, text: str) -> Digest:
         resp = self.client.completions.create(
             model=self.model_name,
@@ -82,28 +98,66 @@ class RemoteDigestor:
             max_tokens=384,
             frequency_penalty=0.3
         ).choices[0].text
-
-        resp = json.loads(resp[resp.find('{'):resp.rfind('}')+1])
-        return Digest(
-            title=resp.get('title'),
-            summary=resp.get('summary'),
-            tags=[tag.strip() for tag in resp['tags'].split(',')] if isinstance(resp['tags'], str) else resp['tags']
-        )
+        return Digest.from_json_text(resp)
         
     def __call__(self, kind: str, text: str) -> Digest:        
         return self.run(kind, text)
     
 class NewspaperDigestor:       
     def __init__(self, language: str = "en"):
+        from newspaper import nlp
         nlp.load_stopwords(language)
         
-    def run(self, text: str, title: str) -> Digest:        
+    def run(self, text: str, title: str) -> Digest:   
+        from newspaper import nlp
+
         summary_lines = [' '.join(line.strip().split("\n")) for line in nlp.summarize(title=title, text=text)]
         return Digest(
             title=title,
             summary=' '.join(summary_lines),
             tags=[] # leaving this empty intentionally because nlp.keywords() is dumb
         )
+    
+_RESPONSE_START = "<|im_start|>assistant\n\n"
+_RESPONSE_END = "<|im_end|>"
+class TransformerDigestor(Digestor):
+    model = None
+    tokenizer = None
+    device = None
+
+    def __init__(self, model_id, context_len=16384):
+        import torch
+
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        if self.device == "cuda":
+            from unsloth import FastLanguageModel
+
+            model, tokenizer = FastLanguageModel.from_pretrained(
+                model_name = model_id,
+                max_seq_length=context_len,
+                dtype=None,
+                load_in_4bit=True
+            )
+            self.model = model
+            self.tokenizer = tokenizer
+            FastLanguageModel.for_inference(self.model)
+        else:
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+
+            self.tokenizer = AutoTokenizer.from_pretrained(model_id, padding=True, truncation=True, max_length=context_len)
+            self.model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True).to(self.device)
+
+    @retry(tries=2, logger=logger)
+    def run(self, text: str):
+        inputs = self.tokenizer(DIGESTOR_PROMPT.format(text=text), return_tensors="pt").to(self.device)
+        outputs = self.model.generate(**inputs, max_new_tokens=384, use_cache=True)
+        generated = self.tokenizer.decode(outputs[0])
+        # strip out the response braces
+        start_index = generated.find(_RESPONSE_START)
+        end_index = generated.find(_RESPONSE_END, start_index)
+        resp = generated[start_index+len(_RESPONSE_START):end_index]
+        # take the json part
+        return Digest.from_json_text(resp)
 
 def combine_texts(texts: list[str], batch_size: int, delimiter: str = "```") -> list[str]:
     if utils.count_tokens(texts) > batch_size:
@@ -117,4 +171,16 @@ def chunk_tokens(input: str, context_len: int, encode_fn) -> list[str]:
     num_chunks = math.ceil(len(tokens) / context_len)
     chunk_size = math.ceil(len(tokens) / num_chunks)
     return [tokens[start : start+chunk_size] for start in range(0, len(tokens), chunk_size)]
+
+LLAMA_CPP_PREFIX = "llama-cpp://"
+API_URL_PREFIX = "https://"
+
+def from_path(llm_path) -> Digestor:
+    # intialize embedder
+    if LLAMA_CPP_PREFIX in llm_path:
+        return LlamaCppDigestor(llm_path[len(LLAMA_CPP_PREFIX):], os.getenv("LLM_N_CTX", 16384))
+    elif API_URL_PREFIX in llm_path:
+        return RemoteDigestor(llm_path, os.getenv("API_KEY"), os.getenv("LLM_NAME"), os.getenv("LLM_N_CTX", 16384))
+    else:
+        return TransformerDigestor(llm_path)
   

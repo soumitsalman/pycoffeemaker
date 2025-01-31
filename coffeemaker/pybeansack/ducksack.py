@@ -9,26 +9,23 @@ from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 SQL_INSTALL_VSS = """
 INSTALL vss;
 LOAD vss;
-SET hnsw_enable_experimental_persistence = true;
-SET checkpoint_threshold='1TB';
 """
 
 SQL_CREATE_BEANS = """
 CREATE TABLE IF NOT EXISTS beans (
     url VARCHAR PRIMARY KEY,
-    text TEXT,
+    kind VARCHAR,
+    source VARCHAR,
+    author VARCHAR,
+
     created TIMESTAMP,    
     collected TIMESTAMP,
     updated TIMESTAMP,
-    source VARCHAR,
-    author VARCHAR,
-    kind VARCHAR,
-    title VARCHAR,
-    embedding FLOAT[1024],
-    categories VARCHAR[],
-    tags VARCHAR[],
+      
+    title VARCHAR,    
     summary TEXT,
-    cluster_id VARCHAR
+    tags VARCHAR[],
+    embedding FLOAT[384],
 );
 """
 SQL_CREATE_BEANS_VECTOR_INDEX = """
@@ -38,8 +35,8 @@ USING HNSW (embedding)
 WITH (metric = 'cosine');
 """
 SQL_INSERT_BEANS = """
-INSERT INTO beans (url, created, collected, updated, source, author, kind, title, embedding) 
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO beans (url, kind, source, author, created, collected, updated, title, summary, tags, embedding) 
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT DO NOTHING
 """
 
@@ -62,44 +59,64 @@ INSERT INTO chatters (url, chatter_url, source, channel, collected, likes, comme
 ON CONFLICT (url, chatter_url, likes, comments, shares) DO NOTHING
 """
 
-SQL_CREATE_CATEGORIES = """
+SQL_CREATE_BARISTAS = """
 CREATE TABLE IF NOT EXISTS categories (
     id VARCHAR PRIMARY KEY,
-    text VARCHAR,
-    related VARCHAR[],
-    description VARCHAR,
-    embedding FLOAT[1024]
+    title VARCHAR,
+    description TEXT,
+
+    query_kinds VARCHAR[],
+    query_sources VARCHAR[],    
+    query_tags VARCHAR[],
+    query_text VARCHAR,
+    query_embedding FLOAT[384],
+
+    owner VARCHAR
 );
 """
-SQL_CREATE_CATEGORIES_VECTOR_INDEX = """
+SQL_CREATE_BARISTA_VECTOR_INDEX = """
 CREATE INDEX IF NOT EXISTS categories_embedding 
 ON categories 
 USING HNSW (embedding)
 WITH (metric = 'cosine');
 """
-SQL_INSERT_CATEGORIES = """
-INSERT INTO categories (id, text, related, description, embedding) VALUES (?, ?, ?, ?, ?)
+SQL_INSERT_BARISTA = """
+INSERT INTO categories (id, title, description, query_kinds, query_sources, query_tags, query_text, query_embedding, owner) VALUES (?,?,?,  ?,?,?,?,?, ?)
 ON CONFLICT DO NOTHING
 """
 
-sql_where_urls = lambda urls: "url IN (" + ', '.join(f"'{url}'" for url in urls) + ")"
+SQL_WHERE_URLS = lambda urls: "url IN (" + ', '.join(f"'{url}'" for url in urls) + ")"
+SQL_NOT_WHERE_URLS = lambda urls: "url NOT IN (" + ', '.join(f"'{url}'" for url in urls) + ")"
 
-sql_search_beans = lambda embedding, min_score: f"""
-SELECT url, created, collected, updated, kind, array_cosine_similarity(embedding, {embedding}::FLOAT[1024]) as search_score
-FROM beans
-WHERE search_score >= {min_score}
-ORDER BY search_score DESC
-"""
-sql_search_similar_beans = lambda url, max_distance: f"""
+SQL_SEARCH_BEANS = lambda embedding: f"""
 SELECT 
     url, 
+    kind,
+    source,
+    author,
+
+    created, 
+    
+    title, 
+    summary, 
+    tags, 
+    array_cosine_distance(
+        embedding, 
+        {embedding}::FLOAT[384]
+    ) as distance
+FROM beans
+ORDER BY distance DESC
+"""
+SQL_SEARCH_BEAN_CLUSTER = lambda url: f"""
+SELECT 
+    url, 
+    title,
     array_distance(
         embedding, 
-        (SELECT embedding FROM beans WHERE url = '{url}')::FLOAT[1024]
-    ) as distance_score            
+        (SELECT embedding FROM beans WHERE url = '{url}')::FLOAT[384]
+    ) as distance            
 FROM beans
-WHERE distance_score <= {max_distance}
-ORDER BY distance_score
+ORDER BY distance
 """
 SQL_TOTAL_CHATTERS = """
 SELECT url, 
@@ -144,7 +161,7 @@ FROM(
 GROUP BY url
 """
 sql_search_categories = lambda embedding, min_score: f"""
-SELECT text, array_cosine_similarity(embedding, {embedding}::FLOAT[1024]) as search_score 
+SELECT text, array_cosine_similarity(embedding, {embedding}::FLOAT[384]) as search_score 
 FROM categories 
 WHERE search_score >= {min_score}
 ORDER BY search_score DESC
@@ -154,15 +171,13 @@ class Beansack:
     db_filepath: str
     db: duckdb.DuckDBPyConnection
 
-    def __init__(self, db_dir: str):
-        if not os.path.exists(db_dir):
-            os.makedirs(db_dir)
-        self.db_filepath = f"{db_dir}/beansack.db"
+    def __init__(self, db_filepath: str = "beansack.db"):
+        self.db_filepath = db_filepath
         self.db = duckdb.connect(self.db_filepath, read_only=False) \
             .execute(SQL_INSTALL_VSS) \
             .execute(SQL_CREATE_BEANS) \
             .execute(SQL_CREATE_CHATTERS) \
-            .execute(SQL_CREATE_CATEGORIES) \
+            .execute(SQL_CREATE_BARISTAS) \
             .commit()
 
     def store_beans(self, beans: list[Bean]):
@@ -170,13 +185,17 @@ class Beansack:
         beans_data = [
             (
                 bean.url,
+                bean.kind,
+                bean.source,
+                bean.author,
+
                 bean.created,                
                 bean.collected,
                 bean.updated,
-                bean.source,
-                bean.author,
-                bean.kind,
+
                 bean.title,
+                bean.summary,
+                bean.tags,
                 bean.embedding
             ) for bean in beans
         ]
@@ -184,32 +203,41 @@ class Beansack:
 
     def exists(self, beans: list[Bean]) -> list[str]:
         local_conn = self.db.cursor()
-        query = local_conn.sql("SELECT url FROM beans").filter(sql_where_urls([bean.url for bean in beans]))
+        query = local_conn.sql("SELECT url FROM beans").filter(SQL_WHERE_URLS([bean.url for bean in beans]))
         return {item[0] for item in query.fetchall()}
 
-    def search_beans(self, embedding: list[float], min_score: float = DEFAULT_VECTOR_SEARCH_SCORE, limit: int = 0) -> list[Bean]:
+    def search_beans(self, embedding: list[float], max_distance: float = 0.0, limit: int = 0) -> list[Bean]:
         local_conn = self.db.cursor()
-        result = local_conn.sql(sql_search_beans(embedding, min_score))
+        query = local_conn.sql(SQL_SEARCH_BEANS(embedding))
+        if max_distance:
+            query = query.filter(f"distance <= {max_distance}")
         if limit:
-            result = result.limit(limit)
+            query = query.limit(limit)
         # result.show()
         return [Bean(
             url=bean[0],
-            created=bean[1],
-            collected=bean[2],
-            updated=bean[3],
-            kind=bean[4],   
-            search_score=bean[5],
+            kind=bean[1],
+            source=bean[2],
+            author=bean[3], 
+
+            created=bean[4],
+
+            title=bean[5],
+            summary=bean[6],
+            tags=bean[7],   
+            search_score=bean[8],
             slots=True
-        ) for bean in result.fetchall()]
+        ) for bean in query.fetchall()]
     
-    def search_similar_beans(self, url: str, max_distance: float, limit: int = 0) -> list[str]:        
+    def search_bean_cluster(self, url: str, max_distance: float = 0.0, limit: int = 0) -> list[str]:        
         local_conn = self.db.cursor()
-        result = local_conn.query(sql_search_similar_beans(url, max_distance))
+        query = local_conn.query(SQL_SEARCH_BEAN_CLUSTER(url))
+        if max_distance:
+            query = query.filter(f"distance <= {max_distance}")
         if limit:
-            result = result.limit(limit)
-        # result.show()
-        return [bean[0] for bean in result.fetchall()]
+            query = query.limit(limit)
+        # query.show()
+        return [bean[0] for bean in query.fetchall()]
 
     def store_chatters(self, chatters: list[Chatter]):
         chatters_data = [
@@ -233,8 +261,8 @@ class Beansack:
         total = local_conn.query(SQL_TOTAL_CHATTERS)
         ndays_ago = local_conn.query(sql_total_chatters_ndays_ago(last_ndays))
         if urls:
-            total = total.filter(sql_where_urls(urls))
-            ndays_ago = ndays_ago.filter(sql_where_urls(urls))
+            total = total.filter(SQL_WHERE_URLS(urls))
+            ndays_ago = ndays_ago.filter(SQL_WHERE_URLS(urls))
         result = local_conn.query("""
             SELECT 
                 total.url as url, 
@@ -276,25 +304,25 @@ class Beansack:
     #         slots=True
     #     ) for chatter in result.fetchall()]
     
-    def store_categories(self, categories: list[dict]):
-        categories_data = [(
-                category.get('_id'),
-                category.get('text'),
-                category.get('related'),
-                category.get('description'),
-                category.get('embedding')
-            ) for category in categories
-        ]
-        local_conn = self.db.cursor()
-        local_conn.executemany(SQL_INSERT_CATEGORIES, categories_data).commit()
+    # def store_barista(self, barista):
+    #     categories_data = (
+    #         barista.get('_id'),
+    #         barista.get('text'),
+    #         barista.get('related'),
+    #         barista.get('description'),
+    #         barista.get('embedding')
+    #     )
+        
+    #     local_conn = self.db.cursor()
+    #     local_conn.execute(SQL_INSERT_BARISTA, categories_data).commit()
 
-    def search_categories(self, embedding: list[float], min_score: float = DEFAULT_VECTOR_SEARCH_SCORE, limit: int = 0) -> list[str]:
-        local_conn = self.db.cursor()
-        result = local_conn.query(sql_search_categories(embedding, min_score))
-        if limit:
-            result = result.limit(limit)
-        # result.show()
-        return [category[0] for category in result.fetchall()]
+    # def search_categories(self, embedding: list[float], min_score: float = DEFAULT_VECTOR_SEARCH_SCORE, limit: int = 0) -> list[str]:
+    #     local_conn = self.db.cursor()
+    #     result = local_conn.query(sql_search_categories(embedding, min_score))
+    #     if limit:
+    #         result = result.limit(limit)
+    #     # result.show()
+    #     return [category[0] for category in result.fetchall()]
 
     def close(self):
         self.db.close()

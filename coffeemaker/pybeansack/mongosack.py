@@ -8,7 +8,7 @@ import logging
 import operator
 from bson import SON
 from icecream import ic
-from .embedding import *
+from .embedders import *
 from .models import *
 from .utils import *
 from pymongo import MongoClient, UpdateMany, UpdateOne
@@ -19,7 +19,7 @@ FIVE_MINUTES = 300
 TEN_MINUTES = 600
 
 # names of db and collections
-BEANSACK = "beansack"
+BEANSACK = "beansackV2" # TODO: change this
 BEANS = "beans"
 CHATTERS = "chatters"
 SOURCES = "sources"
