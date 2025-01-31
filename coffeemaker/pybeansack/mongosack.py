@@ -19,7 +19,7 @@ FIVE_MINUTES = 300
 TEN_MINUTES = 600
 
 # names of db and collections
-BEANSACK = "beansackV2" # TODO: change this
+DB = os.getenv("REMOTE_DB_NAME", "beansack") # TODO: change this
 BEANS = "beans"
 CHATTERS = "chatters"
 SOURCES = "sources"
@@ -68,9 +68,9 @@ class Beansack:
             retryWrites=True,
             minPoolSize=10,
             maxPoolSize=100)        
-        self.beanstore: Collection = client[BEANSACK][BEANS]
-        self.chatterstore: Collection = client[BEANSACK][CHATTERS]        
-        self.sourcestore: Collection = client[BEANSACK][SOURCES]  
+        self.beanstore: Collection = client[DB][BEANS]
+        self.chatterstore: Collection = client[DB][CHATTERS]        
+        self.sourcestore: Collection = client[DB][SOURCES]  
         self.embedder: Embeddings = embedder
 
     ##########################

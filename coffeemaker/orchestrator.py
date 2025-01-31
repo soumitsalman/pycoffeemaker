@@ -217,14 +217,14 @@ class Orchestrator:
     @log_runtime
     async def run_collections_async(self):
         current_directory = os.path.dirname(os.path.abspath(__file__))
-        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))[6:9]
-        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))[9:12]
+        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
+        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
 
         # awaiting on each group so that os is not overwhelmed by sockets
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
         log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        # await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
+        await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
         log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
         
