@@ -5,11 +5,9 @@ import asyncio
 from asyncio import Queue, TaskGroup
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
-from coffeemaker.pybeansack import embedders
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.utils import now
 from coffeemaker.collectors.collector import AsyncCollector, HACKERNEWS, REDDIT
-from coffeemaker import digestors
+from coffeemaker.nlp import digestors, embedders
 from pymongo import UpdateOne
 import os
 
@@ -79,7 +77,7 @@ class Orchestrator:
         self.digestor = digestors.from_path(llm_path)
 
         self.az_storage_conn_str = storage_conn_str
-        self.remotesack = MongoSack(remote_db_conn_str, self.embedder)
+        self.remotesack = MongoSack(remote_db_conn_str)
         self.localsack = DuckSack(local_db_path)
         self.cluster_eps = clus_eps    
         self.scraper = AsyncCollector()
@@ -168,7 +166,6 @@ class Orchestrator:
         
         # clusters = self.find_clusters([bean.url for bean in beans])
         clusters = {bean.url: self.localsack.search_bean_cluster(bean.url, self.category_eps, limit=MAX_CLUSTER_SIZE) for bean in beans}
-
         return self.update_clusters(clusters)
                 
     def find_trend_ranks(self, urls: list[str] = None) -> list[ChatterAnalysis]|None:
@@ -217,14 +214,14 @@ class Orchestrator:
     @log_runtime
     async def run_collections_async(self):
         current_directory = os.path.dirname(os.path.abspath(__file__))
-        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
-        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
+        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))[150:156]
+        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))[:2]
 
         # awaiting on each group so that os is not overwhelmed by sockets
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
         log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
+        # await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
         log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
         
@@ -258,7 +255,6 @@ class Orchestrator:
                 if not items: continue
 
                 source, beans = items
-                # tg.create_task(self.download_async(source, beans), name="downloading: "+source)
                 await self.download_async(source, beans)
                 self.download_queue.task_done()
 
@@ -287,23 +283,26 @@ class Orchestrator:
                 if not beans: continue
 
                 # changing the sequence so that it embeds the digest/summary instead of the whole text
-                # since the digest/summary is smaller and got generated through a text-gen model so it is more clean
-                beans = self.store_beans(
-                    self.embed_beans(
-                        self.digest_beans(
-                            self.new_beans(beans))))  
+                # since the digest/summary is smaller and got generated through a text-gen model so it is more clean. 
+                beans = self.new_beans(indexables(beans))
+                beans = self.embed_beans(self.digest_beans(beans))
+                beans = self.store_beans(beans) 
+
                 if not beans: continue
-                
-                total_new_beans += len(beans)
+
                 log.info("stored", extra={"source": source, "num_items": len(beans)})  
-                clustered_count = self.cluster_beans(beans)
-                if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
-                ranked_count = self.trend_rank_beans(beans)
-                if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})                
-                
+                total_new_beans += len(beans)
+
+                tg.create_task(self.cluster_and_rank(source, beans))
                 self.index_queue.task_done()
             
         log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 
+
+    async def cluster_and_rank(self, source: str, beans: list[Bean]):
+        clustered_count = self.cluster_beans(beans)
+        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
+        ranked_count = self.trend_rank_beans(beans)
+        if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})   
 
     # 1. schedule a clean up
     # 2. start collection
@@ -321,7 +320,7 @@ class Orchestrator:
         # instantiate the run specific work
         self.download_queue = Queue()
         self.index_queue = Queue()
-        self.run_id = now().strftime("%Y-%m-%d %H")
+        self.run_id = datetime.now().strftime("%Y-%m-%d %H")
 
         # 1. start all the scrapers
         # 2. once the chatter collection is done

@@ -18,8 +18,8 @@ log = logging.getLogger("app")
 log.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
-logging.getLogger("coffeemaker.digestors").propagate = False
-logging.getLogger("coffeemaker.pybeansack.embedders").propagate = False
+logging.getLogger("coffeemaker.nlp.digestors").propagate = False
+logging.getLogger("coffeemaker.nlp.embedders").propagate = False
 logging.getLogger("asyncprawcore").propagate = False
 logging.getLogger("asyncpraw").propagate = False
 logging.getLogger("dammit").propagate = False

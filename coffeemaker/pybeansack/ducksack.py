@@ -1,10 +1,6 @@
-import asyncio
 import duckdb
 from .models import *
-from .utils import *
-import os
-from icecream import ic
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+from azure.storage.blob import BlobClient
 
 SQL_INSTALL_VSS = """
 INSTALL vss;

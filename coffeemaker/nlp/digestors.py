@@ -3,10 +3,8 @@ import json
 import math
 import os
 from typing import Optional
-from icecream import ic
-from openai import OpenAI
 from retry import retry
-from coffeemaker.pybeansack import utils
+from .utils import LLAMA_CPP_PREFIX, API_URL_PREFIX, truncate
 from pydantic import BaseModel, Field
 import logging
 
@@ -24,8 +22,6 @@ class Digest(BaseModel):
             summary=text.get('summary'),
             tags=[tag.strip() for tag in text.get('tags', '').split(',')] if isinstance(text.get('tags'), str) else text.get('tags')
         )
-
-
 
 # DIGESTOR_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
 # <|start_header_id|>user<|end_header_id|>
@@ -65,10 +61,10 @@ class LlamaCppDigestor:
         self.context_len = context_len
         self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_gpu_layers=-1, n_threads=os.cpu_count(), embedding=False, verbose=False)  
 
-    @retry(tries=2, logger=logger)
+    # @retry(tries=2, logger=logger)
     def run(self, text: str) -> Digest:
         resp = self.model.create_completion(
-            prompt=DIGESTOR_PROMPT.format(text=utils.truncate(text, self.context_len//2)),
+            prompt=DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//2)),
             max_tokens=384, 
             frequency_penalty=0.3,
             temperature=0.3,
@@ -85,6 +81,8 @@ class RemoteDigestor:
     context_len = None
 
     def __init__(self, base_url: str, api_key: str, model_name: str, context_len: int = 8192):
+        from openai import OpenAI
+
         self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=5, max_retries=2)
         self.model_name = model_name
         self.context_len = context_len
@@ -93,7 +91,7 @@ class RemoteDigestor:
     def run(self, text: str) -> Digest:
         resp = self.client.completions.create(
             model=self.model_name,
-            prompt=DIGESTOR_PROMPT.format(text=utils.truncate(text, self.context_len//2)),
+            prompt=DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//2)),
             temperature=0,
             max_tokens=384,
             frequency_penalty=0.3
@@ -124,8 +122,10 @@ class TransformerDigestor(Digestor):
     model = None
     tokenizer = None
     device = None
+    context_len = None
 
     def __init__(self, model_id, context_len=16384):
+        self.context_len = context_len
         import torch
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -133,8 +133,8 @@ class TransformerDigestor(Digestor):
             from unsloth import FastLanguageModel
 
             model, tokenizer = FastLanguageModel.from_pretrained(
-                model_name = model_id,
-                max_seq_length=context_len,
+                model_name=model_id,
+                max_seq_length=self.context_len,
                 dtype=None,
                 load_in_4bit=True
             )
@@ -147,10 +147,10 @@ class TransformerDigestor(Digestor):
             self.tokenizer = AutoTokenizer.from_pretrained(model_id, padding=True, truncation=True, max_length=context_len)
             self.model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True).to(self.device)
 
-    @retry(tries=2, logger=logger)
+    # @retry(tries=2, logger=logger)
     def run(self, text: str):
-        inputs = self.tokenizer(DIGESTOR_PROMPT.format(text=text), return_tensors="pt").to(self.device)
-        outputs = self.model.generate(**inputs, max_new_tokens=384, use_cache=True)
+        inputs = self.tokenizer(DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//2)), return_tensors="pt").to(self.device)
+        outputs = self.model.generate(**inputs, max_new_tokens=384)
         generated = self.tokenizer.decode(outputs[0])
         # strip out the response braces
         start_index = generated.find(_RESPONSE_START)
@@ -158,22 +158,6 @@ class TransformerDigestor(Digestor):
         resp = generated[start_index+len(_RESPONSE_START):end_index]
         # take the json part
         return Digest.from_json_text(resp)
-
-def combine_texts(texts: list[str], batch_size: int, delimiter: str = "```") -> list[str]:
-    if utils.count_tokens(texts) > batch_size:
-        half = len(texts) // 2
-        return combine_texts(texts[:half], batch_size, delimiter) + combine_texts(texts[half:], batch_size, delimiter)
-    else:
-        return [delimiter.join(texts)]
-    
-def chunk_tokens(input: str, context_len: int, encode_fn) -> list[str]:
-    tokens = encode_fn(input)
-    num_chunks = math.ceil(len(tokens) / context_len)
-    chunk_size = math.ceil(len(tokens) / num_chunks)
-    return [tokens[start : start+chunk_size] for start in range(0, len(tokens), chunk_size)]
-
-LLAMA_CPP_PREFIX = "llama-cpp://"
-API_URL_PREFIX = "https://"
 
 def from_path(llm_path) -> Digestor:
     # intialize embedder

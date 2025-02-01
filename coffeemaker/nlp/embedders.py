@@ -1,11 +1,8 @@
 import logging
 from retry import retry
 import os
-from .utils import truncate
 from abc import ABC, abstractmethod
-from memoization import cached
-from icecream import ic
-import logging
+from .utils import truncate, LLAMA_CPP_PREFIX, API_URL_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +55,6 @@ class RemoteEmbeddings(Embeddings):
         self.context_len = context_len    
        
     @retry(tries=2, delay=5, logger=logger)
-    @cached(max_size=100, ttl=600)
     def embed(self, input):
         result = self.openai_client.embeddings.create(model=self.model_name, input=_prep_input(input, self.context_len), encoding_format="float")
         if isinstance(input, str):
@@ -82,7 +78,8 @@ class TransformerEmbeddings(Embeddings):
     def __call__(self, input: str|list[str]):
         return self.embed(input)
     
-    @retry(tries=2, logger=logger)
+    # TODO: move this out
+    # @retry(tries=2, logger=logger)
     def embed(self, input):
         return self.model.encode(input).tolist()
 
@@ -90,9 +87,6 @@ def _prep_input(input, context_len):
     if isinstance(input, str):
         return truncate(input, context_len)
     return [truncate(t, context_len) for t in input]
-
-LLAMA_CPP_PREFIX = "llama-cpp://"
-API_URL_PREFIX = "https://"
 
 def from_path(emb_path) -> Embeddings:
     # initialize digestor

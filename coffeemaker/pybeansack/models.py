@@ -35,6 +35,7 @@ class Chatter(BaseModel):
     def digest(self):
         return f"From: {self.source}\nBody: {self.text}"
 
+K_ID="_id"
 K_URL="url"
 K_KIND = "kind"
 K_CATEGORIES = "categories"
@@ -92,28 +93,26 @@ class Bean(BaseModel):
         tag_text = {"\n\nTags: "+(", ".join(self.tags))} if self.tags else ""
         return f"# {self.title}\n\n{self.summary}{tag_text}"
     
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed=False
+    
+class Barista(BaseModel):
+    id: str = Field(serialization_alias="_id"),
+    title: Optional[str] = None
+    description: Optional[str] = None
 
-K_ID = "_id"
-K_KEYPHRASE = "keyphrase"
-K_EVENT="event"
-K_DESCRIPTION = "description"
-K_URLS = "urls"
+    query_kinds: Optional[list[str]] = None
+    query_sources: Optional[list[str]] = None   
+    query_tags :Optional[list[str]] = None
+    query_text: Optional[str] = None
+    query_embedding: Optional[list[float]] = None
 
-class Highlight(BaseModel):
-    id: str = Field(default=None, alias="_id")
-    url: Optional[str] = None
-    description: str 
-    updated: Optional[int] = None
-    embedding: Optional[list[float]] = None
-    cluster_id: Optional[str] = None
-    trend_score: Optional[int] = None
-
-    def digest(self) -> str:
-        return self.description
+    owner: Optional[str] = Field(default="__SYSTEM__")
     
     class Config:
         populate_by_name = True
-        arbitrary_types_allowed=True
+        arbitrary_types_allowed=False
 
 class Source(BaseModel):
     url: str

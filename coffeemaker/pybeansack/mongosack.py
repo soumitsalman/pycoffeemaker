@@ -1,22 +1,19 @@
 ############################
 ## BEANSACK DB OPERATIONS ##
 ############################
-
-from datetime import datetime, timedelta
+import os
+from datetime import datetime, timedelta, timezone
 from functools import reduce
 import logging
-import operator
 from bson import SON
 from icecream import ic
-from .embedders import *
 from .models import *
-from .utils import *
 from pymongo import MongoClient, UpdateMany, UpdateOne
 from pymongo.collection import Collection
 
 TIMEOUT = 300000 # 3 mins
-FIVE_MINUTES = 300
-TEN_MINUTES = 600
+DEFAULT_VECTOR_SEARCH_SCORE = 0.75
+DEFAULT_VECTOR_SEARCH_LIMIT = 1000
 
 # names of db and collections
 DB = os.getenv("REMOTE_DB_NAME", "beansack") # TODO: change this
@@ -55,9 +52,8 @@ class Beansack:
     beanstore: Collection
     chatterstore: Collection
     sourcestore: Collection
-    embedder: Embeddings    
 
-    def __init__(self, conn_str: str, embedder: Embeddings = None):   
+    def __init__(self, conn_str: str):   
              
         client = MongoClient(
             conn_str, 
@@ -71,42 +67,29 @@ class Beansack:
         self.beanstore: Collection = client[DB][BEANS]
         self.chatterstore: Collection = client[DB][CHATTERS]        
         self.sourcestore: Collection = client[DB][SOURCES]  
-        self.embedder: Embeddings = embedder
 
-    ##########################
-    ## STORING AND INDEXING ##
-    ##########################
+    #############
+    ## STORING ##
+    #############
     def store_beans(self, beans: list[Bean]) -> int:   
-        beans = self.index_beans(self.not_exists(beans)) 
-        if beans:
-            res = self.beanstore.insert_many([bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans], ordered=False)            
-            return len(res.inserted_ids)
-        return 0
+        beans = self.not_exists(beans)
+        if not beans: return 0
+
+        res = self.beanstore.insert_many([bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans], ordered=False)            
+        return len(res.inserted_ids)
 
     def not_exists(self, beans: list[Bean]):
-        if beans:
-            exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
-            return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
+        if not beans: return beans
+
+        exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
+        return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
                 
-    # this function checks for embeddings, updated time and any other rectification needed before inserting
-    def index_beans(self, beans: list[Bean|Highlight]):
-        # for each item if there is no embedding and create one from the text.
-        if beans:
-            batch_time = now()
-            for bean in beans:
-                if not bean.embedding and self.embedder:
-                    bean.embedding = self.embedder.embed(bean.digest())
-                if not bean.updated:
-                    bean.updated = batch_time
-            return beans
-
     def store_chatters(self, chatters: list[Chatter]):
-        if chatters:
-            res = self.chatterstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in chatters])
-            return len(res.inserted_ids or [])
+        if not chatters: return chatters
 
-    
-    @retry(tries=3, delay=FIVE_MINUTES, max_delay=TEN_MINUTES, logger=logging.getLogger("mongosack"))
+        res = self.chatterstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in chatters])
+        return len(res.inserted_ids or [])
+
     def update_beans(self, updates):
         return self.beanstore.bulk_write(updates, ordered=False, bypass_document_validation=True).matched_count
       
@@ -362,6 +345,9 @@ def _deserialize_chatters(cursor) -> list[Chatter]:
     
 def _get_logger():
     return logging.getLogger("beansack")
+
+now = lambda: datetime.now(tz=timezone.utc)
+ndays_ago = lambda ndays: now() - timedelta(days=ndays)
 
 def updated_after(last_ndays: int):
     return {K_UPDATED: {"$gte": ndays_ago(last_ndays)}}

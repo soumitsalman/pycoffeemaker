@@ -1,9 +1,3 @@
-# llama-cpp-python
-sentence-transformers
 pymongo
-tiktoken
-retry
 pydantic
-python-dotenv
-icecream
-memoization
+duckdb

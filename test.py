@@ -8,8 +8,8 @@ logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
-logging.getLogger("coffeemaker.digestors").propagate = False
-logging.getLogger("coffeemaker.pybeansack.embedders").propagate = False
+logging.getLogger("coffeemaker.nlp.digestors").propagate = False
+logging.getLogger("coffeemaker.nlp.embedders").propagate = False
 logging.getLogger("asyncprawcore").propagate = False
 logging.getLogger("asyncpraw").propagate = False
 logging.getLogger("dammit").propagate = False
@@ -24,7 +24,7 @@ from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import collector, rssfeed, ychackernews, individual, redditor, espresso
 from coffeemaker.orchestrator import Orchestrator
-from coffeemaker.digestors import *
+from coffeemaker.nlp.digestors import *
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 import random
 import re, json, random

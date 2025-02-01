@@ -1,4 +1,3 @@
-__all__ = ['orchestrator', 'digestors']  # Specify modules to be exported
+__all__ = ['orchestrator']  # Specify modules to be exported
 
 from .orchestrator import *
-from .digestors import *

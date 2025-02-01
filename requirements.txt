@@ -1,6 +1,8 @@
 llama-cpp-python
 bitsandbytes
 transformers
+sentence-transformers
+tiktoken
 unsloth
 numpy
 pymongo
