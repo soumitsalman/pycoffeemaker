@@ -3,7 +3,6 @@ bitsandbytes
 transformers
 sentence-transformers
 tiktoken
-unsloth
 numpy
 pymongo
 tiktoken

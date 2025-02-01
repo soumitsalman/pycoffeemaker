@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
 import json
-import math
 import os
 from typing import Optional
 from retry import retry
 from .utils import LLAMA_CPP_PREFIX, API_URL_PREFIX, truncate
 from pydantic import BaseModel, Field
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from llama_cpp import Llama
+from openai import OpenAI
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,14 +52,12 @@ class Digestor(ABC):
     def __call__(self, text: str) -> Digest:
         return self.run(text)
 
-class LlamaCppDigestor:
+class LlamaCppDigestor(Digestor):
     model_path = None
     context_len = None
     model = None
     
     def __init__(self, model_path: str, context_len: int = 16384):
-        from llama_cpp import Llama
-
         self.model_path = model_path
         self.context_len = context_len
         self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_gpu_layers=-1, n_threads=os.cpu_count(), embedding=False, verbose=False)  
@@ -75,14 +76,12 @@ class LlamaCppDigestor:
     def __call__(self, text: str) -> str:
         return self.run(text)
     
-class RemoteDigestor:
+class RemoteDigestor(Digestor):
     client = None
     model_name = None
     context_len = None
 
     def __init__(self, base_url: str, api_key: str, model_name: str, context_len: int = 8192):
-        from openai import OpenAI
-
         self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=5, max_retries=2)
         self.model_name = model_name
         self.context_len = context_len
@@ -126,28 +125,27 @@ class TransformerDigestor(Digestor):
 
     def __init__(self, model_id, context_len=16384):
         self.context_len = context_len
-        import torch
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"        
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id, padding=True, truncation=True, max_length=context_len)
+        self.model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True).to(self.device)
+        # if self.device == "cuda":
+        #     from unsloth import FastLanguageModel
 
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        if self.device == "cuda":
-            from unsloth import FastLanguageModel
+        #     model, tokenizer = FastLanguageModel.from_pretrained(
+        #         model_name=model_id,
+        #         max_seq_length=self.context_len,
+        #         dtype=None,
+        #         load_in_4bit=True
+        #     )
+        #     self.model = model
+        #     self.tokenizer = tokenizer
+        #     FastLanguageModel.for_inference(self.model)
+        # else:
+        #     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-            model, tokenizer = FastLanguageModel.from_pretrained(
-                model_name=model_id,
-                max_seq_length=self.context_len,
-                dtype=None,
-                load_in_4bit=True
-            )
-            self.model = model
-            self.tokenizer = tokenizer
-            FastLanguageModel.for_inference(self.model)
-        else:
-            from transformers import AutoModelForCausalLM, AutoTokenizer
+        #     self.tokenizer = AutoTokenizer.from_pretrained(model_id, padding=True, truncation=True, max_length=context_len)
+        #     self.model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True).to(self.device)
 
-            self.tokenizer = AutoTokenizer.from_pretrained(model_id, padding=True, truncation=True, max_length=context_len)
-            self.model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True).to(self.device)
-
-    # @retry(tries=2, logger=logger)
     def run(self, text: str):
         inputs = self.tokenizer(DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//2)), return_tensors="pt").to(self.device)
         outputs = self.model.generate(**inputs, max_new_tokens=384)
