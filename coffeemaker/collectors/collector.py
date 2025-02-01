@@ -204,7 +204,7 @@ BROWSER_CONFIG = BrowserConfig(
 )
 
 # general utilities
-now = lambda: datetime.now()
+now = datetime.now
 reddit_submission_permalink = lambda permalink: f"https://www.reddit.com{permalink}"
 hackernews_story_metadata = lambda id: f"https://hacker-news.firebaseio.com/v0/item/{id}.json"
 hackernews_story_permalink = lambda id: f"https://news.ycombinator.com/item?id={id}"

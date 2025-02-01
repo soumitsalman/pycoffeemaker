@@ -5,7 +5,7 @@ from typing import Callable, Coroutine
 import requests
 from coffeemaker.collectors.individual import *
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.utils import now
+from datetime import datetime
 from . import USER_AGENT, TIMEOUT
 
 
@@ -14,6 +14,8 @@ COLLECTION_URL_TEMPLATE = "https://hacker-news.firebaseio.com/v0/item/%d.json"
 STORY_URL_TEMPLATE = "https://news.ycombinator.com/item?id=%d"
 YC = "ycombinator"
     
+now = datetime.now
+
 def collect(process_collection: Callable):
     process_collection(_collect())
 
