@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 # NEEDS_SUMMARY_BODY_LEN = 150
 # needs_summary = lambda bean: len(bean.text.split()) >= NEEDS_SUMMARY_BODY_LEN
 
-BATCH_SIZE = 100
+QUEUE_BATCH_SIZE = 100
 END_OF_STREAM = "END_OF_STREAM"
 MAX_CLUSTER_SIZE=20
 
@@ -52,8 +52,8 @@ def _read_sources(file: str) -> list[str]:
         return [line.strip() for line in file.readlines() if line.strip()]
 
 async def _enqueue_beans(queue: Queue, source: str, beans: list[Bean]):
-    for i in range(0, len(beans), BATCH_SIZE):
-        batch = beans[i:i+BATCH_SIZE]
+    for i in range(0, len(beans), QUEUE_BATCH_SIZE):
+        batch = beans[i:i+QUEUE_BATCH_SIZE]
         await queue.put((source, batch))
 
 class Orchestrator:
@@ -99,11 +99,13 @@ class Orchestrator:
     def embed_beans(self, beans: list[Bean]) -> list[Bean]|None:   
         if not beans: return beans
 
-        for bean in beans:
-            try: bean.embedding = self.embedder.embed(bean.digest())  
-            except Exception as e:
-                log.error("failed embedding", extra={"source": bean.url, "num_items": 1})
-                ic(e.__class__.__name__, e) # NOTE: this is for local debugging
+        try:
+            embeddings = self.embedder.embed([bean.digest() for bean in beans])
+            for bean, embedding in zip(beans, embeddings):
+                bean.embedding = embedding
+        except Exception as e:
+            log.error("failed embedding", extra={"source": beans[0].source, "num_items": len(beans)})
+            ic(e.__class__.__name__, e) # NOTE: this is for local debugging
 
         return [bean for bean in beans if bean.embedding]
 
@@ -113,8 +115,17 @@ class Orchestrator:
     def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:
         if not beans: return beans
 
-        digests = self.digestor.run_batch([bean.text for bean in beans])
-        for bean, digest in zip(beans, digests):
+        digests = []
+        DIGESTOR_BATCH_SIZE = 2
+        for i in range(0, len(beans), DIGESTOR_BATCH_SIZE):
+            batch = beans[i:i+DIGESTOR_BATCH_SIZE]
+            try:
+                digests.extend(self.digestor.run_batch([bean.text for bean in batch]))
+            except Exception as e:
+                digests.extend([None] * len(batch))
+                ic(e.__class__.__name__, e)
+
+        for bean, digest in zip(batch, digests):
             if not digest: 
                 log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
                 continue
@@ -122,7 +133,7 @@ class Orchestrator:
             bean.summary = digest.summary if is_text_above_threshold(bean) else bean.text
             bean.title = digest.title or bean.title
             bean.tags = merge_tags(bean, digest.tags)
-        
+    
         # for bean in beans:             
         #     try:
         #         # this is the default if things fail
@@ -224,8 +235,8 @@ class Orchestrator:
     @log_runtime
     async def run_collections_async(self):
         current_directory = os.path.dirname(os.path.abspath(__file__))
-        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
-        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
+        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))[100:102]
+        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))[100:102]
 
         # awaiting on each group so that os is not overwhelmed by sockets
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
@@ -300,14 +311,20 @@ class Orchestrator:
 
             total_new_beans += len(beans)
             log.info("stored", extra={"source": source, "num_items": len(beans)})  
-            clustered_count = self.cluster_beans(beans)
-            if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
-            ranked_count = self.trend_rank_beans(beans)
-            if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})  
+            await self.cluster_and_rank_beans(source, beans)            
 
             self.index_queue.task_done()
 
         log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 
+
+    async def cluster_and_rank_beans(self, source: str, beans: list[Bean]):
+        if not beans: return
+
+        loop = asyncio.get_event_loop()
+        clustered_count = await loop.run_in_executor(None, self.cluster_beans, beans)
+        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
+        ranked_count = await loop.run_in_executor(None, self.trend_rank_beans, beans)
+        if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})  
 
     # 1. schedule a clean up
     # 2. start collection

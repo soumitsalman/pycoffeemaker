@@ -23,8 +23,8 @@ class Digest(BaseModel):
                 summary=text.get('summary'),
                 tags=[tag.strip() for tag in text.get('tags', '').split(',')] if isinstance(text.get('tags'), str) else text.get('tags')
             )
-        except json.JSONDecodeError:
-            ic("failed to parse json:", text)
+        except json.JSONDecodeError as e:
+            ic(e, text)
             return None
 
 # DIGESTOR_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>response_format:json_object<|eot_id|>
@@ -66,7 +66,7 @@ class LlamaCppDigestor(Digestor):
         
         self.model_path = model_path
         self.context_len = context_len
-        self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_gpu_layers=-1, n_threads=os.cpu_count(), embedding=False, verbose=False)  
+        self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=False, verbose=False)  
 
     # @retry(tries=2, logger=logger)
     def run(self, text: str) -> Digest:
@@ -137,14 +137,14 @@ class TransformerDigestor(Digestor):
         from unsloth import FastLanguageModel
 
         self.context_len = context_len
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
   
-        if self.device == "cuda":
+        if self.device == "cuda:0":
             self.model, self.tokenizer = FastLanguageModel.from_pretrained(
                 model_name=model_id,
                 max_seq_length=self.context_len,
                 load_in_4bit=False,
-                device_map="cuda:0"
+                device_map=self.device
             )
             self.model = FastLanguageModel.for_inference(self.model)
         else:
@@ -163,17 +163,20 @@ class TransformerDigestor(Digestor):
         return Digest.from_json_text(resp)
     
     def run_batch(self, texts: list[str]):
+        digests = []
+       
         prompts = [DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//2)) for text in texts]
-        inputs = self.tokenizer(prompts, return_tensors="pt").to(self.device)
+        inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=self.context_len//2).to(self.device)
         outputs = self.model.generate(**inputs, max_new_tokens=384, do_sample=True)
         generated = self.tokenizer.batch_decode(outputs)
-        digests = []
+        
         for g in generated:
             # strip out the response braces
             start_index = g.find(_RESPONSE_START)
             end_index = g.find(_RESPONSE_END, start_index)
             resp = g[start_index+len(_RESPONSE_START):end_index]
             digests.append(Digest.from_json_text(resp))
+
         return digests
 
 
