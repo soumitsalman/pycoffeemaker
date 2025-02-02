@@ -166,7 +166,7 @@ class TransformerDigestor(Digestor):
         digests = []
        
         prompts = [DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//2)) for text in texts]
-        inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=self.context_len//2).to(self.device)
+        inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=(self.context_len*2)//3).to(self.device)
         outputs = self.model.generate(**inputs, max_new_tokens=384, do_sample=True)
         generated = self.tokenizer.batch_decode(outputs)
         
