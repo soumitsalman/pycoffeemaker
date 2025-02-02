@@ -1,6 +1,8 @@
+import os
 import duckdb
 from .models import *
 from azure.storage.blob import BlobClient
+from icecream import ic
 
 SQL_INSTALL_VSS = """
 INSTALL vss;
@@ -167,8 +169,11 @@ class Beansack:
     db_filepath: str
     db: duckdb.DuckDBPyConnection
 
-    def __init__(self, db_filepath: str = "beansack.db"):
-        self.db_filepath = db_filepath
+    def __init__(self, 
+        db_path: str = os.getenv("LOCAL_DB_PATH", "."), 
+        db_name: str = os.getenv("DB_NAME", "beansack")
+    ):
+        self.db_filepath = os.path.join(db_path, db_name+".db")
         self.db = duckdb.connect(self.db_filepath, read_only=False) \
             .execute(SQL_INSTALL_VSS) \
             .execute(SQL_CREATE_BEANS) \
@@ -198,6 +203,8 @@ class Beansack:
         local_conn.executemany(SQL_INSERT_BEANS, beans_data).commit()
 
     def exists(self, beans: list[Bean]) -> list[str]:
+        if not beans: return None
+
         local_conn = self.db.cursor()
         query = local_conn.sql("SELECT url FROM beans").filter(SQL_WHERE_URLS([bean.url for bean in beans]))
         return {item[0] for item in query.fetchall()}

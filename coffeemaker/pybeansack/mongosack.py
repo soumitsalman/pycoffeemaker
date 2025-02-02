@@ -16,7 +16,6 @@ DEFAULT_VECTOR_SEARCH_SCORE = 0.75
 DEFAULT_VECTOR_SEARCH_LIMIT = 1000
 
 # names of db and collections
-DB = os.getenv("REMOTE_DB_NAME", "beansack") # TODO: change this
 BEANS = "beans"
 CHATTERS = "chatters"
 SOURCES = "sources"
@@ -53,8 +52,10 @@ class Beansack:
     chatterstore: Collection
     sourcestore: Collection
 
-    def __init__(self, conn_str: str):   
-             
+    def __init__(self, 
+        conn_str: str = os.getenv("REMOTE_DB_CONNECTION_STRING", "mongodb://localhost:27017"), 
+        db_name: str = os.getenv("DB_NAME", "beansack")
+    ):  
         client = MongoClient(
             conn_str, 
             timeoutMS=TIMEOUT,
@@ -64,9 +65,9 @@ class Beansack:
             retryWrites=True,
             minPoolSize=10,
             maxPoolSize=100)        
-        self.beanstore: Collection = client[DB][BEANS]
-        self.chatterstore: Collection = client[DB][CHATTERS]        
-        self.sourcestore: Collection = client[DB][SOURCES]  
+        self.beanstore: Collection = client[db_name][BEANS]
+        self.chatterstore: Collection = client[db_name][CHATTERS]        
+        self.sourcestore: Collection = client[db_name][SOURCES]  
 
     #############
     ## STORING ##

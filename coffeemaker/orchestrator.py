@@ -2,7 +2,7 @@ from typing import Awaitable
 from icecream import ic
 import logging
 import asyncio
-from asyncio import Queue, TaskGroup
+from asyncio import Queue
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.models import *
@@ -77,8 +77,8 @@ class Orchestrator:
         self.digestor = digestors.from_path(llm_path)
 
         self.az_storage_conn_str = storage_conn_str
-        self.remotesack = MongoSack(remote_db_conn_str)
-        self.localsack = DuckSack(local_db_path)
+        self.remotesack = MongoSack(remote_db_conn_str, os.getenv("DB_NAME"))
+        self.localsack = DuckSack(local_db_path, os.getenv("DB_NAME"))
         self.cluster_eps = clus_eps    
         self.scraper = AsyncCollector()
         
@@ -112,22 +112,32 @@ class Orchestrator:
 
     def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:
         if not beans: return beans
-        
-        for bean in beans:             
-            try:
-                # this is the default if things fail
-                if is_text_above_threshold(bean):
-                    digest = self.digestor.run(bean.text)
-                    if digest:
-                        bean.summary = digest.summary or bean.summary
-                        bean.title = digest.title or bean.title
-                        bean.tags = merge_tags(bean, digest.tags)
-                else:
-                    bean.summary = bean.text
 
-            except Exception as e:                 
-                log.error("failed augmenting", extra={"source": bean.url, "num_items": 1})
-                ic(e.__class__.__name__, e)
+        digests = self.digestor.run_batch([bean.text for bean in beans])
+        for bean, digest in zip(beans, digests):
+            if not digest: 
+                log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
+                continue
+
+            bean.summary = digest.summary if is_text_above_threshold(bean) else bean.text
+            bean.title = digest.title or bean.title
+            bean.tags = merge_tags(bean, digest.tags)
+        
+        # for bean in beans:             
+        #     try:
+        #         # this is the default if things fail
+        #         if is_text_above_threshold(bean):
+        #             digest = self.digestor.run(bean.text)
+        #             if digest:
+        #                 bean.summary = digest.summary or bean.summary
+        #                 bean.title = digest.title or bean.title
+        #                 bean.tags = merge_tags(bean, digest.tags)
+        #         else:
+        #             bean.summary = bean.text
+
+        #     except Exception as e:                 
+        #         log.error("failed augmenting", extra={"source": bean.url, "num_items": 1})
+        #         ic(e.__class__.__name__, e)
 
         return [bean for bean in beans if bean.summary]  
         
@@ -221,7 +231,7 @@ class Orchestrator:
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
         log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        # await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
+        await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
         log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
         
@@ -248,15 +258,14 @@ class Orchestrator:
 
     @log_runtime
     async def run_downloading_async(self):
-        async with TaskGroup() as tg:
-            while True:
-                items = await self.download_queue.get()
-                if items == END_OF_STREAM: break
-                if not items: continue
+        while True:
+            items = await self.download_queue.get()
+            if items == END_OF_STREAM: break
+            if not items: continue
 
-                source, beans = items
-                await self.download_async(source, beans)
-                self.download_queue.task_done()
+            source, beans = items
+            await self.download_async(source, beans)
+            self.download_queue.task_done()
 
         await self.index_queue.put(END_OF_STREAM)
 
@@ -273,36 +282,32 @@ class Orchestrator:
     @log_runtime
     async def run_indexing_async(self):
         total_new_beans = 0
-        async with TaskGroup() as tg:
-            while True:
-                items = await self.index_queue.get()
-                if items == END_OF_STREAM: break
-                if not items: continue
-                
-                source, beans = items
-                if not beans: continue
-
-                # changing the sequence so that it embeds the digest/summary instead of the whole text
-                # since the digest/summary is smaller and got generated through a text-gen model so it is more clean. 
-                beans = self.new_beans(indexables(beans))
-                beans = self.embed_beans(self.digest_beans(beans))
-                beans = self.store_beans(beans) 
-
-                if not beans: continue
-
-                log.info("stored", extra={"source": source, "num_items": len(beans)})  
-                total_new_beans += len(beans)
-
-                tg.create_task(self.cluster_and_rank(source, beans))
-                self.index_queue.task_done()
+        while True:
+            items = await self.index_queue.get()
+            if items == END_OF_STREAM: break
+            if not items: continue
             
-        log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 
+            source, beans = items
+            if not beans: continue
 
-    async def cluster_and_rank(self, source: str, beans: list[Bean]):
-        clustered_count = self.cluster_beans(beans)
-        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
-        ranked_count = self.trend_rank_beans(beans)
-        if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})   
+            # changing the sequence so that it embeds the digest/summary instead of the whole text
+            # since the digest/summary is smaller and got generated through a text-gen model so it is more clean. 
+            beans = self.new_beans(indexables(beans))
+            beans = self.embed_beans(self.digest_beans(beans))
+            beans = self.store_beans(beans) 
+
+            if not beans: continue
+
+            total_new_beans += len(beans)
+            log.info("stored", extra={"source": source, "num_items": len(beans)})  
+            clustered_count = self.cluster_beans(beans)
+            if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
+            ranked_count = self.trend_rank_beans(beans)
+            if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})  
+
+            self.index_queue.task_done()
+
+        log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 
 
     # 1. schedule a clean up
     # 2. start collection

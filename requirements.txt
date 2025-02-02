@@ -28,3 +28,5 @@ azure-storage-blob
 crawl4ai
 nest-asyncio
 asyncpraw
+setuptools
+unsloth
