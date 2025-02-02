@@ -116,7 +116,7 @@ class Orchestrator:
         if not beans: return beans
 
         digests = []
-        DIGESTOR_BATCH_SIZE = 2
+        DIGESTOR_BATCH_SIZE = 3
         for i in range(0, len(beans), DIGESTOR_BATCH_SIZE):
             batch = beans[i:i+DIGESTOR_BATCH_SIZE]
             try:
@@ -235,8 +235,8 @@ class Orchestrator:
     @log_runtime
     async def run_collections_async(self):
         current_directory = os.path.dirname(os.path.abspath(__file__))
-        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))[100:102]
-        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))[100:102]
+        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
+        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
 
         # awaiting on each group so that os is not overwhelmed by sockets
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
