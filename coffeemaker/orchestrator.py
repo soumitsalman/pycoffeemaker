@@ -66,7 +66,6 @@ class Orchestrator:
     az_storage_conn_str: str = None
     remotesack: MongoSack = None
     localsack: DuckSack = None
-    category_eps: float = None
     cluster_eps: float = None
 
     embedder = None
@@ -165,7 +164,7 @@ class Orchestrator:
         if not beans: return
         
         # clusters = self.find_clusters([bean.url for bean in beans])
-        clusters = {bean.url: self.localsack.search_bean_cluster(bean.url, self.category_eps, limit=MAX_CLUSTER_SIZE) for bean in beans}
+        clusters = {bean.url: self.localsack.search_bean_cluster(bean.url, self.cluster_eps, limit=MAX_CLUSTER_SIZE) for bean in beans}
         return self.update_clusters(clusters)
                 
     def find_trend_ranks(self, urls: list[str] = None) -> list[ChatterAnalysis]|None:
