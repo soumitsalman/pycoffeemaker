@@ -115,40 +115,19 @@ class Orchestrator:
     def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:
         if not beans: return beans
 
-        digests = []
-        DIGESTOR_BATCH_SIZE = 3
-        for i in range(0, len(beans), DIGESTOR_BATCH_SIZE):
-            batch = beans[i:i+DIGESTOR_BATCH_SIZE]
-            try:
-                digests.extend(self.digestor.run_batch([bean.text for bean in batch]))
-            except Exception as e:
-                digests.extend([None] * len(batch))
-                ic(e.__class__.__name__, e)
+        try:
+            digests = self.digestor.run_batch([bean.text for bean in beans])
+            for bean, digest in zip(beans, digests):
+                if not digest: 
+                    log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
+                    continue
 
-        for bean, digest in zip(batch, digests):
-            if not digest: 
-                log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
-                continue
-
-            bean.summary = digest.summary if is_text_above_threshold(bean) else bean.text
-            bean.title = digest.title or bean.title
-            bean.tags = merge_tags(bean, digest.tags)
-    
-        # for bean in beans:             
-        #     try:
-        #         # this is the default if things fail
-        #         if is_text_above_threshold(bean):
-        #             digest = self.digestor.run(bean.text)
-        #             if digest:
-        #                 bean.summary = digest.summary or bean.summary
-        #                 bean.title = digest.title or bean.title
-        #                 bean.tags = merge_tags(bean, digest.tags)
-        #         else:
-        #             bean.summary = bean.text
-
-        #     except Exception as e:                 
-        #         log.error("failed augmenting", extra={"source": bean.url, "num_items": 1})
-        #         ic(e.__class__.__name__, e)
+                bean.summary = digest.summary if is_text_above_threshold(bean) else bean.text
+                bean.title = digest.title or bean.title
+                bean.tags = merge_tags(bean, digest.tags)
+        except Exception as e:
+            log.error("failed digesting", extra={"source": beans[0].source, "num_items": len(beans)})
+            ic(e.__class__.__name__, e)
 
         return [bean for bean in beans if bean.summary]  
         

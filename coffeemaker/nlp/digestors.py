@@ -61,7 +61,7 @@ class LlamaCppDigestor(Digestor):
     context_len = None
     model = None
     
-    def __init__(self, model_path: str, context_len: int = 16384):
+    def __init__(self, model_path: str, context_len: int = 8192):
         from llama_cpp import Llama
         
         self.model_path = model_path
@@ -71,7 +71,7 @@ class LlamaCppDigestor(Digestor):
     # @retry(tries=2, logger=logger)
     def run(self, text: str) -> Digest:
         resp = self.model.create_completion(
-            prompt=DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//2)),
+            prompt=DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//4)),
             max_tokens=384, 
             frequency_penalty=0.3,
             temperature=0.3,
@@ -131,7 +131,7 @@ class TransformerDigestor(Digestor):
     device = None
     context_len = None
 
-    def __init__(self, model_id, context_len=16384):
+    def __init__(self, model_id, context_len=8192):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
         from unsloth import FastLanguageModel
@@ -164,18 +164,22 @@ class TransformerDigestor(Digestor):
     
     def run_batch(self, texts: list[str]):
         digests = []
-       
-        prompts = [DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//2)) for text in texts]
-        inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=(self.context_len*2)//3).to(self.device)
-        outputs = self.model.generate(**inputs, max_new_tokens=384, do_sample=True)
-        generated = self.tokenizer.batch_decode(outputs)
-        
-        for g in generated:
-            # strip out the response braces
-            start_index = g.find(_RESPONSE_START)
-            end_index = g.find(_RESPONSE_END, start_index)
-            resp = g[start_index+len(_RESPONSE_START):end_index]
-            digests.append(Digest.from_json_text(resp))
+
+        DIGESTOR_BATCH_SIZE = 16
+        for i in range(0, len(texts), DIGESTOR_BATCH_SIZE):
+            batch = texts[i:i+DIGESTOR_BATCH_SIZE]
+           
+            prompts = [DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//4)) for text in batch]
+            inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=self.context_len//2).to(self.device)
+            outputs = self.model.generate(**inputs, max_new_tokens=384, do_sample=True)
+            generated = self.tokenizer.batch_decode(outputs)
+            
+            for g in generated:
+                # strip out the response braces
+                start_index = g.find(_RESPONSE_START)
+                end_index = g.find(_RESPONSE_END, start_index)
+                resp = g[start_index+len(_RESPONSE_START):end_index]
+                digests.append(Digest.from_json_text(resp))
 
         return digests
 
