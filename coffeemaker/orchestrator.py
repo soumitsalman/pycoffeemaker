@@ -27,13 +27,16 @@ QUEUE_BATCH_SIZE = 100
 END_OF_STREAM = "END_OF_STREAM"
 MAX_CLUSTER_SIZE=20
 
-MIN_WORDS_THRESHOLD = 150
-MIN_WORDS_THRESHOLD_FOR_INDEXING = 70
+# MIN_WORDS_THRESHOLD = 150
+MIN_WORDS_THRESHOLD_FOR_SUMMARY = 150 # min words needed to use the generated summary
+MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 200 # min words needed to not download the body
+MIN_WORDS_THRESHOLD_FOR_INDEXING = 70 # mininum words needed to put it through indexing
 
-is_text_above_threshold = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD
+is_text_above_threshold = lambda bean, threshold: bean.text and len(bean.text.split()) >= threshold
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
-is_indexable = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD_FOR_INDEXING # it has to have some text and the text has to be large enough
-is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean)) # if it is a post dont download it or if the body is large enough
+is_indexable = lambda bean: is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_INDEXING) # it has to have some text and the text has to be large enough
+is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_DOWNLOADING)) # if it is a post dont download it or if the body is large enough
+is_summaryable = lambda bean: is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_SUMMARY) # if the body is large enough
 storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
 indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
 downloadables = lambda beans: [bean for bean in beans if is_downloadable(bean)] if beans else beans
@@ -121,7 +124,7 @@ class Orchestrator:
                     log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
                     continue
 
-                bean.summary = digest.summary if is_text_above_threshold(bean) else bean.text
+                bean.summary = digest.summary if is_summaryable(bean) else bean.text
                 bean.title = digest.title or bean.title
                 bean.tags = merge_tags(bean, digest.tags)
         except Exception as e:
