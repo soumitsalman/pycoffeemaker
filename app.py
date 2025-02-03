@@ -1,18 +1,16 @@
 import asyncio
 import os
 from datetime import datetime as dt
+import logging
+from dotenv import load_dotenv
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
-
-from dotenv import load_dotenv
 load_dotenv(CURR_DIR+"/.env")
 
-WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
-
-import logging
+if not os.path.exists(f"{CURR_DIR}/.logs"): os.makedirs(f"{CURR_DIR}/.logs")
 logging.basicConfig(
     level=logging.WARNING, 
-    filename=f"{WORKING_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
+    filename=f"{CURR_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
     format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s")
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)

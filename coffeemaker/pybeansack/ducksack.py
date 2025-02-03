@@ -170,9 +170,11 @@ class Beansack:
     db: duckdb.DuckDBPyConnection
 
     def __init__(self, 
-        db_path: str = os.getenv("LOCAL_DB_PATH", "."), 
+        db_path: str = os.getenv("LOCAL_DB_PATH", ".db"), 
         db_name: str = os.getenv("DB_NAME", "beansack")
     ):
+        if not os.path.exists(db_path): os.makedirs(db_path)
+        
         self.db_filepath = os.path.join(db_path, db_name+".db")
         self.db = duckdb.connect(self.db_filepath, read_only=False) \
             .execute(SQL_INSTALL_VSS) \

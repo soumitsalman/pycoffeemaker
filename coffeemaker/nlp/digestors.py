@@ -182,9 +182,9 @@ class TransformerDigestor(Digestor):
 
 def from_path(llm_path) -> Digestor:
     # intialize embedder
-    if LLAMA_CPP_PREFIX in llm_path:
+    if ic(llm_path).startswith(LLAMA_CPP_PREFIX):
         return LlamaCppDigestor(llm_path[len(LLAMA_CPP_PREFIX):], os.getenv("LLM_N_CTX", 16384))
-    elif API_URL_PREFIX in llm_path:
+    elif llm_path.startswith(API_URL_PREFIX):
         return RemoteDigestor(llm_path, os.getenv("API_KEY"), os.getenv("LLM_NAME"), os.getenv("LLM_N_CTX", 16384))
     else:
         return TransformerDigestor(llm_path)
