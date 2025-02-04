@@ -1,3 +1,4 @@
+import random
 from typing import Awaitable
 from icecream import ic
 import logging
@@ -218,13 +219,17 @@ class Orchestrator:
         current_directory = os.path.dirname(os.path.abspath(__file__))
         rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
         subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
+        random.shuffle(rssfeeds) # shuffling out to avoid failure of the same things
+        random.shuffle(subreddits) # shuffling out to avoid failure of the same things
 
         # awaiting on each group so that os is not overwhelmed by sockets
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
+       
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
         log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
         await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
         log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
+        
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
         
         await self.download_queue.put(END_OF_STREAM)
@@ -292,13 +297,21 @@ class Orchestrator:
 
             total_new_beans += len(beans)
             log.info("stored", extra={"source": source, "num_items": len(beans)})  
-            await self.cluster_and_rank_beans(source, beans)            
+            self.cluster_and_rank_beans(source, beans)            
 
             self.index_queue.task_done()
 
         log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 
 
-    async def cluster_and_rank_beans(self, source: str, beans: list[Bean]):
+    def cluster_and_rank_beans(self, source: str, beans: list[Bean]):
+        if not beans: return
+
+        clustered_count = self.cluster_beans(beans)
+        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
+        ranked_count = self.trend_rank_beans(beans)
+        if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})  
+
+    async def cluster_and_rank_beans_async(self, source: str, beans: list[Bean]):
         if not beans: return
 
         loop = asyncio.get_event_loop()
