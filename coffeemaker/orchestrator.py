@@ -37,7 +37,7 @@ is_text_above_threshold = lambda bean, threshold: bean.text and len(bean.text.sp
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
 is_indexable = lambda bean: is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_INDEXING) # it has to have some text and the text has to be large enough
 is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_DOWNLOADING)) # if it is a post dont download it or if the body is large enough
-is_summaryable = lambda bean: is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_SUMMARY) # if the body is large enough
+is_summaryable = lambda bean: bean.kind != POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_SUMMARY) # if the body is large enough
 storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
 indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
 downloadables = lambda beans: [bean for bean in beans if is_downloadable(bean)] if beans else beans
