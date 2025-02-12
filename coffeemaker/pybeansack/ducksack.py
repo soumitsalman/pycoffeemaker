@@ -167,6 +167,7 @@ ORDER BY search_score DESC
 
 class Beansack:
     db_filepath: str
+    db_name: str
     db: duckdb.DuckDBPyConnection
 
     def __init__(self, 
@@ -174,8 +175,9 @@ class Beansack:
         db_name: str = os.getenv("DB_NAME", "beansack")
     ):
         if not os.path.exists(db_path): os.makedirs(db_path)
-        
-        self.db_filepath = os.path.join(db_path, db_name+".db")
+
+        self.db_name = db_name+".db"
+        self.db_filepath = os.path.join(db_path, self.db_name)
         self.db = duckdb.connect(self.db_filepath, read_only=False) \
             .execute(SQL_INSTALL_VSS) \
             .execute(SQL_CREATE_BEANS) \
@@ -334,7 +336,7 @@ class Beansack:
 
     def backup_azblob(self, conn_str: str):
         try:
-            client = BlobClient.from_connection_string(conn_str, "backup", "beansack.db")
+            client = BlobClient.from_connection_string(conn_str, "backup", self.db_name)
             with open(self.db_filepath, "rb") as data:
                 client.upload_blob(data, overwrite=True)            
         except Exception as e:
