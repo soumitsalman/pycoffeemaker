@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import json
 import os
+import threading
 from typing import Optional
 from icecream import ic
 from retry import retry
@@ -53,34 +54,35 @@ class Digestor(ABC):
     def run_batch(self, texts: list[str]) -> list[Digest]:
         return [self.run(text) for text in texts]
 
-    def __call__(self, text: str) -> Digest:
-        return self.run(text)
+    def __call__(self, input: str|list[str]) -> Digest|list[Digest]:
+        if isinstance(input, str): return self.run(input)
+        else: return self.run_batch(input)
 
 class LlamaCppDigestor(Digestor):
     model_path = None
     context_len = None
     model = None
+    lock = None
     
     def __init__(self, model_path: str, context_len: int = 8192):
-        from llama_cpp import Llama
-        
+        self.lock = threading.Lock()
         self.model_path = model_path
         self.context_len = context_len
-        self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_threads=os.cpu_count(), embedding=False, verbose=False)  
 
-    # @retry(tries=2, logger=logger)
+        from llama_cpp import Llama
+        self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_batch=self.context_len//2, n_threads_batch=os.cpu_count(), n_threads=os.cpu_count(), embedding=False, verbose=False)  
+  
     def run(self, text: str) -> Digest:
-        resp = self.model.create_completion(
-            prompt=DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//4)),
-            max_tokens=384, 
-            frequency_penalty=0.3,
-            temperature=0.3,
-            seed=42
-        )['choices'][0]['text']
+        prompt = DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//4))
+        with self.lock:
+            resp = self.model.create_completion(
+                prompt=prompt,
+                max_tokens=384, 
+                frequency_penalty=0.3,
+                temperature=0.2,
+                seed=42
+            )['choices'][0]['text']
         return Digest.from_json_text(resp)
-    
-    def __call__(self, text: str) -> str:
-        return self.run(text)
     
 class RemoteDigestor(Digestor):
     client = None
@@ -104,9 +106,6 @@ class RemoteDigestor(Digestor):
             frequency_penalty=0.3
         ).choices[0].text
         return Digest.from_json_text(resp)
-        
-    def __call__(self, kind: str, text: str) -> Digest:        
-        return self.run(kind, text)
     
 class NewspaperDigestor:       
     def __init__(self, language: str = "en"):
@@ -130,13 +129,16 @@ class TransformerDigestor(Digestor):
     tokenizer = None
     device = None
     context_len = None
+    lock = None
 
     def __init__(self, model_id, context_len=8192):
+        self.lock = threading.Lock()
+        self.context_len = context_len
+
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
         from unsloth import FastLanguageModel
-
-        self.context_len = context_len
+        
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
   
         if self.device == "cuda:0":
@@ -152,10 +154,13 @@ class TransformerDigestor(Digestor):
             self.model =  AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype="auto")
 
     def run(self, text: str):
-        inputs = self.tokenizer(DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//2)), return_tensors="pt").to(self.device)
-        outputs = self.model.generate(**inputs, max_new_tokens=384, do_sample=True)
-        generated = self.tokenizer.decode(outputs[0])
-        # strip out the response braces
+        prompt = DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//4))
+
+        with self.lock:
+            inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+            outputs = self.model.generate(**inputs, max_new_tokens=384, do_sample=True)
+            generated = self.tokenizer.decode(outputs[0])
+            # strip out the response braces
         start_index = generated.find(_RESPONSE_START)
         end_index = generated.find(_RESPONSE_END, start_index)
         resp = generated[start_index+len(_RESPONSE_START):end_index]
@@ -163,16 +168,15 @@ class TransformerDigestor(Digestor):
         return Digest.from_json_text(resp)
     
     def run_batch(self, texts: list[str]):
+        prompts = [DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//4)) for text in texts]
         digests = []
 
         DIGESTOR_BATCH_SIZE = 16
         for i in range(0, len(texts), DIGESTOR_BATCH_SIZE):
-            batch = texts[i:i+DIGESTOR_BATCH_SIZE]
-           
-            prompts = [DIGESTOR_PROMPT.format(text=truncate(text, self.context_len//4)) for text in batch]
-            inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=self.context_len//2).to(self.device)
-            outputs = self.model.generate(**inputs, max_new_tokens=384, do_sample=True)
-            generated = self.tokenizer.batch_decode(outputs)
+            with self.lock:
+                inputs = self.tokenizer(prompts[i:i+DIGESTOR_BATCH_SIZE], return_tensors="pt", padding=True, truncation=True, max_length=self.context_len//2).to(self.device)
+                outputs = self.model.generate(**inputs, max_new_tokens=384, do_sample=True)
+                generated = self.tokenizer.batch_decode(outputs)
             
             for g in generated:
                 # strip out the response braces
@@ -186,7 +190,7 @@ class TransformerDigestor(Digestor):
 
 def from_path(llm_path) -> Digestor:
     # intialize embedder
-    if ic(llm_path).startswith(LLAMA_CPP_PREFIX):
+    if llm_path.startswith(LLAMA_CPP_PREFIX):
         return LlamaCppDigestor(llm_path[len(LLAMA_CPP_PREFIX):], os.getenv("LLM_N_CTX", 16384))
     elif llm_path.startswith(API_URL_PREFIX):
         return RemoteDigestor(llm_path, os.getenv("API_KEY"), os.getenv("LLM_NAME"), os.getenv("LLM_N_CTX", 16384))
