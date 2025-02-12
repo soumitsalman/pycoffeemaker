@@ -189,5 +189,92 @@ orch.initialize(
 # embed_categories()
 # rectify_categories()
 # orch.run_clustering()
-rectify_ranking()
+# rectify_ranking()
 # setup_baristas()
+
+ndays_ago = lambda n: (datetime.now() - timedelta(days=n))
+LIMIT=40000
+
+# adding data porting logic
+if __name__ == "__main__":
+    # embedder = TransformerEmbedder("avsolatorio/GIST-small-Embedding-v0")
+    remote_db = MongoClient(os.getenv("REMOTE_DB"))
+    local_db = MongoClient(os.getenv("LOCAL_DB"))
+
+    # remote_baristas = remote_db['beansack']['baristas']
+    # baristas = list(remote_baristas.find())
+
+    # for bar in baristas:
+    #     if 'embedding' in bar:
+    #         text = str(bar['description']).replace("News, blogs and posts on", "classification:")
+    #         bar['embedding'] = embedder(text)
+
+    # remote_db['beansackV2']['baristas'].insert_many(list(local_db['beansackV2']['baristas'].find()))
+
+    # beans = list(local_db['beansackV2']['beans'].find())
+    # batch_size = 1000
+    # for i in range(0, len(beans), batch_size):
+    #     remote_db['beansackV2']['beans'].insert_many(beans[i : i+batch_size], ordered=False, bypass_document_validation=True)
+
+    remote_db['beansackV2']['users'].insert_one(remote_db['beansack']['users'].find_one())
+
+
+    # remote_beans = remote_db["beansack"]["beans"]
+    # beans = list(remote_beans.find(
+    #     projection={
+    #         "embedding": 0
+    #     },
+    #     sort={
+    #         "collected": -1
+    #     },
+    #     limit=LIMIT
+    # ))    
+
+    # digest = lambda bean: "## "+bean['title']+"\n\n"+bean['summary']
+
+    # start_time = datetime.now()
+
+    # vectors = embedder([digest(bean) for bean in beans])
+    # for bean, vec in zip(beans, vectors):
+    #     bean['embedding'] = vec
+    # ic(datetime.now() - start_time)
+    
+    # local_beans = local_db["beansackV2"]['beans']
+    # local_beans.insert_many(beans)
+    # ic(datetime.now() - start_time)
+
+    # remote_beans_v2 = remote_db["beansackV2"]["beans"]
+    # remote_beans_v2.insert_many(beans)
+    # ic(datetime.now() - start_time)
+
+
+
+    # pipeline = lambda q: [
+    #     {
+    #         "$vectorSearch": {
+    #             "index": "beans_vector_index",
+    #             "path": "embedding",
+    #             "queryVector": embedder(q),
+    #             "numCandidates": 1000,
+    #             "limit": 5
+    #         }
+    #     },
+    #     {
+    #         "$project": {
+    #             "_id": 0,
+    #             "title": 1,
+    #             "tags": 1,
+    #             "search_score": {
+    #                 "$meta": "vectorSearchScore"
+    #             }
+    #         }
+    #     }
+    # ]
+
+    # categories = ["Cybersecurity", "Artifical Intelligence", "Sports & Entertainment", "Startups & Venture Capital", "Business & Finance", "Government & Politics", "Cybersecurity Threat Intelligence", "Career Advice and Professional Help"]
+
+    # for cat in categories:
+    #     result = local_beans.aggregate(pipeline("classification: "+ic(cat)))
+    #     ic([bean for bean in result])
+
+

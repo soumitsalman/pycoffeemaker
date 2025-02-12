@@ -8,13 +8,14 @@ from urllib.parse import urlparse
 import feedparser
 import requests
 from coffeemaker.pybeansack.models import Bean, NEWS
-from coffeemaker.pybeansack.utils import now
 from coffeemaker.collectors.individual import *
 from datetime import datetime as dt
 from . import USER_AGENT, TIMEOUT
 
 DEFAULT_FEEDS = os.path.dirname(os.path.abspath(__file__))+"/rssfeedsources.txt"
 log = logging.getLogger(__name__)
+
+now = dt.now
 
 # reads the list of feeds from a file path and collects
 # if sources is a string then it will be treated as a file path or else it will be a an array

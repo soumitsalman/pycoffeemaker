@@ -1,25 +1,23 @@
 import asyncio
 import os
 from datetime import datetime as dt
+import logging
+from dotenv import load_dotenv
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
-
-from dotenv import load_dotenv
 load_dotenv(CURR_DIR+"/.env")
 
-WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
-
-import logging
+if not os.path.exists(f"{CURR_DIR}/.logs"): os.makedirs(f"{CURR_DIR}/.logs")
 logging.basicConfig(
     level=logging.WARNING, 
-    filename=f"{WORKING_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
+    filename=f"{CURR_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
     format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s")
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
-logging.getLogger("digestor.local").propagate = False
-logging.getLogger("embedder.local").propagate = False
+logging.getLogger("coffeemaker.nlp.digestors").propagate = False
+logging.getLogger("coffeemaker.nlp.embedders").propagate = False
 logging.getLogger("asyncprawcore").propagate = False
 logging.getLogger("asyncpraw").propagate = False
 logging.getLogger("dammit").propagate = False
@@ -31,12 +29,11 @@ from coffeemaker.orchestrator import Orchestrator
 
 if __name__ == "__main__":    
     orch = Orchestrator(
-        os.getenv("DB_CONNECTION_STRING"),
+        os.getenv("REMOTE_DB_CONNECTION_STRING"),
+        os.getenv("LOCAL_DB_PATH"),
         os.getenv("AZSTORAGE_CONNECTION_STRING"), 
-        WORKING_DIR, 
         os.getenv("EMBEDDER_PATH"),    
         os.getenv("LLM_PATH"),
-        float(os.getenv('CATEGORY_EPS')),
         float(os.getenv('CLUSTER_EPS')))
     asyncio.run(orch.run_async())
     orch.close()

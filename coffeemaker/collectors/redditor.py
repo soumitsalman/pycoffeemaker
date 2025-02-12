@@ -5,7 +5,6 @@ import praw
 import os
 from datetime import datetime as dt
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.utils import now
 from coffeemaker.collectors.individual import *
 from . import USER_AGENT, TIMEOUT
 
@@ -15,6 +14,7 @@ SUBREDDITS_FILE = os.path.dirname(os.path.abspath(__file__))+"/redditsources.txt
 MAX_LIMIT = 20
 
 log = logging.getLogger(__name__)
+now = dt.now
 
 def create_client():
     return praw.Reddit(

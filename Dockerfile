@@ -25,9 +25,11 @@ RUN apt-get update && \
 # Set the working directory
 WORKDIR /app
 COPY . .
-RUN pip install -r requirements.txt
-RUN mkdir .db .models
 
+RUN pip install -r requirements.txt
+RUN mkdir .db .models .logs
+RUN playwright install-deps
+RUN playwright install
 
 # End Generation Here
 CMD ["python", "/app/app.py"]

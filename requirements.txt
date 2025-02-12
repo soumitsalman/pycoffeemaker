@@ -1,4 +1,8 @@
 llama-cpp-python
+bitsandbytes
+transformers
+sentence-transformers
+tiktoken
 numpy
 pymongo
 tiktoken
@@ -24,3 +28,5 @@ azure-storage-blob
 crawl4ai
 nest-asyncio
 asyncpraw
+setuptools
+unsloth

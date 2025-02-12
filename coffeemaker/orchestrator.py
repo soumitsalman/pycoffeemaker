@@ -1,16 +1,16 @@
+import random
 from typing import Awaitable
 from icecream import ic
 import logging
 import asyncio
-from asyncio import Queue, TaskGroup
+from asyncio import Queue
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
-from coffeemaker.pybeansack.embedding import BeansackEmbeddings
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.utils import now
 from coffeemaker.collectors.collector import AsyncCollector, HACKERNEWS, REDDIT
-from coffeemaker.digestors import *
+from coffeemaker.nlp import digestors, embedders
 from pymongo import UpdateOne
+import os
 
 log = logging.getLogger(__name__)
 
@@ -23,17 +23,21 @@ log = logging.getLogger(__name__)
 # # if a bean.summary is less than 150 words, it is not worth summarizing again
 # NEEDS_SUMMARY_BODY_LEN = 150
 # needs_summary = lambda bean: len(bean.text.split()) >= NEEDS_SUMMARY_BODY_LEN
-THROTTLE_TIMEOUT = 5 # seconds
-BATCH_SIZE = 100
-MIN_WORDS_THRESHOLD = 150
-MIN_WORDS_THRESHOLD_FOR_INDEXING = 70
-MAX_CATEGORIES = 5
-END_OF_STREAM = "END_OF_STREAM"
 
-is_text_above_threshold = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD
+QUEUE_BATCH_SIZE = 100
+END_OF_STREAM = "END_OF_STREAM"
+MAX_CLUSTER_SIZE=20
+
+# MIN_WORDS_THRESHOLD = 150
+MIN_WORDS_THRESHOLD_FOR_SUMMARY = 150 # min words needed to use the generated summary
+MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 200 # min words needed to not download the body
+MIN_WORDS_THRESHOLD_FOR_INDEXING = 70 # mininum words needed to put it through indexing
+
+is_text_above_threshold = lambda bean, threshold: bean.text and len(bean.text.split()) >= threshold
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
-is_indexable = lambda bean: bean.text and len(bean.text.split()) >= MIN_WORDS_THRESHOLD_FOR_INDEXING # it has to have some text and the text has to be large enough
-is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean)) # if it is a post dont download it or if the body is large enough
+is_indexable = lambda bean: is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_INDEXING) # it has to have some text and the text has to be large enough
+is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_DOWNLOADING)) # if it is a post dont download it or if the body is large enough
+is_summaryable = lambda bean: bean.kind != POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_SUMMARY) # if the body is large enough
 storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
 indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
 downloadables = lambda beans: [bean for bean in beans if is_downloadable(bean)] if beans else beans
@@ -52,8 +56,8 @@ def _read_sources(file: str) -> list[str]:
         return [line.strip() for line in file.readlines() if line.strip()]
 
 async def _enqueue_beans(queue: Queue, source: str, beans: list[Bean]):
-    for i in range(0, len(beans), BATCH_SIZE):
-        batch = beans[i:i+BATCH_SIZE]
+    for i in range(0, len(beans), QUEUE_BATCH_SIZE):
+        batch = beans[i:i+QUEUE_BATCH_SIZE]
         await queue.put((source, batch))
 
 class Orchestrator:
@@ -66,20 +70,19 @@ class Orchestrator:
     az_storage_conn_str: str = None
     remotesack: MongoSack = None
     localsack: DuckSack = None
-    category_eps: float = None
     cluster_eps: float = None
 
-    embedder: BeansackEmbeddings = None
-    digestor: NewspaperDigestor = None
+    embedder = None
+    digestor = None
+    trend_rank_time: datetime = None
 
-    def __init__(self, db_conn_str: str, storage_conn_str: str, working_dir: str, emb_path: str, llm_path: str, cat_eps: float, clus_eps: float): 
-        self.embedder = BeansackEmbeddings(model_path=emb_path, context_len=512)
-        self.digestor = LocalDigestor(model_path=llm_path) 
+    def __init__(self, remote_db_conn_str: str, local_db_path: str, storage_conn_str: str, emb_path: str, llm_path: str, clus_eps: float): 
+        self.embedder = embedders.from_path(emb_path)
+        self.digestor = digestors.from_path(llm_path)
 
         self.az_storage_conn_str = storage_conn_str
-        self.remotesack = MongoSack(db_conn_str, self.embedder)
-        self.localsack = DuckSack(db_dir=working_dir+"/.db")
-        self.category_eps = cat_eps
+        self.remotesack = MongoSack(remote_db_conn_str, os.getenv("DB_NAME"))
+        self.localsack = DuckSack(local_db_path, os.getenv("DB_NAME"))
         self.cluster_eps = clus_eps    
         self.scraper = AsyncCollector()
         
@@ -100,31 +103,36 @@ class Orchestrator:
     def embed_beans(self, beans: list[Bean]) -> list[Bean]|None:   
         if not beans: return beans
 
-        for bean in beans:
-            try: bean.embedding = self.embedder.embed(bean.digest())  
-            except Exception as e:
-                log.error("failed embedding", extra={"source": bean.url, "num_items": 1})
-                ic(e.__class__.__name__, e) # NOTE: this is for local debugging
+        try:
+            embeddings = self.embedder.embed([bean.digest() for bean in beans])
+            for bean, embedding in zip(beans, embeddings):
+                bean.embedding = embedding
+        except Exception as e:
+            log.error("failed embedding", extra={"source": beans[0].source, "num_items": len(beans)})
+            ic(e.__class__.__name__, e) # NOTE: this is for local debugging
 
         return [bean for bean in beans if bean.embedding]
 
-    def find_categories(self, bean: Bean):    
-        return self.localsack.search_categories(bean.embedding, self.category_eps, MAX_CATEGORIES)
+    # def find_baristas(self, bean: Bean):    
+    #     return self.localsack.search_categories(bean.embedding, self.category_eps)
 
-    def augment_beans(self, beans: list[Bean]) -> list[Bean]|None:
+    def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:
         if not beans: return beans
-        
-        for bean in beans:             
-            try:
-                bean.summary = bean.text # this is the default if things fail
-                if is_text_above_threshold(bean):
-                    digest = self.digestor.run(bean.text)
-                    if digest:
-                        bean.summary = digest.summary or bean.summary
-                        bean.title = digest.title or bean.title
-                        bean.tags = merge_tags(bean, digest.tags)
-            except: log.error("failed augmenting", extra={"source": bean.url, "num_items": 1})
-        
+
+        try:
+            digests = self.digestor.run_batch([bean.text for bean in beans])
+            for bean, digest in zip(beans, digests):
+                if not digest: 
+                    log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
+                    continue
+
+                bean.summary = digest.summary if is_summaryable(bean) else bean.text
+                bean.title = digest.title or bean.title
+                bean.tags = merge_tags(bean, digest.tags)
+        except Exception as e:
+            log.error("failed digesting", extra={"source": beans[0].source, "num_items": len(beans)})
+            ic(e.__class__.__name__, e)
+
         return [bean for bean in beans if bean.summary]  
         
     def store_beans(self, beans: list[Bean]) -> list[Bean]|None:
@@ -148,8 +156,8 @@ class Orchestrator:
     # if a new bean is found related to the query new bean, then it should be skipped for finding related beans for itself
     # keep running this loop through the whole collection until there is no bean without cluster id left
     # every time we find a cluster (a set of related beans) we add it to the update collection and return
-    def find_clusters(self, urls: list[str]) -> dict[str, list[str]]:
-        return {url: self.localsack.search_similar_beans(url, self.cluster_eps) for url in urls}
+    # def find_clusters(self, urls: list[str]) -> dict[str, list[str]]:
+    #     return {url: self.localsack.search_bean_cluster(url, self.cluster_eps, limit=100) for url in urls}
 
     def update_clusters(self, clusters: dict[str, list[str]]):    
         updates = []
@@ -160,7 +168,8 @@ class Orchestrator:
     def cluster_beans(self, beans: list[Bean]):
         if not beans: return
         
-        clusters = self.find_clusters([bean.url for bean in beans])
+        # clusters = self.find_clusters([bean.url for bean in beans])
+        clusters = {bean.url: self.localsack.search_bean_cluster(bean.url, self.cluster_eps, limit=MAX_CLUSTER_SIZE) for bean in beans}
         return self.update_clusters(clusters)
                 
     def find_trend_ranks(self, urls: list[str] = None) -> list[ChatterAnalysis]|None:
@@ -183,7 +192,7 @@ class Orchestrator:
                     K_LATEST_COMMENTS: trend.comments_change,
                     K_LATEST_SHARES: trend.shares_change,
                     K_TRENDSCORE: trend.trend_score,
-                    K_UPDATED: trend.last_collected      
+                    K_UPDATED: self.trend_rank_time or trend.last_collected      
                 }
             }
         ) for trend in trends if trend.trend_score] 
@@ -211,27 +220,19 @@ class Orchestrator:
         current_directory = os.path.dirname(os.path.abspath(__file__))
         rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
         subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
+        random.shuffle(rssfeeds) # shuffling out to avoid failure of the same things
+        random.shuffle(subreddits) # shuffling out to avoid failure of the same things
 
         # awaiting on each group so that os is not overwhelmed by sockets
-        log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
-        await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
+       
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
         log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
         await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
-
-        # async with TaskGroup() as tg:
-        #     log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
-        #     [tg.create_task(self.collect_async(source, self.scraper.collect_subreddit(source)), name=source) for source in subreddits]
-        #     await asyncio.sleep(THROTTLE_TIMEOUT) # NOTE: this throttle is needed to ease the woos of overwhelming number of request sockets
-            
-        #     log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        #     # NOTE: doing an await here before rss feed is that by this time the socket is overwhelmed
-        #     await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
-
-        #     log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
-        #     [tg.create_task(self.collect_async(source, self.scraper.collect_rssfeed(source)), name=source) for source in rssfeeds]
-            
+        log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
+        
+        await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
+        
         await self.download_queue.put(END_OF_STREAM)
 
     async def collect_async(self, source: str, collect: Awaitable[list[tuple[Bean, Chatter]]]):
@@ -255,16 +256,14 @@ class Orchestrator:
 
     @log_runtime
     async def run_downloading_async(self):
-        async with TaskGroup() as tg:
-            while True:
-                items = await self.download_queue.get()
-                if items == END_OF_STREAM: break
-                if not items: continue
+        while True:
+            items = await self.download_queue.get()
+            if items == END_OF_STREAM: break
+            if not items: continue
 
-                source, beans = items
-                # tg.create_task(self.download_async(source, beans), name="downloading: "+source)
-                await self.download_async(source, beans)
-                self.download_queue.task_done()
+            source, beans = items
+            await self.download_async(source, beans)
+            self.download_queue.task_done()
 
         await self.index_queue.put(END_OF_STREAM)
 
@@ -281,32 +280,46 @@ class Orchestrator:
     @log_runtime
     async def run_indexing_async(self):
         total_new_beans = 0
-        async with TaskGroup() as tg:
-            while True:
-                items = await self.index_queue.get()
-                if items == END_OF_STREAM: break
-                if not items: continue
-                
-                source, beans = items
-                if not beans: continue
-
-                # changing the sequence so that it embeds the digest/summary instead of the whole text
-                # since the digest/summary is smaller and got generated through a text-gen model so it is more clean
-                beans = self.store_beans(
-                    self.embed_beans(
-                        self.augment_beans(
-                            self.new_beans(beans))))  
-                if not beans: continue
-                
-                total_new_beans += len(beans)
-                log.info("stored", extra={"source": source, "num_items": len(beans)})  
-                clustered_count = self.cluster_beans(beans)
-                if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
-                ranked_count = self.trend_rank_beans(beans)
-                if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})                
-                self.index_queue.task_done()
+        while True:
+            items = await self.index_queue.get()
+            if items == END_OF_STREAM: break
+            if not items: continue
             
+            source, beans = items
+            if not beans: continue
+
+            # changing the sequence so that it embeds the digest/summary instead of the whole text
+            # since the digest/summary is smaller and got generated through a text-gen model so it is more clean. 
+            beans = self.new_beans(indexables(beans))
+            beans = self.embed_beans(self.digest_beans(beans))
+            beans = self.store_beans(beans) 
+
+            if not beans: continue
+
+            total_new_beans += len(beans)
+            log.info("stored", extra={"source": source, "num_items": len(beans)})  
+            self.cluster_and_rank_beans(source, beans)            
+
+            self.index_queue.task_done()
+
         log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 
+
+    def cluster_and_rank_beans(self, source: str, beans: list[Bean]):
+        if not beans: return
+
+        clustered_count = self.cluster_beans(beans)
+        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
+        ranked_count = self.trend_rank_beans(beans)
+        if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})  
+
+    async def cluster_and_rank_beans_async(self, source: str, beans: list[Bean]):
+        if not beans: return
+
+        loop = asyncio.get_event_loop()
+        clustered_count = await loop.run_in_executor(None, self.cluster_beans, beans)
+        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
+        ranked_count = await loop.run_in_executor(None, self.trend_rank_beans, beans)
+        if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})  
 
     # 1. schedule a clean up
     # 2. start collection
@@ -324,7 +337,7 @@ class Orchestrator:
         # instantiate the run specific work
         self.download_queue = Queue()
         self.index_queue = Queue()
-        self.run_id = now().strftime("%Y-%m-%d %H")
+        self.run_id = datetime.now().strftime("%Y-%m-%d %H")
 
         # 1. start all the scrapers
         # 2. once the chatter collection is done
@@ -337,6 +350,8 @@ class Orchestrator:
 
         # clean up the old stuff from the db before adding new crap
         self.cleanup()
+
+        self.trend_rank_time = datetime.now()
         ranked_count = self.trend_rank_beans()
         log.info("trend ranked", extra={"source": self.run_id, "num_items": ranked_count})
 

@@ -12,29 +12,7 @@ BLOG = "blog"
 COMMENTS = "comments"
 
 # names of important fields of collections
-K_CONTAINER_URL = "container_url"
-K_LIKES = "likes"
-K_COMMENTS = "comments"
-K_SHARES = "shares"
-
-class Chatter(BaseModel):
-    # this is the url of bean it represents
-    url: Optional[str] = None 
-    # this is the url in context of the social media post that contains the bean represented 'url'
-    # when the bean itself is a post (instead of a news/article url) container url is the same as 'url' 
-    chatter_url: Optional[str] = None
-    source: Optional[str] = None
-    channel: Optional[str] = None    
-    collected: Optional[datetime] = None
-   
-    likes: Optional[int] = Field(default=0)    
-    comments: Optional[int] = Field(default=0)
-    shares: Optional[int] = Field(default=0)
-    subscribers: Optional[int] = Field(default=0)
-    
-    def digest(self):
-        return f"From: {self.source}\nBody: {self.text}"
-
+K_ID="_id"
 K_URL="url"
 K_KIND = "kind"
 K_CATEGORIES = "categories"
@@ -58,10 +36,17 @@ K_LATEST_LIKES = "latest_likes"
 K_LATEST_COMMENTS = "latest_comments"
 K_LATEST_SHARES = "latest_shares"
 K_TRENDSCORE = "trend_score"
-
+K_CONTAINER_URL = "container_url"
+K_LIKES = "likes"
+K_COMMENTS = "comments"
+K_SHARES = "shares"
+K_OWNER = "owner"
+K_FOLLOWING = "following"
+K_DESCRIPTION = "description"
+SYSTEM = "__SYSTEM__"
 
 class Bean(BaseModel):
-    id: str = Field(default=None, alias="_id", serialization_alias="_id")
+    id: str = Field(default=None, alias="_id")
     url: str    
     source: Optional[str] = None
     title: Optional[str] = None
@@ -92,29 +77,28 @@ class Bean(BaseModel):
         tag_text = {"\n\nTags: "+(", ".join(self.tags))} if self.tags else ""
         return f"# {self.title}\n\n{self.summary}{tag_text}"
     
-
-K_ID = "_id"
-K_KEYPHRASE = "keyphrase"
-K_EVENT="event"
-K_DESCRIPTION = "description"
-K_URLS = "urls"
-
-class Highlight(BaseModel):
-    id: str = Field(default=None, alias="_id")
-    url: Optional[str] = None
-    description: str 
-    updated: Optional[int] = None
-    embedding: Optional[list[float]] = None
-    cluster_id: Optional[str] = None
-    trend_score: Optional[int] = None
-
-    def digest(self) -> str:
-        return self.description
-    
     class Config:
         populate_by_name = True
-        arbitrary_types_allowed=True
+        arbitrary_types_allowed=False
 
+class Chatter(BaseModel):
+    # this is the url of bean it represents
+    url: Optional[str] = None 
+    # this is the url in context of the social media post that contains the bean represented 'url'
+    # when the bean itself is a post (instead of a news/article url) container url is the same as 'url' 
+    chatter_url: Optional[str] = None
+    source: Optional[str] = None
+    channel: Optional[str] = None    
+    collected: Optional[datetime] = None
+   
+    likes: Optional[int] = Field(default=0)    
+    comments: Optional[int] = Field(default=0)
+    shares: Optional[int] = Field(default=0)
+    subscribers: Optional[int] = Field(default=0)
+    
+    def digest(self):
+        return f"From: {self.source}\nBody: {self.text}"
+    
 class Source(BaseModel):
     url: str
     kind: str
@@ -134,3 +118,36 @@ class ChatterAnalysis(BaseModel):
     shared_in_change: Optional[list[str]] = None
     trend_score: Optional[int] = 0
     
+class User(BaseModel):
+    id: Optional[str] = Field(default=None, serialization_alias="_id")  
+    email: str = None 
+    name: Optional[str] = None
+    image_url: Optional[str] = None  
+    linked_accounts: Optional[list[str]] = None
+    following: Optional[list[str]] = None
+    created: Optional[datetime] = None
+    updated: Optional[datetime] = None
+
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed=False
+
+class Barista(BaseModel):
+    id: str = Field(alias="_id")
+    title: Optional[str] = None
+    description: Optional[str] = None
+    created: Optional[datetime] = Field(default_factory=datetime.now)
+    owner: Optional[str] = Field(default=SYSTEM)
+    public: Optional[bool] = Field(default=False)
+    
+    query_urls: Optional[list[str]] = Field(default=None, alias="urls")
+    query_kinds: Optional[list[str]] = Field(default=None, alias="kinds")
+    query_sources: Optional[list[str]] = Field(default=None, alias="sources")   
+    query_tags :Optional[list[str]] = Field(default=None, alias="tags")
+    query_text: Optional[str] = Field(default=None, alias="text")
+    query_embedding: Optional[list[float]] = Field(default=None, alias="embedding")
+    query_distance: Optional[float] = Field(default=None, alias="distance")
+    
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed=False

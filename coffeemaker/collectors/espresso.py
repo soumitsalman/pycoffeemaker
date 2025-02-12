@@ -1,8 +1,10 @@
 import json
 from azure.servicebus import ServiceBusClient
-from coffeemaker.pybeansack.utils import now
 from coffeemaker.collectors.individual import extract_source
 from coffeemaker.pybeansack.models import BLOG, K_CREATED, K_SOURCE, K_UPDATED, K_URL, Bean
+from datetime import datetime 
+
+now = datetime.now
 
 def collect(sb_conn_str: str, store_func):
     collected = now()
