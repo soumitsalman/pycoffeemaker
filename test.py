@@ -315,9 +315,10 @@ def test_run_async():
     orch.close()
 
 if __name__ == "__main__":
-    # test_run_async()
+    
     start = datetime.now()
     # test_embedder()
-    test_digestor()
+    # test_digestor()
+    test_run_async()
     ic(datetime.now() - start)
     

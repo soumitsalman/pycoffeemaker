@@ -90,7 +90,12 @@ class Orchestrator:
         if not beans: beans
 
         new_items = {}
-        exists = self.localsack.exists(beans)
+        try:
+            exists = self.localsack.exists(beans)
+        except Exception as e:
+            ic(e) # if the batch fails then don't process any in that batch
+            exists = [bean.url for bean in beans]
+
         for bean in beans:
             if bean.url not in exists:
                 bean.id = bean.url
