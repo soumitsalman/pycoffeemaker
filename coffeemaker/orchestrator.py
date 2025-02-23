@@ -74,7 +74,7 @@ class Orchestrator:
 
     embedder = None
     digestor = None
-    trend_rank_time: datetime = None
+    run_batch_time: datetime = None
 
     def __init__(self, remote_db_conn_str: str, local_db_path: str, storage_conn_str: str, emb_path: str, llm_path: str, clus_eps: float): 
         self.embedder = embedders.from_path(emb_path)
@@ -100,6 +100,7 @@ class Orchestrator:
             if bean.url not in exists:
                 bean.id = bean.url
                 bean.created = bean.created or bean.collected
+                bean.updated = self.run_batch_time or bean.updated or bean.collected
                 bean.tags = None
                 bean.cluster_id = bean.url
                 new_items[bean.url] = bean
@@ -197,7 +198,7 @@ class Orchestrator:
                     K_LATEST_COMMENTS: trend.comments_change,
                     K_LATEST_SHARES: trend.shares_change,
                     K_TRENDSCORE: trend.trend_score,
-                    K_UPDATED: self.trend_rank_time or trend.last_collected      
+                    K_UPDATED: self.run_batch_time or trend.last_collected      
                 }
             }
         ) for trend in trends if trend.trend_score] 
@@ -356,7 +357,7 @@ class Orchestrator:
         # clean up the old stuff from the db before adding new crap
         self.cleanup()
 
-        self.trend_rank_time = datetime.now()
+        self.run_batch_time = datetime.now()
         ranked_count = self.trend_rank_beans()
         log.info("trend ranked", extra={"source": self.run_id, "num_items": ranked_count})
 

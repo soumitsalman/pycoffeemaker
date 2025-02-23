@@ -12,6 +12,7 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConf
 from newspaper import Article
 import asyncpraw
 import requests
+from retry import retry
 import tldextract
 from dateutil.parser import parse as date_parser
 import re
@@ -523,6 +524,7 @@ class AsyncCollector:
     extract_source = lambda url: extract_domain(url) or extract_base_url(url)
     
     ### reddit related utilities ###
+    @retry(tries=2, delay=5, jitter=(0, 10))
     async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
         try:
             subreddit = await self.reddit_client.subreddit(subreddit_name)
