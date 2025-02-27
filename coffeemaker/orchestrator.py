@@ -99,7 +99,7 @@ class Orchestrator:
         for bean in beans:
             if bean.url not in exists:
                 bean.id = bean.url
-                bean.created = bean.created or bean.collected
+                bean.created = min(bean.created or bean.collected, bean.collected)
                 bean.updated = self.run_batch_time or bean.updated or bean.collected
                 bean.tags = None
                 bean.cluster_id = bean.url
