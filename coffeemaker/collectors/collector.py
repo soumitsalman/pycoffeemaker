@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from urllib.parse import urljoin, urlparse
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 import aiohttp
 import feedparser
@@ -205,7 +205,8 @@ BROWSER_CONFIG = BrowserConfig(
 )
 
 # general utilities
-now = datetime.now
+now = lambda: datetime.now(timezone.utc)
+from_timestamp = lambda timestamp: min(now(), datetime.fromtimestamp(timestamp, timezone.utc)) if timestamp else now()
 reddit_submission_permalink = lambda permalink: f"https://www.reddit.com{permalink}"
 hackernews_story_metadata = lambda id: f"https://hacker-news.firebaseio.com/v0/item/{id}.json"
 hackernews_story_permalink = lambda id: f"https://news.ycombinator.com/item?id={id}"
@@ -219,7 +220,7 @@ def extract_domain(url: str) -> str:
     except: return None
 
 def parse_date(date: str) -> datetime:
-    try: return date_parser(date)
+    try: return date_parser(date, timezones=["UTC"])
     except: return None
 
 # general utilities
@@ -430,13 +431,14 @@ class AsyncCollector:
     async def collect_beans(self, beans: list[Bean], collect_metadata: bool = False) -> list[Bean]:
         """Collects the bodies of the beans as markdowns"""
         results = await self.collect_urls([bean.url for bean in beans], collect_metadata)
+        current_time = now()
         for bean, result in zip(beans, results):
             if not result: continue
             bean.text = result.get("markdown")
             bean.title = result.get("meta_title") or bean.title or result.get("title") # this sequence is important because result['title'] is often crap
             bean.image_url = result.get("top_image") or bean.image_url
             bean.author = result.get("author") or bean.author
-            bean.created = result.get("published_time") or bean.created
+            bean.created = min(result.get("published_time") or bean.created or bean.collected, current_time)
             bean.source = result.get("site_name") or bean.source # override the source
         return beans
  
@@ -454,12 +456,12 @@ class AsyncCollector:
             return collected
         except Exception as e:
             log.warning("collection failed", extra={"source": url, "num_items": 1})
-            ic(e.__class__.__name__, e) # NOTE: this is for local debugging
+            ic(url, e) # NOTE: this is for local debugging
 
     def _from_rssfeed(self, entry: feedparser.FeedParserDict, source: str, default_kind: str) -> tuple[Bean, Chatter]:
         current_time = now()
         published_time = entry.get("published_parsed") or entry.get("updated_parsed")
-        created_time = datetime.fromtimestamp(time.mktime(published_time)) if published_time else current_time
+        created_time = from_timestamp(time.mktime(published_time)) if published_time else current_time
         body_html = AsyncCollector._extract_body(entry)
         body = f"# {entry.title}\n\n{self._generate_markdown(body_html)}" if body_html else None
         return (
@@ -524,21 +526,24 @@ class AsyncCollector:
     extract_source = lambda url: extract_domain(url) or extract_base_url(url)
     
     ### reddit related utilities ###
-    @retry(tries=2, delay=5, jitter=(0, 10))
     async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
         try:
-            subreddit = await self.reddit_client.subreddit(subreddit_name)
-            return [self._from_reddit(post, default_kind) 
-                    async for post in subreddit.hot(limit=20) 
-                    if not _excluded_url(post.url)]
+            return await self._collect_subreddit(subreddit_name, default_kind)
         except Exception as e:
             log.warning("collection failed", extra={"source": subreddit_name, "num_items": 1})
-            print(f"collection failed",subreddit_name, e)
+            ic(subreddit_name, e)
+        
+    @retry(tries=2, delay=5, jitter=(0, 10))
+    async def _collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
+        subreddit = await self.reddit_client.subreddit(subreddit_name)
+        return [self._from_reddit(post, default_kind) 
+                async for post in subreddit.hot(limit=20) 
+                if not _excluded_url(post.url)]
 
     def _from_reddit(self, post, default_kind) -> tuple[Bean, Chatter]: 
         subreddit = f"r/{post.subreddit.display_name}"
         current_time = now()
-        created_time = datetime.fromtimestamp(post.created_utc)
+        created_time = from_timestamp(post.created_utc)
 
         if post.is_self:    
             url = reddit_submission_permalink(post.permalink)
@@ -601,12 +606,12 @@ class AsyncCollector:
             return collected
         except Exception as e:
             log.warning("collection failed", extra={"source": HACKERNEWS, "num_items": 1})
-            ic(e.__class__.__name__, e)
+            ic(HACKERNEWS, e)
         
     def _from_hackernews_story(self, story: dict, default_kind: str) -> tuple[Bean, Chatter]:
         # either its a shared url or it is a text
         current_time = now()
-        created_time = datetime.fromtimestamp(story['time']) if 'time' in story else current_time
+        created_time = from_timestamp(story['time'])
 
         id = story['id']
         if 'url' in story:

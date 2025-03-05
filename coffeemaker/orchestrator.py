@@ -99,7 +99,7 @@ class Orchestrator:
         for bean in beans:
             if bean.url not in exists:
                 bean.id = bean.url
-                bean.created = min(bean.created or bean.collected, bean.collected)
+                bean.created = bean.created or bean.collected
                 bean.updated = self.run_batch_time or bean.updated or bean.collected
                 bean.tags = None
                 bean.cluster_id = bean.url
@@ -212,7 +212,7 @@ class Orchestrator:
 
     def cleanup(self):
         # TODO: add delete from localsack
-        num_items =  self.remotesack.delete_old(window=30)
+        num_items =  self.remotesack.delete_old(window=60)
         log.info("cleaned up", extra={"source": self.run_id, "num_items": num_items})
 
     def close(self):
