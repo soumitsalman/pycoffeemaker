@@ -178,8 +178,8 @@ class Beansack:
 
         self.db_name = db_name+".db"
         self.db_filepath = os.path.join(db_path, self.db_name)
+        # removing             .execute(SQL_INSTALL_VSS) temporarily
         self.db = duckdb.connect(self.db_filepath, read_only=False) \
-            .execute(SQL_INSTALL_VSS) \
             .execute(SQL_CREATE_BEANS) \
             .execute(SQL_CREATE_CHATTERS) \
             .execute(SQL_CREATE_BARISTAS) \
