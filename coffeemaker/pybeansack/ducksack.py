@@ -9,6 +9,13 @@ INSTALL vss;
 LOAD vss;
 """
 
+SQL_DB_INIT = """
+SET checkpoint_threshold = '128 KB';
+SET wal_autocheckpoint = '128 KB';
+INSTALL vss;
+LOAD vss;
+"""
+
 SQL_CREATE_BEANS = """
 CREATE TABLE IF NOT EXISTS beans (
     url VARCHAR PRIMARY KEY,
@@ -35,8 +42,9 @@ WITH (metric = 'cosine');
 SQL_INSERT_BEANS = """
 INSERT INTO beans (url, kind, source, author, created, collected, updated, title, summary, tags, embedding) 
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT DO NOTHING
+ON CONFLICT DO NOTHING;
 """
+SQL_CHECKPOINT = "CHECKPOINT;"
 
 SQL_CREATE_CHATTERS = """
 CREATE TABLE IF NOT EXISTS chatters (
@@ -178,8 +186,8 @@ class Beansack:
 
         self.db_name = db_name+".db"
         self.db_filepath = os.path.join(db_path, self.db_name)
-        # removing             .execute(SQL_INSTALL_VSS) temporarily
         self.db = duckdb.connect(self.db_filepath, read_only=False) \
+            .execute(SQL_DB_INIT) \
             .execute(SQL_CREATE_BEANS) \
             .execute(SQL_CREATE_CHATTERS) \
             .execute(SQL_CREATE_BARISTAS) \
@@ -204,7 +212,7 @@ class Beansack:
                 bean.embedding
             ) for bean in beans
         ]
-        local_conn.executemany(SQL_INSERT_BEANS, beans_data).commit()
+        local_conn.executemany(SQL_INSERT_BEANS, beans_data).execute(SQL_CHECKPOINT).commit()
 
     def exists(self, beans: list[Bean]) -> list[str]:
         if not beans: return None

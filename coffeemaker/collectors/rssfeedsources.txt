@@ -263,6 +263,7 @@ https://fly.io/blog/feed.xml
 https://www.digitalocean.com/blog.atom
 https://blog.runpod.io/rss/
 https://aws.amazon.com/blogs/media/feed/
+https://github.blog/feed/
 https://blog.businesswire.com/rss.xml
 https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeEFpQWQ==
 https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJdEVhZXw==

@@ -126,6 +126,7 @@ METADATA_EXTRACTION_SCHEMA = {
         {"name": "rss_feed", "type": "attribute", "selector": "link[type='application/rss+xml']", "attribute": "href"},
     ]
 }
+SCRAPER_BATCH_SIZE = os.cpu_count()*os.cpu_count()
 
 MD_COLLECTION_CONFIG = CrawlerRunConfig(   
     # content processing
@@ -141,8 +142,8 @@ MD_COLLECTION_CONFIG = CrawlerRunConfig(
     cache_mode=CacheMode.ENABLED,
 
     # navigation & timing
+    semaphore_count=SCRAPER_BATCH_SIZE,
     wait_for_images=False,
-    semaphore_count=os.cpu_count(),
 
     # page interaction
     scan_full_page=False,
@@ -174,8 +175,8 @@ MD_AND_METADATA_COLLECTION_CONFIG = CrawlerRunConfig(
     cache_mode=CacheMode.BYPASS,
 
     # navigation & timing
-    wait_for_images=False,    
-    semaphore_count=os.cpu_count(),
+    semaphore_count=SCRAPER_BATCH_SIZE,
+    wait_for_images=False,  
 
     # page interaction
     scan_full_page=False,
@@ -319,9 +320,9 @@ class AsyncCollector:
     #             result = await crawler.arun(url=url, config=config)
     #             return AsyncCollector._package_result(result)
     #         results = await asyncio.gather(*[_collect(url) for url in urls])
-
     #     return results
 
+    # NOTE: The failure rate seems higher on this one
     async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
         """Collects the bodies of the urls as markdowns"""
         async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
@@ -411,7 +412,7 @@ class AsyncCollector:
     #         ic(e.__class__.__name__, e)
 
     def _package_result(result: CrawlResult) -> dict:
-        if _excluded_url(result.url) or not isinstance(result, CrawlResult) or result.status_code != 200: return
+        if not isinstance(result, CrawlResult) or ic(result.status_code) != 200: return
 
         ret = {
             "url": result.url,
@@ -614,14 +615,14 @@ class AsyncCollector:
         created_time = from_timestamp(story['time'])
 
         id = story['id']
-        if 'url' in story:
+        if story.get('url'):
             url = story['url']
-            kind = guess_type(url, HACKERNEWS) or default_kind
             source = extract_base_url(url)
+            kind = guess_type(url, source) or default_kind
         else:
             url = hackernews_story_permalink(id)
+            source = HACKERNEWS           
             kind = POST
-            source = HACKERNEWS
                     
         return (
             Bean(            

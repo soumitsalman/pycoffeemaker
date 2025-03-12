@@ -58,6 +58,9 @@ def _create_orchestrator():
         float(os.getenv('CLUSTER_EPS')))
 
 def test_collection():
+    orch = _create_orchestrator()
+    asyncio.run(orch.run_collections_async())
+    orch.close()
     # orch.run_collection()
     # urls = [
     #     "https://www.huffpost.com/entry/vivek-ramaswamy-ohio-senate_n_6788136ee4b0ebaad44e9932",
@@ -78,7 +81,8 @@ def test_collection():
     # collected = lambda beans: logger.info("collected", extra={"source": beans[0][0].source if isinstance(beans[0], tuple) else beans[0].source, "num_items": len(beans)}) if beans else None
     # rssfeed.collect(collected, sources=sources)
     # redditor.collect(collected)
-    asyncio.run(orch.run_collection_async())
+    
+    
     
     # rssfeed.collect(store_beans=lambda items: print(len(items), "beans collected from", items[0].source), sources=sources)
     # redditor.collect(
@@ -317,8 +321,9 @@ def test_run_async():
 if __name__ == "__main__":
     
     start = datetime.now()
+    test_run_async()
     # test_embedder()
     # test_digestor()
-    test_run_async()
+    # test_run_async()
     ic(datetime.now() - start)
     

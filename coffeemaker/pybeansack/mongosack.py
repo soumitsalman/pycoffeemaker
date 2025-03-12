@@ -90,7 +90,7 @@ class Beansack:
     def not_exists(self, beans: list[Bean]):
         if not beans: return beans
 
-        exists = [item[K_URL] for item in self.beanstore.find({K_URL: {"$in": [bean.url for bean in beans]}}, {K_URL: 1})]
+        exists = [item[K_ID] for item in self.beanstore.find({K_ID: {"$in": [bean.url for bean in beans]}}, {K_ID: 1})]
         return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
                 
     def store_chatters(self, chatters: list[Chatter]):

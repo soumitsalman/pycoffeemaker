@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 # NEEDS_SUMMARY_BODY_LEN = 150
 # needs_summary = lambda bean: len(bean.text.split()) >= NEEDS_SUMMARY_BODY_LEN
 
-QUEUE_BATCH_SIZE = 100
+QUEUE_BATCH_SIZE = os.cpu_count()*os.cpu_count()
 END_OF_STREAM = "END_OF_STREAM"
 MAX_CLUSTER_SIZE=20
 
@@ -56,9 +56,8 @@ def _read_sources(file: str) -> list[str]:
         return [line.strip() for line in file.readlines() if line.strip()]
 
 async def _enqueue_beans(queue: Queue, source: str, beans: list[Bean]):
-    for i in range(0, len(beans), QUEUE_BATCH_SIZE):
-        batch = beans[i:i+QUEUE_BATCH_SIZE]
-        await queue.put((source, batch))
+    if not beans: return
+    await asyncio.gather(*[queue.put((source, beans[i:i+QUEUE_BATCH_SIZE])) for i in range(0, len(beans), QUEUE_BATCH_SIZE)])
 
 class Orchestrator:
     run_id: str = None
@@ -84,7 +83,7 @@ class Orchestrator:
         self.remotesack = MongoSack(remote_db_conn_str, os.getenv("DB_NAME"))
         self.localsack = DuckSack(local_db_path, os.getenv("DB_NAME"))
         self.cluster_eps = clus_eps    
-        self.scraper = AsyncCollector()
+        
         
     def new_beans(self, beans: list[Bean]) -> list[Bean]:
         if not beans: beans
@@ -141,12 +140,14 @@ class Orchestrator:
 
         return [bean for bean in beans if bean.summary]  
         
-    def store_beans(self, beans: list[Bean]) -> list[Bean]|None:
+    def store_beans(self, source: str, beans: list[Bean]) -> list[Bean]|None:
         beans = storables(beans)
+        num_stored = 0
         if beans:
             self.localsack.store_beans(beans)
-            self.remotesack.store_beans(beans)
-        return beans
+            num_stored = self.remotesack.store_beans(beans)
+            log.info("stored", extra={"source": source, "num_items": num_stored})  
+        return beans if num_stored else None
             
     def store_chatters(self, chatters: list[Chatter]) -> list[Chatter]|None:
         if chatters:
@@ -171,12 +172,13 @@ class Orchestrator:
             updates.extend([UpdateOne({ K_ID: url }, { "$set": { K_CLUSTER_ID: key } }) for url in val])
         return self.remotesack.update_beans(updates)
         
-    def cluster_beans(self, beans: list[Bean]):
+    def cluster_beans(self, source:str, beans: list[Bean]):
         if not beans: return
         
         # clusters = self.find_clusters([bean.url for bean in beans])
         clusters = {bean.url: self.localsack.search_bean_cluster(bean.url, self.cluster_eps, limit=MAX_CLUSTER_SIZE) for bean in beans}
-        return self.update_clusters(clusters)
+        clustered_count = self.update_clusters(clusters)
+        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
                 
     def find_trend_ranks(self, urls: list[str] = None) -> list[ChatterAnalysis]|None:
         calculate_trend_score = lambda chatter_delta: 100*(chatter_delta.comments_change or 0) + 10*(chatter_delta.shares_change or 0) + (chatter_delta.likes_change or 0)
@@ -204,11 +206,12 @@ class Orchestrator:
         ) for trend in trends if trend.trend_score] 
         return self.remotesack.update_beans(updates)
         
-    def trend_rank_beans(self, beans: list[Bean] = None):
+    def trend_rank_beans(self, source: str = None, beans: list[Bean] = None):
         trends = self.find_trend_ranks([bean.url for bean in beans] if beans else None)
         if not trends: return
 
-        return self.update_trend_ranks(trends)
+        ranked_count = self.update_trend_ranks(trends)
+        if ranked_count: log.info("trend ranked", extra={"source": source or self.run_id, "num_items": ranked_count}) 
 
     def cleanup(self):
         # TODO: add delete from localsack
@@ -230,16 +233,12 @@ class Orchestrator:
         random.shuffle(subreddits) # shuffling out to avoid failure of the same things
 
         # awaiting on each group so that os is not overwhelmed by sockets
+        log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
+        await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
-       
         await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
         log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
         await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
-        log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
-        
-        await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
-        
-        await self.download_queue.put(END_OF_STREAM)
 
     async def collect_async(self, source: str, collect: Awaitable[list[tuple[Bean, Chatter]]]):
         collection = await collect
@@ -251,14 +250,12 @@ class Orchestrator:
             self.localsack.store_chatters(chatters)
         
         beans = self.new_beans([bean for bean in beans if bean]) if beans else None
-        needs_download = downloadables(beans)
-        if needs_download:
-            await _enqueue_beans(self.download_queue, source, needs_download)
-            beans = [bean for bean in beans if bean not in needs_download]
         if not beans: return
-
-        await _enqueue_beans(self.index_queue, source, beans)
-        log.info("collected", extra={"source": source, "num_items": len(beans)})
+        
+        log.info("collected", extra={"source": source, "num_items": len(beans)})   
+        needs_download = downloadables(beans)
+        await _enqueue_beans(self.download_queue, source, needs_download)   
+        await _enqueue_beans(self.index_queue, source, [bean for bean in beans if bean not in needs_download])
 
     @log_runtime
     async def run_downloading_async(self):
@@ -271,17 +268,15 @@ class Orchestrator:
             await self.download_async(source, beans)
             self.download_queue.task_done()
 
-        await self.index_queue.put(END_OF_STREAM)
-
     async def download_async(self, source: str, beans: list[Bean]):
         if not beans: return
         
         downloaded_beans = indexables(await self.scraper.collect_beans(beans, collect_metadata=True))
-        if downloaded_beans:
-            await self.index_queue.put((source, downloaded_beans))
-            log.info("downloaded", extra={"source": source, "num_items": len(downloaded_beans)})
-        if len(downloaded_beans) < len(beans):
+        if len(downloaded_beans) < len(beans): 
             log.info("download failed", extra={"source": source, "num_items": len(beans)-len(downloaded_beans)})
+        if downloaded_beans: 
+            log.info("downloaded", extra={"source": source, "num_items": len(downloaded_beans)})
+            await _enqueue_beans(self.index_queue, source, downloaded_beans)
         
     @log_runtime
     async def run_indexing_async(self):
@@ -298,13 +293,11 @@ class Orchestrator:
             # since the digest/summary is smaller and got generated through a text-gen model so it is more clean. 
             beans = self.new_beans(indexables(beans))
             beans = self.embed_beans(self.digest_beans(beans))
-            beans = self.store_beans(beans) 
+            beans = self.store_beans(source, beans) 
 
-            if not beans: continue
-
-            total_new_beans += len(beans)
-            log.info("stored", extra={"source": source, "num_items": len(beans)})  
-            self.cluster_and_rank_beans(source, beans)            
+            if beans: 
+                total_new_beans += len(beans)
+                self.cluster_and_rank_beans(source, beans)            
 
             self.index_queue.task_done()
 
@@ -313,19 +306,15 @@ class Orchestrator:
     def cluster_and_rank_beans(self, source: str, beans: list[Bean]):
         if not beans: return
 
-        clustered_count = self.cluster_beans(beans)
-        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
-        ranked_count = self.trend_rank_beans(beans)
-        if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})  
+        self.cluster_beans(source, beans)
+        self.trend_rank_beans(source, beans)        
 
     async def cluster_and_rank_beans_async(self, source: str, beans: list[Bean]):
         if not beans: return
 
         loop = asyncio.get_event_loop()
-        clustered_count = await loop.run_in_executor(None, self.cluster_beans, beans)
-        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
-        ranked_count = await loop.run_in_executor(None, self.trend_rank_beans, beans)
-        if ranked_count: log.info("trend ranked", extra={"source": source, "num_items": ranked_count})  
+        await loop.run_in_executor(None, self.cluster_beans, source, beans)
+        await loop.run_in_executor(None, self.trend_rank_beans, source, beans)
 
     # 1. schedule a clean up
     # 2. start collection
@@ -341,9 +330,7 @@ class Orchestrator:
     @log_runtime
     async def run_async(self):    
         # instantiate the run specific work
-        self.download_queue = Queue()
-        self.index_queue = Queue()
-        self.run_id = datetime.now().strftime("%Y-%m-%d %H")
+        self._init_run()
 
         # 1. start all the scrapers
         # 2. once the chatter collection is done
@@ -351,21 +338,23 @@ class Orchestrator:
         # 4. then kick off indexing
         # 5. wait for the downloading to finish and then put the end of stream for indexing
         # 6. wait for indexing to finish
-        # await self.scraper.web_crawler.start() # this is very important otherwise people die
-        await self.run_collections_async()        
 
-        # clean up the old stuff from the db before adding new crap
+        await self.run_collections_async()
+        await self.download_queue.put(END_OF_STREAM)
         self.cleanup()
+        self.trend_rank_beans()
 
-        self.run_batch_time = datetime.now()
-        ranked_count = self.trend_rank_beans()
-        log.info("trend ranked", extra={"source": self.run_id, "num_items": ranked_count})
-
-        downloading_task = asyncio.create_task(self.run_downloading_async())
-        indexing_task = asyncio.create_task(self.run_indexing_async())       
-
-        await downloading_task
+        indexing_task = asyncio.create_task(self.run_indexing_async()) 
+        await self.run_downloading_async()
         await self.index_queue.put(END_OF_STREAM)
-        await self.scraper.close() # this is for closing out the open sessions
+        await self.scraper.close() 
+        
         await indexing_task
+        
+    def _init_run(self):
+        self.scraper = AsyncCollector()        
+        self.download_queue = Queue()
+        self.index_queue = Queue()
+        self.run_id = datetime.now().strftime("%Y-%m-%d %H")
+        self.run_batch_time = datetime.now()
   
