@@ -1,25 +1,30 @@
+import asyncio
+from dotenv import load_dotenv
+load_dotenv()
+
 from itertools import chain
 import json
-import logging
 import os
 import re
-from dotenv import load_dotenv
 from icecream import ic
-from datetime import datetime as dt
-
-CURR_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(CURR_DIR+"/.env")
-WORKING_DIR = os.getenv("WORKING_DIR", CURR_DIR)
-
+from datetime import datetime, timedelta
 from pymongo import MongoClient, UpdateOne
-
 from coffeemaker.collectors import ychackernews, redditor
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.utils import *
-from coffeemaker import orchestrator as orch
+from coffeemaker.orchestrator import Orchestrator
 
-make_id = lambda text: re.sub(r'[^a-zA-Z0-9]', '-', text.lower())
 K_RELATED = "related"
+LIMIT=40000
+
+ndays_ago = lambda n: (datetime.now() - timedelta(days=n))
+make_id = lambda text: re.sub(r'[^a-zA-Z0-9]', '-', text.lower())
+create_orch = lambda: Orchestrator(
+    os.getenv("REMOTE_DB_CONNECTION_STRING"),
+    os.getenv("LOCAL_DB_PATH"),
+    os.getenv("AZSTORAGE_CONNECTION_STRING"), 
+    os.getenv("EMBEDDER_PATH"),    
+    os.getenv("LLM_PATH"),
+    float(os.getenv('CLUSTER_EPS')))
 
 def setup_categories():   
     updates = []
@@ -137,23 +142,30 @@ def rectify_ranking():
 def port_categories_to_localsack():
     orch.localsack.store_categories(list(orch.categorystore.find()))
 
+
 def port_beans_to_localsack():
+    orch = create_orch()
     beans = orch.remotesack.get_beans(
         filter={
             K_EMBEDDING: {"$exists": True},
-            K_COLLECTED: {"$gte": int(ndays_ago(3).timestamp())}
-        },
-        projection={K_ID: 0, K_TEXT: 0}
+            K_COLLECTED: {"$gte": ndays_ago(30)}
+        }
     )
-    print("porting beans|%d", len(beans))
-    for bean in beans:
-        if isinstance(bean.created, int):
-            bean.created = dt.fromtimestamp(bean.created)
-        if isinstance(bean.updated, int):
-            bean.updated = dt.fromtimestamp(bean.updated)
-        if isinstance(bean.collected, int):
-            bean.collected = dt.fromtimestamp(bean.collected)
-    orch.localsack.store_beans(beans)
+    print(datetime.now(), "porting beans|%d", len(beans))
+    BATCH_SIZE = 2000
+    
+    async def store_locally(beans: list[Bean]):
+        tasks = [asyncio.to_thread(orch.localsack.store_beans, beans[i:i+BATCH_SIZE]) for i in range(0, len(beans), BATCH_SIZE)]
+        await asyncio.gather(*tasks) 
+           
+    asyncio.run(store_locally(beans))   
+    orch.close()
+    
+    print(datetime.now(), "finished porting beans")
+
+def port_chatters_to_localsack():
+    orch = create_orch()
+    
     print("finished porting beans")
 
 def port_chatters_to_localsack():
@@ -169,112 +181,6 @@ def port_chatters_to_localsack():
     orch.localsack.store_chatters(chatters)
     print("finished porting chatters")
 
-orch.initialize(
-    os.getenv("DB_CONNECTION_STRING"),
-    os.getenv("SB_CONNECTION_STRING"), 
-    WORKING_DIR, 
-    os.getenv("EMBEDDER_PATH"),    
-    os.getenv("LLM_BASE_URL"),
-    os.getenv("LLM_API_KEY"),
-    os.getenv("LLM_MODEL"),
-    float(os.getenv('CATEGORY_EPS')),
-    float(os.getenv('CLUSTER_EPS'))
-)
-
-# port_chatters_to_localsack()
-# port_categories_to_localsack()
-# port_beans_to_localsack()
-# _patch_upper_categories()
-# setup_categories()
-# embed_categories()
-# rectify_categories()
-# orch.run_clustering()
-# rectify_ranking()
-# setup_baristas()
-
-ndays_ago = lambda n: (datetime.now() - timedelta(days=n))
-LIMIT=40000
-
 # adding data porting logic
 if __name__ == "__main__":
-    # embedder = TransformerEmbedder("avsolatorio/GIST-small-Embedding-v0")
-    remote_db = MongoClient(os.getenv("REMOTE_DB"))
-    local_db = MongoClient(os.getenv("LOCAL_DB"))
-
-    # remote_baristas = remote_db['beansack']['baristas']
-    # baristas = list(remote_baristas.find())
-
-    # for bar in baristas:
-    #     if 'embedding' in bar:
-    #         text = str(bar['description']).replace("News, blogs and posts on", "classification:")
-    #         bar['embedding'] = embedder(text)
-
-    # remote_db['beansackV2']['baristas'].insert_many(list(local_db['beansackV2']['baristas'].find()))
-
-    # beans = list(local_db['beansackV2']['beans'].find())
-    # batch_size = 1000
-    # for i in range(0, len(beans), batch_size):
-    #     remote_db['beansackV2']['beans'].insert_many(beans[i : i+batch_size], ordered=False, bypass_document_validation=True)
-
-    remote_db['beansackV2']['users'].insert_one(remote_db['beansack']['users'].find_one())
-
-
-    # remote_beans = remote_db["beansack"]["beans"]
-    # beans = list(remote_beans.find(
-    #     projection={
-    #         "embedding": 0
-    #     },
-    #     sort={
-    #         "collected": -1
-    #     },
-    #     limit=LIMIT
-    # ))    
-
-    # digest = lambda bean: "## "+bean['title']+"\n\n"+bean['summary']
-
-    # start_time = datetime.now()
-
-    # vectors = embedder([digest(bean) for bean in beans])
-    # for bean, vec in zip(beans, vectors):
-    #     bean['embedding'] = vec
-    # ic(datetime.now() - start_time)
-    
-    # local_beans = local_db["beansackV2"]['beans']
-    # local_beans.insert_many(beans)
-    # ic(datetime.now() - start_time)
-
-    # remote_beans_v2 = remote_db["beansackV2"]["beans"]
-    # remote_beans_v2.insert_many(beans)
-    # ic(datetime.now() - start_time)
-
-
-
-    # pipeline = lambda q: [
-    #     {
-    #         "$vectorSearch": {
-    #             "index": "beans_vector_index",
-    #             "path": "embedding",
-    #             "queryVector": embedder(q),
-    #             "numCandidates": 1000,
-    #             "limit": 5
-    #         }
-    #     },
-    #     {
-    #         "$project": {
-    #             "_id": 0,
-    #             "title": 1,
-    #             "tags": 1,
-    #             "search_score": {
-    #                 "$meta": "vectorSearchScore"
-    #             }
-    #         }
-    #     }
-    # ]
-
-    # categories = ["Cybersecurity", "Artifical Intelligence", "Sports & Entertainment", "Startups & Venture Capital", "Business & Finance", "Government & Politics", "Cybersecurity Threat Intelligence", "Career Advice and Professional Help"]
-
-    # for cat in categories:
-    #     result = local_beans.aggregate(pipeline("classification: "+ic(cat)))
-    #     ic([bean for bean in result])
-
-
+    port_beans_to_localsack()

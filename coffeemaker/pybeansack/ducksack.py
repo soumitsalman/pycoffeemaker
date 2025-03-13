@@ -4,14 +4,9 @@ from .models import *
 from azure.storage.blob import BlobClient
 from icecream import ic
 
-SQL_INSTALL_VSS = """
-INSTALL vss;
-LOAD vss;
-"""
-
 SQL_DB_INIT = """
-SET checkpoint_threshold = '128 KB';
-SET wal_autocheckpoint = '128 KB';
+SET checkpoint_threshold = '1 MB';
+SET wal_autocheckpoint = '1 MB';
 INSTALL vss;
 LOAD vss;
 """
@@ -192,6 +187,7 @@ class Beansack:
             .execute(SQL_CREATE_CHATTERS) \
             .execute(SQL_CREATE_BARISTAS) \
             .commit()
+        self.checkpoint_counter = 0
 
     def store_beans(self, beans: list[Bean]):
         local_conn = self.db.cursor()
@@ -212,7 +208,7 @@ class Beansack:
                 bean.embedding
             ) for bean in beans
         ]
-        local_conn.executemany(SQL_INSERT_BEANS, beans_data).execute(SQL_CHECKPOINT).commit()
+        local_conn.executemany(SQL_INSERT_BEANS, beans_data).commit()
 
     def exists(self, beans: list[Bean]) -> list[str]:
         if not beans: return None

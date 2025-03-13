@@ -64,8 +64,6 @@ class Orchestrator:
     download_queue: Queue = None
     index_queue: Queue = None
 
-    scraper: AsyncCollector = None
-
     az_storage_conn_str: str = None
     remotesack: MongoSack = None
     localsack: DuckSack = None
@@ -226,19 +224,21 @@ class Orchestrator:
 
     @log_runtime
     async def run_collections_async(self):
+        scraper = AsyncCollector()        
         current_directory = os.path.dirname(os.path.abspath(__file__))
         rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
         subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
         random.shuffle(rssfeeds) # shuffling out to avoid failure of the same things
         random.shuffle(subreddits) # shuffling out to avoid failure of the same things
-
+        
         # awaiting on each group so that os is not overwhelmed by sockets
         log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
-        await asyncio.gather(*[self.collect_async(source, self.scraper.collect_rssfeed(source)) for source in rssfeeds])
-        log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
-        await asyncio.gather(*[self.collect_async(source, self.scraper.collect_subreddit(source)) for source in subreddits])
+        await asyncio.gather(*[self.collect_async(source, scraper.collect_rssfeed(source)) for source in rssfeeds])
         log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        await self.collect_async(HACKERNEWS, self.scraper.collect_ychackernews())
+        await self.collect_async(HACKERNEWS, scraper.collect_ychackernews())
+        log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
+        await asyncio.gather(*[self.collect_async(source, scraper.collect_subreddit(source)) for source in subreddits])
+        
 
     async def collect_async(self, source: str, collect: Awaitable[list[tuple[Bean, Chatter]]]):
         collection = await collect
@@ -259,19 +259,22 @@ class Orchestrator:
 
     @log_runtime
     async def run_downloading_async(self):
+        scraper = AsyncCollector()
+        
         while True:
             items = await self.download_queue.get()
             if items == END_OF_STREAM: break
             if not items: continue
 
             source, beans = items
-            await self.download_async(source, beans)
+            await self.download_async(source, scraper.collect_beans(beans, collect_metadata=True))
             self.download_queue.task_done()
 
-    async def download_async(self, source: str, beans: list[Bean]):
+    async def download_async(self, source: str, collect: Awaitable[list[Bean]]):
+        beans = await collect
         if not beans: return
         
-        downloaded_beans = indexables(await self.scraper.collect_beans(beans, collect_metadata=True))
+        downloaded_beans = indexables(beans)
         if len(downloaded_beans) < len(beans): 
             log.info("download failed", extra={"source": source, "num_items": len(beans)-len(downloaded_beans)})
         if downloaded_beans: 
@@ -347,12 +350,15 @@ class Orchestrator:
         indexing_task = asyncio.create_task(self.run_indexing_async()) 
         await self.run_downloading_async()
         await self.index_queue.put(END_OF_STREAM)
-        await self.scraper.close() 
-        
-        await indexing_task
+
+        # NOTE: putthing this try catch to avoid the app from crashing when the indexing fails
+        try:
+            await indexing_task
+        except Exception as e:
+            log.error("failed indexing", extra={"source": self.run_id, "num_items": 1})
+            ic(e)
         
     def _init_run(self):
-        self.scraper = AsyncCollector()        
         self.download_queue = Queue()
         self.index_queue = Queue()
         self.run_id = datetime.now().strftime("%Y-%m-%d %H")
