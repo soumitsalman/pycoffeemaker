@@ -5,8 +5,8 @@ from azure.storage.blob import BlobClient
 from icecream import ic
 
 SQL_DB_INIT = """
-SET checkpoint_threshold = '1 MB';
-SET wal_autocheckpoint = '1 MB';
+SET checkpoint_threshold = '1MB';
+SET wal_autocheckpoint = '1MB';
 INSTALL vss;
 LOAD vss;
 """

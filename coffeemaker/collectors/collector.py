@@ -16,7 +16,7 @@ from retry import retry
 import tldextract
 from dateutil.parser import parse as date_parser
 import re
-from coffeemaker.collectors import USER_AGENT, TIMEOUT, RATELIMIT_WAIT, individual
+from coffeemaker.collectors import USER_AGENT, TIMEOUT, RATELIMIT_WAIT
 from coffeemaker.pybeansack.models import *
 from icecream import ic
 
@@ -321,24 +321,24 @@ class AsyncCollector:
 
     #     return results             
 
-    async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
-        """Collects the bodies of the urls as markdowns"""        
-        async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
-            config = AsyncCollector._run_config(collect_metadata)
-            async def _collect(url: str):
-                if _excluded_url(url): return
-                result = await crawler.arun(url=url, config=config)
-                return AsyncCollector._package_result(result)
-            results = await asyncio.gather(*[_collect(url) for url in urls])
-        return results
+    # async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
+    #     """Collects the bodies of the urls as markdowns"""        
+    #     async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
+    #         config = AsyncCollector._run_config(collect_metadata)
+    #         async def _collect(url: str):
+    #             if _excluded_url(url): return
+    #             result = await crawler.arun(url=url, config=config)
+    #             return AsyncCollector._package_result(result)
+    #         results = await asyncio.gather(*[_collect(url) for url in urls])
+    #     return results
 
     # NOTE: The failure rate seems higher on this one
-    # async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
-    #     """Collects the bodies of the urls as markdowns"""
-    #     async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
-    #         parsed_results = await crawler.arun_many(urls=urls, config=AsyncCollector._run_config(collect_metadata))
-    #         results = [AsyncCollector._package_result(result) for result in parsed_results]
-    #     return results
+    async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
+        """Collects the bodies of the urls as markdowns"""
+        async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
+            parsed_results = await crawler.arun_many(urls=urls, config=AsyncCollector._run_config(collect_metadata))
+            results = [AsyncCollector._package_result(result) for result in parsed_results]
+        return results
 
     # async def _collect_url(self, url: str, session: aiohttp.ClientSession, config: CrawlerRunConfig) -> dict:
     #     if _excluded_url(url): return
@@ -421,8 +421,8 @@ class AsyncCollector:
     #     except Exception as e:
     #         ic(e.__class__.__name__, e)
 
-    def _package_result(result: CrawlResult) -> dict:
-        if not isinstance(result, CrawlResult) or ic(result.status_code) != 200: return
+    def _package_result(result) -> dict:   
+        if not (result and result.status_code == 200): return        
 
         ret = {
             "url": result.url,
