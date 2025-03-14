@@ -350,13 +350,7 @@ class Orchestrator:
         indexing_task = asyncio.create_task(self.run_indexing_async()) 
         await self.run_downloading_async()
         await self.index_queue.put(END_OF_STREAM)
-
-        # NOTE: putthing this try catch to avoid the app from crashing when the indexing fails
-        try:
-            await indexing_task
-        except Exception as e:
-            log.error("failed indexing", extra={"source": self.run_id, "num_items": 1})
-            ic(e)
+        await indexing_task
         
     def _init_run(self):
         self.download_queue = Queue()

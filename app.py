@@ -3,6 +3,7 @@ import os
 from datetime import datetime as dt
 import logging
 from dotenv import load_dotenv
+from icecream import ic
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR+"/.env")
@@ -11,7 +12,9 @@ if not os.path.exists(f"{CURR_DIR}/.logs"): os.makedirs(f"{CURR_DIR}/.logs")
 logging.basicConfig(
     level=logging.WARNING, 
     filename=f"{CURR_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
-    format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s")
+    format="%(asctime)s.%(msecs)03d||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s",
+    datefmt="%Y-%m-%d %H:%M:%S")
+
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
@@ -35,7 +38,14 @@ if __name__ == "__main__":
         os.getenv("EMBEDDER_PATH"),    
         os.getenv("LLM_PATH"),
         float(os.getenv('CLUSTER_EPS')))
-    asyncio.run(orch.run_async())
+    
+    # NOTE: putthing this try catch to avoid the app from crashing when the indexing fails
+    try:
+        asyncio.run(orch.run_async())
+    except Exception as e:
+        log.error("failed run", extra={"source": "__BATCH__", "num_items": 1})
+        ic(e)
+    
     orch.close()
     
  
