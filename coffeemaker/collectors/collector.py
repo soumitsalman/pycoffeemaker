@@ -337,7 +337,8 @@ class AsyncCollector:
         """Collects the bodies of the urls as markdowns"""
         async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
             parsed_results = await crawler.arun_many(urls=urls, config=AsyncCollector._run_config(collect_metadata))
-            results = [AsyncCollector._package_result(result) for result in parsed_results]
+            parsed_results = {result.url: result for result in parsed_results}
+            results = [AsyncCollector._package_result(parsed_results[url]) for url in urls]            
         return results
 
     # async def _collect_url(self, url: str, session: aiohttp.ClientSession, config: CrawlerRunConfig) -> dict:

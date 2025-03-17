@@ -232,13 +232,12 @@ class Orchestrator:
         random.shuffle(subreddits) # shuffling out to avoid failure of the same things
         
         # awaiting on each group so that os is not overwhelmed by sockets
-        log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
-        await asyncio.gather(*[self.collect_async(source, scraper.collect_rssfeed(source)) for source in rssfeeds])
         log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
         await self.collect_async(HACKERNEWS, scraper.collect_ychackernews())
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
         await asyncio.gather(*[self.collect_async(source, scraper.collect_subreddit(source)) for source in subreddits])
-        
+        log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
+        await asyncio.gather(*[self.collect_async(source, scraper.collect_rssfeed(source)) for source in rssfeeds])
 
     async def collect_async(self, source: str, collect: Awaitable[list[tuple[Bean, Chatter]]]):
         collection = await collect
@@ -296,11 +295,15 @@ class Orchestrator:
             # since the digest/summary is smaller and got generated through a text-gen model so it is more clean. 
             beans = self.new_beans(indexables(beans))
             beans = self.embed_beans(self.digest_beans(beans))
-            beans = self.store_beans(source, beans) 
+            beans = await self.store_cluster_and_rank_beans_async(source, beans)
+            
+            if beans: total_new_beans += len(beans)            
+            
+            # beans = self.store_beans(source, beans) 
 
-            if beans: 
-                total_new_beans += len(beans)
-                self.cluster_and_rank_beans(source, beans)            
+            # if beans: 
+            #     total_new_beans += len(beans)
+            #     await self.cluster_and_rank_beans_async(source, beans)            
 
             self.index_queue.task_done()
 
@@ -312,13 +315,15 @@ class Orchestrator:
         self.cluster_beans(source, beans)
         self.trend_rank_beans(source, beans)        
 
-    async def cluster_and_rank_beans_async(self, source: str, beans: list[Bean]):
-        if not beans: return
-
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self.cluster_beans, source, beans)
-        await loop.run_in_executor(None, self.trend_rank_beans, source, beans)
-
+    async def store_cluster_and_rank_beans_async(self, source: str, beans: list[Bean]):
+        beans = self.store_beans(source, beans) 
+        if beans:
+            await asyncio.gather(*[
+                asyncio.to_thread(self.cluster_beans, source, beans),
+                asyncio.to_thread(self.trend_rank_beans, source, beans)
+            ])
+        return beans
+         
     # 1. schedule a clean up
     # 2. start collection
     # 3. await collection to finish
