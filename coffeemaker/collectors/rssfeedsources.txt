@@ -206,7 +206,6 @@ https://www.newscientist.com/section/news/feed/
 https://www.newscientist.com/subject/earth/feed/
 https://www.sciencenews.org/feed
 https://www.twz.com/feed
-https://medicalxpress.com/rss-feed/breaking/
 https://medium.com/feed/faa
 https://lobste.rs/rss
 https://lobste.rs/newest.rss
@@ -263,6 +262,8 @@ https://fly.io/blog/feed.xml
 https://www.digitalocean.com/blog.atom
 https://blog.runpod.io/rss/
 https://aws.amazon.com/blogs/media/feed/
+https://www.wiz.io/feed/rss.xml
+https://semgrep.dev/blog/rss/
 https://github.blog/feed/
 https://blog.businesswire.com/rss.xml
 https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeEFpQWQ==

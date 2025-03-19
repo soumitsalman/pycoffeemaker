@@ -5,7 +5,6 @@ from azure.storage.blob import BlobClient
 from icecream import ic
 
 SQL_DB_INIT = """
-SET checkpoint_threshold = '2MB';
 SET wal_autocheckpoint = '2MB';
 INSTALL vss;
 LOAD vss;
@@ -207,7 +206,7 @@ class Beansack:
                 bean.embedding
             ) for bean in beans
         ]
-        local_conn.executemany(SQL_INSERT_BEANS, beans_data).execute(SQL_CHECKPOINT).commit()
+        local_conn.executemany(SQL_INSERT_BEANS, beans_data).commit()
 
     def exists(self, beans: list[Bean]) -> list[str]:
         if not beans: return None
