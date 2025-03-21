@@ -80,8 +80,7 @@ class Orchestrator:
         self.az_storage_conn_str = storage_conn_str
         self.remotesack = MongoSack(remote_db_conn_str, os.getenv("DB_NAME"))
         self.localsack = DuckSack(local_db_path, os.getenv("DB_NAME"))
-        self.cluster_eps = clus_eps    
-        
+        self.cluster_eps = clus_eps            
         
     def new_beans(self, beans: list[Bean]) -> list[Bean]:
         if not beans: beans
@@ -90,7 +89,7 @@ class Orchestrator:
         try:
             exists = self.localsack.exists(beans)
         except Exception as e:
-            ic(e) # if the batch fails then don't process any in that batch
+            ic("new_beans query failed", e) # if the batch fails then don't process any in that batch
             exists = [bean.url for bean in beans]
 
         for bean in beans:

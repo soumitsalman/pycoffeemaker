@@ -5,7 +5,6 @@ from azure.storage.blob import BlobClient
 from icecream import ic
 
 SQL_DB_INIT = """
-SET wal_autocheckpoint = '2MB';
 INSTALL vss;
 LOAD vss;
 """
@@ -15,15 +14,12 @@ CREATE TABLE IF NOT EXISTS beans (
     url VARCHAR PRIMARY KEY,
     kind VARCHAR,
     source VARCHAR,
-    author VARCHAR,
 
     created TIMESTAMP,    
     collected TIMESTAMP,
     updated TIMESTAMP,
       
     title VARCHAR,    
-    summary TEXT,
-    tags VARCHAR[],
     embedding FLOAT[384],
 );
 """
@@ -34,8 +30,8 @@ USING HNSW (embedding)
 WITH (metric = 'cosine');
 """
 SQL_INSERT_BEANS = """
-INSERT INTO beans (url, kind, source, author, created, collected, updated, title, summary, tags, embedding) 
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO beans (url, kind, source, created, collected, updated, title, embedding) 
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT DO NOTHING;
 """
 SQL_CHECKPOINT = "CHECKPOINT;"
@@ -93,13 +89,12 @@ SELECT
     url, 
     kind,
     source,
-    author,
 
     created, 
-    
+    collected,
+    updated,
+
     title, 
-    summary, 
-    tags, 
     array_cosine_distance(
         embedding, 
         {embedding}::FLOAT[384]
@@ -185,6 +180,7 @@ class Beansack:
             .execute(SQL_CREATE_BEANS) \
             .execute(SQL_CREATE_CHATTERS) \
             .execute(SQL_CREATE_BARISTAS) \
+            .execute(SQL_CHECKPOINT) \
             .commit()
 
     def store_beans(self, beans: list[Bean]):
@@ -194,19 +190,16 @@ class Beansack:
                 bean.url,
                 bean.kind,
                 bean.source,
-                bean.author,
 
                 bean.created,                
                 bean.collected,
                 bean.updated,
 
                 bean.title,
-                bean.summary,
-                bean.tags,
                 bean.embedding
             ) for bean in beans
         ]
-        local_conn.executemany(SQL_INSERT_BEANS, beans_data).commit()
+        local_conn.executemany(SQL_INSERT_BEANS, beans_data)
 
     def exists(self, beans: list[Bean]) -> list[str]:
         if not beans: return None
@@ -227,14 +220,13 @@ class Beansack:
             url=bean[0],
             kind=bean[1],
             source=bean[2],
-            author=bean[3], 
 
-            created=bean[4],
+            created=bean[3],
+            collected=bean[4],
+            updated=bean[5],
 
-            title=bean[5],
-            summary=bean[6],
-            tags=bean[7],   
-            search_score=bean[8],
+            title=bean[6],
+            search_score=bean[7],
             slots=True
         ) for bean in query.fetchall()]
     
