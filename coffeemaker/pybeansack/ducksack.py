@@ -180,7 +180,6 @@ class Beansack:
             .execute(SQL_CREATE_BEANS) \
             .execute(SQL_CREATE_CHATTERS) \
             .execute(SQL_CREATE_BARISTAS) \
-            .execute(SQL_CHECKPOINT) \
             .commit()
 
     def store_beans(self, beans: list[Bean]):
@@ -199,7 +198,7 @@ class Beansack:
                 bean.embedding
             ) for bean in beans
         ]
-        local_conn.executemany(SQL_INSERT_BEANS, beans_data)
+        local_conn.executemany(SQL_INSERT_BEANS, beans_data).commit()
 
     def exists(self, beans: list[Bean]) -> list[str]:
         if not beans: return None
@@ -255,7 +254,7 @@ class Beansack:
             ) for chatter in chatters
         ]
         local_conn = self.db.cursor()
-        local_conn.executemany(SQL_INSERT_CHATTERS, chatters_data).execute(SQL_CHECKPOINT).commit()
+        local_conn.executemany(SQL_INSERT_CHATTERS, chatters_data).commit()
 
     def get_latest_chatters(self, last_ndays: int, urls: list[str] = None) -> list[ChatterAnalysis]:
         local_conn = self.db.cursor()
