@@ -217,9 +217,12 @@ class Orchestrator:
 
     def close(self):
         self.localsack.close()
-        if self.az_storage_conn_str: 
+        if not self.az_storage_conn_str: return 
+        try:
             self.localsack.backup_azblob(self.az_storage_conn_str)
             log.info("local db backed up", extra={"source": self.run_id, "num_items": 1})
+        except Exception as e:
+            log.error("local db backup failed", extra={"source": self.run_id, "num_items": 1})
 
     @log_runtime
     async def run_collections_async(self):

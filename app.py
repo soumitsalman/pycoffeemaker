@@ -12,8 +12,7 @@ if not os.path.exists(f"{CURR_DIR}/.logs"): os.makedirs(f"{CURR_DIR}/.logs")
 logging.basicConfig(
     level=logging.WARNING, 
     filename=f"{CURR_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
-    format="%(asctime)s.%(msecs)03d||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s",
-    datefmt="%Y-%m-%d %H:%M:%S")
+    format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s")
 
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)
