@@ -273,3 +273,4 @@ https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeEFpQWA==
 https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeGVtXWQ==&_gl=1*q2j3qa*_gcl_au*MTI3ODIyODE2Mi4xNzQwNzU0ODUx*_ga*MzU0Mjc1MDkuMTc0MDc1NDg1MQ..*_ga_ZQWF70T3FK*MTc0MDc1NDg1MC4xLjEuMTc0MDc1NTUzOC41Ny4wLjA.
 https://www.nasa.gov/feed/
 https://freebeacon.com/feed/
+https://videocardz.com/rss-feed
