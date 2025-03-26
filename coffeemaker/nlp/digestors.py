@@ -77,7 +77,7 @@ class LlamaCppDigestor(Digestor):
         with self.lock:
             resp = self.model.create_completion(
                 prompt=prompt,
-                max_tokens=384, 
+                max_tokens=512, 
                 frequency_penalty=0.3,
                 temperature=0.2,
                 seed=42

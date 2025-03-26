@@ -147,8 +147,7 @@ def port_beans_to_localsack():
     orch = create_orch()
     beans = orch.remotesack.get_beans(
         filter={
-            K_EMBEDDING: {"$exists": True},
-            K_COLLECTED: {"$gte": ndays_ago(30)}
+            K_EMBEDDING: {"$exists": True}
         }
     )
     print(datetime.now(), "porting beans|%d", len(beans))
