@@ -198,3 +198,17 @@ powerengineering
 blogs
 Blogging
 Coronavirus
+SaaS
+sweatystartup
+LanguageTechnology
+Economics
+StockMarket
+stocks
+inthenews
+climatechange
+climate
+dataengineering
+nasa
+spacex
+ArtificialInteligence
+gamedev
