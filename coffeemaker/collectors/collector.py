@@ -101,7 +101,6 @@ MD_EXCLUDED_SELECTOR = ", ".join([
 ])
 MD_EXCLUDED_TAGS = BASE_EXCLUDED_TAGS + ["link", "meta"]
 MD_OPTIONS = {
-    "ignore_links": True,
     "ignore_images": True,
     "escape_html": False,
     "skip_external_links": True,
@@ -156,7 +155,7 @@ MD_COLLECTION_CONFIG = CrawlerRunConfig(
     screenshot=False,
     pdf=False,
     exclude_external_images=True,
-    exclude_external_links=True,
+    # exclude_external_links=True,
     exclude_social_media_links=True, 
 
     verbose=False
@@ -177,6 +176,7 @@ MD_AND_METADATA_COLLECTION_CONFIG = CrawlerRunConfig(
     # navigation & timing
     semaphore_count=SCRAPER_BATCH_SIZE,
     wait_for_images=False,  
+    page_timeout=30000,
 
     # page interaction
     scan_full_page=False,
@@ -189,7 +189,7 @@ MD_AND_METADATA_COLLECTION_CONFIG = CrawlerRunConfig(
     screenshot=False,
     pdf=False,
     exclude_external_images=True,
-    exclude_external_links=True,
+    # exclude_external_links=True,
     exclude_social_media_links=True, 
 
     verbose=False
