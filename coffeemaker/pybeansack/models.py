@@ -57,7 +57,9 @@ class Bean(BaseModel):
     created: Optional[datetime] = None 
     collected: Optional[datetime] = None
     updated: Optional[datetime] = None
+    # highlights: Optional[list[str]] = None
     categories: Optional[list[str]] = None
+    names: Optional[list[str]] = None
     tags: Optional[list[str]|str] = None
     summary: Optional[str] = None
     embedding: Optional[list[float]] = None

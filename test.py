@@ -23,7 +23,7 @@ from datetime import datetime as dt
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import collector, rssfeed, ychackernews, individual, redditor, espresso
-from coffeemaker.orchestrator import Orchestrator
+from coffeemaker.orchestrator import Orchestrator, log_runtime
 from coffeemaker.nlp import digestors, embedders
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 import random
@@ -247,6 +247,7 @@ def test_embedder():
     vecs = embedder([i['summary'] for i in inputs])
     ic(len(vecs), [(len(vec), vec[0]) for vec in vecs])
 
+@log_runtime
 def test_digestor():
     inputs = [
         {
@@ -311,8 +312,11 @@ def test_digestor():
         }
         ]
     digestor = digestors.from_path(os.getenv("LLM_PATH"))
-    ic(digestor([b['text'] for b in inputs]))
+    [print(f"# {digest.title}\n{digest.names}\n{digest.domains}\n{digest.summary}\n==============================") 
+     for digest in digestor([b['text'] for b in inputs])]
+    ic(len(inputs))
 
+@log_runtime
 def test_run_async():
     orch = _create_orchestrator()
     asyncio.run(orch.run_async())
@@ -320,10 +324,8 @@ def test_run_async():
 
 if __name__ == "__main__":
     
-    start = datetime.now()
-    test_run_async()
+    # test_run_async()
     # test_embedder()
     # test_digestor()
-    # test_run_async()
-    ic(datetime.now() - start)
+    test_run_async()
     

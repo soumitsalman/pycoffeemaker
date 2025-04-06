@@ -14,22 +14,11 @@ import os
 
 log = logging.getLogger(__name__)
 
-# # if a bean.text is less than 75 words, it is not worth indexing
-# ALLOWED_BODY_LEN = 50   
-# allowed_body = lambda bean: bean.text and len(bean.text.split()) >= ALLOWED_BODY_LEN
-# # if a bean.text is more than 150 words, then assume it is a good candidate for indexing and does not need to be downloaded again
-# NEEDS_DOWNLOAD_BODY_LEN = 150 
-# needs_download = lambda bean: not bean.text or len(bean.text.split()) < NEEDS_DOWNLOAD_BODY_LEN
-# # if a bean.summary is less than 150 words, it is not worth summarizing again
-# NEEDS_SUMMARY_BODY_LEN = 150
-# needs_summary = lambda bean: len(bean.text.split()) >= NEEDS_SUMMARY_BODY_LEN
-
 QUEUE_BATCH_SIZE = os.cpu_count()*os.cpu_count()
 END_OF_STREAM = "END_OF_STREAM"
 MAX_CLUSTER_SIZE=20
 
 # MIN_WORDS_THRESHOLD = 150
-MIN_WORDS_THRESHOLD_FOR_SUMMARY = 150 # min words needed to use the generated summary
 MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 200 # min words needed to not download the body
 MIN_WORDS_THRESHOLD_FOR_INDEXING = 70 # mininum words needed to put it through indexing
 
@@ -37,13 +26,22 @@ is_text_above_threshold = lambda bean, threshold: bean.text and len(bean.text.sp
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
 is_indexable = lambda bean: is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_INDEXING) # it has to have some text and the text has to be large enough
 is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_DOWNLOADING)) # if it is a post dont download it or if the body is large enough
-is_summaryable = lambda bean: bean.kind != POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_SUMMARY) # if the body is large enough
 storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
 indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
 downloadables = lambda beans: [bean for bean in beans if is_downloadable(bean)] if beans else beans
-merge_tags = lambda bean, new_tags: list({tag.lower(): tag for tag in ((bean.tags + new_tags) if (bean.tags and new_tags) else (bean.tags or new_tags))}.values())
+
+merge_tags = lambda old_tags, new_tags: digestors.unique_items(old_tags + new_tags) if (old_tags and new_tags) else (old_tags or new_tags)
+first_n = lambda items, n: items[:n] if items else items
 
 def log_runtime(func):
+    def wrapper(*args, **kwargs):
+        start_time = datetime.now()
+        result = func(*args, **kwargs)
+        log.info("execution time", extra={"source": func.__name__, "num_items": int((datetime.now() - start_time).total_seconds())})
+        return result
+    return wrapper
+
+def log_runtime_async(func):
     async def wrapper(*args, **kwargs):
         start_time = datetime.now()
         result = await func(*args, **kwargs)
@@ -128,9 +126,12 @@ class Orchestrator:
                     log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
                     continue
 
-                bean.summary = digest.summary if is_summaryable(bean) else bean.text
+                bean.summary = digest.summary or bean.text
+                # bean.highlights = digest.highlights
                 bean.title = digest.title or bean.title
-                bean.tags = merge_tags(bean, digest.tags)
+                bean.names = first_n(digest.names, 3)
+                bean.categories = first_n(digest.domains, 1)
+                bean.tags = merge_tags(bean.names, bean.categories)
         except Exception as e:
             log.error("failed digesting", extra={"source": beans[0].source, "num_items": len(beans)})
             ic(e.__class__.__name__, e)
@@ -224,7 +225,7 @@ class Orchestrator:
         except Exception as e:
             log.error("local db backup failed", extra={"source": self.run_id, "num_items": 1})
 
-    @log_runtime
+    @log_runtime_async
     async def run_collections_async(self):
         scraper = AsyncCollector()        
         current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -258,7 +259,7 @@ class Orchestrator:
         await _enqueue_beans(self.download_queue, source, needs_download)   
         await _enqueue_beans(self.index_queue, source, [bean for bean in beans if bean not in needs_download])
 
-    @log_runtime
+    @log_runtime_async
     async def run_downloading_async(self):
         scraper = AsyncCollector()
         
@@ -282,7 +283,7 @@ class Orchestrator:
             log.info("downloaded", extra={"source": source, "num_items": len(downloaded_beans)})
             await _enqueue_beans(self.index_queue, source, downloaded_beans)
         
-    @log_runtime
+    @log_runtime_async
     async def run_indexing_async(self):
         total_new_beans = 0
         while True:
@@ -299,14 +300,7 @@ class Orchestrator:
             beans = self.embed_beans(self.digest_beans(beans))
             beans = await self.store_cluster_and_rank_beans_async(source, beans)
             
-            if beans: total_new_beans += len(beans)            
-            
-            # beans = self.store_beans(source, beans) 
-
-            # if beans: 
-            #     total_new_beans += len(beans)
-            #     await self.cluster_and_rank_beans_async(source, beans)            
-
+            if beans: total_new_beans += len(beans)     
             self.index_queue.task_done()
 
         log.info("run complete", extra={"source": self.run_id, "num_items": total_new_beans}) 
@@ -337,7 +331,7 @@ class Orchestrator:
     # 9. store beans
     # 10. schedule clustering and then update clusters
     # 11. schedule trend ranking and then update trend ranking new beans 
-    @log_runtime
+    @log_runtime_async
     async def run_async(self):    
         # instantiate the run specific work
         self._init_run()
