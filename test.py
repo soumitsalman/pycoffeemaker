@@ -312,7 +312,7 @@ def test_digestor():
         }
         ]
     digestor = digestors.from_path(os.getenv("LLM_PATH"))
-    [print(f"# {digest.title}\n{digest.names}\n{digest.domains}\n{digest.summary}\n==============================") 
+    [print(f"# {digest.title}\n{digest.names}\n{digest.domains}\n{digest.summary}\n==============================" if digest else None)
      for digest in digestor([b['text'] for b in inputs])]
     ic(len(inputs))
 
@@ -326,6 +326,6 @@ if __name__ == "__main__":
     
     # test_run_async()
     # test_embedder()
-    # test_digestor()
+    test_digestor()
     test_run_async()
     

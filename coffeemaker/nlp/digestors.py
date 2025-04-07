@@ -11,10 +11,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-CONTEXT_LEN = 4096
+CONTEXT_LEN = 8192
 NUM_THREADS = os.cpu_count()
 DIGESTOR_BATCH_SIZE = os.getenv("DIGESTOR_BATCH_SIZE", 16)
-MIN_WORDS_THRESHOLD_FOR_SUMMARY = 256 # min words needed to use the generated summary
+MIN_WORDS_THRESHOLD_FOR_SUMMARY = 200 # min words needed to use the generated summary
 
 SUMMARY_TEMPLATE = """TASK: Rewrite the article/post text using less than 250 words.
 
@@ -96,7 +96,7 @@ class LlamaCppDigestor(Digestor):
     model = None
     lock = None
     
-    def __init__(self, model_path: str, context_len: int = CONTEXT_LEN):
+    def __init__(self, model_path: str, context_len: int = int(os.getenv("LLM_N_CTX", CONTEXT_LEN))):
         self.lock = threading.Lock()
         self.model_path = model_path
         self.context_len = context_len
@@ -113,10 +113,10 @@ class LlamaCppDigestor(Digestor):
             messages=create_prompt(input_text=input_text, template=template, max_tokens=self.context_len//2),
             max_tokens=max_new_tokens,
             seed=666,
-            response_format={"type": response_format} if response_format else None,
-            temperature=0.1 if response_format=="json_object" else 0.2,
-            frequency_penalty=0.2,
-            repeat_penalty=1 if response_format=="json_object" else 1.3
+            # response_format={"type": response_format} if response_format else None,
+            # temperature=0.1, # if response_format=="json_object" else 0.3,
+            # frequency_penalty=0.2,
+            repeat_penalty=1 if response_format=="json_object" else 1.5
         )['choices'][0]['message']['content'].strip()          
   
     def run(self, text: str) -> Digest:
@@ -135,7 +135,7 @@ class RemoteDigestor(Digestor):
     model_name = None
     context_len = None
 
-    def __init__(self, base_url: str, api_key: str, model_name: str, context_len: int = CONTEXT_LEN):
+    def __init__(self, base_url: str, api_key: str, model_name: str, context_len: int = int(os.getenv("LLM_N_CTX", CONTEXT_LEN))):
         from openai import OpenAI
 
         self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=5, max_retries=2)
@@ -178,7 +178,7 @@ class TransformerDigestor(Digestor):
     context_len = None
     lock = None
 
-    def __init__(self, model_id, context_len=CONTEXT_LEN):
+    def __init__(self, model_id, context_len=int(os.getenv("LLM_N_CTX", CONTEXT_LEN))):
         self.lock = threading.Lock()
         self.context_len = context_len
 
@@ -254,9 +254,9 @@ class TransformerDigestor(Digestor):
 def from_path(llm_path) -> Digestor:
     # intialize embedder
     if llm_path.startswith(LLAMA_CPP_PREFIX):
-        return LlamaCppDigestor(llm_path[len(LLAMA_CPP_PREFIX):], os.getenv("LLM_N_CTX", CONTEXT_LEN))
+        return LlamaCppDigestor(llm_path[len(LLAMA_CPP_PREFIX):])
     elif llm_path.startswith(API_URL_PREFIX):
-        return RemoteDigestor(llm_path, os.getenv("API_KEY"), os.getenv("LLM_NAME"), os.getenv("LLM_N_CTX", CONTEXT_LEN))
+        return RemoteDigestor(llm_path, os.getenv("API_KEY"), os.getenv("LLM_NAME"))
     else:
         return TransformerDigestor(llm_path)
   
