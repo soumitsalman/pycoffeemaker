@@ -12,9 +12,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 CONTEXT_LEN = 8192
-NUM_THREADS = os.cpu_count()
-DIGESTOR_BATCH_SIZE = os.getenv("DIGESTOR_BATCH_SIZE", 16)
+# BATCH_CONTEXT_LEN = 4096
+BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", 16))
 MIN_WORDS_THRESHOLD_FOR_SUMMARY = 200 # min words needed to use the generated summary
+NUM_THREADS = os.cpu_count()
 
 SUMMARY_TEMPLATE = """TASK: Rewrite the article/post text using less than 250 words.
 
@@ -124,9 +125,9 @@ class LlamaCppDigestor(Digestor):
             resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
             digest = parse_digest(resp)
             if digest and needs_summary(text):
-                summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
-                if summary and (summary[0].isalnum() or summary[0] in ['-', '*']): 
-                    digest.summary = summary
+                digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
+                # if summary and (summary[0].isalnum() or summary[0] in ['-', '*']): 
+                #     digest.summary = summary
         return digest
 
     
@@ -169,7 +170,7 @@ class NewspaperDigestor:
             names=[] # leaving this empty intentionally because nlp.keywords() is dumb
         )
     
-_RESPONSE_START = "<|im_start|>assistant\n\n"
+_RESPONSE_START = "<|im_start|>assistant\n"
 _RESPONSE_END = "<|im_end|>"
 class TransformerDigestor(Digestor):
     model = None
@@ -181,74 +182,64 @@ class TransformerDigestor(Digestor):
     def __init__(self, model_id, context_len=int(os.getenv("LLM_N_CTX", CONTEXT_LEN))):
         self.lock = threading.Lock()
         self.context_len = context_len
-
-        import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-        from unsloth import FastLanguageModel
         
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-  
-        if self.device == "cuda":
-            self.model, self.tokenizer = FastLanguageModel.from_pretrained(
-                model_name=model_id,
-                max_seq_length=self.context_len,
-                load_in_4bit=False,
-                device_map=self.device
-            )
-            self.model = FastLanguageModel.for_inference(self.model)
-        else:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_id, padding=True, truncation=True, max_length=context_len)
-            self.model =  AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype="auto")
+        from unsloth import FastLanguageModel
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        import torch
 
-    def _generate_response(self, text: str, template: str, max_new_tokens: int = 256) -> str:
-        prompt = template.format(input_text=truncate(text, self.context_len//2))
-        inputs = self.tokenizer.apply_chat_template(prompt, tokenize=True, add_generation_prompt=True, truncation=False, return_tensors="pt").to(self.device)
-        outputs = self.model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=True)
-        generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # if self.device == "cuda":
+        #     self.model, self.tokenizer = FastLanguageModel.from_pretrained(
+        #         model_name=model_id,
+        #         max_seq_length=self.context_len,
+        #         load_in_4bit=False,
+        #         # load_in_8bit=True,
+        #         device_map=self.device
+        #     )
+        #     self.model = FastLanguageModel.for_inference(self.model)
+            
+        # else:
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id, padding=True, truncation=True, max_length=context_len)
+        self.model =  AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype="auto")
+
+    def _extract_response(self, generated: str) -> str:
         start_index = generated.find(_RESPONSE_START)
         end_index = generated.find(_RESPONSE_END, start_index)
         return generated[start_index + len(_RESPONSE_START):end_index].strip()
 
+    def _generate_response(self, text: str, template: str, max_new_tokens: int = 256) -> str:
+        prompt = create_prompt(text, template, self.context_len//2)
+        inputs = self.tokenizer.apply_chat_template(prompt, tokenize=True, add_generation_prompt=True, max_length=self.context_len, return_tensors="pt").to(self.device)
+        outputs = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
+        generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return self._extract_response(generated)
+
     def run(self, text: str) -> Digest:
         with self.lock:
-            # prompt = EXTRACTION_TEMPLATE.format(input_text=truncate(text, self.context_len//4))
-            # inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=self.context_len//2).to(self.device)
-            # outputs = self.model.generate(**inputs, max_new_tokens=384, do_sample=True)
-            # generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            # start_index = generated.find(_RESPONSE_START)
-            # end_index = generated.find(_RESPONSE_END, start_index)
-            # resp = generated[start_index + len(_RESPONSE_START):end_index]
             resp = self._generate_response(text, EXTRACTION_TEMPLATE, max_new_tokens=192)
             digest = parse_digest(resp) or Digest()
-            if needs_summary(text):
-                # summary_prompt = SUMMARY_TEMPLATE.format(input_text=truncate(text, self.context_len//4))
-                # inputs = self.tokenizer(summary_prompt, return_tensors="pt", truncation=True, max_length=self.context_len//2).to(self.device)
-                # outputs = self.model.generate(**inputs, max_new_tokens=464, do_sample=True)
-                # summary_generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-                digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=384)
+            if digest and needs_summary(text):
+                digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=400)
         return digest
+    
+    def _generate_response_batch(self, texts: list[str], template: str, max_new_tokens: int = 256) -> list[str]:
+        prompts = [create_prompt(text, template, self.context_len//2) for text in texts]
+        inputs = self.tokenizer.apply_chat_template(prompts, tokenize=True, add_generation_prompt=True, padding=True, truncation=True, max_length=self.context_len, return_dict=True, return_tensors="pt").to(self.device)
+        outputs = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
+        generated = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)
+        return [self._extract_response(g) for g in generated]
 
-    # def run_batch(self, texts: list[str]) -> list[Digest]:
-        
-    #     digests = []        
-    #     for i in range(0, len(prompts), DIGESTOR_BATCH_SIZE):
-    #         with self.lock:
-    #             inputs = self.tokenizer(prompts[i:i + DIGESTOR_BATCH_SIZE], return_tensors="pt", padding=True, truncation=True, max_length=self.context_len//2).to(self.device)
-    #             outputs = self.model.generate(**inputs, max_new_tokens=384, do_sample=True)
-    #             generated = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
-    #         for g, text in zip(generated, texts[i:i + DIGESTOR_BATCH_SIZE]):
-    #             start_index = g.find(_RESPONSE_START)
-    #             end_index = g.find(_RESPONSE_END, start_index)
-    #             resp = g[start_index + len(_RESPONSE_START):end_index]
-    #             digest = parse_digest(resp) or Digest()
-    #             if needs_summary(text):
-    #                 summary_prompt = SUMMARY_TEMPLATE.format(input_text=truncate(text, self.context_len//4))
-    #                 inputs = self.tokenizer(summary_prompt, return_tensors="pt", truncation=True, max_length=self.context_len//2).to(self.device)
-    #                 outputs = self.model.generate(**inputs, max_new_tokens=464, do_sample=True)
-    #                 summary_generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-    #                 digest.summary = summary_generated
-    #             digests.append(digest)
-    #     return digests
+    def run_batch(self, texts: list[str]) -> list[Digest]:
+        digests = []    
+        with self.lock:
+            for i in range(0, len(texts), BATCH_SIZE):               
+                extracts = self._generate_response_batch(texts[i:i + BATCH_SIZE], EXTRACTION_TEMPLATE, max_new_tokens=192)
+                summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=400)
+                for ext, summ in zip(extracts, summaries):
+                    digest = parse_digest(ext) or Digest()
+                    digest.summary = summ
+                    digests.append(digest)
+        return digests
 
 
 def from_path(llm_path) -> Digestor:
