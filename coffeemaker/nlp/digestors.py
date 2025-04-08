@@ -14,27 +14,23 @@ logger = logging.getLogger(__name__)
 CONTEXT_LEN = 8192
 # BATCH_CONTEXT_LEN = 4096
 BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", 16))
-MIN_WORDS_THRESHOLD_FOR_SUMMARY = 200 # min words needed to use the generated summary
+MIN_WORDS_THRESHOLD_FOR_SUMMARY = 160 # min words needed to use the generated summary
 NUM_THREADS = os.cpu_count()
 
-SUMMARY_TEMPLATE = """TASK: Rewrite the article/post text using less than 250 words.
-
-ARTICLE/POST:
-{input_text}
-"""
-
-EXTRACTION_TEMPLATE = """TASKS:
-    - Create a one sentence gist of the article/post. This will be the 'title'.
-    - Extract names of the top 1 - 4 people, products, companies, organizations, or stock tickers mentioned in the article/post that influence the content. These will be the 'names'.
-    - Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets, etc. These will be the 'domains'.
+DIGEST_TEMPLATE = """TASKS:
+  - Rewrite the article/post using less than 250 words. This will be the 'summary'.
+  - Create a one sentence gist of the article/post. This will be the 'title'.
+  - Extract names of the top 1 - 4 people, products, companies, organizations, or stock tickers mentioned in the article/post that influence the content. These will be the 'names'.
+  - Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets, etc. These will be the 'domains'.
 
 RESPONSE FORMAT: 
 Response MUST be a json object of the following structure
 ```json
 {{
+    "summary": string,
     "title": string,
     "names": [string, string, string, string],
-    "domains": [string, string]
+    "domain": [string, string]
 }}
 ```
 
@@ -104,7 +100,7 @@ class LlamaCppDigestor(Digestor):
 
         from llama_cpp import Llama
         self.model = Llama(
-            model_path=self.model_path, n_ctx=self.context_len, 
+            model_path=self.model_path, n_ctx=self.context_len+(self.context_len//4), # this extension is needed to accommodate occasional overflows
             n_batch=self.context_len//2, n_threads_batch=NUM_THREADS, n_threads=NUM_THREADS, 
             embedding=False, verbose=False
         )  
@@ -122,14 +118,34 @@ class LlamaCppDigestor(Digestor):
   
     def run(self, text: str) -> Digest:
         with self.lock:
-            resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
-            digest = parse_digest(resp)
-            if digest and needs_summary(text):
-                digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
+            digest = parse_digest(
+                self._generate_response(
+                    input_text=text, 
+                    template=DIGEST_TEMPLATE, 
+                    max_new_tokens=1024
+                )
+            )
+            # resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
+            # digest = parse_digest(resp) or Digest()
+            # digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
+
+            # if digest and needs_summary(text):
+            #     digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
                 # if summary and (summary[0].isalnum() or summary[0] in ['-', '*']): 
                 #     digest.summary = summary
         return digest
-
+    
+    def run_batch(self, texts: list[str]) -> list[Digest]:
+        with self.lock:
+            digests = [parse_digest(
+                self._generate_response(
+                    input_text=text, 
+                    template=DIGEST_TEMPLATE, 
+                    max_new_tokens=1024
+                )
+            )
+            for text in texts]
+        return digests
     
 class RemoteDigestor(Digestor):
     client = None
@@ -183,7 +199,7 @@ class TransformerDigestor(Digestor):
         self.lock = threading.Lock()
         self.context_len = context_len
         
-        from unsloth import FastLanguageModel
+        # from unsloth import FastLanguageModel
         from transformers import AutoModelForCausalLM, AutoTokenizer
         import torch
 
@@ -216,10 +232,17 @@ class TransformerDigestor(Digestor):
 
     def run(self, text: str) -> Digest:
         with self.lock:
-            resp = self._generate_response(text, EXTRACTION_TEMPLATE, max_new_tokens=192)
-            digest = parse_digest(resp) or Digest()
-            if digest and needs_summary(text):
-                digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=400)
+            digest = parse_digest(
+                self._generate_response(
+                    input_text=text, 
+                    template=DIGEST_TEMPLATE, 
+                    max_new_tokens=1024
+                )
+            )
+            # resp = self._generate_response(text, EXTRACTION_TEMPLATE, max_new_tokens=192)
+            # digest = parse_digest(resp) or Digest()
+            # if digest and needs_summary(text):
+            #     digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=400)
         return digest
     
     def _generate_response_batch(self, texts: list[str], template: str, max_new_tokens: int = 256) -> list[str]:
@@ -233,12 +256,15 @@ class TransformerDigestor(Digestor):
         digests = []    
         with self.lock:
             for i in range(0, len(texts), BATCH_SIZE):               
-                extracts = self._generate_response_batch(texts[i:i + BATCH_SIZE], EXTRACTION_TEMPLATE, max_new_tokens=192)
-                summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=400)
-                for ext, summ in zip(extracts, summaries):
-                    digest = parse_digest(ext) or Digest()
-                    digest.summary = summ
-                    digests.append(digest)
+                responses = self._generate_response_batch(texts[i:i + BATCH_SIZE], DIGEST_TEMPLATE, max_new_tokens=1024)
+                digests.extend([parse_digest(response) for response in responses])
+            # for i in range(0, len(texts), BATCH_SIZE):               
+            #     extracts = self._generate_response_batch(texts[i:i + BATCH_SIZE], EXTRACTION_TEMPLATE, max_new_tokens=192)
+            #     summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=400)
+            #     for ext, summ in zip(extracts, summaries):
+            #         digest = parse_digest(ext) or Digest()
+            #         digest.summary = summ
+            #         digests.append(digest)
         return digests
 
 

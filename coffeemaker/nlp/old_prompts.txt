@@ -101,3 +101,28 @@
 # ARTICLE/POST:
 # {input_text}
 # """
+
+# SUMMARY_TEMPLATE = """TASK: Rewrite the article/post text using less than 250 words.
+
+# ARTICLE/POST:
+# {input_text}
+# """
+
+# EXTRACTION_TEMPLATE = """TASKS:
+#     - Create a one sentence gist of the article/post. This will be the 'title'.
+#     - Extract names of the top 1 - 4 people, products, companies, organizations, or stock tickers mentioned in the article/post that influence the content. These will be the 'names'.
+#     - Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets, etc. These will be the 'domains'.
+
+# RESPONSE FORMAT: 
+# Response MUST be a json object of the following structure
+# ```json
+# {{
+#     "title": string,
+#     "names": [string, string, string, string],
+#     "domains": [string, string]
+# }}
+# ```
+
+# ARTICLE/POST:
+# {input_text}
+# """
