@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import json
 import os
+import re
 import threading
 from typing import Optional
 from icecream import ic
@@ -168,7 +169,7 @@ class LlamaCppDigestor(Digestor):
                 resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
                 digest = parse_digest(resp)
                 if digest and needs_summary(text):
-                    digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
+                    digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=300)
                 digests.append(digest)
 
             # digests = [parse_digest(
@@ -266,17 +267,17 @@ class TransformerDigestor(Digestor):
 
     def run(self, text: str) -> Digest:
         with self.lock:
-            digest = parse_digest(
-                self._generate_response(
-                    input_text=text, 
-                    template=DIGEST_TEMPLATE, 
-                    max_new_tokens=1024
-                )
-            )
-            # resp = self._generate_response(text, EXTRACTION_TEMPLATE, max_new_tokens=192)
-            # digest = parse_digest(resp) or Digest()
-            # if digest and needs_summary(text):
-            #     digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=400)
+            # digest = parse_digest(
+            #     self._generate_response(
+            #         input_text=text, 
+            #         template=DIGEST_TEMPLATE, 
+            #         max_new_tokens=1024
+            #     )
+            # )
+            resp = self._generate_response(text, EXTRACTION_TEMPLATE, max_new_tokens=192)
+            digest = parse_digest(resp) or Digest()
+            if digest and needs_summary(text):
+                digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=400)
         return digest
     
     def _generate_response_batch(self, texts: list[str], template: str, max_new_tokens: int = 256) -> list[str]:
@@ -289,17 +290,59 @@ class TransformerDigestor(Digestor):
     def run_batch(self, texts: list[str]) -> list[Digest]:
         digests = []    
         with self.lock:
-            for i in range(0, len(texts), BATCH_SIZE):               
-                responses = self._generate_response_batch(texts[i:i + BATCH_SIZE], DIGEST_TEMPLATE, max_new_tokens=1024)
-                digests.extend([parse_digest(response) for response in responses])
             # for i in range(0, len(texts), BATCH_SIZE):               
-            #     extracts = self._generate_response_batch(texts[i:i + BATCH_SIZE], EXTRACTION_TEMPLATE, max_new_tokens=192)
-            #     summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=400)
-            #     for ext, summ in zip(extracts, summaries):
-            #         digest = parse_digest(ext) or Digest()
-            #         digest.summary = summ
-            #         digests.append(digest)
+            #     responses = self._generate_response_batch(texts[i:i + BATCH_SIZE], DIGEST_TEMPLATE, max_new_tokens=1024)
+            #     digests.extend([parse_digest(response) for response in responses])
+            for i in range(0, len(texts), BATCH_SIZE):               
+                extracts = self._generate_response_batch(texts[i:i + BATCH_SIZE], EXTRACTION_TEMPLATE, max_new_tokens=192)
+                summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=300)
+                for ext, summ in zip(extracts, summaries):
+                    digest = parse_digest(ext)
+                    if digest: digest.summary = summ
+                    digests.append(digest)
         return digests
+    
+MARKDOWN_HEADERS = ["# ", "## ", "### ", "#### ", "**"]
+def cleanup_markdown(text: str) -> str:
+    # remove all \t with
+    text = text.replace("\t", "")
+    
+    # removing the first line if it looks like a header
+    text = text.strip()
+    if any(text.startswith(tag) for tag in MARKDOWN_HEADERS):
+        text = remove_before(text, "\n") 
+
+    # replace remaining headers with "**"
+    text = re.sub(r"(#+ )(.*?)(\n|$)", replace_header_tag, text)
+    # Replace "\n(any number of spaces)\n" with "\n\n"
+    text = re.sub(r"\n\s*\n", "\n\n", text)
+    # Remove any space after "\n"
+    text = re.sub(r"\n\s+", "\n", text)
+    # Replace "\n\n\n" with "\n\n"
+    # text = re.sub(r"\n\n\n", "\n\n", text)
+    # remove > right after \n
+    # text = re.sub(r"\n>", "\n", text)
+    # replace every single \n with \n\n
+    text = re.sub(r'(?<!\n)\n(?!\n)', '\n\n', text)
+    # Add a space after every "+" if there is no space
+    text = re.sub(r'\+(?!\s)', '+ ', text)
+
+    return text.strip()
+
+def replace_header_tag(match):
+    header_content = match.group(2).strip()  # The content after "# " or "## "
+    newline = match.group(3)  # Preserve the newline or end of string
+    return f"\n**{header_content}**{newline}"
+
+def remove_before(text: str, sub: str) -> str:
+    index = text.find(sub)
+    if index > 0: return text[index:]
+    return text
+
+def remove_after(text: str, sub: str) -> str:
+    index = text.find(sub)
+    if index > 0: return text[:index]
+    return text
 
 
 def from_path(llm_path) -> Digestor:

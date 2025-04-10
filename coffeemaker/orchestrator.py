@@ -126,10 +126,10 @@ class Orchestrator:
                     log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
                     continue
 
-                bean.summary = digest.summary or bean.text
+                bean.summary = digestors.cleanup_markdown(digest.summary or bean.text)
                 # bean.highlights = digest.highlights
                 bean.title = digest.title or bean.title
-                bean.names = first_n(digest.names, 3)
+                bean.names = digest.names
                 bean.categories = first_n(digest.domains, 1)
                 bean.tags = merge_tags(bean.names, bean.categories)
         except Exception as e:
@@ -235,10 +235,10 @@ class Orchestrator:
         random.shuffle(subreddits) # shuffling out to avoid failure of the same things
         
         # awaiting on each group so that os is not overwhelmed by sockets
-        log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        await self.collect_async(HACKERNEWS, scraper.collect_ychackernews())
-        log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
-        await asyncio.gather(*[self.collect_async(source, scraper.collect_subreddit(source)) for source in subreddits])
+        # log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
+        # await self.collect_async(HACKERNEWS, scraper.collect_ychackernews())
+        # log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
+        # await asyncio.gather(*[self.collect_async(source, scraper.collect_subreddit(source)) for source in subreddits])
         log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
         await asyncio.gather(*[self.collect_async(source, scraper.collect_rssfeed(source)) for source in rssfeeds])
 
