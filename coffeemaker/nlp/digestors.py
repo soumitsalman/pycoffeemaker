@@ -17,20 +17,45 @@ BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", 16))
 MIN_WORDS_THRESHOLD_FOR_SUMMARY = 160 # min words needed to use the generated summary
 NUM_THREADS = os.cpu_count()
 
-DIGEST_TEMPLATE = """TASKS:
-  - Rewrite the article/post using less than 250 words. This will be the 'summary'.
-  - Create a one sentence gist of the article/post. This will be the 'title'.
-  - Extract names of the top 1 - 4 people, products, companies, organizations, or stock tickers mentioned in the article/post that influence the content. These will be the 'names'.
-  - Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets, etc. These will be the 'domains'.
+# DIGEST_TEMPLATE = """TASKS:
+#   - Rewrite the article/post using less than 250 words. This will be the 'summary'.
+#   - Create a one sentence gist of the article/post. This will be the 'title'.
+#   - Extract names of the top 1 - 4 people, products, companies, organizations, or stock tickers mentioned in the article/post that influence the content. These will be the 'names'.
+#   - Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets, etc. These will be the 'domains'.
+
+# RESPONSE FORMAT: 
+# Response MUST be a json object of the following structure
+# ```json
+# {{
+#     "summary": string,
+#     "title": string,
+#     "names": [string, string, string, string],
+#     "domain": [string, string]
+# }}
+# ```
+
+# ARTICLE/POST:
+# {input_text}
+# """
+
+SUMMARY_TEMPLATE = """TASK: Rewrite the article/post text using less than 250 words.
+
+ARTICLE/POST:
+{input_text}
+"""
+
+EXTRACTION_TEMPLATE = """TASKS:
+    - Create a one sentence gist of the article/post. This will be the 'title'.
+    - Extract names of the top 1 - 4 people, products, companies, organizations, or stock tickers mentioned in the article/post that influence the content. These will be the 'names'.
+    - Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets, etc. These will be the 'domains'.
 
 RESPONSE FORMAT: 
 Response MUST be a json object of the following structure
 ```json
 {{
-    "summary": string,
     "title": string,
     "names": [string, string, string, string],
-    "domain": [string, string]
+    "domains": [string, string]
 }}
 ```
 
@@ -118,33 +143,42 @@ class LlamaCppDigestor(Digestor):
   
     def run(self, text: str) -> Digest:
         with self.lock:
-            digest = parse_digest(
-                self._generate_response(
-                    input_text=text, 
-                    template=DIGEST_TEMPLATE, 
-                    max_new_tokens=1024
-                )
-            )
-            # resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
-            # digest = parse_digest(resp) or Digest()
-            # digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
+            # digest = parse_digest(
+            #     self._generate_response(
+            #         input_text=text, 
+            #         template=DIGEST_TEMPLATE, 
+            #         max_new_tokens=1024
+            #     )
+            # )
+            resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
+            digest = parse_digest(resp)
+            if digest and needs_summary(text):
+                digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=416)
 
             # if digest and needs_summary(text):
             #     digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
-                # if summary and (summary[0].isalnum() or summary[0] in ['-', '*']): 
-                #     digest.summary = summary
+            #     if summary and (summary[0].isalnum() or summary[0] in ['-', '*']): 
+            #         digest.summary = summary
         return digest
     
     def run_batch(self, texts: list[str]) -> list[Digest]:
+        digests = []
         with self.lock:
-            digests = [parse_digest(
-                self._generate_response(
-                    input_text=text, 
-                    template=DIGEST_TEMPLATE, 
-                    max_new_tokens=1024
-                )
-            )
-            for text in texts]
+            for text in texts:
+                resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
+                digest = parse_digest(resp)
+                if digest and needs_summary(text):
+                    digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
+                digests.append(digest)
+
+            # digests = [parse_digest(
+            #     self._generate_response(
+            #         input_text=text, 
+            #         template=DIGEST_TEMPLATE, 
+            #         max_new_tokens=1024
+            #     )
+            # )
+            # for text in texts]
         return digests
     
 class RemoteDigestor(Digestor):

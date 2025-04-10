@@ -6,6 +6,7 @@
 .clustering
 .test
 .db
+.mongodb
 .vscode
 .logs
 __pycache__
