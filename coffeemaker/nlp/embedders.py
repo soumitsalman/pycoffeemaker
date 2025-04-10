@@ -78,7 +78,7 @@ class TransformerEmbeddings(Embeddings):
         import torch
         from sentence_transformers import SentenceTransformer
         
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = SentenceTransformer(model_id, trust_remote_code=True, device=device, tokenizer_kwargs=_TOKENIZER_KWARGS)
     
     # TODO: move this out

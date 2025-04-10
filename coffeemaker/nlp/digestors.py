@@ -154,7 +154,7 @@ class LlamaCppDigestor(Digestor):
             resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
             digest = parse_digest(resp)
             if digest and needs_summary(text):
-                digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=416)
+                digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=360)
 
             # if digest and needs_summary(text):
             #     digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
@@ -169,7 +169,7 @@ class LlamaCppDigestor(Digestor):
                 resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
                 digest = parse_digest(resp)
                 if digest and needs_summary(text):
-                    digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=300)
+                    digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=360)
                 digests.append(digest)
 
             # digests = [parse_digest(
@@ -277,7 +277,7 @@ class TransformerDigestor(Digestor):
             resp = self._generate_response(text, EXTRACTION_TEMPLATE, max_new_tokens=192)
             digest = parse_digest(resp) or Digest()
             if digest and needs_summary(text):
-                digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=400)
+                digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=360)
         return digest
     
     def _generate_response_batch(self, texts: list[str], template: str, max_new_tokens: int = 256) -> list[str]:
@@ -295,7 +295,7 @@ class TransformerDigestor(Digestor):
             #     digests.extend([parse_digest(response) for response in responses])
             for i in range(0, len(texts), BATCH_SIZE):               
                 extracts = self._generate_response_batch(texts[i:i + BATCH_SIZE], EXTRACTION_TEMPLATE, max_new_tokens=192)
-                summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=300)
+                summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=360)
                 for ext, summ in zip(extracts, summaries):
                     digest = parse_digest(ext)
                     if digest: digest.summary = summ
