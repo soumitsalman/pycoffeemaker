@@ -235,10 +235,10 @@ class Orchestrator:
         random.shuffle(subreddits) # shuffling out to avoid failure of the same things
         
         # awaiting on each group so that os is not overwhelmed by sockets
-        # log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        # await self.collect_async(HACKERNEWS, scraper.collect_ychackernews())
-        # log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
-        # await asyncio.gather(*[self.collect_async(source, scraper.collect_subreddit(source)) for source in subreddits])
+        log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
+        await self.collect_async(HACKERNEWS, scraper.collect_ychackernews())
+        log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
+        await asyncio.gather(*[self.collect_async(source, scraper.collect_subreddit(source)) for source in subreddits])
         log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
         await asyncio.gather(*[self.collect_async(source, scraper.collect_rssfeed(source)) for source in rssfeeds])
 
