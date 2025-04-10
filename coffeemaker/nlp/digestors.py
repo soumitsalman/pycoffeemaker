@@ -321,7 +321,7 @@ def cleanup_markdown(text: str) -> str:
     # Replace "\n\n\n" with "\n\n"
     # text = re.sub(r"\n\n\n", "\n\n", text)
     # remove > right after \n
-    # text = re.sub(r"\n>", "\n", text)
+    text = re.sub(r"\n>", "\n", text)
     # replace every single \n with \n\n
     text = re.sub(r'(?<!\n)\n(?!\n)', '\n\n', text)
     # Add a space after every "+" if there is no space
