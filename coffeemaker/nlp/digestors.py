@@ -18,45 +18,20 @@ BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", 16))
 MIN_WORDS_THRESHOLD_FOR_SUMMARY = 160 # min words needed to use the generated summary
 NUM_THREADS = os.cpu_count()
 
-# DIGEST_TEMPLATE = """TASKS:
-#   - Rewrite the article/post using less than 250 words. This will be the 'summary'.
-#   - Create a one sentence gist of the article/post. This will be the 'title'.
-#   - Extract names of the top 1 - 4 people, products, companies, organizations, or stock tickers mentioned in the article/post that influence the content. These will be the 'names'.
-#   - Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets, etc. These will be the 'domains'.
-
-# RESPONSE FORMAT: 
-# Response MUST be a json object of the following structure
-# ```json
-# {{
-#     "summary": string,
-#     "title": string,
-#     "names": [string, string, string, string],
-#     "domain": [string, string]
-# }}
-# ```
-
-# ARTICLE/POST:
-# {input_text}
-# """
-
-SUMMARY_TEMPLATE = """TASK: Rewrite the article/post text using less than 250 words.
-
-ARTICLE/POST:
-{input_text}
-"""
-
-EXTRACTION_TEMPLATE = """TASKS:
-    - Create a one sentence gist of the article/post. This will be the 'title'.
-    - Extract names of the top 1 - 4 people, products, companies, organizations, or stock tickers mentioned in the article/post that influence the content. These will be the 'names'.
-    - Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets, etc. These will be the 'domains'.
+DIGEST_TEMPLATE = """TASKS:
+  - Rewrite the article/post using less than 250 words. This will be the 'summary'.
+  - Create a one sentence gist of the article/post. This will be the 'title'.
+  - Extract names of the top 1 - 4 people, products, companies, organizations, or stock tickers mentioned in the article/post that influence the content. These will be the 'names'.
+  - Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets, etc. These will be the 'domains'.
 
 RESPONSE FORMAT: 
 Response MUST be a json object of the following structure
 ```json
 {{
+    "summary": string,
     "title": string,
     "names": [string, string, string, string],
-    "domains": [string, string]
+    "domain": [string, string]
 }}
 ```
 
@@ -136,50 +111,36 @@ class LlamaCppDigestor(Digestor):
             messages=create_prompt(input_text=input_text, template=template, max_tokens=self.context_len//2),
             max_tokens=max_new_tokens,
             seed=666,
-            # response_format={"type": response_format} if response_format else None,
+            response_format={"type": response_format} if response_format else None,
             # temperature=0.1, # if response_format=="json_object" else 0.3,
             # frequency_penalty=0.2,
-            repeat_penalty=1 if response_format=="json_object" else 1.5
-        )['choices'][0]['message']['content'].strip()          
+            # top_k=40,
+            # repeat_penalty=1 if response_format=="json_object" else 1.3
+        )['choices'][0]['message']['content'].strip() 
+
+    def _run_one(self, text: str) -> Digest:
+        digest = parse_digest(
+            self._generate_response(
+                input_text=text, 
+                template=DIGEST_TEMPLATE, 
+                max_new_tokens=600,
+                response_format="json_object"
+            )
+        )
+        # resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
+        # digest = parse_digest(resp)
+        # if digest and needs_summary(text):
+        #     digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=360)
+        return digest         
   
     def run(self, text: str) -> Digest:
         with self.lock:
-            # digest = parse_digest(
-            #     self._generate_response(
-            #         input_text=text, 
-            #         template=DIGEST_TEMPLATE, 
-            #         max_new_tokens=1024
-            #     )
-            # )
-            resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
-            digest = parse_digest(resp)
-            if digest and needs_summary(text):
-                digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=360)
-
-            # if digest and needs_summary(text):
-            #     digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=400)
-            #     if summary and (summary[0].isalnum() or summary[0] in ['-', '*']): 
-            #         digest.summary = summary
+            digest = self._run_one(text)
         return digest
     
     def run_batch(self, texts: list[str]) -> list[Digest]:
-        digests = []
         with self.lock:
-            for text in texts:
-                resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
-                digest = parse_digest(resp)
-                if digest and needs_summary(text):
-                    digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=360)
-                digests.append(digest)
-
-            # digests = [parse_digest(
-            #     self._generate_response(
-            #         input_text=text, 
-            #         template=DIGEST_TEMPLATE, 
-            #         max_new_tokens=1024
-            #     )
-            # )
-            # for text in texts]
+            digests = [self._run_one(text) for text in texts]
         return digests
     
 class RemoteDigestor(Digestor):
@@ -248,10 +209,11 @@ class TransformerDigestor(Digestor):
         #         device_map=self.device
         #     )
         #     self.model = FastLanguageModel.for_inference(self.model)
-            
+        #     self.tokenizer = self.tokenizer
         # else:
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, padding=True, truncation=True, max_length=context_len)
         self.model =  AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype="auto")
+        
 
     def _extract_response(self, generated: str) -> str:
         start_index = generated.find(_RESPONSE_START)
@@ -267,39 +229,39 @@ class TransformerDigestor(Digestor):
 
     def run(self, text: str) -> Digest:
         with self.lock:
-            # digest = parse_digest(
-            #     self._generate_response(
-            #         input_text=text, 
-            #         template=DIGEST_TEMPLATE, 
-            #         max_new_tokens=1024
-            #     )
-            # )
-            resp = self._generate_response(text, EXTRACTION_TEMPLATE, max_new_tokens=192)
-            digest = parse_digest(resp) or Digest()
-            if digest and needs_summary(text):
-                digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=360)
+            digest = parse_digest(
+                self._generate_response(
+                    input_text=text, 
+                    template=DIGEST_TEMPLATE, 
+                    max_new_tokens=600
+                )
+            )
+            # resp = self._generate_response(text, EXTRACTION_TEMPLATE, max_new_tokens=192)
+            # digest = parse_digest(resp) or Digest()
+            # if digest and needs_summary(text):
+            #     digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=360)
         return digest
     
     def _generate_response_batch(self, texts: list[str], template: str, max_new_tokens: int = 256) -> list[str]:
         prompts = [create_prompt(text, template, self.context_len//2) for text in texts]
         inputs = self.tokenizer.apply_chat_template(prompts, tokenize=True, add_generation_prompt=True, padding=True, truncation=True, max_length=self.context_len, return_dict=True, return_tensors="pt").to(self.device)
-        outputs = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
+        outputs = self.model.generate(**inputs, max_new_tokens=max_new_tokens, num_beams=BATCH_SIZE, top_k=25)
         generated = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)
         return [self._extract_response(g) for g in generated]
 
     def run_batch(self, texts: list[str]) -> list[Digest]:
         digests = []    
         with self.lock:
-            # for i in range(0, len(texts), BATCH_SIZE):               
-            #     responses = self._generate_response_batch(texts[i:i + BATCH_SIZE], DIGEST_TEMPLATE, max_new_tokens=1024)
-            #     digests.extend([parse_digest(response) for response in responses])
             for i in range(0, len(texts), BATCH_SIZE):               
-                extracts = self._generate_response_batch(texts[i:i + BATCH_SIZE], EXTRACTION_TEMPLATE, max_new_tokens=192)
-                summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=360)
-                for ext, summ in zip(extracts, summaries):
-                    digest = parse_digest(ext)
-                    if digest: digest.summary = summ
-                    digests.append(digest)
+                responses = self._generate_response_batch(texts[i:i + BATCH_SIZE], DIGEST_TEMPLATE, max_new_tokens=600)
+                digests.extend([parse_digest(response) for response in responses])
+            # for i in range(0, len(texts), BATCH_SIZE):               
+            #     extracts = self._generate_response_batch(texts[i:i + BATCH_SIZE], EXTRACTION_TEMPLATE, max_new_tokens=192)
+            #     summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=360)
+            #     for ext, summ in zip(extracts, summaries):
+            #         digest = parse_digest(ext)
+            #         if digest: digest.summary = summ
+            #         digests.append(digest)
         return digests
     
 MARKDOWN_HEADERS = ["# ", "## ", "### ", "#### ", "**"]
@@ -316,12 +278,12 @@ def cleanup_markdown(text: str) -> str:
     text = re.sub(r"(#+ )(.*?)(\n|$)", replace_header_tag, text)
     # Replace "\n(any number of spaces)\n" with "\n\n"
     text = re.sub(r"\n\s*\n", "\n\n", text)
-    # Remove any space after "\n"
-    text = re.sub(r"\n\s+", "\n", text)
+    # # Remove any space after "\n"
+    # text = re.sub(r"\n\s+", "\n", text)
     # Replace "\n\n\n" with "\n\n"
     # text = re.sub(r"\n\n\n", "\n\n", text)
-    # remove > right after \n
-    text = re.sub(r"\n>", "\n", text)
+    # # remove > right after \n
+    # text = re.sub(r"\n>", "\n", text)
     # replace every single \n with \n\n
     text = re.sub(r'(?<!\n)\n(?!\n)', '\n\n', text)
     # Add a space after every "+" if there is no space

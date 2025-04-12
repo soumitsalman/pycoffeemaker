@@ -16,16 +16,18 @@ log = logging.getLogger(__name__)
 
 QUEUE_BATCH_SIZE = os.cpu_count()*os.cpu_count()
 END_OF_STREAM = "END_OF_STREAM"
-MAX_CLUSTER_SIZE=20
+MAX_CLUSTER_SIZE = 20
 
 # MIN_WORDS_THRESHOLD = 150
 MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 200 # min words needed to not download the body
 MIN_WORDS_THRESHOLD_FOR_INDEXING = 70 # mininum words needed to put it through indexing
+MIN_WORDS_THRESHOLD_FOR_SUMMARY = 160 # min words needed to use the generated summary
 
 is_text_above_threshold = lambda bean, threshold: bean.text and len(bean.text.split()) >= threshold
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
 is_indexable = lambda bean: is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_INDEXING) # it has to have some text and the text has to be large enough
 is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_DOWNLOADING)) # if it is a post dont download it or if the body is large enough
+use_summary = lambda text: text and len(text.split()) >= MIN_WORDS_THRESHOLD_FOR_SUMMARY # if the body is large enough
 storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
 indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
 downloadables = lambda beans: [bean for bean in beans if is_downloadable(bean)] if beans else beans
@@ -126,7 +128,7 @@ class Orchestrator:
                     log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
                     continue
 
-                bean.summary = digestors.cleanup_markdown(digest.summary or bean.text)
+                bean.summary = digestors.cleanup_markdown(digest.summary if use_summary(bean.text) else bean.text)
                 # bean.highlights = digest.highlights
                 bean.title = digest.title or bean.title
                 bean.names = digest.names

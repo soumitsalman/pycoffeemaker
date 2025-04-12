@@ -32,7 +32,7 @@ curl https://install.duckdb.org | sh
 # MODELS
 mkdir .models
 wget https://huggingface.co/soumitsr/GIST-small-Embedding-v0-Q8_0-GGUF/resolve/main/gist-small-embedding-v0-q8_0.gguf -O .models/gist-small-embedding-v0-q8_0.gguf
-wget https://huggingface.co/soumitsr/SmolLM2-135M-Instruct-article-digestor-gguf/resolve/main/unsloth.Q8_0.gguf -O .models/SmolLM2-135M-Instruct-article-digestor-q8.gguf
+wget https://huggingface.co/soumitsr/SmolLM2-360M-Instruct-article-digestor-gguf/resolve/main/unsloth.Q8_0.gguf -O .models/SmolLM2-360M-Instruct-article-digestor-q8.gguf
 
 # PLAYWRIGHT
 playwright install
