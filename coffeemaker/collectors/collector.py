@@ -212,6 +212,8 @@ reddit_submission_permalink = lambda permalink: f"https://www.reddit.com{permali
 hackernews_story_metadata = lambda id: f"https://hacker-news.firebaseio.com/v0/item/{id}.json"
 hackernews_story_permalink = lambda id: f"https://news.ycombinator.com/item?id={id}"
 
+extract_source = lambda url: extract_domain(url) or extract_base_url(url)
+
 def extract_base_url(url: str) -> str:
     try: return urlparse(url).netloc
     except: return None
@@ -227,6 +229,37 @@ def parse_date(date: str) -> datetime:
 # general utilities
 def _excluded_url(url: str):
     return (not url) or any(re.search(pattern, url) for pattern in EXCLUDED_URL_PATTERNS)
+
+### rss feed related utilities ###
+def _extract_body(entry: feedparser.FeedParserDict) -> str:
+    # the body usually lives in <dc:content>, <content:encoded> or <description>
+    body_html: str = ""
+    if 'dc_content' in entry:
+        body_html = entry.dc_content
+    elif 'content' in entry:        
+        body_html = entry.content[0]['value'] if isinstance(entry.content, list) else entry.content    
+    elif 'summary' in entry:
+        body_html = entry.summary
+    return body_html.strip()
+
+def _extract_main_image(entry: feedparser.FeedParserDict) -> str:
+    if ('links' in entry) and any(item for item in entry.links if "image" in item.get('type', "")):
+        return next(item for item in entry.links if "image" in item.get('type', "")).get('href')
+    if ('media_content' in entry) and entry.media_content:
+        return entry.media_content[0].get('url')
+    elif ('media_thumbnail' in entry) and entry.media_thumbnail:
+        return entry.media_thumbnail[0].get('url')
+
+def _clean_markdown(markdown: str) -> str:
+    """Remove any content before the first line starting with '# '."""
+    if not markdown: return
+    markdown = markdown.strip()
+    lines = markdown.splitlines()
+    # TODO: add a check to remove "advertisement"
+    for i, line in enumerate(lines):
+        if line.startswith("# "):
+            return "\n".join(lines[i+1:])
+    return markdown
 
 POST_DOMAINS = ["reddit", "redd", "linkedin", "x", "twitter", "facebook", "ycombinator"]
 BLOG_URLS = ["medium.com",  "substack.", "wordpress.", "blogspot.", "newsletter.", "developers.", "blogs.", "blog.", ".so/", ".dev/", ".io/",  ".to/", ".rs/", ".tech/", ".ai/", ".blog/", "/blog/" ]
@@ -427,7 +460,7 @@ class AsyncCollector:
 
         ret = {
             "url": result.url,
-            "markdown": AsyncCollector._clean_markdown(result.markdown)
+            "markdown": _clean_markdown(result.markdown)
         }
         if content := (json.loads(result.extracted_content) if result.extracted_content else None):
             metadata = content[0]
@@ -463,7 +496,7 @@ class AsyncCollector:
                 feed = feedparser.parse(await resp.text())
                 if not feed.entries: return
 
-                source = AsyncCollector.extract_source(feed.feed.get('link') or feed.entries[0].link)
+                source = extract_source(feed.feed.get('link') or feed.entries[0].link)
                 collected = [self._from_rssfeed(entry, source, default_kind) for entry in feed.entries]
             return collected
         except Exception as e:
@@ -474,7 +507,7 @@ class AsyncCollector:
         current_time = now()
         published_time = entry.get("published_parsed") or entry.get("updated_parsed")
         created_time = from_timestamp(time.mktime(published_time)) if published_time else current_time
-        body_html = AsyncCollector._extract_body(entry)
+        body_html = _extract_body(entry)
         body = f"# {entry.title}\n\n{self._generate_markdown(body_html)}" if body_html else None
         return (
             Bean(
@@ -488,7 +521,7 @@ class AsyncCollector:
                 kind=guess_type(entry.link, source) or default_kind,
                 text=body,
                 author=entry.get('author'),        
-                image_url=AsyncCollector._extract_main_image(entry)
+                image_url=_extract_main_image(entry)
             ),
             Chatter(
                 url=entry.link,
@@ -502,40 +535,7 @@ class AsyncCollector:
     def _generate_markdown(self, html: str) -> str:
         """Converts the given html into a markdown"""
         # TODO: ideally this should be done with crawler.arun("raw:"+html)
-        return self.md_generator.generate_markdown(cleaned_html=html).raw_markdown.strip()
-
-    ### rss feed related utilities ###
-    def _extract_body(entry: feedparser.FeedParserDict) -> str:
-        # the body usually lives in <dc:content>, <content:encoded> or <description>
-        body_html: str = ""
-        if 'dc_content' in entry:
-            body_html = entry.dc_content
-        elif 'content' in entry:        
-            body_html = entry.content[0]['value'] if isinstance(entry.content, list) else entry.content    
-        elif 'summary' in entry:
-            body_html = entry.summary
-        return body_html.strip()
-
-    def _extract_main_image(entry: feedparser.FeedParserDict) -> str:
-        if ('links' in entry) and any(item for item in entry.links if "image" in item.get('type', "")):
-            return next(item for item in entry.links if "image" in item.get('type', "")).get('href')
-        if ('media_content' in entry) and entry.media_content:
-            return entry.media_content[0].get('url')
-        elif ('media_thumbnail' in entry) and entry.media_thumbnail:
-            return entry.media_thumbnail[0].get('url')
-
-    def _clean_markdown(markdown: str) -> str:
-        """Remove any content before the first line starting with '# '."""
-        if not markdown: return
-        markdown = markdown.strip()
-        lines = markdown.splitlines()
-        # TODO: add a check to remove "advertisement"
-        for i, line in enumerate(lines):
-            if line.startswith("# "):
-                return "\n".join(lines[i+1:])
-        return markdown
-    
-    extract_source = lambda url: extract_domain(url) or extract_base_url(url)
+        return self.md_generator.generate_markdown(input_html=html).raw_markdown.strip()
     
     ### reddit related utilities ###
     async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:

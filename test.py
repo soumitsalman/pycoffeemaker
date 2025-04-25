@@ -23,7 +23,7 @@ from datetime import datetime as dt
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import collector, rssfeed, ychackernews, individual, redditor, espresso
-from coffeemaker.orchestrator import Orchestrator, log_runtime
+from coffeemaker.orchestrator import Orchestrator, log_runtime, END_OF_STREAM
 from coffeemaker.nlp import digestors, embedders
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 import random
@@ -160,25 +160,16 @@ def test_trend_ranking():
     #     store_chatters=orch._collect_chatters)    
     orch._trend_rank()
 
-def test_whole_path_live():    
-    rssfeed.collect(
-        store_beans=lambda beans: orch.extract_new(random.sample(beans, 2)),
-        sources=[
-            "https://www.techradar.com/feeds/articletype/news",
-            "https://www.geekwire.com/feed/",
-            "https://investorplace.com/content-feed/",
-            "https://dev.to/feed"
-        ])
-    redditor.collect(
-        store_beans=lambda beans: orch.extract_new(random.sample(beans, 2)),
-        store_chatters=orch.store_chatters)
-    ychackernews.collect(
-        store_beans=lambda beans: orch.extract_new(random.sample(beans, 2)),
-        store_chatters=orch.store_chatters)
-    
-    orch.run_indexing_and_augmenting()
-    orch.cluster_beans()
-    orch.trend_rank_beans()
+def test_collection_and_download():
+    async def _run(orch: Orchestrator):
+        orch._init_run()
+        await orch.run_collections_async()
+        await orch.download_queue.put(END_OF_STREAM)
+        await orch.run_downloading_async()
+
+    orch = _create_orchestrator()
+    asyncio.run(_run(orch))
+    orch.close()
 
 def test_embedder():
     inputs = [
@@ -326,6 +317,7 @@ if __name__ == "__main__":
     
     # test_run_async()
     # test_embedder()
-    test_digestor()
-    # test_run_async()
+    # test_digestor()
+    # test_collection_and_download()
+    test_run_async()
     

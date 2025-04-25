@@ -1,4 +1,5 @@
 llama-cpp-python
+onnxruntime
 tiktoken
 numpy
 pymongo
