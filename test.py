@@ -325,6 +325,6 @@ if __name__ == "__main__":
     # test_run_async()
     # test_embedder()
     # test_digestor()
-    # test_collection_and_download()
-    test_run_async()
+    test_collection_and_download()
+    # test_run_async()
     

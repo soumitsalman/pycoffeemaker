@@ -14,7 +14,7 @@ import os
 
 log = logging.getLogger(__name__)
 
-QUEUE_BATCH_SIZE = os.cpu_count()*os.cpu_count()
+QUEUE_BATCH_SIZE = 256 # os.cpu_count()*os.cpu_count()
 END_OF_STREAM = "END_OF_STREAM"
 MAX_CLUSTER_SIZE = 20
 
@@ -148,14 +148,13 @@ class Orchestrator:
                 bean.summary = digest.summary or bean.text
                 bean.highlights = digest.takeways
                 bean.insight = digest.insight
+                bean.tags = bean.entities
                 
         except Exception as e:
             log.error("failed digesting", extra={"source": beans[0].source, "num_items": len(beans)})
             ic(e.__class__.__name__, e)
 
-        # [print("========= ", bean.url, "========\n", bean.digest(), "\n========================================") for bean in beans]
-
-        return [bean for bean in beans if bean.summary]  
+        return [bean for bean in beans if bean.gist and bean.summary]  
         
     def store_beans(self, source: str, beans: list[Bean]) -> list[Bean]|None:
         beans = storables(beans)
