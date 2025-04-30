@@ -31,7 +31,7 @@ from coffeemaker.orchestrator import Orchestrator
 
 if __name__ == "__main__":    
     orch = Orchestrator(
-        os.getenv("DB_REMOTE_TEST"),
+        os.getenv("DB_REMOTE"),
         os.getenv("DB_LOCAL"),
         os.getenv("DB_NAME"),
         os.getenv("AZSTORAGE_CONNECTION_STRING")
