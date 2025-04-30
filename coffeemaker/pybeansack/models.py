@@ -46,6 +46,7 @@ K_DESCRIPTION = "description"
 SYSTEM = "__SYSTEM__"
 
 class Bean(BaseModel):
+    # collected / scraped fields
     id: str = Field(default=None, alias="_id")
     url: str    
     source: Optional[str] = None
@@ -57,27 +58,45 @@ class Bean(BaseModel):
     created: Optional[datetime] = None 
     collected: Optional[datetime] = None
     updated: Optional[datetime] = None
-    # highlights: Optional[list[str]] = None
+
+    # generated fields
+    gist: Optional[str] = None
     categories: Optional[list[str]] = None
-    names: Optional[list[str]] = None
-    tags: Optional[list[str]|str] = None
+    entities: Optional[list[str]] = None
+    locations: Optional[list[str]] = None
+    topic: Optional[str] = None
     summary: Optional[str] = None
+    highlights: Optional[list[str]] = None
+    insight: Optional[str] = None
+    tags: Optional[list[str]|str] = None
     embedding: Optional[list[float]] = None
+    cluster_id: Optional[str] = None
     
+    # social media stats
     likes: Optional[int] = Field(default=0)
     comments: Optional[int] = Field(default=0)
     shares: Optional[int] = Field(default=0)
     similars: Optional[int] = Field(default=1) # a bean is always similar to itself
     trend_score: Optional[int] = Field(default=0) # a bean is always similar to itself
     shared_in: Optional[list[str]] = None
-    cluster_id: Optional[str] = None
 
+    # query result fields
     search_score: Optional[float|int] = None
 
     def digest(self) -> str:
-        if not self.summary: return self.text or self.title
-        tag_text = {"\n\nTags: "+(", ".join(self.tags))} if self.tags else ""
-        return f"# {self.title}\n\n{self.summary}{tag_text}"
+        return "\n\n".join(
+            [
+                f"# {self.gist or self.title}",
+                f"**Publish Date**: {(self.created or self.collected).strftime('%Y-%m-%d %H:%M:%S')}",
+                f"**Categories**: {', '.join(self.categories)}" if self.categories else "",
+                f"**Mentions**: {', '.join(self.entities)}" if self.entities else "",
+                f"**Topic: {self.topic}" if self.topic else "",
+                f"**Location**: {', '.join(self.locations)}" if self.locations else "", 
+                self.summary or self.text
+            ] + 
+            ["- "+item for item in self.highlights] if self.highlights else [] + 
+            [f"**Actionable Insight**: {self.insight}"] if self.insight else []
+        )
     
     class Config:
         populate_by_name = True

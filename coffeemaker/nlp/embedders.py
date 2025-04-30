@@ -1,11 +1,15 @@
 import logging
 import threading
+from openai import OpenAI
+from sentence_transformers import SentenceTransformer
 from retry import retry
 import os
 from abc import ABC, abstractmethod
 from .utils import truncate, LLAMA_CPP_PREFIX, API_URL_PREFIX
 
 logger = logging.getLogger(__name__)
+
+CONTEXT_LEN = 512
 
 class Embeddings(ABC):
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -30,7 +34,7 @@ class LlamaCppEmbeddings(Embeddings):
     context_len = None
     model = None
     lock = None
-    def __init__(self, model_path: str, context_len: int = 8192):  
+    def __init__(self, model_path: str, context_len: int = CONTEXT_LEN):  
         from llama_cpp import Llama
 
         self.lock = threading.Lock()
@@ -52,8 +56,7 @@ class RemoteEmbeddings(Embeddings):
     model_name: str
     context_len: int
 
-    def __init__(self, base_url: str, api_key: str, model_name: str, context_len: int):
-        from openai import OpenAI
+    def __init__(self, model_name: str, base_url: str, api_key: str, context_len: int):        
         self.openai_client = OpenAI(base_url=base_url, api_key=api_key, max_retries=3, timeout=10)
         self.model_name = model_name
         self.context_len = context_len    
@@ -76,10 +79,10 @@ class TransformerEmbeddings(Embeddings):
         self.lock = threading.Lock()
 
         import torch
-        from sentence_transformers import SentenceTransformer
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = SentenceTransformer(model_id, trust_remote_code=True, device=device, tokenizer_kwargs=_TOKENIZER_KWARGS)
+        backend = "torch" if torch.cuda.is_available() else "onnx"
+        self.model = SentenceTransformer(model_id, trust_remote_code=True, device=device, backend=backend, tokenizer_kwargs=_TOKENIZER_KWARGS)
     
     # TODO: move this out
     # @retry(tries=2, logger=logger)
@@ -93,11 +96,16 @@ def _prep_input(input, context_len):
         return truncate(input, context_len)
     return [truncate(t, context_len) for t in input]
 
-def from_path(emb_path) -> Embeddings:
+def from_path(
+    embedder_path: str, 
+    context_len: str,
+    base_url: str = None,
+    api_key: str = None
+) -> Embeddings:
     # initialize digestor
-    if LLAMA_CPP_PREFIX in emb_path:
-        return LlamaCppEmbeddings(emb_path[len(LLAMA_CPP_PREFIX):], os.getenv("EMBEDDER_N_CTX", 512))
-    elif API_URL_PREFIX in emb_path:
-        return RemoteEmbeddings(emb_path, os.getenv("API_KEY"), os.getenv("EMBEDDER_MODEL_NAME"), os.getenv("EMBEDDER_N_CTX", 512))
+    if embedder_path.startswith(LLAMA_CPP_PREFIX):
+        return LlamaCppEmbeddings(embedder_path.removeprefix(LLAMA_CPP_PREFIX), context_len)
+    elif base_url:
+        return RemoteEmbeddings(embedder_path, base_url, api_key, context_len)
     else:
-        return TransformerEmbeddings(emb_path)
+        return TransformerEmbeddings(embedder_path)

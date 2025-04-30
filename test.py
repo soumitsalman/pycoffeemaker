@@ -50,12 +50,13 @@ def save_models(items: list[Bean|Chatter], file_name: str = None):
 
 def _create_orchestrator():
     return Orchestrator(
-        os.getenv("LOCAL_DB_CONNECTION_STRING"),
-        os.getenv("LOCAL_DB_PATH"),
-        None, 
-        os.getenv("EMBEDDER_PATH"),    
-        os.getenv("LLM_PATH"),
-        float(os.getenv('CLUSTER_EPS')))
+        os.getenv("DB_REMOTE_TEST"),
+        os.getenv("DB_LOCAL"),
+        os.getenv("DB_NAME"),
+        embedder_path=os.getenv("EMBEDDER_PATH"),
+        digestor_path=os.getenv("DIGESTOR_PATH"),
+        clus_eps=0.202
+    )
 
 def test_collection():
     orch = _create_orchestrator()
@@ -301,11 +302,17 @@ def test_digestor():
         {
             "text": "# Trump inviting influencers to White House press briefings is likely to usher in a new era of fake news\n\nJust over a week after Donald Trump was sworn in as 47th president of the United States, his new press secretary, Karoline Leavitt, appeared in the James S. Brady press briefing room to preside over her first media conference. Pulling up a chart that showed Americans’ declining trust in traditional, or what she called “legacy”, media outlets, Leavitt announced that henceforth, “independent journalists, podcasters, social media influencers and content creators” would be welcome at press briefings.\nLeavitt said that seats formerly reserved for White House officials would be available to these independent journalists, and invited people to apply online for White House press accreditation. It has since been reported that the White House has received more than 7,400 applications.\nIn principle, broadening the range of media outlets allowed into White House press briefings is a good idea. There’s no doubt that the media consumption habits of the American public are changing fast. But the way Trump and his communications team handled press briefings in his first term raises some concerns. \nDuring that first term between 2017 and 2021, Trump and his White House communications team tended to favour reporters from friendly media outfits such as Fox News. Early in his administration, a number of reporters from what were perceived as “hostile” organisations were banned from “the huddle” – the informal gatherings around Trump’s press secretary that followed more formal briefings.\nFringe organisations such as Breitbart News  and the One America News network carried Trump’s message faithfully and got disproportionately favourable access. This week, Breitbart was one of two online media outlets (alongside the widely respected news website Axios) that Leavitt selected to ask the first questions at her debut press briefing. \nIt’s not just their friendly disposition towards Trump but their reach that makes social media influencers appealing to the incoming president. Their primary purpose at the press briefings would be to help generate positive messages and content to feed to Trump’s Maga base – which are then promoted on platforms such as Elon Musk’s X (formerly Twitter).\nRecent research suggests that X has adjusted its algorithm to boost right-wing content as well as posts by Musk himself. A clear example has been Musk promoting the former Fox News host turned online influencer and Trump campaign surrogate Tucker Carlson’s online show.\n## Undermining public regard for journalism\nBut there may be another, insidious function of inviting these influencers to the White House press briefing room. Their presence beside professional journalists from traditional media outlets is likely to undermine public regard for journalism in general. This could sow even greater mistrust in the US media, which is already at record lows.\nIn recent years, there has been a gradual blurring of lines between traditional and digital media. But while research consistently shows, across a wide cross-section of countries and within those countries, traditional media is still more trusted than new media, this is not to say that all new media outlets should be excluded. Many of these organisations and individuals have a track record of holding power to account. \nBellingcat – a coalition of researchers, investigators and citizen journalists – typically uses open-source information to uncover important stories of public interest. Individual journalists such as Taylor Lorenz, who covers the tech and creator industry, and Ken Klippenstein, who is well known for getting hold of internal government documents, are also good examples of journalists who produce quality reports from outside the traditional mainstream.\nIt should ideally be journalists such as these, with track records for solid and impartial reporting, who are invited into the White House fold – although there’s every chance they would get the same sort of treatment as reporters such as CNN’s Jim Acosta, whom Trump famously branded an “enemy of the people” when refusing to answer a question from him in 2018.\nAcosta, incidentally, has just left CNN after the network moved him to the midnight “graveyard” slot. Shortly after signing off from his final CNN broadcast on January 28, Acosta appeared on his own Substack feed to announce he would go it alone. \nIt seems unlikely, though, that he will be awarded one of the coveted new independent media accreditations, given Trump’s recent attack on him. Celebrating Acosta’s apparent relegation by CNN, Trump took to his TruthSocial media site to call him “one of the worst and most dishonest reporters in journalistic history, a major sleazebag”. \n## Polarised media, divided audiences\nIt’s likely that America’s news media will only become more polarised during this second Trump administration, including an increasingly toxic mix of content creators dominating social media platforms. And now that Mark Zuckerberg has decided to remove Meta’s factchecking mechanism in favour of “community moderation”, research suggests this is likely to incentivise political messages which polarise and provoke rather than inform people.\n* * *\n_**Read more:What Meta’s move to community moderation could mean for misinformation ** _\n* * *\nWe’ve already seen that the incoming president was more than willing to use lawsuits to intimidate journalists. Trump recently won a legal case over ABC when its journalist George Stephanopoulos defamed him by falsely saying he had been found liable for rape. \nThis, combined with Trump’s threat to sue the Des Moines Register and its pollster Ann Selzer over their allegations of election interference, are likely to increase the chilling effect on free speech. Legal threats such as these may serve to discourage close scrutiny of his second administration. \nMeanwhile, the steady rise in prominence of partisan influencers using increasingly dangerous language is only likely to lead to the American public having less faith in the institutions that are critical to a functioning democracy – the press included.\n_Steven Buckley does not work for, consult, own shares in or receive funding from any company or organisation that would benefit from this article, and has disclosed no relevant affiliations beyond their academic appointment._"
         }
-        ]
-    digestor = digestors.from_path(os.getenv("LLM_PATH"))
-    [print(f"# {digest.title}\n{digest.names}\n{digest.domains}\n{digest.summary}\n==============================" if digest else None)
-     for digest in digestor([b['text'] for b in inputs])]
-    ic(len(inputs))
+    ]
+    digestor = digestors.from_path(
+        os.getenv("DIGESTOR_PATH"), 
+        int(os.getenv("DIGESTOR_CONTEXT_LEN", 8192)), 
+        os.getenv("DIGESTOR_BASE_URL"), 
+        os.getenv("DIGESTOR_API_KEY"), 
+        use_short_digest=lambda text: len(text.split()) < 160)
+    # [print(f"# {digest.gist}\n{digest.entities}\n{digest.domains}\n{digest.topic}\n{digest.summary}\n{digest.insight}==============================" if digest else None)
+    #  for digest in digestor([b['text'] for b in inputs[:3]])]
+    # ic(len(inputs))
+    ic(digestor([b['text'] for b in inputs]))
 
 @log_runtime
 def test_run_async():

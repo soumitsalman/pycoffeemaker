@@ -1,3 +1,4 @@
+import os
 import tiktoken
 import math
 
@@ -5,6 +6,7 @@ LLAMA_CPP_PREFIX = "llama-cpp://"
 API_URL_PREFIX = "https://"
 
 _encoding = tiktoken.get_encoding("cl100k_base")
+NUM_THREADS = os.cpu_count()
 
 def chunk(input: str, context_len: int) -> list[str]:
     tokens = _encoding.encode(input)
@@ -27,3 +29,8 @@ def chunk_tokens(input: str, context_len: int, encode_fn) -> list[str]:
 
 truncate = lambda input, n_ctx: _encoding.decode(_encoding.encode(input)[:n_ctx]) 
 count_tokens = lambda input: len(_encoding.encode(input))
+
+def batch_truncate(input_texts: list[str], n_ctx):
+    tokenlist = _encoding.encode_batch(input_texts, num_threads=os.cpu_count())
+    tokenlist = [tokens[:n_ctx] for tokens in tokenlist]
+    return _encoding.decode_batch(tokenlist, num_threads=os.cpu_count())

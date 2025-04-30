@@ -1,5 +1,4 @@
 llama-cpp-python
-bitsandbytes
 transformers
 sentence-transformers
 tiktoken
@@ -29,4 +28,3 @@ crawl4ai
 nest-asyncio
 asyncpraw
 setuptools
-unsloth

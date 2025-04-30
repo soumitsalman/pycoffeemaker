@@ -73,13 +73,25 @@ class Orchestrator:
     digestor = None
     run_batch_time: datetime = None
 
-    def __init__(self, remote_db_conn_str: str, local_db_path: str, storage_conn_str: str, emb_path: str, llm_path: str, clus_eps: float): 
-        self.embedder = embedders.from_path(emb_path)
-        self.digestor = digestors.from_path(llm_path)
+    def __init__(self, 
+        remote_db_conn_str: str, 
+        local_db_path: str, 
+        db_name: str, 
+        backup_storage_conn_str: str = None, 
+        embedder_path: str = os.getenv("EMBEDDER_PATH"), 
+        embedder_context_len: int = int(os.getenv("EMBEDDER_CONTEXT_LEN", embedders.CONTEXT_LEN)),
+        digestor_path: str = os.getenv("DIGESTOR_PATH"), 
+        digestor_base_url: str = os.getenv("DIGESTOR_BASE_URL"),
+        digestor_api_key: str = os.getenv("DIGESTOR_API_KEY"),
+        digestor_context_len: int = int(os.getenv("DIGESTOR_CONTEXT_LEN", digestors.CONTEXT_LEN)),
+        clus_eps: float = float(os.getenv("CLUSTER_EPS", 3))
+    ): 
+        self.embedder = embedders.from_path(embedder_path, embedder_context_len)
+        self.digestor = digestors.from_path(digestor_path, digestor_context_len, digestor_base_url, digestor_api_key, use_short_digest=lambda text: len(text.split()) < MIN_WORDS_THRESHOLD_FOR_SUMMARY)
 
-        self.az_storage_conn_str = storage_conn_str
-        self.remotesack = MongoSack(remote_db_conn_str, os.getenv("DB_NAME"))
-        self.localsack = DuckSack(local_db_path, os.getenv("DB_NAME"))
+        self.az_storage_conn_str = backup_storage_conn_str
+        self.remotesack = MongoSack(remote_db_conn_str, db_name)
+        self.localsack = DuckSack(local_db_path, db_name)
         self.cluster_eps = clus_eps            
         
     def new_beans(self, beans: list[Bean]) -> list[Bean]:
@@ -124,16 +136,19 @@ class Orchestrator:
         try:
             digests = self.digestor.run_batch([bean.text for bean in beans])
             for bean, digest in zip(beans, digests):
-                if not digest: 
-                    log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
-                    continue
+                # if not digest: 
+                #     log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
+                #     continue
 
-                bean.summary = digestors.cleanup_markdown(digest.summary if use_summary(bean.text) else bean.text)
-                # bean.highlights = digest.highlights
-                bean.title = digest.title or bean.title
-                bean.names = digest.names
-                bean.categories = first_n(digest.domains, 1)
-                bean.tags = merge_tags(bean.names, bean.categories)
+                bean.gist = digest.gist
+                bean.categories = digest.domains
+                bean.entities = digest.entities
+                bean.locations = digest.locations
+                bean.topic = digest.topic
+                bean.summary = digest.summary or bean.text
+                bean.highlights = digest.takeways
+                bean.insight = digest.insight
+                
         except Exception as e:
             log.error("failed digesting", extra={"source": beans[0].source, "num_items": len(beans)})
             ic(e.__class__.__name__, e)

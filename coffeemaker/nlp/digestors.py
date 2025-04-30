@@ -1,80 +1,33 @@
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import re
 import threading
-from typing import Optional
+from typing import Callable, Optional
 from icecream import ic
 from retry import retry
-from .utils import LLAMA_CPP_PREFIX, API_URL_PREFIX, truncate
+from .prompts import *
+from .utils import LLAMA_CPP_PREFIX, batch_truncate, truncate
 from pydantic import BaseModel, Field
+from openai import OpenAI
 import logging
 
 logger = logging.getLogger(__name__)
 
 CONTEXT_LEN = 8192
-# BATCH_CONTEXT_LEN = 4096
-BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", 16))
-MIN_WORDS_THRESHOLD_FOR_SUMMARY = 160 # min words needed to use the generated summary
-NUM_THREADS = os.cpu_count()
-
-DIGEST_TEMPLATE = """TASKS:
-  - Rewrite the article/post using less than 250 words. This will be the 'summary'.
-  - Create a one sentence gist of the article/post. This will be the 'title'.
-  - Extract names of the top 1 - 4 people, products, companies, organizations, or stock tickers mentioned in the article/post that influence the content. These will be the 'names'.
-  - Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets, etc. These will be the 'domains'.
-
-RESPONSE FORMAT: 
-Response MUST be a json object of the following structure
-```json
-{{
-    "summary": string,
-    "title": string,
-    "names": [string, string, string, string],
-    "domain": [string, string]
-}}
-```
-
-ARTICLE/POST:
-{input_text}
-"""
+BATCH_SIZE = int(os.getenv("DIGESTOR_BATCH_SIZE", os.cpu_count()))
+NUM_THREADS = int(os.getenv("DIGESTOR_NUM_THREADS", os.cpu_count()))
 
 class Digest(BaseModel):
-    summary: Optional[str] = Field(description="Rewrite the article/post using less that 250 words.", default=None)
-    # highlights: Optional[str|list[str]] = Field(description="A list of sentences that are most relevant to the main points and core meaning of the entire content", default=None)
-    title: Optional[str] = Field(description="Create a one sentence gist of article/post.", default=None)
-    names: Optional[list[str]] = Field(description="Extract names of the top 1 - 4 people, product, company, organization or stock ticker mentioned in the article/post that influences the content.", default=None)
-    domains: Optional[list[str]] = Field(description="Identify 1 or 2 domains that the subject matter of the article/post aligns closest to, such as: Cybersecurity, Business & Finance, Health & Wellness, Astrophysics, Smart Automotive, IoT and Gadgets etc.", default=None)
-
-
-create_prompt = lambda input_text, template, max_tokens: [
-    {
-        "role": "system",
-        "content": "response_format:json_object"
-    },
-    {
-        "role": "user",
-        "content":  template.format(input_text=truncate(input_text, max_tokens))
-    }
-]
-
-needs_summary = lambda text: text and len(text.split()) >= MIN_WORDS_THRESHOLD_FOR_SUMMARY # if the body is large enough
-parse_list = lambda field: [item.strip() for item in field.split(',')] if isinstance(field, str) else field
-unique_items = lambda items: list({item.strip().lower(): item for item in items}.values()) if items else items
-
-def parse_digest(response: str):  
-    try:      
-        response = json.loads(response[response.find('{'):response.rfind('}')+1])
-        return Digest(
-            summary=response.get('summary'),
-            highlights=response.get('highlights'),
-            title=response.get('title'),
-            names=unique_items(parse_list(response.get('names'))),
-            domains=unique_items(parse_list(response.get('domains'))),
-        )
-    except json.JSONDecodeError as e:
-        ic(e, response)
-        return None
+    gist: Optional[str] = Field(default=None)
+    domains: Optional[list[str]] = Field(default=None)
+    entities: Optional[list[str]] = Field(default=None)
+    locations: Optional[list[str]] = Field(default=None)
+    topic: Optional[str] = Field(default=None)
+    summary: Optional[str] = Field(default=None)
+    takeways: Optional[list[str]] = Field(default=None)
+    insight: Optional[str] = Field(default=None)
 
 class Digestor(ABC):
     @abstractmethod
@@ -87,6 +40,63 @@ class Digestor(ABC):
     def __call__(self, input: str|list[str]) -> Digest|list[Digest]:
         if isinstance(input, str): return self.run(input)
         else: return self.run_batch(input)
+
+
+create_prompt_for_tuned_model = lambda input_text, template: [
+    {
+        "role": "user",
+        "content":  template.format(input_text=input_text)
+    }
+]
+
+parse_list = lambda field: [item.strip() for item in field.split(',')] if isinstance(field, str) else field
+unique_items = lambda items: list({item.strip().lower(): item for item in items}.values()) if items else items
+
+def json_to_digest(response: str):  
+    try:      
+        response = json.loads(response[response.find('{'):response.rfind('}')+1])
+        return Digest(
+            summary=response.get('summary'),
+            highlights=response.get('highlights'),
+            title=response.get('title'),
+            names=unique_items(parse_list(response.get('names'))),
+            domains=unique_items(parse_list(response.get('domains'))),
+        )
+    except json.JSONDecodeError as e:
+        ic(e, response)
+        return None
+    
+_MARKDOWN_START = "```markdown"
+_MARKDOWN_END="```"
+def markdown_to_digest(response: str):
+    digest = Digest()
+    response = response.strip().removeprefix(_MARKDOWN_START).removesuffix(_MARKDOWN_END).strip()
+    last = None
+    for line in response.splitlines():
+        line = line.strip()
+        if not line or line == UNDETERMINED: continue
+
+        if any(field in line for field in DIGEST_FIELDS):
+            last = line
+        elif GIST in last:
+            digest.gist = line
+        elif DOMAINS in last:
+            digest.domains = parse_list(line)
+        elif ENTITIES in last:
+            digest.entities = parse_list(line)
+        elif TOPIC in last:
+            digest.topic = line 
+        elif LOCATION in last:
+            digest.locations = parse_list(line)
+        elif SUMMARY in last:
+            digest.summary = (digest.summary+"\n"+line) if digest.summary else line
+        elif TAKEAWAYS in last:
+            if not digest.takeways: digest.takeways = []
+            digest.takeways.append(line.removeprefix("- ").removeprefix("* "))
+        elif INSIGHT in last:
+            digest.insight = line
+
+    return digest    
 
 class LlamaCppDigestor(Digestor):
     model_path = None
@@ -119,10 +129,10 @@ class LlamaCppDigestor(Digestor):
         )['choices'][0]['message']['content'].strip() 
 
     def _run_one(self, text: str) -> Digest:
-        digest = parse_digest(
+        digest = json_to_digest(
             self._generate_response(
                 input_text=text, 
-                template=DIGEST_TEMPLATE, 
+                template=TUNED_MODEL_DIGEST_INST, 
                 max_new_tokens=600,
                 response_format="json_object"
             )
@@ -147,25 +157,56 @@ class RemoteDigestor(Digestor):
     client = None
     model_name = None
     context_len = None
+    use_short_digest = None
 
-    def __init__(self, base_url: str, api_key: str, model_name: str, context_len: int = int(os.getenv("LLM_N_CTX", CONTEXT_LEN))):
-        from openai import OpenAI
-
-        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=5, max_retries=2)
+    def __init__(self, 
+        model_name: str,
+        base_url: str, 
+        api_key: str, 
+        context_len: int,
+        use_short_digest: Callable
+    ):
+        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=20, max_retries=2)
         self.model_name = model_name
         self.context_len = context_len
+        self.use_short_digest = use_short_digest or (lambda text: False)
+
+    def create_prompt(self, text: str): 
+        template = GENERIC_MODEL_SHORT_DIGEST_INST \
+            if self.use_short_digest(text) else \
+                GENERIC_MODEL_DIGEST_INST
+        return [
+            {
+                "role": "system",
+                "content": GENERIC_MODEL_SYSTEM_INST
+            },
+            {
+                "role": "user",
+                "content":  template.format(input_text=text)
+            }
+        ]
     
-    @retry(tries=2, delay=5, logger=logger)
-    def run(self, text: str) -> Digest:
+    # @retry(tries=2, delay=5, logger=logger)
+    def _run(self, text: str) -> Digest:
+        max_tokens = 300 if self.use_short_digest(text) else 512
+
         resp = self.client.chat.completions.create(
-            messages=create_prompt(truncate(text, self.context_len//2)),
-            max_tokens=512, 
-            frequency_penalty=0.3,
-            temperature=0.7,
-            seed=22,
-            response_format={"type": "json_object"}
+            messages=self.create_prompt(text),
+            model=self.model_name,
+            max_tokens=max_tokens, 
+            temperature=0.3,
+            seed=666
         ).choices[0].message.content
-        return parse_digest(resp)
+        return markdown_to_digest(resp)
+
+    def run(self, text: str) -> Digest:
+        return self._run(truncate(text, self.context_len//2))
+    
+    def run_batch(self, input_texts: list[str]) -> list[Digest]:
+        input_texts = batch_truncate(input_texts, self.context_len//2)
+        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="remote-digestor") as executor:
+            results = list(executor.map(self._run, input_texts))
+        return results
     
 class NewspaperDigestor:       
     def __init__(self, language: str = "en"):
@@ -229,10 +270,10 @@ class TransformerDigestor(Digestor):
 
     def run(self, text: str) -> Digest:
         with self.lock:
-            digest = parse_digest(
+            digest = json_to_digest(
                 self._generate_response(
                     input_text=text, 
-                    template=DIGEST_TEMPLATE, 
+                    template=TUNED_MODEL_DIGEST_INST, 
                     max_new_tokens=600
                 )
             )
@@ -253,8 +294,8 @@ class TransformerDigestor(Digestor):
         digests = []    
         with self.lock:
             for i in range(0, len(texts), BATCH_SIZE):               
-                responses = self._generate_response_batch(texts[i:i + BATCH_SIZE], DIGEST_TEMPLATE, max_new_tokens=600)
-                digests.extend([parse_digest(response) for response in responses])
+                responses = self._generate_response_batch(texts[i:i + BATCH_SIZE], TUNED_MODEL_DIGEST_INST, max_new_tokens=600)
+                digests.extend([json_to_digest(response) for response in responses])
             # for i in range(0, len(texts), BATCH_SIZE):               
             #     extracts = self._generate_response_batch(texts[i:i + BATCH_SIZE], EXTRACTION_TEMPLATE, max_new_tokens=192)
             #     summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=360)
@@ -307,12 +348,17 @@ def remove_after(text: str, sub: str) -> str:
     return text
 
 
-def from_path(llm_path) -> Digestor:
-    # intialize embedder
-    if llm_path.startswith(LLAMA_CPP_PREFIX):
-        return LlamaCppDigestor(llm_path[len(LLAMA_CPP_PREFIX):])
-    elif llm_path.startswith(API_URL_PREFIX):
-        return RemoteDigestor(llm_path, os.getenv("API_KEY"), os.getenv("LLM_NAME"))
+def from_path(
+    digestor_path: str,
+    context_len: int = CONTEXT_LEN, 
+    base_url: str = None, 
+    api_key: str = None,
+    use_short_digest = None
+) -> Digestor:
+    if digestor_path.startswith(LLAMA_CPP_PREFIX):
+        return LlamaCppDigestor(digestor_path.removeprefix(LLAMA_CPP_PREFIX), context_len=context_len, use_short_digest=use_short_digest)
+    elif base_url:
+        return RemoteDigestor(digestor_path, base_url, api_key, context_len=context_len, use_short_digest=use_short_digest)
     else:
-        return TransformerDigestor(llm_path)
+        return TransformerDigestor(digestor_path, context_len=context_len, use_short_digest=use_short_digest)
   
