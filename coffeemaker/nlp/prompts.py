@@ -16,11 +16,11 @@ STEP 1: Analyze the input and disregard the irrelevant contents
   - The input is a scrapped webpage and hence may contain text chunks that are irrelevant such as: Pay-wall message, advertisements, related articles, website biolerplate
   - Remove the irrelevant contents from further processing.
 
-STEP 2: Extract the relevant contents presented by the core of the article
+STEP 2: Extract the following contents relevant to the core meaning of the input news/blog/post
   - Extract the events and actions that have happened or will take place
   - Extract the key data points that influence the actions, events, outcomes and questions
-  - Extract the key takeways presented by the article
-  - Extract the key entities such as person, organization, company, product, stock ticker, phenomenon mentioned in the article
+  - Extract the key takeways
+  - Extract the key entities such as person, organization, company, product, stock ticker, phenomenon etc. mentioned in the news/blog/post
   - Extract the geographic location of the key events if mentioned.
   - Extract the domain/genre of the content subject matter such as: Government & Politics, Business & Finance, Cybersecurity, Crypto & Blockchain, Software Engineering, DevOps, Artificial Intelligence, IoT and Gadgets, Physics, Chemistry, Economy, Environment, Clean Energy, Health, Arts & Culture, Startups & Entrepreneurship, Entertainment, Sports etc.
 
@@ -29,7 +29,7 @@ STEP 3: Formulate your response
     - The gist should be formatted as [Who] [Action] [What] [Where - optional]
       - Who - the main entity or person involved.
       - Action - What has happened or what is happening or what is being done.
-      - What - The core object of the article or the impacted entity
+      - What - The core object or the impacted entity
       - Where - the action took place (if mentioned).
     - Examples of gist
       - Example 1: NASA Launches Mars Mission in 2025 to Study Planet’s Atmosphere.
@@ -87,7 +87,7 @@ STEP 1: Analyze the input and disregard the irrelevant contents
 
 STEP 2: Extract the contents relevant to the core meaning of the input
   - Extract the questions in focus or the events and actions that have happened or will take place
-  - Extract the primary topic such as: Seeking Cofounder, Seeking Funding, Seeking Career Advice, Sharing Ideas, Sharing Results, New Product Release, Funding Raising Opportunity, Looking for Tools, Looking for Help, Hiring etc.
+  - Extract the primary topic such as: Seeking Cofounder, Seeking Funding, Seeking Career Advice, Sharing Ideas, Sharing Results, New Product Release, Funding Raising Opportunity, Looking for Tools, Looking for Service, Seeking Help, Job Opportunity etc.
   - Extract the key entities such as person, organization, company, product, stock ticker, phenomenon mentioned
   - Extract the domain/genre of the content subject matter such as: Government & Politics, Business & Finance, Cybersecurity, Crypto & Blockchain, Software Engineering, DevOps, Artificial Intelligence, IoT and Gadgets, Physics, Chemistry, Economy, Environment, Clean Energy, Health, Arts & Culture, Startups & Entrepreneurship, Entertainment, Sports etc.
 

@@ -105,7 +105,7 @@ class Orchestrator:
             exists = [bean.url for bean in beans]
 
         for bean in beans:
-            if bean.url not in exists:
+            if bean.url not in exists:                
                 bean.id = bean.url
                 bean.created = bean.created or bean.collected
                 bean.updated = self.run_batch_time or bean.updated or bean.collected
@@ -136,9 +136,9 @@ class Orchestrator:
         try:
             digests = self.digestor.run_batch([bean.text for bean in beans])
             for bean, digest in zip(beans, digests):
-                # if not digest: 
-                #     log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
-                #     continue
+                if not digest: 
+                    log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
+                    continue
 
                 bean.gist = digest.gist
                 bean.categories = digest.domains
@@ -152,6 +152,8 @@ class Orchestrator:
         except Exception as e:
             log.error("failed digesting", extra={"source": beans[0].source, "num_items": len(beans)})
             ic(e.__class__.__name__, e)
+
+        # [print("========= ", bean.url, "========\n", bean.digest(), "\n========================================") for bean in beans]
 
         return [bean for bean in beans if bean.summary]  
         
@@ -362,7 +364,7 @@ class Orchestrator:
 
         await self.run_collections_async()
         await self.download_queue.put(END_OF_STREAM)
-        self.cleanup()
+        # self.cleanup()
         self.trend_rank_beans()
 
         indexing_task = asyncio.create_task(self.run_indexing_async()) 

@@ -31,12 +31,11 @@ from coffeemaker.orchestrator import Orchestrator
 
 if __name__ == "__main__":    
     orch = Orchestrator(
-        os.getenv("REMOTE_DB_CONNECTION_STRING"),
-        os.getenv("LOCAL_DB_PATH"),
-        os.getenv("AZSTORAGE_CONNECTION_STRING"), 
-        os.getenv("EMBEDDER_PATH"),    
-        os.getenv("LLM_PATH"),
-        float(os.getenv('CLUSTER_EPS')))
+        os.getenv("DB_REMOTE_TEST"),
+        os.getenv("DB_LOCAL"),
+        os.getenv("DB_NAME"),
+        os.getenv("AZSTORAGE_CONNECTION_STRING")
+    )
     
     # NOTE: putthing this try catch to avoid the app from crashing when the indexing fails
     try:

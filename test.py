@@ -55,7 +55,7 @@ def _create_orchestrator():
         os.getenv("DB_NAME"),
         embedder_path=os.getenv("EMBEDDER_PATH"),
         digestor_path=os.getenv("DIGESTOR_PATH"),
-        clus_eps=0.202
+        clus_eps=0.40
     )
 
 def test_collection():

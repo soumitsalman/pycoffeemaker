@@ -84,19 +84,19 @@ class Bean(BaseModel):
     search_score: Optional[float|int] = None
 
     def digest(self) -> str:
-        return "\n\n".join(
-            [
-                f"# {self.gist or self.title}",
-                f"**Publish Date**: {(self.created or self.collected).strftime('%Y-%m-%d %H:%M:%S')}",
-                f"**Categories**: {', '.join(self.categories)}" if self.categories else "",
-                f"**Mentions**: {', '.join(self.entities)}" if self.entities else "",
-                f"**Topic: {self.topic}" if self.topic else "",
-                f"**Location**: {', '.join(self.locations)}" if self.locations else "", 
-                self.summary or self.text
-            ] + 
-            ["- "+item for item in self.highlights] if self.highlights else [] + 
-            [f"**Actionable Insight**: {self.insight}"] if self.insight else []
-        )
+        lines = [
+            "# "+(self.gist or self.title),
+            "**Publish Date**: " + (self.created or self.collected).strftime('%Y-%m-%d %H:%M:%S')
+        ]
+        if self.categories: lines.append("**Categories**: " + ', '.join(self.categories))
+        if self.entities: lines.append("**Mentions**: " + ', '.join(self.entities))
+        if self.topic: lines.append("**Topic: " + self.topic)
+        if self.locations: lines.append("**Location**: " + ', '.join(self.locations))
+        lines.append(self.summary or self.text)
+        if self.highlights: lines.extend(["- "+item for item in self.highlights])
+        if self.insight: lines.append("**Actionable Insight**: "+ self.insight)
+
+        return "\n\n".join(lines)
     
     class Config:
         populate_by_name = True

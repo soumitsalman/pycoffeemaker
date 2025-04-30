@@ -125,7 +125,7 @@ METADATA_EXTRACTION_SCHEMA = {
         {"name": "rss_feed", "type": "attribute", "selector": "link[type='application/rss+xml']", "attribute": "href"},
     ]
 }
-SCRAPER_BATCH_SIZE = os.cpu_count()*os.cpu_count()
+SCRAPER_BATCH_SIZE = int(os.getenv("SCRAPER_BATCH_SIZE", os.cpu_count()*os.cpu_count()))
 
 MD_COLLECTION_CONFIG = CrawlerRunConfig(   
     # content processing
