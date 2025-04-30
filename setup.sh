@@ -73,3 +73,9 @@ curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
 echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] http://repo.mongodb.org/apt/debian bookwarm/mongodb-org/8.0 main" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
 sudo apt-get update
 sudo apt-get install -y mongodb-org
+
+### ENV SETTINGS
+# this for sentence-transformers
+# CLUSTER_EPS=0.45 
+# this is for llama-cpp
+# CLUSTER_EPS=3.75 
