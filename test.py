@@ -16,6 +16,8 @@ logging.getLogger("dammit").propagate = False
 logging.getLogger("UnicodeDammit").propagate = False
 logging.getLogger("urllib3").propagate = False
 logging.getLogger("connectionpool").propagate = False
+logging.getLogger("asyncio").propagate = False
+
 
 import json
 import asyncio

@@ -7,7 +7,7 @@ from asyncio import Queue
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.models import *
-from coffeemaker.collectors.collector import AsyncCollector, HACKERNEWS, REDDIT
+from coffeemaker.collectors.collector import Collector, HACKERNEWS, REDDIT, WebScraper
 from coffeemaker.nlp import digestors, embedders
 from pymongo import UpdateOne
 import os
@@ -245,7 +245,7 @@ class Orchestrator:
 
     @log_runtime_async
     async def run_collections_async(self):
-        scraper = AsyncCollector()        
+        scraper = Collector()        
         current_directory = os.path.dirname(os.path.abspath(__file__))
         rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
         subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
@@ -259,6 +259,7 @@ class Orchestrator:
         await asyncio.gather(*[self.collect_async(source, scraper.collect_subreddit(source)) for source in subreddits])
         log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
         await asyncio.gather(*[self.collect_async(source, scraper.collect_rssfeed(source)) for source in rssfeeds])
+        await scraper.close()
 
     async def collect_async(self, source: str, collect: Awaitable[list[tuple[Bean, Chatter]]]):
         collection = await collect
@@ -279,7 +280,7 @@ class Orchestrator:
 
     @log_runtime_async
     async def run_downloading_async(self):
-        scraper = AsyncCollector()
+        scraper = WebScraper()
         
         while True:
             items = await self.download_queue.get()
@@ -287,7 +288,7 @@ class Orchestrator:
             if not items: continue
 
             source, beans = items
-            await self.download_async(source, scraper.collect_beans(beans, collect_metadata=True))
+            await self.download_async(source, scraper.scrape_beans(beans, collect_metadata=True))
             self.download_queue.task_done()
 
     async def download_async(self, source: str, collect: Awaitable[list[Bean]]):
