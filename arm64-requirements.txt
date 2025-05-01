@@ -3,7 +3,9 @@ transformers
 sentence-transformers
 optimum
 onnxruntime
+onnxruntime-tools
 torch
+hf_xet
 openai
 tiktoken
 numpy

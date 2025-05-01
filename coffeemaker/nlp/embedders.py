@@ -6,6 +6,7 @@ from retry import retry
 import os
 from abc import ABC, abstractmethod
 from .utils import truncate, LLAMA_CPP_PREFIX, API_URL_PREFIX
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -13,19 +14,16 @@ CONTEXT_LEN = 512
 
 class Embeddings(ABC):
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        if texts:
-            return self.embed(texts)
+        if texts: return self.embed(texts)
 
-    def embed_query(self, text: str) -> list[float]:
-        if text:
-            return self.embed("query: "+text)
+    def embed_query(self, query: str) -> list[float]:
+        if query: return self.embed("query: "+query)
         
-    def __call__(self, input):
-        if input:
-            return self.embed(input)
+    def __call__(self, texts: str|list[str]):
+        if texts: return self.embed(texts)
 
     @abstractmethod
-    def embed(self, input: str|list[str]):
+    def embed(self, texts: str|list[str]):
         raise NotImplementedError("Subclass must implement abstract method")
 
 # local embeddings from llama.cpp
@@ -43,11 +41,11 @@ class LlamaCppEmbeddings(Embeddings):
         self.model = Llama(model_path=self.model_path, n_ctx=self.context_len, n_batch=self.context_len, n_threads_batch=os.cpu_count(), n_threads=os.cpu_count(), embedding=True, verbose=False)
     
     @retry(tries=2, logger=logger)
-    def embed(self, input):
+    def embed(self, texts: str|list[str]):
         with self.lock:
-            result = self.model.create_embedding(_prep_input(input, self.context_len))
+            result = self.model.create_embedding(_prep_input(texts, self.context_len))
 
-        if isinstance(input, str):
+        if isinstance(texts, str):
             return result['data'][0]['embedding']
         return [data['embedding'] for data in result['data']]
     
@@ -68,28 +66,26 @@ class RemoteEmbeddings(Embeddings):
             return result.data[0].embedding
         return [data.embedding for data in result.data]
     
-_TOKENIZER_KWARGS = {
-    "padding": True,
-    "truncation": True
-}
 class TransformerEmbeddings(Embeddings):
     model = None
     lock = None
-    def __init__(self, model_id: str):
+    def __init__(self, model_id: str, context_len: int):
         self.lock = threading.Lock()
 
-        import torch
-        
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        backend = "torch" if torch.cuda.is_available() else "onnx"
-        self.model = SentenceTransformer(model_id, trust_remote_code=True, device=device, backend=backend, tokenizer_kwargs=_TOKENIZER_KWARGS)
+        tokenizer_kwargs = {
+            "truncation": True,
+            "max_length": context_len
+        }
+        if torch.cuda.is_available():
+            self.model = SentenceTransformer(model_id, trust_remote_code=True, device="cuda", tokenizer_kwargs=tokenizer_kwargs)
+        else:
+            self.model = SentenceTransformer(model_id, trust_remote_code=True, backend="onnx", model_kwargs={"file_name": "model_quantized.onnx"}, tokenizer_kwargs=tokenizer_kwargs)
     
-    # TODO: move this out
-    # @retry(tries=2, logger=logger)
-    def embed(self, input):
+    def embed(self, texts: str|list[str]):
         with self.lock:
-            result = self.model.encode(input)
-        return result.tolist()
+            results = self.model.encode(texts, convert_to_numpy=False, batch_size=os.cpu_count())
+        if isinstance(texts, str): return results.tolist()
+        return [r.tolist() for r in results]
 
 def _prep_input(input, context_len):
     if isinstance(input, str):
@@ -98,7 +94,7 @@ def _prep_input(input, context_len):
 
 def from_path(
     embedder_path: str, 
-    context_len: str,
+    context_len: int,
     base_url: str = None,
     api_key: str = None
 ) -> Embeddings:
@@ -108,4 +104,4 @@ def from_path(
     elif base_url:
         return RemoteEmbeddings(embedder_path, base_url, api_key, context_len)
     else:
-        return TransformerEmbeddings(embedder_path)
+        return TransformerEmbeddings(embedder_path, context_len)

@@ -166,7 +166,7 @@ class RemoteDigestor(Digestor):
         context_len: int,
         use_short_digest: Callable
     ):
-        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=20, max_retries=2)
+        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=30, max_retries=2)
         self.model_name = model_name
         self.context_len = context_len
         self.use_short_digest = use_short_digest or (lambda text: False)
