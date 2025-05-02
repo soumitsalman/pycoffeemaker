@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS beans (
       
     title VARCHAR,    
     embedding FLOAT[384],
+    digest TEXT
 );
 """
 SQL_CREATE_BEANS_VECTOR_INDEX = """
@@ -30,8 +31,8 @@ USING HNSW (embedding)
 WITH (metric = 'cosine');
 """
 SQL_INSERT_BEANS = """
-INSERT INTO beans (url, kind, source, created, collected, updated, title, embedding) 
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO beans (url, kind, source, created, collected, updated, title, embedding, digest) 
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT DO NOTHING;
 """
 SQL_CHECKPOINT = "CHECKPOINT;"
@@ -195,7 +196,8 @@ class Beansack:
                 bean.updated,
 
                 bean.title,
-                bean.embedding
+                bean.embedding,
+                bean.digest()
             ) for bean in beans
         ]
         local_conn.executemany(SQL_INSERT_BEANS, beans_data).commit()
@@ -206,6 +208,27 @@ class Beansack:
         local_conn = self.db.cursor()
         query = local_conn.sql("SELECT url FROM beans").filter(SQL_WHERE_URLS([bean.url for bean in beans]))
         return {item[0] for item in query.fetchall()}
+
+    def get_beans(self, filter=None, offset=0, limit=0) -> list[Bean]:
+        query = "SELECT * FROM beans"
+        if filter: query += f" WHERE {filter}"
+        if limit: query += f" LIMIT {limit}"
+        if offset: query += f" OFFSET {offset}"
+
+        local_conn = self.db.cursor()
+        return [Bean(
+            url=bean[0],
+            kind=bean[1],
+            source=bean[2],
+
+            created=bean[3],
+            collected=bean[4],
+            updated=bean[5],
+
+            title=bean[6],
+            embedding=bean[7],
+            slots=True
+        ) for bean in local_conn.sql(query).fetchall()]
 
     def search_beans(self, embedding: list[float], max_distance: float = 0.0, limit: int = 0) -> list[Bean]:
         local_conn = self.db.cursor()
@@ -255,6 +278,26 @@ class Beansack:
         ]
         local_conn = self.db.cursor()
         local_conn.executemany(SQL_INSERT_CHATTERS, chatters_data).commit()
+
+    def get_chatters(self, filter = None, offset = 0, limit = 0):
+        query = "SELECT * FROM chatters"
+        if filter: query += f" WHERE {filter}"
+        if limit: query += f" LIMIT {limit}"
+        if offset: query += f" OFFSET {offset}"
+
+        local_conn = self.db.cursor()
+        return [Chatter(
+            url=chatter[0],
+            chatter_url=chatter[1],
+            collected=chatter[2],
+            source=chatter[3],
+            channel=chatter[4],
+            likes=chatter[5],
+            comments=chatter[6],
+            shares=chatter[7],
+            subscribers=chatter[8],
+            slots=True
+        ) for chatter in local_conn.sql(query).fetchall()]
 
     def get_latest_chatters(self, last_ndays: int, urls: list[str] = None) -> list[ChatterAnalysis]:
         local_conn = self.db.cursor()

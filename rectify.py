@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -11,6 +12,7 @@ from datetime import datetime, timedelta
 from pymongo import MongoClient, UpdateOne
 from coffeemaker.collectors import ychackernews, redditor
 from coffeemaker.pybeansack.models import *
+from coffeemaker.pybeansack.ducksack import SQL_NOT_WHERE_URLS
 from coffeemaker.orchestrator import Orchestrator
 
 K_RELATED = "related"
@@ -19,12 +21,12 @@ LIMIT=40000
 ndays_ago = lambda n: (datetime.now() - timedelta(days=n))
 make_id = lambda text: re.sub(r'[^a-zA-Z0-9]', '-', text.lower())
 create_orch = lambda: Orchestrator(
-    os.getenv("REMOTE_DB_CONNECTION_STRING"),
-    os.getenv("LOCAL_DB_PATH"),
-    os.getenv("AZSTORAGE_CONNECTION_STRING"), 
-    os.getenv("EMBEDDER_PATH"),    
-    os.getenv("LLM_PATH"),
-    float(os.getenv('CLUSTER_EPS')))
+    os.getenv("DB_REMOTE"),
+    os.getenv("DB_LOCAL"),
+    os.getenv("DB_NAME"),
+    embedder_path = os.getenv("EMBEDDER_PATH"),    
+    digestor_path = os.getenv("DIGESTOR_PATH")
+)
 
 def setup_categories():   
     updates = []
@@ -112,35 +114,35 @@ def setup_baristas():
     # baristas.delete_many({"owner": "__SYSTEM__"})
     baristas.insert_many(list({item[K_ID]: item for item in updates}.values())) 
 
-def embed_categories():
-    cats = orch.categorystore.find({K_EMBEDDING: {"$exists": False}})
-    ic(orch.categorystore.bulk_write(
-        [UpdateOne(filter={K_ID: cat[K_ID]}, update={"$set": {K_EMBEDDING: orch.remotesack.embedder.embed("topic: " + cat[K_TEXT])}}) for cat in cats],
-        ordered=False
-    ).modified_count)
+# def embed_categories():
+#     cats = orch.categorystore.find({K_EMBEDDING: {"$exists": False}})
+#     ic(orch.categorystore.bulk_write(
+#         [UpdateOne(filter={K_ID: cat[K_ID]}, update={"$set": {K_EMBEDDING: orch.remotesack.embedder.embed("topic: " + cat[K_TEXT])}}) for cat in cats],
+#         ordered=False
+#     ).modified_count)
 
-def rectify_categories():
-    beans = orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_TITLE: 1, K_EMBEDDING: 1})
-    updates = []
-    for bean in beans:
-        cats = orch._find_categories(bean)
-        if cats:
-            updates.append(UpdateOne(
-                filter = {K_URL: bean.url},
-                update = {"$set": {K_CATEGORIES: cats}}
-            ))
-        else:
-            updates.append(UpdateOne(
-                filter = {K_URL: bean.url},
-                update = {"$unset": {K_CATEGORIES: ""}}
-            ))
-    return orch.remotesack.beanstore.bulk_write(updates, False).modified_count
+# def rectify_categories():
+#     beans = orch.remotesack.get_beans(filter={K_EMBEDDING: {"$exists": True}}, projection={K_URL: 1, K_TITLE: 1, K_EMBEDDING: 1})
+#     updates = []
+#     for bean in beans:
+#         cats = orch._find_categories(bean)
+#         if cats:
+#             updates.append(UpdateOne(
+#                 filter = {K_URL: bean.url},
+#                 update = {"$set": {K_CATEGORIES: cats}}
+#             ))
+#         else:
+#             updates.append(UpdateOne(
+#                 filter = {K_URL: bean.url},
+#                 update = {"$unset": {K_CATEGORIES: ""}}
+#             ))
+#     return orch.remotesack.beanstore.bulk_write(updates, False).modified_count
 
-def rectify_ranking():
-    orch.trend_rank_beans()
+# def rectify_ranking():
+#     orch.trend_rank_beans()
 
-def port_categories_to_localsack():
-    orch.localsack.store_categories(list(orch.categorystore.find()))
+# def port_categories_to_localsack():
+#     orch.localsack.store_categories(list(orch.categorystore.find()))
 
 
 def port_beans_to_localsack():
@@ -167,19 +169,75 @@ def port_chatters_to_localsack():
     
     print("finished porting beans")
 
-def port_chatters_to_localsack():
-    chatters = []
-    items = list(orch.remotesack.chatterstore.find(filter={K_UPDATED: {"$exists": True}}, sort={K_UPDATED: -1}))
-    print("porting chatters|%d", len(items))
-    for item in items:
-        if isinstance(item.get(K_UPDATED), int):
-            item[K_COLLECTED] = dt.fromtimestamp(item[K_UPDATED])
-        item["chatter_url"] = item[K_CONTAINER_URL]
-        chatters.append(Chatter(**item))
+# def port_chatters_to_localsack():
+#     chatters = []
+#     items = list(orch.remotesack.chatterstore.find(filter={K_UPDATED: {"$exists": True}}, sort={K_UPDATED: -1}))
+#     print("porting chatters|%d", len(items))
+#     for item in items:
+#         if isinstance(item.get(K_UPDATED), int):
+#             item[K_COLLECTED] = dt.fromtimestamp(item[K_UPDATED])
+#         item["chatter_url"] = item[K_CONTAINER_URL]
+#         chatters.append(Chatter(**item))
 
-    orch.localsack.store_chatters(chatters)
-    print("finished porting chatters")
+#     orch.localsack.store_chatters(chatters)
+#     print("finished porting chatters")
+
+def refresh_localsack():
+    orch = create_orch()
+    orch_new = Orchestrator("mongodb://localhost:27017/", ".db-new", "beansackV2")
+
+    BATCH_SIZE = 256
+    # count = orch.remotesack.beanstore.count_documents(filter={})
+    # ported_urls = set()
+    # print(datetime.now(), "porting remote beans|%d", count)
+    # from tqdm import tqdm
+    # progress_bar = tqdm(total=count, desc="Progress", unit="beans")
+    # for i in range(43008, count, BATCH_SIZE):
+    #     beans = orch.remotesack.get_beans(
+    #         filter = {},
+    #         skip = i,
+    #         limit = BATCH_SIZE
+    #     )
+    #     vecs = orch.embedder.embed_documents([bean.digest() for bean in beans])
+    #     for bean, v in zip(beans, vecs):
+    #         bean.embedding = v
+
+    #     orch_new.localsack.store_beans(beans)
+    #     orch.remotesack.update_beans([UpdateOne(filter={"_id": bean.url}, update={"$set": {"embedding": bean.embedding}}) for bean in beans])
+    #     ported_urls.update([bean.url for bean in beans])
+
+    #     progress_bar.update(len(beans))
+
+    # progress_bar.close()
+
+    # print(datetime.now(), "recomputed vectors and saved|%d", len(ported_urls))
+
+    # print("porting chatters")
+
+    # orch_new.localsack.store_chatters(orch.localsack.get_chatters())    
+    
+    beans = orch.localsack.get_beans(filter = "updated <= CURRENT_TIMESTAMP - INTERVAL '2 months'")
+    print(datetime.now(), "porting local beans")   
+    orch_new.localsack.store_beans(beans)  
+
+    # from tqdm import tqdm
+    # progress_bar = tqdm(total=len(beans), desc="Progress", unit="bean")
+
+    # def load_and_store(batch):
+    #     orch_new.localsack.store_beans(batch)        
+    #     progress_bar.update(len(batch))
+   
+    # with ThreadPoolExecutor(max_workers=os.cpu_count()*os.cpu_count()) as executor:
+    #     executor.map(load_and_store, [beans[i:i+BATCH_SIZE] for i in range(0, len(beans), BATCH_SIZE)])    
+    
+    # progress_bar.close()
+    orch.close()
+    orch_new.close()
+    
+    print(datetime.now(), "refresh complete")
+
+
 
 # adding data porting logic
 if __name__ == "__main__":
-    port_beans_to_localsack()
+    refresh_localsack()

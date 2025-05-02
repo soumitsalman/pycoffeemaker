@@ -8,7 +8,7 @@ from typing import Callable, Optional
 from icecream import ic
 from retry import retry
 from .prompts import *
-from .utils import LLAMA_CPP_PREFIX, batch_truncate, truncate
+from .utils import *
 from pydantic import BaseModel, Field
 from openai import OpenAI
 import logging
@@ -40,14 +40,6 @@ class Digestor(ABC):
     def __call__(self, input: str|list[str]) -> Digest|list[Digest]:
         if isinstance(input, str): return self.run(input)
         else: return self.run_batch(input)
-
-
-create_prompt_for_tuned_model = lambda input_text, template: [
-    {
-        "role": "user",
-        "content":  template.format(input_text=input_text)
-    }
-]
 
 parse_list = lambda field: [item.strip() for item in field.split(',')] if isinstance(field, str) else field
 unique_items = lambda items: list({item.strip().lower(): item for item in items}.values()) if items else items
@@ -96,18 +88,29 @@ def markdown_to_digest(response: str):
         elif INSIGHT in last:
             digest.insight = line
 
-    return digest    
+    return digest   
+
+def create_prompt_for_tuned_model(input_text: str, use_short_digest: bool): 
+    template = TUNED_MODEL_DIGEST_INST if use_short_digest else TUNED_MODEL_DIGEST_INST
+    return [
+        {
+            "role": "user",
+            "content":  template.format(input_text=input_text)
+        }
+    ]
 
 class LlamaCppDigestor(Digestor):
     model_path = None
     context_len = None
     model = None
     lock = None
+    use_short_digest: Callable
     
-    def __init__(self, model_path: str, context_len: int = int(os.getenv("LLM_N_CTX", CONTEXT_LEN))):
+    def __init__(self, model_path: str, context_len: int, use_short_digest: Callable = None):
         self.lock = threading.Lock()
         self.model_path = model_path
         self.context_len = context_len
+        self.use_short_digest = use_short_digest or (lambda text: False)
 
         from llama_cpp import Llama
         self.model = Llama(
@@ -116,42 +119,98 @@ class LlamaCppDigestor(Digestor):
             embedding=False, verbose=False
         )  
 
-    def _generate_response(self, input_text: str, template: str, max_new_tokens: int = 256, response_format = None) -> str:
-        return self.model.create_chat_completion(
-            messages=create_prompt(input_text=input_text, template=template, max_tokens=self.context_len//2),
-            max_tokens=max_new_tokens,
-            seed=666,
-            response_format={"type": response_format} if response_format else None,
-            # temperature=0.1, # if response_format=="json_object" else 0.3,
-            # frequency_penalty=0.2,
-            # top_k=40,
-            # repeat_penalty=1 if response_format=="json_object" else 1.3
-        )['choices'][0]['message']['content'].strip() 
+    def _run(self, text: str) -> str:
+        max_tokens = 256 if self.use_short_digest(text) else 512
 
-    def _run_one(self, text: str) -> Digest:
-        digest = json_to_digest(
-            self._generate_response(
-                input_text=text, 
-                template=TUNED_MODEL_DIGEST_INST, 
-                max_new_tokens=600,
-                response_format="json_object"
-            )
-        )
-        # resp = self._generate_response(input_text=text, template=EXTRACTION_TEMPLATE, max_new_tokens=192, response_format="json_object")
-        # digest = parse_digest(resp)
-        # if digest and needs_summary(text):
-        #     digest.summary = self._generate_response(input_text=text, template=SUMMARY_TEMPLATE, max_new_tokens=360)
-        return digest         
+        return self.model.create_chat_completion(
+            messages=create_prompt_for_tuned_model(input_text=text),
+            max_tokens=max_tokens,
+            temperature=0.1,
+            seed=666
+        )['choices'][0]['message']['content'].strip()              
   
     def run(self, text: str) -> Digest:
         with self.lock:
-            digest = self._run_one(text)
+            resp = self._run(truncate(text, self.context_len//2))
+            digest = markdown_to_digest(resp)  
         return digest
     
     def run_batch(self, texts: list[str]) -> list[Digest]:
+        texts = batch_truncate(texts, self.context_len//2)
         with self.lock:
-            digests = [self._run_one(text) for text in texts]
-        return digests
+            results = [self._run(text) for text in texts]
+        return batch_run(markdown_to_digest, results)
+    
+_RESPONSE_START = "<|im_start|>assistant\n"
+_RESPONSE_END = "<|im_end|>"
+class TransformerDigestor(Digestor):
+    model = None
+    tokenizer = None
+    device = None
+    context_len = None
+    lock = None
+    use_short_digest = None
+
+    def __init__(self, 
+        model_id: str, 
+        context_len: int,
+        use_short_digest: Callable = None
+    ):
+        self.lock = threading.Lock()
+        self.context_len = context_len
+        self.use_short_digest = use_short_digest or (lambda text: False)
+
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        import torch
+
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id, padding=True, truncation=True, max_length=context_len)
+        self.model =  AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype="auto")
+        
+    def _extract_response(self, generated: str) -> Digest:
+        generated = remove_before(generated, _RESPONSE_START)
+        generated = remove_after(generated, _RESPONSE_END)
+        return markdown_to_digest(generated.strip())
+
+    def run(self, text: str) -> Digest:
+        max_tokens = 256 if self.use_short_digest(text) else 512
+        prompt = create_prompt_for_tuned_model(truncate(text, self.context_len//2))
+
+        with self.lock:            
+            inputs = self.tokenizer.apply_chat_template(prompt, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(self.device)
+            outputs = self.model.generate(**inputs, max_new_tokens=max_tokens)
+            generated = self.tokenizer.decode(outputs[0], skip_special_tokens=False)
+
+        return self._extract_response(generated)
+
+    def run_batch(self, texts: list[str]) -> list[Digest]:
+        max_tokens = 512
+        prompts = batch_run(create_prompt_for_tuned_model, batch_truncate(texts, self.context_len//2))
+
+        generated = [] 
+        with self.lock:
+            for i in range(0, len(texts), BATCH_SIZE):    
+                inputs = self.tokenizer.apply_chat_template(prompts, tokenize=True, add_generation_prompt=True, padding=True, truncation=True, max_length=(self.context_len*3)//4, return_dict=True, return_tensors="pt").to(self.device)
+                outputs = self.model.generate(**inputs, max_new_tokens=max_tokens, num_beams=BATCH_SIZE, top_k=25)
+                generated.extend(
+                    self.tokenizer.batch_decode(outputs, skip_special_tokens=False)
+                )
+       
+        return batch_run(self._extract_response, generated)
+
+def create_prompt_for_generic_model(text: str, use_short_digest: bool): 
+    template = GENERIC_MODEL_SHORT_DIGEST_INST if use_short_digest else GENERIC_MODEL_DIGEST_INST
+    return [
+        {
+            "role": "system",
+            "content": GENERIC_MODEL_SYSTEM_INST
+        },
+        {
+            "role": "user",
+            "content":  template.format(input_text=text)
+        }
+    ]
     
 class RemoteDigestor(Digestor):
     client = None
@@ -170,28 +229,13 @@ class RemoteDigestor(Digestor):
         self.model_name = model_name
         self.context_len = context_len
         self.use_short_digest = use_short_digest or (lambda text: False)
-
-    def create_prompt(self, text: str): 
-        template = GENERIC_MODEL_SHORT_DIGEST_INST \
-            if self.use_short_digest(text) else \
-                GENERIC_MODEL_DIGEST_INST
-        return [
-            {
-                "role": "system",
-                "content": GENERIC_MODEL_SYSTEM_INST
-            },
-            {
-                "role": "user",
-                "content":  template.format(input_text=text)
-            }
-        ]
     
     # @retry(tries=2, delay=5, logger=logger)
     def _run(self, text: str) -> Digest:
-        max_tokens = 300 if self.use_short_digest(text) else 512
+        max_tokens = 256 if self.use_short_digest(text) else 512
 
         resp = self.client.chat.completions.create(
-            messages=self.create_prompt(text),
+            messages=create_prompt_for_generic_model(text, self.use_short_digest(text)),
             model=self.model_name,
             max_tokens=max_tokens, 
             temperature=0.3,
@@ -202,109 +246,9 @@ class RemoteDigestor(Digestor):
     def run(self, text: str) -> Digest:
         return self._run(truncate(text, self.context_len//2))
     
-    def run_batch(self, input_texts: list[str]) -> list[Digest]:
-        input_texts = batch_truncate(input_texts, self.context_len//2)
-        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="remote-digestor") as executor:
-            results = list(executor.map(self._run, input_texts))
-        return results
-    
-class NewspaperDigestor:       
-    def __init__(self, language: str = "en"):
-        from newspaper import nlp
-        nlp.load_stopwords(language)
-        
-    def run(self, text: str, title: str) -> Digest:   
-        from newspaper import nlp
-
-        summary_lines = [' '.join(line.strip().split("\n")) for line in nlp.summarize(title=title, text=text)]
-        return Digest(
-            title=title,
-            summary=' '.join(summary_lines),
-            names=[] # leaving this empty intentionally because nlp.keywords() is dumb
-        )
-    
-_RESPONSE_START = "<|im_start|>assistant\n"
-_RESPONSE_END = "<|im_end|>"
-class TransformerDigestor(Digestor):
-    model = None
-    tokenizer = None
-    device = None
-    context_len = None
-    lock = None
-
-    def __init__(self, model_id, context_len=int(os.getenv("LLM_N_CTX", CONTEXT_LEN))):
-        self.lock = threading.Lock()
-        self.context_len = context_len
-        
-        # from unsloth import FastLanguageModel
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-        import torch
-
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        # if self.device == "cuda":
-        #     self.model, self.tokenizer = FastLanguageModel.from_pretrained(
-        #         model_name=model_id,
-        #         max_seq_length=self.context_len,
-        #         load_in_4bit=False,
-        #         # load_in_8bit=True,
-        #         device_map=self.device
-        #     )
-        #     self.model = FastLanguageModel.for_inference(self.model)
-        #     self.tokenizer = self.tokenizer
-        # else:
-        self.tokenizer = AutoTokenizer.from_pretrained(model_id, padding=True, truncation=True, max_length=context_len)
-        self.model =  AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype="auto")
-        
-
-    def _extract_response(self, generated: str) -> str:
-        start_index = generated.find(_RESPONSE_START)
-        end_index = generated.find(_RESPONSE_END, start_index)
-        return generated[start_index + len(_RESPONSE_START):end_index].strip()
-
-    def _generate_response(self, text: str, template: str, max_new_tokens: int = 256) -> str:
-        prompt = create_prompt(text, template, self.context_len//2)
-        inputs = self.tokenizer.apply_chat_template(prompt, tokenize=True, add_generation_prompt=True, max_length=self.context_len, return_tensors="pt").to(self.device)
-        outputs = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
-        generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        return self._extract_response(generated)
-
-    def run(self, text: str) -> Digest:
-        with self.lock:
-            digest = json_to_digest(
-                self._generate_response(
-                    input_text=text, 
-                    template=TUNED_MODEL_DIGEST_INST, 
-                    max_new_tokens=600
-                )
-            )
-            # resp = self._generate_response(text, EXTRACTION_TEMPLATE, max_new_tokens=192)
-            # digest = parse_digest(resp) or Digest()
-            # if digest and needs_summary(text):
-            #     digest.summary = self._generate_response(text, SUMMARY_TEMPLATE, max_new_tokens=360)
-        return digest
-    
-    def _generate_response_batch(self, texts: list[str], template: str, max_new_tokens: int = 256) -> list[str]:
-        prompts = [create_prompt(text, template, self.context_len//2) for text in texts]
-        inputs = self.tokenizer.apply_chat_template(prompts, tokenize=True, add_generation_prompt=True, padding=True, truncation=True, max_length=self.context_len, return_dict=True, return_tensors="pt").to(self.device)
-        outputs = self.model.generate(**inputs, max_new_tokens=max_new_tokens, num_beams=BATCH_SIZE, top_k=25)
-        generated = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)
-        return [self._extract_response(g) for g in generated]
-
     def run_batch(self, texts: list[str]) -> list[Digest]:
-        digests = []    
-        with self.lock:
-            for i in range(0, len(texts), BATCH_SIZE):               
-                responses = self._generate_response_batch(texts[i:i + BATCH_SIZE], TUNED_MODEL_DIGEST_INST, max_new_tokens=600)
-                digests.extend([json_to_digest(response) for response in responses])
-            # for i in range(0, len(texts), BATCH_SIZE):               
-            #     extracts = self._generate_response_batch(texts[i:i + BATCH_SIZE], EXTRACTION_TEMPLATE, max_new_tokens=192)
-            #     summaries = self._generate_response_batch(texts[i:i + BATCH_SIZE], SUMMARY_TEMPLATE, max_new_tokens=360)
-            #     for ext, summ in zip(extracts, summaries):
-            #         digest = parse_digest(ext)
-            #         if digest: digest.summary = summ
-            #         digests.append(digest)
-        return digests
-    
+        return batch_run(self._run, batch_truncate(texts, self.context_len//2), BATCH_SIZE)
+
 MARKDOWN_HEADERS = ["# ", "## ", "### ", "#### ", "**"]
 def cleanup_markdown(text: str) -> str:
     # remove all \t with

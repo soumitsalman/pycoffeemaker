@@ -92,7 +92,7 @@ class Bean(BaseModel):
         if self.entities: lines.append("**Mentions**: " + ', '.join(self.entities))
         if self.topic: lines.append("**Topic: " + self.topic)
         if self.locations: lines.append("**Location**: " + ', '.join(self.locations))
-        lines.append(self.summary or self.text)
+        if self.summary: lines.append(self.summary)
         if self.highlights: lines.extend(["- "+item for item in self.highlights])
         if self.insight: lines.append("**Actionable Insight**: "+ self.insight)
 

@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 import os
+from typing import Callable
 import tiktoken
 import math
 
@@ -34,3 +36,9 @@ def batch_truncate(input_texts: list[str], n_ctx):
     tokenlist = _encoding.encode_batch(input_texts, num_threads=os.cpu_count())
     tokenlist = [tokens[:n_ctx] for tokens in tokenlist]
     return _encoding.decode_batch(tokenlist, num_threads=os.cpu_count())
+
+def batch_run(func: Callable, items, num_threads: int = os.cpu_count()):
+    results = None
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        results = list(executor.map(func, items))
+    return results  
