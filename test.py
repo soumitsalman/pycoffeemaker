@@ -7,6 +7,7 @@ logging.basicConfig(level=logging.WARNING, format="%(asctime)s|%(name)s|%(leveln
 logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
+logging.getLogger("colleemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.digestors").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
@@ -17,7 +18,6 @@ logging.getLogger("UnicodeDammit").propagate = False
 logging.getLogger("urllib3").propagate = False
 logging.getLogger("connectionpool").propagate = False
 logging.getLogger("asyncio").propagate = False
-
 
 import json
 import asyncio
@@ -30,6 +30,8 @@ from coffeemaker.nlp import digestors, embedders
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 import random
 import re, json, random
+
+os.makedirs(".test", exist_ok=True)
 
 def url_to_filename(url: str) -> str:
     return "./.test/" + re.sub(r'[^a-zA-Z0-9]', '-', url)
@@ -57,7 +59,7 @@ def _create_orchestrator():
         os.getenv("DB_NAME"),
         embedder_path=os.getenv("EMBEDDER_PATH"),
         digestor_path=os.getenv("DIGESTOR_PATH"),
-        clus_eps=0.40
+        clus_eps=0.53
     )
 
 def test_collection():
@@ -236,7 +238,7 @@ def test_embedder():
         {
             "summary": "As Donald Trump takes the reins as 47th president of the United States, his new press secretary, Karoline Leavitt, has announced plans to invite independent journalists and social media influencers into White House press briefings. This initiative aims to expand the range of media outlets available for discussion, but it raises concerns about the erosion of public trust in traditional media. Critics argue that Trump's previous approach towards media outlets has led to a shift in public perception of journalism, with some questioning its credibility. The influx of new media personalities could further polarize the media landscape, potentially undermining the integrity of news reporting. As the incoming administration faces challenges in maintaining transparency and accountability, the implications of this move are profound, as it influences how Americans consume news and engage with political discourse."
         }
-        ]
+    ]
     embedder = embedders.from_path(ic(os.getenv("EMBEDDER_PATH")))
     vecs = embedder([i['summary'] for i in inputs])
     ic(len(vecs), [(len(vec), vec[0]) for vec in vecs])
@@ -248,7 +250,23 @@ def test_digestor():
             "text": "By\nChris Mellor\n- \nFebruary 7, 2025\n**Alluxio** Enterprise AI accelerates AI model training and streamlines operations with a new Cache Only Write Mode to accelerate checkpoints, advanced cache management, and enhanced Python SDK integrations. TTL (time-to-live) Cache Eviction Policies allow admins to enforce TTL settings on cached data, ensuring less frequently accessed data is automatically evicted based on defined policies. Alluxio’s S3 API now supports HTTP persistent connections (HTTP keep-alive), TLS encryption, and multi-part upload (MPU). MPU splits files into multiple parts and uploads each part separately to improve throughput for large files.\n…\nData compression startup **Atombeam** has raised $20 million in an A+ funding round, bringing total funding to $35 million. Atombeam’s uses cryptography and compression to translate raw data into a set of codewords within an AI/ML-created codebook. Data is transmitted as codewords and the receiver decrypts and decompresses it. Atombeam has been issued more than 84 patents for its technology, with an additional 115 pending. There are similarities between Atombeam’s codewords and the now extinct ‘s bit markers. LinkedIn shows Atombeam founder Asghar Riahi was a Master Technologist at HP from 1999 to 2012. SymbolicIO founder Brian Ignomirello was StorageWorks CTO at HP from Dec 2007 to Dec 2011. The two overlapped at HP over a four-year period. \n…\nAIOps automation developer **CloudFabrix** is changing its name to **Fabrix.ai** and rolling out a framework for agentic AIOps. Agents need to be developed, deployed, orchestrated, and managed, and Fabrix.ai has developed a framework for this. The main components are:\n  * Agent Orchestration and Lifecycle Management \n  * AI Guardrails \n  * Managing Data and Action Privileges for Agents \n  * Visibility and Observability of Agents \n  * Agent Quality Control and Assurance \n  * Reasoning LLMs \n\n\nThere is an AI Fabric – “an AI agent-driven distributed orchestrator that enables customers to securely build, deploy, and manage Agents’ lifecycles, ensuring guardrails and quality controls. It integrates with disparate large and small models, curated datasets, and automation to drive Agentic Workflows.”\n… \n**DDN** has appointed Wendy Stusrud as VP for Worldwide Channel Sales. She comes from being VP Global Partner Sales at Pure Storage for more than three years.\n…\nIn-memory computing clustered node supplier **GridGain** says its new GridGain for AI enables customers to use GridGain as a low-latency data store for real-time AI workloads. Real-time AI requires low-latency data access to ensure fast retrieval of inputs, such as features and embeddings for inference, enterprise- and user-specific context to augment LLM queries, prediction caching to reduce computation, and dynamic model loading. GridGain pitch for AI is a single, distributed platform, delivering low-latency performance, scalability, and reduced integration overhead to streamline deployments and improve overall system efficiency for modern AI applications.\n…\n**Hitachi Vantara** has won speciality pharmaceutical as a customer for its Virtual Storage Platform One (VSP One) Block product, upgrading an existing Hitachi VSP G200 storage system.\n…\nStreaming log data supplier **Hydrolix** has shipped a new Apache Spark connector for **Databricks,** designed to make it easy to replace the current log data infrastructure with Hydrolix.Now. Databricks users can “economically store full-fidelity event data, such as logs, in Hydrolix and rapidly extract information from both real-time and historical data.”\n…\nOpen-source object storage supplier **MinIO** has appointed a new CMO, Erik Frieberg. Former CMO Jonathan Symons, appointed in 2019, has moved to a full-time advisor role. Frieberg has been SVP marketing at Pantheon for the past 15 months and has CMO and SVP roles at VMware, Puppet and MongoDB in his LinkedIn CV. \n…\n**Quobyte** has appointed Tom Murch as the new regional director of sales to head its New York office. Murch has held director-level positions at Penguin Computing, Toshiba, CiaraTech, Smart Storage, and Sanmina. By expanding into New York, Quobyte is trying to strengthen its presence in the financial sector where organizations need high-performance, scalable storage to support demanding workloads. \n…\nMulti-site file collaboration vendor **Resilio** has appointed Eric Soffin as VP Sales. He comes from being VP worldwide Sales at Nasuni for more than five years.\n…\nObject storage supplier **Scality** has appointed Emilio Roman as its new global CRO. He comes from being SVP global sales and channels at BitDefender, where he spent five years. Before that, he was SVP EMEA, APAC and global alliances at … Scality. Roman’s appointment follows “the highly impactful tenure of Peter Brennan, who built the company’s sales and channel organisation to achieve consecutive years of record growth.”\nBrennan has left for a senior sales leadership role with an unnamed network technology company, and will remain a member of Scality’s Advisory Board. Scality said “We are thrilled to welcome Emilio back to the Scality family. Emilio’s extensive cybersecurity experience and outstanding leadership skills make him the ideal choice to lead our global sales efforts.”\n…\nSW RAID shipper **Xinnor** has won the as a customer which has used E4 Computer Engineering to integrate Xinnor’s xiRAID with BeeGFS. This ships data to/from Nvidia DGX servers. The system includes dual storage nodes, each powered by xiRAID in RAID 6 configuration, built to deliver a fail-safe environment for large-scale AI operations. Read speeds reach 29.2 GBps and write speeds 25.8 GBps in tests involving up to 128 processes per node.\n#### RELATED ARTICLESMORE FROM AUTHOR\n### Hammerspace challenges object storage norms for AI\n### WEKA restructures for the GenAI era\n### Qumulo takes on mainstream data fabric suppliers\n### DataCore buys Arcastream parallel file system from Kalray\n### PEAK:AIO drives UK effort to bring down cost of medicine\n### VDURA talks up energy-efficient HPC systems for utilities\nBlocks and FilesStorages and File System News\n### ABOUT US\nBlocks & Files is a storage news, information and analysis site covering storage media, devices from drives through arrays to server-based storage, cloud storage, networking and protocols, data management, suppliers and standards. We publish news, views, opinions and analysis of storage industry events and developments, aiming to keep storage users, developers, consultants, marketeers, salespeople, support staff, analysts and everyone else involved in IT storage up to date with what’s going on.\n### FOLLOW US\nRss\n© Situation Publishing, 2018-2024\n  * About\n  * Contribute\n  * Contact\n  * Privacy\n  * Cookies\n  * Ts&Cs\n  * Do not sell my personal information\n\n\nMORE STORIES\n### Hammerspace challenges object storage norms for AI\nChris Mellor - February 7, 2025 0\n### WEKA restructures for the GenAI era\nChris Mellor - February 7, 2025 0\n### Qumulo takes on mainstream data fabric suppliers\nChris Mellor - February 6, 2025 0"
         },
         {
-            "text": "By\nChris Mellor\n- \nFebruary 7, 2025\nData orchestrator Hammerspace is challenging the conventional wisdom that object storage is the optimal solution for AI training and inference, arguing that universal, protocol-agnostic data access is far more crucial.\nIn a sense, that would be natural as Hammerspace has AI model training customers, such as Meta. Its technology is based on parallel NFS and it supports Nvidia’s GPUDirect fast file access protocol. However, Hammerspace supports S3 data access as well as file access. It has a partnership with object storage supplier Cloudian so that its HyperStore object storage repository can be used by Hammerspace’s Global Data Platform software. HyperStore supports Nvidia’s GPUDirect for object storage, designed to provide faster object access.\nMolly Presley, Hammerspace SVP for marketing, discussed the file-vs-objects AI topic with _Blocks and Files_ , and moved onto making data suitable for AI processing – vectorization and how data should be organized for the AI LLM/agent era.\n**Blocks & Files: Why is Hammerspace focused on a hybrid data platform instead of just file or object storage?**\n**Molly Presley:** In article, he calls out the pain points of parallel file systems due to their proprietary nature and needing specialized headcount. This is a huge reason why Hammerspace, with over 2,400 contributions to the Linux kernel, is so focused on a standards-based data platform. The choice for customers is not limited to just object storage if they need standards-based access without proprietary clients and silos.\nIt’s not about choosing between file systems and object storage interfaces; the conversation is also about scalability, efficiency at scale, understanding data sources, and seamlessly orchestrating data regardless of its format.\nFocusing solely on storage interfaces and file vs object storage trivializes the complexity of today’s AI demands. Each workload has different performance requirements, is connected to different applications with different storage interface requirements, and may use data sources from a wide variety of locations. The optimal platform delivers performance through orchestration, scalability, and intelligent workload-specific optimizations.\n**Blocks & Files: ****Are AI infrastructure purchase decisions primarily being made around training workloads?**\n**Molly Presley:** No. As organizations are assessing their AI investments, they are thinking beyond more than just training. Data architecture investments for most organizations need to accommodate far more than training. They need to span inference, RAG, real-time analytics, and more. Each requires specific optimizations that go beyond generic, one-size-fits-all storage systems. A data platform is needed and must adapt to each phase of AI workloads, not force them into outdated storage paradigms.\nA data platform must provide real-time data ingestion (aka data assimilation), intelligent metadata management, security, and resilience. Storage interfaces alone don’t solve the full challenge – data must be fluid, orchestrated, and dynamically placed for optimal performance across workloads.\n**Blocks & Files: We have been concerned about the spread of LLMs as that implies the LLMs need access, in principle, to an organization’s entire data estate. Will an organization’s entire data estate need to be vectorized? If not all, which parts? Mission-critical, near-time, archival?**\n**Molly Presley:** At Hammerspace, we don’t see vectorization as the immediate challenge or top-of-mind concern for buyers and architects – it’s global access and orchestration. Organizing data sets, ensuring clean data, and moving data to available compute are much more urgent in today’s training, RAG, and iteration workloads.\nThe need to vectorize an organization’s entire data estate is highly use-case and industry-specific. While the answer varies, full vectorization is typically unnecessary. Mission-critical and near-time data are the primary candidates, while archival data can be selectively sampled to identify relevance or patterns that justify further vectorization.\nThe key to effective implementation is enabling applications to access all data across storage types at a metadata control plane level – without requiring migrations or centralization. This ensures scalability and efficiency.\n**Blocks & Files: Will an organization’s chatbots/AI agents need, collectively and in principle, access to its entire data estate? How do they get it?**\n**Molly Presley:** Chatbots and AI agents typically don’t need access to an organization’s entire data estate – only a curated subset relevant to their function. Security and compliance concerns make unrestricted access impractical. Instead, leveraging global data access with intelligent orchestration ensures AI tools can access the right data without uncontrolled sprawl.\nEven if an organization vectorized everything, the resulting data store would be near-real-time, not truly real-time. Performance is constrained by update latency – vector representations are only as current as their latest refresh. API integration and fast indexing can help, but real-time responsiveness depends on continuous updates. Hammerspace’s relevant angle remains metadata-driven, automated orchestration rather than full-scale vectorization.\n**Blocks & Files: Will the prime interface to data become LLMs for users in an organization that adopts LLM agents?**\n**Molly Presley:** Good question. LLMs are rapidly becoming an important interface for data in organizations adopting AI agents. Their ability to process natural language and provide contextual insights makes them a powerful tool for accessibility and decision-making. However, they won’t replace traditional BI and analytics tools – rather, they will integrate with them. Enterprises require structured reporting, governance, and auditability, which remain best served by established standards. The near-term (next few years at least) future lies in a hybrid approach: LLMs will enhance data interaction and discovery, while enterprise-grade analytics tools ensure precision, compliance, and operational control. \n**Blocks & Files: In a vector data space, do the concepts of file storage and object storage lose their meaning?**\n**Molly Presley:** File and object storage don’t disappear; they evolve. In a vector data space, data is accessed by semantic relationships, not file paths or object keys. However, storage type still matters in terms of performance, cost, and scale.\n**Blocks & Files: ****Will we see a VQL, Vector Query Language, emerge like SQL?**\n**Molly Presley:** Yes, a Vector Query Language will emerge, though it may not take the exact form of SQL. Standardization is critical. Just as SQL became the universal language for structured data, vector search will need a standardized query language to make it more accessible and interoperable across tools and platforms.\nAPIs and embeddings aren’t enough. Right now, vector databases rely on APIs and embedding models for similarity search, but businesses will demand more intuitive, high-level query capabilities as adoption grows. Hybrid queries will be key. Future AI-driven analytics will need queries that blend structured (SQL) and unstructured (VQL) data, allowing users to seamlessly pull insights from both.\n**Blocks & Files: Can a storage supplier provide a data space abstraction covering block, file, and object data?**\n**Molly Presley:** Some storage vendors can abstract storage types across file and object, and some offer block as well – but that’s not a true global data space. They create global namespaces within their own ecosystem but fail to unify data across vendors, clouds, and diverse formats (structured, unstructured, vectorized).\nStandards are a critical part of this conversation as well. Organizations are typically unwilling to add software to their GPU servers or change their approved IT build environments. Building the data layer client interface into Linux as the most adopted OS is critical, and using interfaces like pNFS, NFS, and S3, which applications natively write to, is often mandated.\nA global data space is about universal access, not just storage abstraction. It must integrate rich metadata, enable advanced analytics, and orchestrate data dynamically – without migrations, duplication, or vendor lock-in.\nBottom line: storage type is irrelevant. Without true global orchestration, data stays siloed, infrastructure-bound, and inefficient.\n**Blocks & Files: How do we organize an organization’s data estate and its storage in a world adopting LLM-based agents?**\n**Molly Presley:** We need a tiered approach to data, organized not in traditional HSM (Hierarchical Storage Management) terms of time, but with rich contextual relevance to automate orchestration of curated subsets of data non-disruptively from anywhere to anywhere when needed. \nFocus on the data, not the storage. Especially in LLM-based ecosystems, the storage type is opportunistic and workflow-driven. All storage types have their uses, from flash to tape to cloud. When the type of storage is abstracted with intelligent, non-disruptive orchestration, then the storage decisions can be made tactically based on cost, performance, location, preferred hardware vendor, etc. \nUnified access via standard protocols and APIs that can bridge all storage types and locations. This provides direct data access, regardless of where the data is today, or moves to tomorrow. In this way, data is curated in place so that applications can access the relevant subset of the data estate without requiring disruptive and costly migrations.\nThere is rich metadata in files and objects that typically is unused in traditional storage environments. Custom metadata, semantic tagging, and other rich metadata can be used to drive more granularity in the curation of the datasets. Combining these metadata into the global file system to trigger automated data orchestration minimizes unnecessary data movement, reduces underutilized storage costs, and improves accuracy and contextual insights for LLM-based use cases. \nData mobility and the ability to scale linearly are essential. LLM workflows inevitably result in data growth but, more importantly, may require cloud-based compute resources when local GPUs are unavailable. Modern organizations must put their data in motion without the complexity and limitations of traditional siloed and vendor-locked storage infrastructures.\n#### RELATED ARTICLESMORE FROM AUTHOR\n### Storage news ticker – February 7\n### WEKA restructures for the GenAI era\n### Qumulo takes on mainstream data fabric suppliers\n### DataCore buys Arcastream parallel file system from Kalray\n### PEAK:AIO drives UK effort to bring down cost of medicine\n### VDURA talks up energy-efficient HPC systems for utilities\nBlocks and FilesStorages and File System News\n### ABOUT US\nBlocks & Files is a storage news, information and analysis site covering storage media, devices from drives through arrays to server-based storage, cloud storage, networking and protocols, data management, suppliers and standards. We publish news, views, opinions and analysis of storage industry events and developments, aiming to keep storage users, developers, consultants, marketeers, salespeople, support staff, analysts and everyone else involved in IT storage up to date with what’s going on.\n### FOLLOW US\nRss\n© Situation Publishing, 2018-2024\n  * About\n  * Contribute\n  * Contact\n  * Privacy\n  * Cookies\n  * Ts&Cs\n  * Do not sell my personal information\n\n\nMORE STORIES\n### Storage news ticker – February 7\nChris Mellor - February 7, 2025 0\n### WEKA restructures for the GenAI era\nChris Mellor - February 7, 2025 0\n### Qumulo takes on mainstream data fabric suppliers\nChris Mellor - February 6, 2025 0"
+            "text": """# stanlee000 maintains a public GitHub repository named "spellbound."
+            **Publish Date**: 2025-05-01 18:48:18
+            **Categories**: Software Engineering, DevOps, Cybersecurity
+            **Mentions**: stanlee000, spellbound, GitHub
+            **Topic: Software Repository Information
+            [Search syntax tips](https://docs.github.com/search-github/github-code-search/understanding-github-code-search-syntax)
+            #  Provide feedback 
+            #  Saved searches 
+            ## Use saved searches to filter your results more quickly
+            [ Sign in ](https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fstanlee000%2Fspellbound%2Ftree%2Fmain%2Fsafari-extension)
+            [ Sign up ](https://github.com/signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Ffiles%2Fdisambiguate&source=header-repo&source_repo=stanlee000%2Fspellbound)
+            You signed in with another tab or window. [Reload](https://github.com/stanlee000/spellbound/tree/main/safari-extension) to refresh your session. You signed out in another tab or window. [Reload](https://github.com/stanlee000/spellbound/tree/main/safari-extension) to refresh your session. You switched accounts on another tab or window. [Reload](https://github.com/stanlee000/spellbound/tree/main/safari-extension) to refresh your session. Dismiss alert
+            {{ message }}
+            [ stanlee000 ](https://github.com/stanlee000) / **[spellbound](https://github.com/stanlee000/spellbound) ** Public
+            * [ Notifications ](https://github.com/login?return_to=%2Fstanlee000%2Fspellbound) You must be signed in to change notification settings
+            * [ Fork 1 ](https://github.com/login?return_to=%2Fstanlee000%2Fspellbound)
+            * [ Star  7 ](https://github.com/login?return_to=%2Fstanlee000%2Fspellbound)"""
         },
         {
             "text": "The State Department has fired about 60 contractors who work for its democracy, human rights and labor bureau, a division whose programs have often been criticized by authoritarian leaders, according to two U.S. officials and two former officials.\n\nThe dismissals deal a severe blow to the bureau, because the contractors were mostly technical or area experts whom senior officials relied on to do the day-to-day work of enacting the programs overseas.\n\nThe bureau has received about $150 million to $200 million of annual budget funding from Congress in recent years. But the bureau also handles and passes on money that Congress appropriates for other groups, including the National Endowment for Democracy.\n\nThe bureau’s programs have often been focused on building up civil society and democratic practices in countries where the United States does not have missions and formal diplomatic ties, or where relations with an authoritarian government are especially tense. This includes Russia, China, Iran, North Korea, Venezuela and Cuba.\n\nSome of the bureau’s contractors have specific technical expertise. For example, at least one is an expert on virtual private networks, software that allows users to get around government internet blocks. China has the most effective internet censorship program in the world, called the Great Firewall.\n\nThe bureau has also worked on enacting policies aimed at pressuring China to relent on its forced labor of Uyghur Muslims, including the imposing of sanctions on U.S. companies that buy products that can be traced back to some form of forced labor."
@@ -306,15 +324,86 @@ def test_digestor():
         }
     ]
     digestor = digestors.from_path(
-        os.getenv("DIGESTOR_PATH"), 
+        # "nvidia/Llama-3.1-Nemotron-70B-Instruct", 
+        "google/gemma-3-27b-it",
+        # "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+        # "microsoft/WizardLM-2-8x22B",
         int(os.getenv("DIGESTOR_CONTEXT_LEN", 8192)), 
         os.getenv("DIGESTOR_BASE_URL"), 
         os.getenv("DIGESTOR_API_KEY"), 
-        use_short_digest=lambda text: len(text.split()) < 160)
+        use_short_digest=lambda text: False)
     # [print(f"# {digest.gist}\n{digest.entities}\n{digest.domains}\n{digest.topic}\n{digest.summary}\n{digest.insight}==============================" if digest else None)
     #  for digest in digestor([b['text'] for b in inputs[:3]])]
     # ic(len(inputs))
-    ic(digestor([b['text'] for b in inputs]))
+    [print(resp if resp else "N/A", '\n') for resp in digestor([b['text'] for b in inputs])]
+
+def test_digest_parser():
+    responses = [
+        "P:AI model training acceleration|Data compression advancements|AIOps framework rollout|Channel sales leadership change|Real-time AI data store|Storage system upgrade|Log data infrastructure replacement|CMO appointment|Sales leadership expansion|File collaboration VP appointment|CRO appointment|RAID integration for AI;E:Alluxio introduces Cache Only Write Mode|Atombeam raises $20M in A+ funding|CloudFabrix rebrands to Fabrix.ai|DDN appoints Wendy Stusrud|GridGain launches GridGain for AI|Hitachi Vantara wins pharmaceutical customer|Hydrolix ships Spark connector for Databricks|MinIO appoints Erik Frieberg|Quobyte expands to New York|Resilio appoints Eric Soffin|Scality appoints Emilio Roman|Xinnor wins customer with BeeGFS integration;D:Atombeam funding: $35M total|$84 patents issued to Atombeam|115 patents pending for Atombeam|HP overlap: Riahi & Ignomirello - 4 years|Read speeds: 29.2 GBps|Write speeds: 25.8 GBps;R:Financial sector (Quobyte expansion);N:Alluxio|Atombeam|CloudFabrix/Fabrix.ai|DDN|GridGain|Hitachi Vantara|Hydrolix|MinIO|Quobyte|Resilio|Scality|Xinnor|Asghar Riahi|Brian Ignomirello|Wendy Stusrud|Erik Frieberg|Emilio Roman|Peter Brennan;C:AI|Storage|Data Management|Cloud Computing|AIOps;S:neutral",
+
+        """P:Public GitHub repository;Saved searches available;Notification & Fork options;Sign-in/Sign-up prompts;Session management alerts
+        E:Repository maintenance;User authentication requests;Account switching detected
+        D:2025-05-01 18:48:18|1 Fork|7 Stars
+        R:GitHub
+        N:stanlee000|spellbound|GitHub
+        C:Software Engineering|DevOps|Cybersecurity
+        S:neutral""",
+
+        "P:Contractors fired from State Department bureau;Bureau programs criticized by authoritarian regimes;Loss of technical expertise impacts program implementation;Focus on civil society in countries with limited US diplomatic presence;Efforts to address forced labor in China|S:negative;E:Dismissal of ~60 contractors;D:$150M-$200M annual bureau budget;R:Russia|China|Iran|North Korea|Venezuela|Cuba|US;N:State Department|National Endowment for Democracy|Uyghur Muslims|China;C:Politics|Human Rights|International Relations|Labor|Technology;S:negative|critical",
+
+        "P:NewExpropriationAct|LandInequality|PropertyRightsDebate|ConstitutionalAlignment|LimitedEffectiveness|LandownerProtection|NilCompensationClause;E:ActPassage2024|RepealsApartheidAct|DebateOverProvisions|FocusOnCompensation|NilCompensationConsideration;D:Act13of2024|Act63of1975Repealed|Section12(3)NilCompensation|LandOnlyForNilCompensation|PublicInterestForNilCompensation|LimitedNilCompensationCircumstances;R:SouthAfrica;N:Zsa-ZsaTemmersBoggenpoel|SouthAfricanGovernment|Landowners|ExpropriatingAuthority;C:Law|LandReform|PropertyRights|Politics;S:neutral|concerned|analytical",
+
+        """P:Challenges to Bill 21 reach Supreme Court|Law restricts religious symbols for public sector employees|Bill 21 enacted with popular support but raises constitutional concerns|Section 33 (notwithstanding clause) shields law from challenges|Unwritten constitutional principles, like minority protection, may limit Section 33 use|Law impacts Muslim women disproportionately, hindering employment & access to services|Court must define limits of Section 33 to ensure Charter rights are meaningful
+        E:Supreme Court announces hearing of Bill 21 challenge|Québec government invoked Section 33 & 52 preemptively|Superior Court found Bill 21 has cruel & dehumanizing impact
+        D:Bill 21 passed in 2019|Section 33 declaration valid for 5 years, renewable|Examples of past discriminatory laws: Indian Act, Chinese Exclusion Act, Japanese internment
+        R:Québec|Canada
+        N:Supreme Court of Canada|Bill 21|Section 33 (notwithstanding clause)|Muslim women|Natasha Bakht|Lynda Collins|National Council of Canadian Muslims|Women's Legal Education and Action Fund
+        C:Law|Politics|Human Rights|Religion|Constitutional Law|Discrimination
+        S:negative|critical|concerned""",
+
+        "P:Burundi faces climate/environmental challenges due to biomass dependence & outdated agriculture|Deforestation increases vulnerability to climate shocks|Government needs balanced “carrot & stick” approach for compliance|Legal framework crucial for effective climate regulation|Regional applicability to East Central African countries;E:Population increase (8M to 12M, 2008-2021) drives demand for firewood/land|Severe droughts (1998-2005: 35% livestock mortality) & floods (2006, 2007) experienced|Loss of 2,350 hectares of natural forest in 2023;D:76% population below poverty line (US$2.15/day, 2023)|Burundi ranks 22nd most vulnerable to climate change|CO₂ emissions <0.02% of global total|90% rural households use three-stone fires|99% households use solid fuels for cooking|<2% access to improved cookstoves|465,000 hectares natural forest (2020);R:Lake Tanganyika region|East Central African region (Uganda, Rwanda, DR Congo, Zambia, CAR, Malawi);N:Burundi|Kikelomo Kila;C:Climate Change|Environmental Policy|Sustainable Development|Law & Regulation;S:concerned|informative ",
+
+        "P:Economic potential of plastic waste|Informal collectors key to goals|Perceptions shaped by socio-cultural factors|Education improves business understanding|Family size impacts feasibility|Religion promotes resource management|Gender influences perception|Age affects motivation|Income drives engagement|Social connections foster collaboration;E:Exploratory survey in Ijebu, Ogun State|Study of 86 participants with 5+ years experience|Highlighting education, family, religion, gender, age, & economic factors|Identifying barriers & opportunities for formalization;D:86 participants surveyed|5+ years experience in plastic waste industry|Age range: Younger (<14) to Adults (33-38);R:Nigeria|Ijebu area of Ogun State;N:Samuel Oludare Awobona (Osun State University)|Islamic teachings (_israf_, _zakat_)|African traditional religions;C:Waste Management|Sustainable Development|Environmental Governance|Economics|Sociology|Gender Studies;S:positive ",
+
+        "P:Addo Elephant Park wetlands endangered|New wetland inventory completed|Wetlands crucial for biodiversity & water sources|Climate change threatens wetland function|Past farming practices impact wetland recovery|Elephant population impacts wetlands; trade-off with conservation|Importance of monitoring & preventing invasive species;E:Inventory of Addo's rivers & wetlands co-authored|Discovery of previously undocumented wetlands (dune-slack, springs, depression wetlands)|Rangers' local knowledge crucial for discovery|National assessment shows wetlands highly threatened|Climate change disrupting weather patterns & water resources;D:Park established 94 years ago|Park size: 155,000 hectares|437 wetlands in Addo Park|600+ elephants in Addo Park|National biodiversity assessment every 6 years|Ramsar Convention recognizes importance of small wetlands;R:Eastern Cape region, South Africa|Addo Elephant National Park|Coastal dunes|Forested gorges (\"kloofs\")|Mountainous plateaus;N:Nancy Job|Dirk Roux|Nicholas Cole (SANParks)|South African National Parks|South African National Biodiversity Institute|Elephants|Rangers;C:Conservation|Ecology|Environmental Science|Climate Change|Biodiversity|Water Resources;S:concerned|informative",
+
+        """P:Trump proposes relocating Palestinians|Ultranationlists seek "Greater Israel"|Shift towards right-wing coalitions in Israel|Religious Zionists combine faith & nationalism|Settler violence destabilizes West Bank;US removes sanctions;Netanyahu's upcoming White House visit ominous|Oslo Accords derailed by assassination & intifada|Netanyahu's longevity enables rightward shift;E:Trump suggests clearing Gaza|Smotrich aims to enact relocation policy|Ben Gvir calls Gaza evacuation "humanitarian";R:Gaza|West Bank ("Judea & Samaria")|Israel|Egypt|Jordan|Lebanon|Syria|Iraq|Saudi Arabia;N:Donald Trump|Bezalel Smotrich|Itamar Ben Gvir|Yitzhak Rabin|Yasser Arafat|Ehud Barak|Benjamin Netanyahu|Yigal Amir|Religious Zionists|Palestinians|Israelis|Pew Research Center|Israel Democracy Institute;C:Politics|International Relations|Israeli-Palestinian Conflict|Religion|Ideology|US Foreign Policy;D:2024 Pew Research: 45% Israelis unfavorable view of Ben-Gvir|2024 Pew Research: 41% Israelis unfavorable view of Smotrich|2022 Elections: Religious Zionist party won 10.84%|1995: Oslo II support at 72% in Israel|1995: Rabin assassinated|2022: Religious Zionists hold balance of power in Knesset|2024: Religious Zionists represent 22% of Jewish population in Israel|S:negative|critical """,
+
+        "P:Australia considering social media ban for under-16s;Adversarial framing of tech debate hinders solutions;Students express awareness of excessive app use & desire for self-discipline;Education should foster critical reflection on digital world;Banning tech may increase its allure;Content curation by tech companies is key issue|E:Australian government proposes social media ban;Research project collaborates with students, tech companies, policymakers, & ethicists;Callaghan's 1976 Ruskin Speech questioned education's focus;Rowland claims need for immediate action on content exposure|D:Students use apps ~8 hours/day;Students report difficulty reading >5 pages;UK education shifted from 'how to live' to 'how to make a living';Survey prioritizes online safety & harm prevention|R:Australia;UK|N:Anthony Albanese;Michelle Rowland;James Callaghan;Bernard Crick;Lawrence Stenhouse;James Conroy|C:Social Media;Education;Digital Citizenship;Technology Policy;Online Safety|S:concerned;critical;nuanced ",
+
+        "P:PM exposure linked to decreased melanoma risk|Study shows association, not causation|Benefits of clean air outweigh potential melanoma risk reduction|Further research needed to confirm findings;E:New study finds potential link between air pollution & melanoma|Researchers acknowledge study limitations;D:PM10 & PM2.5 are particulate matter sizes|Long-term PM exposure causes millions of premature deaths annually|UV radiation is primary risk factor for melanoma;R:Italy (study location);N:Particulate Matter (PM10, PM2.5)|Melanoma|Ultraviolet (UV) Radiation;C:Health|Environmental Science|Cancer Research|Dermatology;S:cautionary|informative|negative ",
+
+        """P:Art,music,science exhibition at Winchester Cathedral|Whale sculptures made from "ghost gear" highlight ocean pollution|AI used to translate whale calls|Whale foraging areas overlap with krill fisheries|Global "whale superhighways" mapped, revealing threats|Performance piece "Echolocations" responds to cathedral acoustics & whale communication|Human impact on oceans: pollution, overfishing, climate change|Imagination needed for sustainable relations with planet;E:Exhibition open until Feb 26 2025|Performance "Echolocations" on Feb 6|Discovery of complex sperm whale codas|Reports of stranded whales with plastic-filled stomachs|D:Whales weigh up to 45 tonnes|Sculptures 3-5m long|Sperm whale found with 25kg debris in stomach|Cathedral is 170m long|Over 1,000 whale tracks used for "superhighway" map|40,000+ subscribers to "Imagine" newsletter|R:Winchester Cathedral, Hampshire, UK|Pas-de-Calais, France|North Carolina, US|Western Antarctic Peninsula|Global oceans|N:Tessa Campbell Fraser (artist)|Sperm whales|Blue whales|Herman Melville (author of Moby Dick)|Philip Hoare (author of Leviathan)|Liz Gre (vocalist)|Ben Oliver (pianist)|Pablo Galaz (electronics)|Drew Crawford (electronics)|Ryan Reisinger (researcher)|Ghost Fishing UK (charity)|University of Southampton|WWF|C:Art|Music|Science|Marine Biology|Conservation|Climate Change|Pollution|Technology|Literature|Acoustics|S:concerned|hopeful|critical """,
+
+        "P:Slow growth strategy|Immediate impact lacking|Focus on supply-side reforms|Infrastructure investment key|Long timeframe for results|Political risk of unfulfilled promises|Financing reliant on pension funds & private capital|Planning reform faces local opposition|Tension between growth & environmental goals|Deregulation concerns in finance & industry|Skills shortage a limiting factor|Trade dependency & Brexit impact;E:Reeves shifts economic outlook|OBR forecasts minimal short-term growth boost|HS2 debacle cited as example of project delays|Starmer emphasizes deregulation|Head of Competition and Markets Authority sacked;D:£160 billion available in defined benefit pension schemes|0.1% growth boost per 1% public investment|IMF projects 1.6% UK growth this year|Heathrow expansion unlikely before 2030|Lower Thames crossing & Sizewell C planned for ~20 years;R:UK|Kent|Essex|Suffolk|EU|USA|France|Germany;N:Rachel Reeves|Keir Starmer|Liz Truss|Office for Budget Responsibility (OBR)|International Monetary Fund (IMF)|Dinendra Haria|Steve Schifferes;C:Economics|Politics|Infrastructure|Finance|Regulation|Trade|Brexit|Environmental Policy;S:cautious|concerned|critical ",
+
+        "P:4 distinct giraffe species confirmed|Skull morphology supports 4 species|Conservation efforts need species-specific focus|Skull variations affect reproductive success|Study confirms previous genetic findings;E:Study of 500+ giraffe skulls|DNA, ecology, behavior, health & coat patterns previously studied|IUCN still recognizes only one giraffe species;D:45,000 southern giraffe|50,000 Masai giraffe|16,000 reticulated giraffe|6,000 northern giraffe|3D scanning used on 500+ skulls;R:Africa|Europe|US;N:Giraffa giraffa|Giraffa tippelskirchi|Giraffa reticulata|Giraffa camelopardalis|Giraffe Conservation Foundation (GCF)|International Union for the Conservation of Nature (IUCN);C:Biology|Taxonomy|Conservation|Zoology;S:positive",
+
+        """P:Labour aims for economic growth|Chancellor Reeves seeks "faster" growth|Growth elusive since election|Speech on Jan 29 was economic reset attempt|Ambitions positive, execution key|Fiscal constraints limit investment|Brexit remains a drag|Need private sector support|Immediate stimulus needed
+        E:Reeves' speech on Jan 29|Means-testing of winter fuel payments criticized|Budget framing dented confidence|Announcement of £28M investment in Cornish Metals|£63M for advanced fuels in Teesside|Plans for redevelopment around Old Trafford
+        D:Public investment to rise to 2.6% of GDP|Previous government planned 1.9% GDP investment|UK exports down 9% since 2020|Similar economies exports up 1% since 2020|Planning law reform commitment|
+        R:South-East may benefit from investment|Cornwall (investment in Cornish Metals)|Teesside (advanced fuels investment)|Manchester (Old Trafford redevelopment)|Oxford-Cambridge ("Silicon Valley" plan)
+        N:Rachel Reeves|Labour government|Heathrow Airport|Luton Airport|Gatwick Airport|Cornish Metals|Phil Tomlinson|David Bailey
+        C:UK Economy|Economic Policy|Brexit|Industrial Strategy|Investment|Infrastructure|Regional Development
+        S:mixed|cautiously optimistic|critical of past "own goals"|concerned about Brexit impact|skeptical about execution|""",
+
+        """P:Anti-gender movements restrict equality & sex education globally|Trump presidency may limit school knowledge|Movements target schools to influence long-term norms|Funding from US/European conservative sources|Movements utilize anti-colonial language in Africa/Latin America|Misinformation & parental anxieties are exploited|Legal frameworks can protect education access;E:Book bans in US schools|CitizenGO's "anti-trans" bus campaign in Europe/Americas|Outrage manufactured around comprehensive sex education|Parental protests against sex education in South Africa, Peru, Ghana|Strategic litigation overturned laws in Mexico/Brazil|Policies banning adolescent mothers reversed in Sierra Leone;D:US$6.2 billion revenue (2008-2017) for US anti-gender orgs|US$1 billion+ funneled abroad (2008-2017)|US$54 million spent in Africa (2007-2020) by US Christian groups|Global Philanthropy Project aims to advance LGBTI+ rights;R:US|Europe|Africa|Latin America|Global South|Mexico|Brazil|Sierra Leone|Peru|Ghana|South Africa|Argentina|Chile|Colombia;N:Trump|CitizenGO|ODI Global|Global Philanthropy Project|Con Mis Hijos No Te Metas;C:Education|Politics|LGBTQ+ Rights|Gender Equality|Human Rights|Social Movements|Sex Education|Misinformation;S:negative """,
+
+        """P:Surging bird flu cases in UK|Human case detected in England|Risk to humans remains low|Virus evolving & spreading aggressively|Outbreak impacting wild birds & poultry|H5N1 strain prominent|Previous UK outbreak subsided mid-2023, resurged autumn 2024|Prevention zones declared in England, Scotland, Wales|Wild birds spread to poultry|Global H5N1 outbreak ongoing|Virus infecting mammals in South America (seals/sea lions) & US (dairy cattle)|Mild human infections reported in US farm workers|Severe cases & fatality in US/Canada|No human-to-human transmission reported|UK has vaccine/antiviral reserves
+        E:Avian influenza control zones implemented|Restrictions placed on wild birds & poultry|H5N1 evolved in 2020|Outbreak in seabird colonies in UK (2021)|Outbreaks in farmed birds|Case of bird flu in poultry worker in England|Sightings of dead/sick birds reported to agencies
+        D:H5N1 strain causing major poultry die-offs since late 1990s|Three seasonal influenza types in humans (H1N1, H3N2, influenza B)|US experiencing major H5N1 outbreak|Potential for temporary egg supply difficulties & price increases
+        R:England|Scotland|Wales|South America|US|UK
+        N:H5N1|Influenza viruses|Wild birds|Poultry|Seals|Sea lions|Dairy cattle|Ed Hutchinson
+        C:Avian influenza|Public health|Animal health|Global outbreak|Influenza viruses
+        S:neutral|concerned|informative|cautionary """,
+
+        "P:Shipping companies hesitant to return to Red Sea despite Gaza ceasefire|Increased shipping costs & delays due to rerouting|Ceasefire considered “fragile”|Long-term security needed for route resumption|Supply chain disruptions likely to continue in 2025;E:Houthi attacks on ~190 ships since Nov 2023|Ship diversions around Africa began Nov 2023|Tesla & Volvo temporarily suspended manufacturing due to component delays|Houthi leader warned of continued attacks Jan 20;D:12% of global trade normally passes through Red Sea|Suez Canal usage dropped from 26k (2023) to 13.2k (2024)|Shanghai-Rotterdam container cost surged from $4.4k (Jan) to $8k (Aug), then to $4.9k (Dec)|On-time container ship arrival dropped from 60% (2023) to 50% (2024)|Fuel use increased 33% on Africa route|Emissions increased by ~13.6M tonnes CO₂ (Dec 2023-Apr 2024)|Air freight CO₂ emissions 50x higher than container shipping;R:Red Sea|Bab al-Mandab Strait|Suez Canal|Africa (Southern Tip)|Europe|China|Gaza Strip|Netherlands (Rotterdam);N:CMA CGM|Houthi militants|Tesla|Volvo|Abdul-Malik al-Houthi|Gokcay Balci;C:Shipping|Supply Chain|Geopolitics|Environment|Economics;S:negative ",
+
+        "P:Support for authoritarianism increasing among UK Gen Z|Disillusionment with current political systems|Distrust of politicians prioritizing self/corporate interests|Young people want engagement but feel unheard|Democracy seen as potentially improvable, not inherently rejected|Need for political/media literacy & democratic education|Youth desire systemic political reform|Democracy extends beyond governance to social organization;S:concerned|negative|hopeful;E:Channel 4 research shows 52% Gen Z favor strong leader bypassing Parliament|Open Society Foundations study: 42% global youth see military rule as good|12 discussion groups conducted with 101 young people|Youth network formed to re-imagine democracy;D:2000 UK 13-27 year olds surveyed|86% of young people still want to live in a democracy|73% of Gen Z view democracy positively|Liam (Sunderland) highlights lack of democratic education|Chloe (Liverpool) describes performative politician engagement;R:UK|Europe|Global;N:Gen Z|Melissa Butcher|Channel 4|Open Society Foundations|Cumberland Lodge|Green Party|DimaBerlin/Shutterstock;C:Politics|Youth Engagement|Democracy|Authoritarianism|Social Issues|Education|Mental Health|Climate Change|Artificial Intelligence|Housing ",
+
+        "P:Trump invites influencers to briefings|Broadening media access is a good idea in principle|Concerns about repeating past briefing practices|Potential to undermine public trust in journalism|Polarization of media expected to increase|Legal threats to journalists may increase|Rise of partisan influencers with dangerous language;E:Karoline Leavitt announces new briefing policy|White House received 7,400 accreditation applications|Trump favored friendly media (Fox News) in first term|Breitbart & Axios selected for first questions|Acosta leaves CNN;D:7400 applications received|2017-2021: Trump's first term|January 28: Acosta's final CNN broadcast;R:United States|White House;N:Donald Trump|Karoline Leavitt|Elon Musk|Tucker Carlson|Jim Acosta|George Stephanopoulos|Taylor Lorenz|Ken Klippenstein|Mark Zuckerberg|Steven Buckley;C:Politics|Media|Journalism|Misinformation|Social Media;S:negative|concerned|critical"
+    ]
+    [ic(digestors.parse_compressed_digest(resp)) for resp in responses]
 
 @log_runtime
 def test_run_async():
@@ -322,11 +411,181 @@ def test_run_async():
     asyncio.run(orch.run_async())
     orch.close()
 
+lower_case = lambda items: {"$in": [item.lower() for item in items]} if isinstance(items, list) else items.lower()
+case_insensitive = lambda items: {"$in": [re.compile(item, re.IGNORECASE) for item in items]} if isinstance(items, list) else re.compile(items, re.IGNORECASE)
+
+
+def download_beans():
+    orch = Orchestrator(
+        os.getenv("DB_REMOTE"),
+        os.getenv("DB_LOCAL"),
+        os.getenv("DB_NAME"), 
+        embedder_path=os.getenv("EMBEDDER_PATH"),    
+        digestor_path=os.getenv("DIGESTOR_PATH")
+    )
+    beans = orch.remotesack.get_beans(
+        filter = {
+            "collected": { "$gte": (datetime.now() - timedelta(hours=8))},
+            "gist": {"$exists": True},
+            "highlights": {"$exists": True}
+        },
+        limit=256
+    )
+    to_write = [{"digest": bean.digest()} for bean in beans]
+    with open("embedder-test-data.json", "w") as file:
+        json.dump(to_write, file)
+
+def download_markdown(q: str = None, accuracy = DEFAULT_VECTOR_SEARCH_SCORE, keywords: str|list[str] = None, limit = 100):
+    orch = Orchestrator(
+        os.getenv("DB_REMOTE"),
+        os.getenv("DB_LOCAL"),
+        os.getenv("DB_NAME"), 
+        embedder_path=os.getenv("EMBEDDER_PATH"),    
+        digestor_path=os.getenv("DIGESTOR_PATH")
+    )
+    filter = {K_KIND: { "$ne": POST}}
+    if keywords: filter.update(
+        {
+            "$or": [
+                { "entities": case_insensitive(keywords) },
+                { "tags": case_insensitive(keywords) },
+                { "categories": case_insensitive(keywords) }
+            ]
+        }
+    )
+    projection = {K_EMBEDDING: 0, K_TEXT: 0}
+
+    if q:
+        beans = orch.remotesack.vector_search_beans(
+            embedding=orch.embedder.embed_query(f"query: {q}"),
+            min_score=accuracy,
+            filter=filter,
+            sort_by=NEWEST,
+            skip=0,
+            limit=100,
+            projection=projection
+        )
+    else:
+        beans = orch.remotesack.query_distinct_beans(filter, NEWEST, 0, 100, projection)
+
+    markdown = "\n\n".join([bean.digest() for bean in beans])
+
+    # markdown = ""
+    # for bean in beans:
+    #     markdown += bean.digest()
+    #     related = orch.remotesack.sample_related_beans(bean.url, limit=3, projection=projection)
+    #     if related:
+    #         markdown += "\n\n## Related News and Blogs:\n"
+    #         markdown += "\n\n".join(["##"+r.digest() for r in related])
+    #     markdown += "\n--------------------------------\n\n"
+
+    save_markdown(q, markdown)
+
+topics = {
+  "topics": [
+    {
+      "verdict": "Critical infrastructure’s cybersecurity is a hot mess, and apparently, everyone’s just hoping thoughts and prayers will fend off nation-state hackers.",
+      "keywords": [
+        "critical infrastructure",
+        "cybersecurity",
+        "Salt Typhoon",
+        "CISA",
+        "budget cuts",
+        "wishful thinking",
+        "nation-state actors"
+      ]
+    },
+    {
+      "verdict": "AI’s playing both hero and villain in cybersecurity, because who doesn’t love a tech savior that also hands out phishing kits like candy?",
+      "keywords": [
+        "AI",
+        "cybersecurity",
+        "phishing",
+        "deepfakes",
+        "human oversight",
+        "collaboration",
+        "tech double-cross"
+      ]
+    },
+    {
+      "verdict": "Ransomware’s got governments and retailers by the throat, but sure, let’s keep pretending a quick reboot will fix it all.",
+      "keywords": [
+        "ransomware",
+        "government",
+        "retail",
+        "Marks & Spencer",
+        "Qilin",
+        "incident response",
+        "denial"
+      ]
+    },
+    {
+      "verdict": "North Korean operatives are waltzing into remote jobs, because apparently, “What’s your take on Kim Jong Un?” is the only vibe check companies can muster.",
+      "keywords": [
+        "North Korea",
+        "remote work",
+        "identity verification",
+        "AI profiles",
+        "Kim Jong Un",
+        "corporate laziness"
+      ]
+    },
+    {
+      "verdict": "AI rights and neuro-privacy laws are popping up, because nothing screams “future” like arguing over whether your brain’s data deserves a lawyer.",
+      "keywords": [
+        "AI rights",
+        "neuro-privacy",
+        "cybersecurity law",
+        "ELVIS Act",
+        "algorithmic discrimination",
+        "legal circus"
+      ]
+    },
+    {
+      "verdict": "Cybersecurity pros are stressed to the gills and there’s no one to replace them, but sure, let’s just pile on more alerts to fix burnout.",
+      "keywords": [
+        "cybersecurity workforce",
+        "stress",
+        "skills shortage",
+        "burnout",
+        "training",
+        "well-being",
+        "management genius"
+      ]
+    },
+    {
+      "verdict": "AI-powered phishing is so slick it’s basically a Netflix special, but we’re still telling users to “just be careful” like that’s a strategy.",
+      "keywords": [
+        "AI-driven phishing",
+        "social engineering",
+        "MFA bypass",
+        "WebAuthn",
+        "user education",
+        "cybersecurity fairy tales"
+      ]
+    },
+    {
+      "verdict": "Cybersecurity debt’s piling up like bad life choices, but organizations keep buying shiny new tools instead of fixing their ancient, creaky systems.",
+      "keywords": [
+        "cybersecurity debt",
+        "outdated tools",
+        "misconfigurations",
+        "operational discipline",
+        "risk management",
+        "tech hoarding"
+      ]
+    }
+  ]
+}
+
 if __name__ == "__main__":
-    
     # test_run_async()
     # test_embedder()
     # test_digestor()
-    test_collection_and_download()
-    # test_run_async()
+    # test_digest_parser()
+    # test_collection_and_download()
+    test_run_async()
+    # topics['topics'][0]
+    # download_markdown("North Korean operatives generate $250 million to $600 million annually through remote IT job fraud (May 2, 2025).", accuracy=0.8)
+    # [download_markdown(q = topic['verdict'], limit = 50) for topic in topics['topics']]
     

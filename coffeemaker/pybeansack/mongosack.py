@@ -114,7 +114,7 @@ class Beansack:
         cursor = self.beanstore.find(filter = filter, projection = projection, sort=sort_by, skip = skip, limit=limit)
         return _deserialize_beans(cursor)
     
-    def sample_related_beans(self, url: str, filter: dict = None, limit: int = 0) -> list[Bean]:
+    def sample_related_beans(self, url: str, filter: dict = None, limit: int = 1, projection = {}) -> list[Bean]:
         match_filter = {K_ID: url}
         if filter:
             match_filter.update(filter)
@@ -134,7 +134,7 @@ class Beansack:
                 "$unwind": "$related_beans"
             },
             { 
-                "$sample": {"size": limit+1} 
+                "$sample": {"size": limit} 
             },
             {
                 "$match": {
@@ -142,44 +142,31 @@ class Beansack:
                 }
             },
             {
-                "$project": {
-                    "_id": "$related_beans._id",
-                    "url": "$related_beans.url",
-                    "source": "$related_beans.source",
-                    "title": "$related_beans.title",
-                    "kind": "$related_beans.kind",
-                    "image_url": "$related_beans.image_url",
-                    "author": "$related_beans.author",
-                    "created": "$related_beans.created",
-                    "collected": "$related_beans.collected",
-                    "updated": "$related_beans.updated",
-                    "tags": "$related_beans.tags",
-                    "summary": "$related_beans.summary",
-                    "cluster_id": "$related_beans.cluster_id",
-                    "likes": "$related_beans.likes",
-                    "comments": "$related_beans.comments",
-                    "shares": "$related_beans.shares"
+                "$replaceRoot": {
+                    "newRoot": "$related_beans"
                 }
+            },
+            {
+                "$project": projection
             },
             { "$sort": NEWEST_AND_TRENDING }
         ]
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
 
     def vector_search_beans(self, 
-            query: str = None,
-            embedding: list[float] = None, 
-            min_score = None, 
-            filter = None, 
-            sort_by = None,
-            skip = None,
-            limit = DEFAULT_VECTOR_SEARCH_LIMIT, 
-            projection = None
-        ) -> list[Bean]:
-        pipline = self._vector_search_pipeline(query, embedding, min_score, filter, sort_by, skip, limit, projection)
+        embedding: list[float] = None, 
+        min_score = None, 
+        filter = None, 
+        sort_by = None,
+        skip = None,
+        limit = DEFAULT_VECTOR_SEARCH_LIMIT, 
+        projection = None
+    ) -> list[Bean]:
+        pipline = self._vector_search_pipeline(embedding, min_score, filter, sort_by, skip, limit, projection)
         return _deserialize_beans(self.beanstore.aggregate(pipeline=pipline))
     
-    def count_vector_search_beans(self, query: str = None, embedding: list[float] = None, min_score = DEFAULT_VECTOR_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_VECTOR_SEARCH_LIMIT) -> int:
-        pipeline = self._count_vector_search_pipeline(query, embedding, min_score, filter, limit)
+    def count_vector_search_beans(self, embedding: list[float] = None, min_score = DEFAULT_VECTOR_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_VECTOR_SEARCH_LIMIT) -> int:
+        pipeline = self._count_vector_search_pipeline(embedding, min_score, filter, limit)
         result = list(self.beanstore.aggregate(pipeline))
         return result[0]['total_count'] if result else 0
     
@@ -192,7 +179,7 @@ class Beansack:
         result = self.beanstore.aggregate(self._text_search_pipeline(query, filter=filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True))
         return next(iter(result), {'total_count': 0})['total_count'] if result else 0
     
-    def get_unique_beans(self, filter, sort_by = None, skip = 0, limit = 0, projection = None):
+    def query_distinct_beans(self, filter, sort_by = None, skip = 0, limit = 0, projection = None):
         pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
     
@@ -231,14 +218,13 @@ class Beansack:
         # return _deserialize_beans(self.beanstore.aggregate(pipeline))
 
     def vector_search_tags(self, 
-            query: str = None,
-            embedding: list[float] = None, 
-            min_score = None, 
-            beans_in_scope = None, 
-            exclude_from_result = None,
-            skip = None,
-            limit = DEFAULT_VECTOR_SEARCH_LIMIT
-        ) -> list[Bean]:
+        embedding: list[float] = None, 
+        min_score = None, 
+        beans_in_scope = None, 
+        exclude_from_result = None,
+        skip = None,
+        limit = DEFAULT_VECTOR_SEARCH_LIMIT
+    ) -> list[Bean]:
 
         match_filter = {K_TAGS: {"$exists": True}}
         if beans_in_scope:
@@ -247,7 +233,7 @@ class Beansack:
             {
                 "$search": {
                     "cosmosSearch": {
-                        "vector": embedding or self.embedder.embed_query(query),
+                        "vector": embedding,
                         "path":   K_EMBEDDING,
                         "filter": match_filter,
                         "k":      DEFAULT_VECTOR_SEARCH_LIMIT,
@@ -356,13 +342,13 @@ class Beansack:
             pipeline.append({"$project": projection})
         return pipeline
    
-    def _vector_search_pipeline(self, text, embedding, min_score, filter, sort_by, skip, limit, projection):    
+    def _vector_search_pipeline(self, embedding, min_score, filter, sort_by, skip, limit, projection):    
         sort_by = sort_by or { "search_score": -1 }
         pipeline = [            
             {
                 "$search": {
                     "cosmosSearch": {
-                        "vector": embedding or self.embedder.embed_query(text),
+                        "vector": embedding,
                         "path":   K_EMBEDDING,
                         "filter": filter or {},
                         "k":      DEFAULT_VECTOR_SEARCH_LIMIT if limit > 1 else 1, # if limit is 1, then we don't need to search for more than 1
@@ -379,7 +365,16 @@ class Beansack:
                 "$sort": sort_by
             },
             {
-                "$group": CLUSTER_GROUP
+                "$group": {
+                    "_id": { "cluster_id": "$cluster_id" },
+                    "search_score": { "$first": "$search_score" },
+                    "created": { "$first": "$created" },
+                    "updated": { "$first": "$updated" },
+                    "doc": { "$first": "$$ROOT" }
+                }
+            },
+            {
+                "$replaceRoot": { "newRoot": "$doc" }
             },
             {   
                 "$sort": sort_by
@@ -393,8 +388,8 @@ class Beansack:
             pipeline.append({"$project": projection})
         return pipeline
     
-    def _count_vector_search_pipeline(self, text, embedding, min_score, filter, limit):
-        pipline = self._vector_search_pipeline(text, embedding, min_score, filter, None, None, limit, None)
+    def _count_vector_search_pipeline(self, embedding, min_score, filter, limit):
+        pipline = self._vector_search_pipeline(embedding, min_score, filter, None, None, limit, None)
         pipline.append({ "$count": "total_count"})
         return pipline
     

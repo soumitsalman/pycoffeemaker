@@ -1,16 +1,19 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from itertools import chain
 import json
 import logging
 import os
+from typing import Callable
 from urllib.parse import urljoin, urlparse
 from datetime import datetime, timezone
 import time
 import aiohttp
 import feedparser
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator
-from newspaper import Article
-import asyncpraw
+import praw
+import prawcore
 import requests
 from retry import retry
 import tldextract
@@ -23,14 +26,13 @@ from icecream import ic
 log = logging.getLogger(__name__)
 
 REDDIT = "Reddit"
-
 HACKERNEWS = "ycombinator"
 HACKERNEWS_TOP_STORIES = "https://hacker-news.firebaseio.com/v0/topstories.json"
 HACKERNEWS_NEW_STORIES = "https://hacker-news.firebaseio.com/v0/newstories.json"
 # HACKERNEWS_JOB_STORIES = "https://hacker-news.firebaseio.com/v0/jobstories.json"
 HACKERNEWS_ASK_STORIES = "https://hacker-news.firebaseio.com/v0/askstories.json"
 HACKERNEWS_SHOW_STORIES = "https://hacker-news.firebaseio.com/v0/showstories.json"
-HACKERNEWS_STORIES = [HACKERNEWS_TOP_STORIES, HACKERNEWS_NEW_STORIES, HACKERNEWS_ASK_STORIES, HACKERNEWS_SHOW_STORIES]
+HACKERNEWS_STORIES_URLS = [HACKERNEWS_TOP_STORIES, HACKERNEWS_NEW_STORIES, HACKERNEWS_ASK_STORIES, HACKERNEWS_SHOW_STORIES]
 
 RSS_REQUEST_HEADERS = {
     "User-Agent": USER_AGENT,
@@ -48,84 +50,25 @@ HTML_REQUEST_HEADERS = {
     'Accept-encoding': 'gzip, deflate',
     'Accept': "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5,application/signed-exchange;v=b3;q=0.9"
 }
-
+MD_OPTIONS = {
+    "ignore_images": True,
+    "escape_html": False,
+    # "skip_external_links": True,
+    # "skip_internal_links": True, 
+}
 EXCLUDED_URL_PATTERNS = [
     r'\.(png|jpeg|jpg|gif|webp|mp4|avi|mkv|mp3|wav|pdf)$',
     r'(v\.redd\.it|i\.redd\.it|www\.reddit\.com\/gallery|youtube\.com|youtu\.be)',
     r'\/video(s)?\/',
     r'\/image(s)?\/',
-]
+] 
+POST_DOMAINS = ["reddit", "redd", "linkedin", "x", "twitter", "facebook", "ycombinator"]
+BLOG_URLS = ["medium.com",  "substack.", "wordpress.", "blogspot.", "newsletter.", "developers.", "blogs.", "blog.", ".so/", ".dev/", ".io/",  ".to/", ".rs/", ".tech/", ".ai/", ".blog/", "/blog/" ]
+BLOG_SITENAMES = ["blog", "magazine", "newsletter", "weekly"]
+NEWS_SITENAMES = ["daily", "wire", "times", "today",  "news", "the "]
 
-# GENERIC URL COLLECTOR CONFIG
-BASE_EXCLUDED_TAGS = ["script", "style", "nav", "footer", "navbar", "comment", "contact",
-"img", "audio", "video", "source", "track", "iframe", "object", "embed", "param", "picture", "figure",
-"svg", "canvas", "aside", "form", "input", "button", "textarea", "select", "option", "optgroup", "ins"]
-MD_SELECTOR = ", ".join([
-    "article", 
-    "main", 
-    ".article-body", 
-    ".article", 
-    ".article-content", 
-    ".main-article", 
-    ".content"
-    "[class~='main']"
-])
-MD_EXCLUDED_SELECTOR = ", ".join([
-    ".ads-banner", 
-    ".adsbygoogle", 
-    ".advertisement", 
-    ".advertisement-holder", 
-    ".post-bottom-ad",
-    "[class~='sponsor']", 
-    "[id~='sponsor']", 
-    "[class~='advertorial']", 
-    "[id~='advertorial']", 
-    "[class~='marketing-page']",
-    "[id~='marketing-page']",
-    ".article-sharing", 
-    ".link-embed", 
-    ".article-footer", 
-    ".related-stories", 
-    ".related-posts", 
-    "[id~='related-article']", 
-    "#related-articles", 
-    ".comments", 
-    "#comments", 
-    ".comments-section", 
-    ".md-sidebar", 
-    ".sidebar", 
-    ".image-holder", 
-    ".category-label", 
-    ".InlineImage-imageEmbedCredit", 
-    ".metadata", 
-])
-MD_EXCLUDED_TAGS = BASE_EXCLUDED_TAGS + ["link", "meta"]
-MD_OPTIONS = {
-    "ignore_images": True,
-    "escape_html": False,
-    "skip_external_links": True,
-    "skip_internal_links": True, 
-}  
-METADATA_EXTRACTION_SCHEMA = {
-    "name": "Site Metadata",
-    "baseSelector": "html",
-    "fields": [
-        # all body selectors
-        {"name": "title", "type": "text", "selector": "h1, title"},
-        # all meta selectors
-        # {"name": "description", "type": "attribute", "selector": "meta[name='description']", "attribute": "content"},
-        {"name": "meta_title", "type": "attribute", "selector": "meta[property='og:title'], meta[name='og:title']", "attribute": "content"},
-        {"name": "published_time", "type": "attribute", "selector": "meta[property='rnews:datePublished'], meta[property='article:published_time'], meta[name='OriginalPublicationDate'], meta[itemprop='datePublished'], meta[property='og:published_time'], meta[name='article_date_original'], meta[name='publication_date'], meta[name='sailthru.date'], meta[name='PublishDate'], meta[property='pubdate']", "attribute": "content"},
-        {"name": "top_image", "type": "attribute", "selector": "meta[property='og:image'], meta[property='og:image:url'], meta[name='og:image:url'], meta[name='og:image']", "attribute": "content"},
-        {"name": "kind", "type": "attribute", "selector": "meta[property='og:type']", "attribute": "content"},
-        {"name": "author", "type": "attribute", "selector": "meta[name='author'], meta[name='dc.creator'], meta[name='byl'], meta[name='byline']", "attribute": "content"},
-        {"name": "site_name", "type": "attribute", "selector": "meta[name='og:site_name'], meta[property='og:site_name']", "attribute": "content"},
-        # all link selectors
-        {"name": "favicon", "type": "attribute", "selector": "link[rel='shortcut icon'][type='image/png'], link[rel='icon']", "attribute": "href"},
-        {"name": "rss_feed", "type": "attribute", "selector": "link[type='application/rss+xml']", "attribute": "href"},
-    ]
-}
-SCRAPER_BATCH_SIZE = os.cpu_count()*os.cpu_count()
+# assigning 16 io threads per cpu
+SCRAPER_BATCH_SIZE = 16*os.cpu_count()
 
 # general utilities
 now = lambda: datetime.now(timezone.utc)
@@ -134,7 +77,7 @@ reddit_submission_permalink = lambda permalink: f"https://www.reddit.com{permali
 hackernews_story_metadata = lambda id: f"https://hacker-news.firebaseio.com/v0/item/{id}.json"
 hackernews_story_permalink = lambda id: f"https://news.ycombinator.com/item?id={id}"
 
-extract_source = lambda url: extract_domain(url) or extract_base_url(url)
+extract_source = lambda url: (extract_domain(url) or extract_base_url(url)).strip().lower()
 
 def extract_base_url(url: str) -> str:
     try: return urlparse(url).netloc
@@ -183,12 +126,33 @@ def _clean_markdown(markdown: str) -> str:
             return "\n".join(lines[i+1:])
     return markdown
 
-POST_DOMAINS = ["reddit", "redd", "linkedin", "x", "twitter", "facebook", "ycombinator"]
-BLOG_URLS = ["medium.com",  "substack.", "wordpress.", "blogspot.", "newsletter.", "developers.", "blogs.", "blog.", ".so/", ".dev/", ".io/",  ".to/", ".rs/", ".tech/", ".ai/", ".blog/", "/blog/" ]
-BLOG_SITENAMES = ["blog", "magazine", "newsletter", "weekly"]
-NEWS_SITENAMES = ["daily", "wire", "times", "today",  "news", "the "]
+async def _fetch_json_async(session: aiohttp.ClientSession, url: str) -> dict:
+    body = None
+    async with session.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT) as response:
+        response.raise_for_status()
+        body = await response.json()
+    return body
 
-def guess_type(url: str, source: str) -> str:
+def _fetch_json(content_url: str):
+    # @retry(tries=2, delay=10, jitter=(5, 10))
+    def _fetch():
+        resp = requests.get(content_url, headers=JSON_REQUEST_HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
+    try: return _fetch()
+    except Exception as e: 
+        log.warning("collection failed", extra={"source": content_url, "num_items": 1})
+        ic(content_url, e, e.__class__.__name__)
+
+merge_lists = lambda results: list(chain(*(r for r in results if r))) 
+
+def _batch_collect(collect: Callable, sources: list):
+    results = None
+    with ThreadPoolExecutor(max_workers=SCRAPER_BATCH_SIZE, thread_name_prefix="collector") as executor:
+        results = list(executor.map(collect, sources))
+    return results
+
+def _guess_type(url: str, source: str) -> str:
     """This is entirely heuristic to figure out if the url contains a news or a blog.
     This is the dumbest shit I ever wrote but it gets the job done for now."""
 
@@ -204,35 +168,45 @@ def guess_type(url: str, source: str) -> str:
 
     if "/news/" in url: return NEWS
 
-async def _fetch_json(session: aiohttp.ClientSession, url: str) -> dict:
-    body = None
-    async with session.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT) as response:
-        if response.status == 200: 
-            body = await response.json()
-    return body
-
-class Collector:
+class APICollector:
     md_generator: DefaultMarkdownGenerator = None
     reddit_client = None
 
     def __init__(self):  
         self.md_generator = DefaultMarkdownGenerator(options=MD_OPTIONS)
-        self.reddit_client = asyncpraw.Reddit(
-                check_for_updates=True,
-                client_id=os.getenv("REDDIT_APP_ID"),
-                client_secret=os.getenv("REDDIT_APP_SECRET"),
-                user_agent=USER_AGENT+" (by u/randomizer_000)",
-                username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
-                password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
-                timeout=TIMEOUT,
-                rate_limit_seconds=RATELIMIT_WAIT,
-            )
-    
-    async def close(self):
-        await self.reddit_client.close()
+        self.reddit_client = praw.Reddit(
+            check_for_updates=True,
+            client_id=os.getenv("REDDIT_APP_ID"),
+            client_secret=os.getenv("REDDIT_APP_SECRET"),
+            user_agent=USER_AGENT+" (by u/randomizer_000)",
+            username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
+            password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
+            timeout=TIMEOUT,
+            rate_limit_seconds=RATELIMIT_WAIT,
+        )
+
+    def collected_rssfeeds(self, feed_urls: list[str]) -> list[Bean]|list[tuple[Bean, Chatter]]:
+        return merge_lists(_batch_collect(self.collect_rssfeed, feed_urls))
+
+    def collect_rssfeed(self, url: str) -> list[Bean]|list[tuple[Bean, Chatter]]:
+        collected = None
+        try:
+            resp = requests.get(url, headers=RSS_REQUEST_HEADERS, timeout=TIMEOUT)  # Set timeout to 10 seconds
+            resp.raise_for_status()  # Raise exception for bad status codes
+            feed = feedparser.parse(BytesIO(resp.content))
+                    
+            if feed.entries: 
+                source = extract_source(feed.entries[0].link)
+                collected = [self._from_rssfeed(entry, source, NEWS) for entry in feed.entries]
+        except Exception as e:
+            ic(url, e)
+
+        if collected: log.info("collected", extra={"source": url, "num_items": len(feed.entries)})
+        else: log.warning("collection failed", extra={"source": url, "num_items": 1})
+        return collected
  
     ### rss feed related utilities  ###
-    async def collect_rssfeed(self, url: str, default_kind: str = NEWS) -> list[Bean]:
+    async def collect_rssfeed_async(self, url: str, default_kind: str = NEWS) -> list[Bean]|list[tuple[Bean, Chatter]]:
         try:
             collected = None
             async with aiohttp.ClientSession() as session:
@@ -242,6 +216,8 @@ class Collector:
                 if feed.entries:
                     source = extract_source(feed.feed.get('link') or feed.entries[0].link)
                     collected = [self._from_rssfeed(entry, source, default_kind) for entry in feed.entries]
+                else:
+                    log.warning("collection failed", extra={"source": url, "num_items": 1})
             return collected
         except Exception as e:
             log.warning("collection failed", extra={"source": url, "num_items": 1})
@@ -262,7 +238,7 @@ class Collector:
                 updated=created_time,
                 source=source,
                 title=entry.title,
-                kind=guess_type(entry.link, source) or default_kind,
+                kind=_guess_type(entry.link, source) or default_kind,
                 text=body,
                 author=entry.get('author'),        
                 image_url=_extract_main_image(entry)
@@ -281,35 +257,45 @@ class Collector:
         # TODO: ideally this should be done with crawler.arun("raw:"+html)
         return self.md_generator.generate_markdown(input_html=html).raw_markdown.strip()
     
-    ### reddit related utilities ###
-    async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
-        try:
-            return await self._collect_subreddit(subreddit_name, default_kind)
+    def collect_subreddits(self, subreddit_names: list[str]):
+        return merge_lists(_batch_collect(self.collect_subreddit, subreddit_names))
+    
+    def collect_subreddit(self, subreddit_name, default_kind: str = NEWS):
+        @retry(exceptions=(prawcore.exceptions.ResponseException), tries=2, delay=10, jitter=(5, 10))
+        def _collect():
+            sr = self.reddit_client.subreddit(subreddit_name)
+            return [self._from_reddit(post, subreddit_name, default_kind) for post in sr.hot(limit=25) if not _excluded_url(post.url)]
+        try: return _collect()
         except Exception as e:
             log.warning("collection failed", extra={"source": subreddit_name, "num_items": 1})
-            ic(subreddit_name, e)
-        
-    @retry(tries=2, delay=5, jitter=(0, 10))
-    async def _collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
-        subreddit = await self.reddit_client.subreddit(subreddit_name)
-        return [self._from_reddit(post, default_kind) 
-                async for post in subreddit.hot(limit=20) 
-                if not _excluded_url(post.url)]
+            ic(subreddit_name, e, e.__class__.__name__)            
+    
+    ### reddit related utilities ###
+    async def collect_subreddit_async(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
+        # @retry(tries=2, delay=5, jitter=(0, 10))
+        async def _collect():
+            subreddit = await self.reddit_client.subreddit(subreddit_name)
+            return [self._from_reddit(post, subreddit_name, default_kind) async for post in subreddit.hot(limit=25) if not _excluded_url(post.url)]
+        try: return await _collect()
+        except Exception as e:
+            log.warning("collection failed", extra={"source": subreddit_name, "num_items": 1})
+            ic(subreddit_name, e, e.__class__.__name__)
 
-    def _from_reddit(self, post, default_kind) -> tuple[Bean, Chatter]: 
-        subreddit = f"r/{post.subreddit.display_name}"
+    def _from_reddit(self, post, sr_name, default_kind) -> tuple[Bean, Chatter]: 
+        subreddit = f"r/{sr_name}"
         current_time = now()
         created_time = from_timestamp(post.created_utc)
+        chatter_link = reddit_submission_permalink(post.permalink)
 
         if post.is_self:    
-            url = reddit_submission_permalink(post.permalink)
+            url = chatter_link
             source = subreddit
             kind = POST
         else:
-            source = extract_base_url(post.url)
+            source = extract_source(post.url)
             if source:
                 url = post.url
-                kind = guess_type(url, source) or default_kind
+                kind = _guess_type(url, source) or default_kind
             else: # sometimes the links are itself a reddit post
                 url = reddit_submission_permalink(post.url)
                 kind = POST
@@ -328,13 +314,13 @@ class Collector:
                 text=post.selftext,
                 author=post.author.name if post.author else None,
                 # fill in the defaults
-                shared_in=[subreddit, REDDIT],
+                shared_in=[chatter_link],
                 likes=post.score,
                 comments=post.num_comments
             ),
             Chatter(
                 url=url,
-                chatter_url=reddit_submission_permalink(post.permalink),            
+                chatter_url=chatter_link,            
                 source=REDDIT,                        
                 channel=subreddit,
                 collected=current_time,
@@ -343,27 +329,27 @@ class Collector:
             )
         )
     
-    def _extract_submission_url(post: asyncpraw.models.Submission) -> str:
-        if post.is_self:
-            return reddit_submission_permalink(post.permalink)
-        # if the shared link itself it a reddit submission then url will not have a base url
-        if extract_base_url(post.url):
-            return post.url
-        return reddit_submission_permalink(post.url)
-    
     ### hackernews related utilities ###
-    async def collect_ychackernews(self, default_kind: str = BLOG) -> list[tuple[Bean, Chatter]]:
+    async def collect_ychackernews_async(self) -> list[tuple[Bean, Chatter]]:
         try:
             async with aiohttp.ClientSession() as session:
-                entry_ids = await asyncio.gather(*[_fetch_json(session, ids_url) for ids_url in HACKERNEWS_STORIES])
+                entry_ids = await asyncio.gather(*[_fetch_json(session, ids_url) for ids_url in HACKERNEWS_STORIES_URLS])
                 entry_ids = set(chain(*entry_ids))
                 stories = await asyncio.gather(*[_fetch_json(session, hackernews_story_metadata(id)) for id in entry_ids])
-                collected = [self._from_hackernews_story(story, default_kind) for story in stories if story and not _excluded_url(story.get('url'))]
+                collected = [self._from_hackernews_story(story, BLOG) for story in stories if story and not _excluded_url(story.get('url'))]
             return collected
         except Exception as e:
             log.warning("collection failed", extra={"source": HACKERNEWS, "num_items": 1})
             ic(HACKERNEWS, e)
-        
+
+    def collect_ychackernews(self) -> list[tuple[Bean, Chatter]]:
+        ids = merge_lists(_batch_collect(_fetch_json, HACKERNEWS_STORIES_URLS))
+        stories = _batch_collect(_fetch_json, [hackernews_story_metadata(id) for id in ids])
+        return _batch_collect(
+            lambda story: self._from_hackernews_story(story, BLOG), 
+            [story for story in stories if story and not _excluded_url(story.get('url'))]
+        )
+    
     def _from_hackernews_story(self, story: dict, default_kind: str) -> tuple[Bean, Chatter]:
         # either its a shared url or it is a text
         current_time = now()
@@ -372,8 +358,8 @@ class Collector:
         id = story['id']
         if story.get('url'):
             url = story['url']
-            source = extract_base_url(url)
-            kind = guess_type(url, source) or default_kind
+            source = extract_source(url)
+            kind = _guess_type(url, source) or default_kind
         else:
             url = hackernews_story_permalink(id)
             source = HACKERNEWS           
@@ -393,7 +379,7 @@ class Collector:
                 text=self._generate_markdown(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
                 author=story.get('by'),
                 # fill in the defaults
-                shared_in=[HACKERNEWS],
+                shared_in=[hackernews_story_permalink(id)],
                 likes=story.get('score'),
                 comments=len(story.get('kids', []))
             ), 
@@ -408,6 +394,70 @@ class Collector:
             )
         )
     
+# GENERIC URL COLLECTOR CONFIG
+BASE_EXCLUDED_TAGS = ["script", "style", "nav", "footer", "navbar", "comment", "contact",
+"img", "audio", "video", "source", "track", "iframe", "object", "embed", "param", "picture", "figure",
+"svg", "canvas", "aside", "form", "input", "button", "textarea", "select", "option", "optgroup", "ins"]
+MD_SELECTOR = ", ".join([
+    "article", 
+    "main", 
+    ".article-body", 
+    ".article", 
+    ".article-content", 
+    ".main-article", 
+    ".content"
+    "[class~='main']"
+])
+MD_EXCLUDED_SELECTOR = ", ".join([
+    ".ads-banner", 
+    ".adsbygoogle", 
+    ".advertisement", 
+    ".advertisement-holder", 
+    ".post-bottom-ad",
+    "[class~='sponsor']", 
+    "[id~='sponsor']", 
+    "[class~='advertorial']", 
+    "[id~='advertorial']", 
+    "[class~='marketing-page']",
+    "[id~='marketing-page']",
+    ".article-sharing", 
+    ".link-embed", 
+    ".article-footer", 
+    ".related-stories", 
+    ".related-posts", 
+    "[id~='related-article']", 
+    "#related-articles", 
+    ".comments", 
+    "#comments", 
+    ".comments-section", 
+    ".md-sidebar", 
+    ".sidebar", 
+    ".image-holder", 
+    ".category-label", 
+    ".InlineImage-imageEmbedCredit", 
+    ".metadata", 
+])
+MD_EXCLUDED_TAGS = BASE_EXCLUDED_TAGS + ["link", "meta"] 
+METADATA_EXTRACTION_SCHEMA = {
+    "name": "Site Metadata",
+    "baseSelector": "html",
+    "fields": [
+        # all body selectors
+        {"name": "title", "type": "text", "selector": "h1, title"},
+        # all meta selectors
+        # {"name": "description", "type": "attribute", "selector": "meta[name='description']", "attribute": "content"},
+        {"name": "meta_title", "type": "attribute", "selector": "meta[property='og:title'], meta[name='og:title']", "attribute": "content"},
+        {"name": "published_time", "type": "attribute", "selector": "meta[property='rnews:datePublished'], meta[property='article:published_time'], meta[name='OriginalPublicationDate'], meta[itemprop='datePublished'], meta[property='og:published_time'], meta[name='article_date_original'], meta[name='publication_date'], meta[name='sailthru.date'], meta[name='PublishDate'], meta[property='pubdate']", "attribute": "content"},
+        {"name": "top_image", "type": "attribute", "selector": "meta[property='og:image'], meta[property='og:image:url'], meta[name='og:image:url'], meta[name='og:image']", "attribute": "content"},
+        {"name": "kind", "type": "attribute", "selector": "meta[property='og:type']", "attribute": "content"},
+        {"name": "author", "type": "attribute", "selector": "meta[name='author'], meta[name='dc.creator'], meta[name='byl'], meta[name='byline']", "attribute": "content"},
+        {"name": "site_name", "type": "attribute", "selector": "meta[name='og:site_name'], meta[property='og:site_name']", "attribute": "content"},
+        # all link selectors
+        {"name": "favicon", "type": "attribute", "selector": "link[rel='shortcut icon'][type='image/png'], link[rel='icon']", "attribute": "href"},
+        {"name": "rss_feed", "type": "attribute", "selector": "link[type='application/rss+xml']", "attribute": "href"},
+    ]
+}
+
 class WebScraper:    
     browser_config = None
 
@@ -496,7 +546,7 @@ class WebScraper:
         if _excluded_url(url): return
         async with AsyncWebCrawler(config=self.browser_config) as crawler:
             parsed_result = await crawler.arun(url=url, config=WebScraper._run_config(collect_metadata))
-            result = Collector._package_result(parsed_result)
+            result = APICollector._package_result(parsed_result)
         return result
 
     async def scrape_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:

@@ -63,7 +63,8 @@ class Bean(BaseModel):
     gist: Optional[str] = None
     categories: Optional[list[str]] = None
     entities: Optional[list[str]] = None
-    locations: Optional[list[str]] = None
+    regions: Optional[list[str]] = None
+    sentiments: Optional[list[str]] = None
     topic: Optional[str] = None
     summary: Optional[str] = None
     highlights: Optional[list[str]] = None
@@ -84,19 +85,20 @@ class Bean(BaseModel):
     search_score: Optional[float|int] = None
 
     def digest(self) -> str:
-        lines = [
-            "# "+(self.gist or self.title),
-            "**Publish Date**: " + (self.created or self.collected).strftime('%Y-%m-%d %H:%M:%S')
-        ]
-        if self.categories: lines.append("**Categories**: " + ', '.join(self.categories))
-        if self.entities: lines.append("**Mentions**: " + ', '.join(self.entities))
-        if self.topic: lines.append("**Topic: " + self.topic)
-        if self.locations: lines.append("**Location**: " + ', '.join(self.locations))
-        if self.summary: lines.append(self.summary)
-        if self.highlights: lines.extend(["- "+item for item in self.highlights])
-        if self.insight: lines.append("**Actionable Insight**: "+ self.insight)
+        return self.summary
+        # lines = [
+        #     "# "+(self.gist or self.title),
+        #     "**Publish Date**: " + (self.created or self.collected).strftime('%Y-%m-%d %H:%M:%S')
+        # ]
+        # if self.categories: lines.append("**Categories**: " + ', '.join(self.categories))
+        # if self.entities: lines.append("**Mentions**: " + ', '.join(self.entities))
+        # if self.topic: lines.append("**Topic: " + self.topic)
+        # if self.regions: lines.append("**Location**: " + ', '.join(self.regions))
+        # if self.summary: lines.append(self.summary)
+        # if self.highlights: lines.extend(["- "+item for item in self.highlights])
+        # if self.insight: lines.append("**Actionable Insight**: "+ self.insight)
 
-        return "\n\n".join(lines)
+        # return "\n".join(lines)
     
     class Config:
         populate_by_name = True

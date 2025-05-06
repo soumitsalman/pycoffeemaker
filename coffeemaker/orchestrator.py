@@ -7,16 +7,16 @@ from asyncio import Queue
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.models import *
-from coffeemaker.collectors.collector import Collector, HACKERNEWS, REDDIT, WebScraper
-from coffeemaker.nlp import digestors, embedders
+from coffeemaker.collectors.collector import APICollector, HACKERNEWS, REDDIT, WebScraper
+from coffeemaker.nlp import digestors, embedders, utils
 from pymongo import UpdateOne
 import os
 
 log = logging.getLogger(__name__)
 
-QUEUE_BATCH_SIZE = 256 # os.cpu_count()*os.cpu_count()
+QUEUE_BATCH_SIZE = 16*os.cpu_count()
 END_OF_STREAM = "END_OF_STREAM"
-MAX_CLUSTER_SIZE = 20
+MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 256))
 
 # MIN_WORDS_THRESHOLD = 150
 MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 200 # min words needed to not download the body
@@ -31,9 +31,6 @@ use_summary = lambda text: text and len(text.split()) >= MIN_WORDS_THRESHOLD_FOR
 storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
 indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
 downloadables = lambda beans: [bean for bean in beans if is_downloadable(bean)] if beans else beans
-
-merge_tags = lambda old_tags, new_tags: digestors.unique_items(old_tags + new_tags) if (old_tags and new_tags) else (old_tags or new_tags)
-first_n = lambda items, n: items[:n] if items else items
 
 def log_runtime(func):
     def wrapper(*args, **kwargs):
@@ -50,6 +47,18 @@ def log_runtime_async(func):
         log.info("execution time", extra={"source": func.__name__, "num_items": int((datetime.now() - start_time).total_seconds())})
         return result
     return wrapper
+
+def log_beans(level, msg, beans: list[Bean]):
+    source_counts = {}
+    for bean in beans:
+        source_counts[bean.source] = source_counts.get(bean.source, 0) + 1
+        if not bean.source.strip(): ic(bean.url)
+    
+    if level == logging.INFO: func = log.info
+    elif level == logging.WARNING or logging.WARN: func = log.warning
+    elif level == logging.ERROR: func = log.error
+    else: func = log.debug
+    [func(msg, extra={"source": source, "num_items": count}) for source, count in source_counts.items()]
 
 def _read_sources(file: str) -> list[str]:
     with open(file, 'r') as file:
@@ -97,22 +106,20 @@ class Orchestrator:
     def new_beans(self, beans: list[Bean]) -> list[Bean]:
         if not beans: beans
 
-        new_items = {}
         try:
             exists = self.localsack.exists(beans)
         except Exception as e:
-            ic("new_beans query failed", e) # if the batch fails then don't process any in that batch
             exists = [bean.url for bean in beans]
-
+            ic("new_beans query failed", e) # if the batch fails then don't process any in that batch
+            
+        beans = list({bean.url: bean for bean in beans if bean.source and (bean.url not in exists)}.values())
         for bean in beans:
-            if bean.url not in exists:                
-                bean.id = bean.url
-                bean.created = bean.created or bean.collected
-                bean.updated = self.run_batch_time or bean.updated or bean.collected
-                bean.tags = None
-                bean.cluster_id = bean.url
-                new_items[bean.url] = bean
-        return list(new_items.values())
+            bean.id = bean.url
+            bean.created = bean.created or bean.collected
+            bean.updated = self.run_batch_time or bean.updated or bean.collected
+            bean.tags = None
+            bean.cluster_id = bean.url
+        return beans
  
     def embed_beans(self, beans: list[Bean]) -> list[Bean]|None:   
         if not beans: return beans
@@ -140,21 +147,28 @@ class Orchestrator:
                     log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
                     continue
 
-                bean.gist = digest.gist
-                bean.categories = digest.domains
+                bean.summary = f"U:{bean.created.strftime('%Y-%m-%d')};"+digest.expr
+                bean.regions = digest.regions
                 bean.entities = digest.entities
-                bean.locations = digest.locations
-                bean.topic = digest.topic
-                bean.summary = digest.summary or bean.text
-                bean.highlights = digest.takeways
-                bean.insight = digest.insight
-                bean.tags = bean.entities
+                bean.categories = digest.categories
+                bean.sentiments = digest.sentiments
+                bean.tags = utils.merge_tags(digest.regions, digest.entities, digest.categories)
+                # bean.gist = digest.gist
+                # bean.categories = digest.domains
+                # bean.entities = digest.entities
+                # bean.locations = digest.regions
+                # bean.topic = digest.topic
+                # bean.summary = digest.summary or bean.text
+                # bean.highlights = digest.takeways
+                # bean.insight = digest.insight
+                # bean.tags = bean.entities
                 
         except Exception as e:
-            log.error("failed digesting", extra={"source": beans[0].source, "num_items": len(beans)})
+            # log.error("failed digesting", extra={"source": beans[0].source, "num_items": len(beans)})
+            log_beans(logging.ERROR, "failed digesting", beans)
             ic(e.__class__.__name__, e)
 
-        return [bean for bean in beans if bean.gist and bean.summary]  
+        return [bean for bean in beans if bean.summary]  
         
     def store_beans(self, source: str, beans: list[Bean]) -> list[Bean]|None:
         beans = storables(beans)
@@ -162,7 +176,8 @@ class Orchestrator:
         if beans:
             self.localsack.store_beans(beans)
             num_stored = self.remotesack.store_beans(beans)
-            log.info("stored", extra={"source": source, "num_items": num_stored})  
+            log_beans(logging.INFO, "stored", beans)
+            # log.info("stored", extra={"source": source or beans[0].source, "num_items": num_stored})  
         return beans if num_stored else None
             
     def store_chatters(self, chatters: list[Chatter]) -> list[Chatter]|None:
@@ -194,7 +209,7 @@ class Orchestrator:
         # clusters = self.find_clusters([bean.url for bean in beans])
         clusters = {bean.url: self.localsack.search_bean_cluster(bean.url, self.cluster_eps, limit=MAX_CLUSTER_SIZE) for bean in beans}
         clustered_count = self.update_clusters(clusters)
-        if clustered_count > len(beans): log.info("clustered", extra={"source": source, "num_items": clustered_count})
+        if clustered_count > len(beans): log.info("clustered", extra={"source": source or beans[0].source, "num_items": clustered_count})
                 
     def find_trend_ranks(self, urls: list[str] = None) -> list[ChatterAnalysis]|None:
         calculate_trend_score = lambda chatter_delta: 100*(chatter_delta.comments_change or 0) + 10*(chatter_delta.shares_change or 0) + (chatter_delta.likes_change or 0)
@@ -245,7 +260,7 @@ class Orchestrator:
 
     @log_runtime_async
     async def run_collections_async(self):
-        scraper = Collector()        
+        scraper = APICollector()        
         current_directory = os.path.dirname(os.path.abspath(__file__))
         rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
         subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
@@ -254,29 +269,27 @@ class Orchestrator:
         
         # awaiting on each group so that os is not overwhelmed by sockets
         log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        await self.collect_async(HACKERNEWS, scraper.collect_ychackernews())
+        await self.triage_collection(scraper.collect_ychackernews())
         log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
-        await asyncio.gather(*[self.collect_async(source, scraper.collect_subreddit(source)) for source in subreddits])
-        log.info("collecting", extra={"source": "rssfeed", "num_items": len(rssfeeds)})
-        await asyncio.gather(*[self.collect_async(source, scraper.collect_rssfeed(source)) for source in rssfeeds])
-        await scraper.close()
+        await self.triage_collection(scraper.collect_subreddits(subreddits))
+        log.info("collecting", extra={"source": "rssfeeds", "num_items": len(rssfeeds)})
+        await self.triage_collection(scraper.collected_rssfeeds(rssfeeds))
 
-    async def collect_async(self, source: str, collect: Awaitable[list[tuple[Bean, Chatter]]]):
-        collection = await collect
+    async def triage_collection(self, collection: list[tuple[Bean, Chatter]]|Awaitable[list[tuple[Bean, Chatter]]]):
+        if isinstance(collection, Awaitable): collection = await collection
         if not collection: return
 
         beans, chatters = zip(*collection)
         chatters = [chatter for chatter in chatters if chatter] if chatters else None
-        if chatters: 
-            self.localsack.store_chatters(chatters)
+        if chatters: self.localsack.store_chatters(chatters)
         
         beans = self.new_beans([bean for bean in beans if bean]) if beans else None
         if not beans: return
-        
-        log.info("collected", extra={"source": source, "num_items": len(beans)})   
+
+        log_beans(logging.INFO, "triaged", beans)
         needs_download = downloadables(beans)
-        await _enqueue_beans(self.download_queue, source, needs_download)   
-        await _enqueue_beans(self.index_queue, source, [bean for bean in beans if bean not in needs_download])
+        await _enqueue_beans(self.download_queue, None, needs_download)   
+        await _enqueue_beans(self.index_queue, None, [bean for bean in beans if bean not in needs_download])
 
     @log_runtime_async
     async def run_downloading_async(self):
@@ -297,10 +310,10 @@ class Orchestrator:
         
         downloaded_beans = indexables(beans)
         if len(downloaded_beans) < len(beans): 
-            log.info("download failed", extra={"source": source, "num_items": len(beans)-len(downloaded_beans)})
+            log_beans(logging.WARNING, "download failed", [bean for bean in beans if bean not in downloaded_beans])
         if downloaded_beans: 
-            log.info("downloaded", extra={"source": source, "num_items": len(downloaded_beans)})
-            await _enqueue_beans(self.index_queue, source, downloaded_beans)
+            log_beans(logging.INFO, "downloaded", downloaded_beans)
+            await _enqueue_beans(self.index_queue, source, downloaded_beans)            
         
     @log_runtime_async
     async def run_indexing_async(self):
@@ -317,7 +330,7 @@ class Orchestrator:
             # since the digest/summary is smaller and got generated through a text-gen model so it is more clean. 
             beans = self.new_beans(indexables(beans))
             beans = self.embed_beans(self.digest_beans(beans))
-            beans = await self.store_cluster_and_rank_beans_async(source, beans)
+            beans = await self.store_cluster_and_rank_beans_async(source or beans[0].source, beans)
             
             if beans: total_new_beans += len(beans)     
             self.index_queue.task_done()

@@ -19,15 +19,21 @@ CONTEXT_LEN = 8192
 BATCH_SIZE = int(os.getenv("DIGESTOR_BATCH_SIZE", os.cpu_count()))
 NUM_THREADS = int(os.getenv("DIGESTOR_NUM_THREADS", os.cpu_count()))
 
+
 class Digest(BaseModel):
-    gist: Optional[str] = Field(default=None)
-    domains: Optional[list[str]] = Field(default=None)
+    expr: str
+    keypoints: Optional[list[str]] = Field(default=None)
+    keyevents: Optional[list[str]] = Field(default=None)
+    datapoints: Optional[list[str]] = Field(default=None)
+    categories: Optional[list[str]] = Field(default=None)
     entities: Optional[list[str]] = Field(default=None)
-    locations: Optional[list[str]] = Field(default=None)
+    regions: Optional[list[str]] = Field(default=None)
+    sentiments: Optional[list[str]] = Field(default=None)
+
+    gist: Optional[str] = Field(default=None)
     topic: Optional[str] = Field(default=None)
     summary: Optional[str] = Field(default=None)
-    takeways: Optional[list[str]] = Field(default=None)
-    insight: Optional[str] = Field(default=None)
+    insight: Optional[str] = Field(default=None)    
 
 class Digestor(ABC):
     @abstractmethod
@@ -41,54 +47,107 @@ class Digestor(ABC):
         if isinstance(input, str): return self.run(input)
         else: return self.run_batch(input)
 
-parse_list = lambda field: [item.strip() for item in field.split(',')] if isinstance(field, str) else field
-unique_items = lambda items: list({item.strip().lower(): item for item in items}.values()) if items else items
 
-def json_to_digest(response: str):  
+
+def parse_json(response: str):  
     try:      
         response = json.loads(response[response.find('{'):response.rfind('}')+1])
         return Digest(
             summary=response.get('summary'),
-            highlights=response.get('highlights'),
-            title=response.get('title'),
-            names=unique_items(parse_list(response.get('names'))),
-            domains=unique_items(parse_list(response.get('domains'))),
+            highlights=response.get('keypoints'),
+            title=response.get('gist'),
+            names=distinct_items(split_parts(response.get('entities'))),
+            domains=distinct_items(split_parts(response.get('categories'))),
         )
     except json.JSONDecodeError as e:
         ic(e, response)
         return None
     
-_MARKDOWN_START = "```markdown"
-_MARKDOWN_END="```"
-def markdown_to_digest(response: str):
+M_GIST = "# GIST"
+M_CATEGORIES = "# DOMAINS"
+M_ENTITIES = "# ENTITIES"
+M_TOPIC = "# TOPIC"
+M_REGIONS = "# REGIONS"
+M_SUMMARY = "# SUMMARY"
+M_KEYPOINTS = "# KEY POINTS"
+M_KEYEVENTS = "# KEY EVENTS"
+M_DATAPOINTS = "# KEY POINTS"
+M_INSIGHT = "# ACTIONABLE INSIGHT"
+M_FIELDS = [M_GIST, M_CATEGORIES, M_ENTITIES, M_TOPIC, M_REGIONS, M_SUMMARY, M_KEYPOINTS, M_KEYEVENTS, M_DATAPOINTS, M_INSIGHT]
+M_START = "```markdown"
+M_END="```"
+UNDETERMINED = "N/A"
+def parse_markdown(response: str):
     digest = Digest()
-    response = response.strip().removeprefix(_MARKDOWN_START).removesuffix(_MARKDOWN_END).strip()
+    response = response.strip().removeprefix(M_START).removesuffix(M_END).strip()
     last = None
     for line in response.splitlines():
         line = line.strip()
         if not line or line == UNDETERMINED: continue
 
-        if any(field in line for field in DIGEST_FIELDS):
+        if any(field in line for field in M_FIELDS):
             last = line
-        elif GIST in last:
+        elif M_GIST in last:
             digest.gist = line
-        elif DOMAINS in last:
-            digest.domains = parse_list(line)
-        elif ENTITIES in last:
-            digest.entities = parse_list(line)
-        elif TOPIC in last:
+        elif M_CATEGORIES in last:
+            digest.categories = split_parts(line)
+        elif C_ENTITIES in last:
+            digest.entities = split_parts(line)
+        elif M_TOPIC in last:
             digest.topic = line 
-        elif LOCATION in last:
-            digest.locations = parse_list(line)
-        elif SUMMARY in last:
+        elif C_REGIONS in last:
+            digest.regions = split_parts(line)
+        elif M_SUMMARY in last:
             digest.summary = (digest.summary+"\n"+line) if digest.summary else line
-        elif TAKEAWAYS in last:
-            if not digest.takeways: digest.takeways = []
-            digest.takeways.append(line.removeprefix("- ").removeprefix("* "))
-        elif INSIGHT in last:
+        elif C_KEYPOINTS in last:
+            if not digest.keypoints: digest.keypoints = []
+            digest.keypoints.append(line.removeprefix("- ").removeprefix("* "))
+        elif M_INSIGHT in last:
             digest.insight = line
 
     return digest   
+
+C_KEYPOINTS = "P:"
+C_KEYEVENTS = "E:"
+C_DATAPOINTS = "D:"
+C_REGIONS = "R:"
+C_ENTITIES = "N:"
+C_CATEGORIES = "C:"
+C_SENTIMENTS = "S:"
+COMPRESSED_FIELDS = [C_KEYPOINTS, C_KEYEVENTS, C_DATAPOINTS, C_REGIONS, C_ENTITIES, C_CATEGORIES, C_SENTIMENTS]
+
+def parse_compressed_digest(response: str) -> Digest:
+    response = response.strip()
+    if not response: return
+    
+    digest = Digest(expr = "")
+    parts = [part for part in split_parts(response, r'[;\|\n]+') if part != UNDETERMINED]
+    last = None
+    for part in parts:
+        prefix = next((field for field in COMPRESSED_FIELDS if part.startswith(field)), None)
+
+        if prefix:
+            part = part.removeprefix(prefix)
+            last = prefix
+            if part == UNDETERMINED: continue # skip
+            digest.expr += f";{part}" if digest.expr else part
+        else:
+            digest.expr += f"|{part}"
+
+        if last == C_REGIONS:
+            if not digest.regions: digest.regions = []
+            digest.regions.append(part)
+        if last == C_ENTITIES:
+            if not digest.entities: digest.entities = []
+            digest.entities.append(part)
+        if last == C_CATEGORIES:
+            if not digest.categories: digest.categories = []
+            digest.categories.append(part)
+        if last == C_SENTIMENTS:
+            if not digest.sentiments: digest.sentiments = []
+            digest.sentiments.append(part)
+
+    return digest
 
 def create_prompt_for_tuned_model(input_text: str, use_short_digest: bool): 
     template = TUNED_MODEL_DIGEST_INST if use_short_digest else TUNED_MODEL_DIGEST_INST
@@ -125,21 +184,21 @@ class LlamaCppDigestor(Digestor):
         return self.model.create_chat_completion(
             messages=create_prompt_for_tuned_model(input_text=text),
             max_tokens=max_tokens,
-            temperature=0.1,
+            temperature=0.3,
             seed=666
         )['choices'][0]['message']['content'].strip()              
   
     def run(self, text: str) -> Digest:
         with self.lock:
             resp = self._run(truncate(text, self.context_len//2))
-            digest = markdown_to_digest(resp)  
+            digest = parse_markdown(resp)  
         return digest
     
     def run_batch(self, texts: list[str]) -> list[Digest]:
         texts = batch_truncate(texts, self.context_len//2)
         with self.lock:
             results = [self._run(text) for text in texts]
-        return batch_run(markdown_to_digest, results)
+        return batch_run(parse_markdown, results)
     
 _RESPONSE_START = "<|im_start|>assistant\n"
 _RESPONSE_END = "<|im_end|>"
@@ -171,7 +230,7 @@ class TransformerDigestor(Digestor):
     def _extract_response(self, generated: str) -> Digest:
         generated = remove_before(generated, _RESPONSE_START)
         generated = remove_after(generated, _RESPONSE_END)
-        return markdown_to_digest(generated.strip())
+        return parse_markdown(generated.strip())
 
     def run(self, text: str) -> Digest:
         max_tokens = 256 if self.use_short_digest(text) else 512
@@ -199,19 +258,13 @@ class TransformerDigestor(Digestor):
        
         return batch_run(self._extract_response, generated)
 
-def create_prompt_for_generic_model(text: str, use_short_digest: bool): 
-    template = GENERIC_MODEL_SHORT_DIGEST_INST if use_short_digest else GENERIC_MODEL_DIGEST_INST
-    return [
-        {
-            "role": "system",
-            "content": GENERIC_MODEL_SYSTEM_INST
-        },
-        {
-            "role": "user",
-            "content":  template.format(input_text=text)
-        }
-    ]
-    
+create_prompt_for_generic_model = lambda text: [
+    {
+        "role": "user",
+        "content":  GENERIC_MODEL_DIGEST_INST.format(input_text=text)
+    }
+]
+
 class RemoteDigestor(Digestor):
     client = None
     model_name = None
@@ -230,18 +283,18 @@ class RemoteDigestor(Digestor):
         self.context_len = context_len
         self.use_short_digest = use_short_digest or (lambda text: False)
     
-    # @retry(tries=2, delay=5, logger=logger)
+    @retry(tries=2, delay=5, logger=logger)
     def _run(self, text: str) -> Digest:
-        max_tokens = 256 if self.use_short_digest(text) else 512
+        max_tokens = 400
 
         resp = self.client.chat.completions.create(
-            messages=create_prompt_for_generic_model(text, self.use_short_digest(text)),
+            messages=create_prompt_for_generic_model(text),
             model=self.model_name,
             max_tokens=max_tokens, 
-            temperature=0.3,
+            temperature=0.2,
             seed=666
         ).choices[0].message.content
-        return markdown_to_digest(resp)
+        return parse_compressed_digest(resp) 
 
     def run(self, text: str) -> Digest:
         return self._run(truncate(text, self.context_len//2))
