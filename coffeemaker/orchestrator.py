@@ -7,16 +7,18 @@ from asyncio import Queue
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.models import *
-from coffeemaker.collectors.collector import APICollector, HACKERNEWS, REDDIT, WebScraper
+from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
 from coffeemaker.nlp import digestors, embedders, utils
 from pymongo import UpdateOne
 import os
 
 log = logging.getLogger(__name__)
 
-QUEUE_BATCH_SIZE = 16*os.cpu_count()
+BATCH_SIZE = 16*os.cpu_count()
 END_OF_STREAM = "END_OF_STREAM"
 MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 256))
+
+FILTER_KINDS = [NEWS, BLOG]
 
 # MIN_WORDS_THRESHOLD = 150
 MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 200 # min words needed to not download the body
@@ -66,7 +68,7 @@ def _read_sources(file: str) -> list[str]:
 
 async def _enqueue_beans(queue: Queue, source: str, beans: list[Bean]):
     if not beans: return
-    await asyncio.gather(*[queue.put((source, beans[i:i+QUEUE_BATCH_SIZE])) for i in range(0, len(beans), QUEUE_BATCH_SIZE)])
+    await asyncio.gather(*[queue.put((source, beans[i:i+BATCH_SIZE])) for i in range(0, len(beans), BATCH_SIZE)])
 
 class Orchestrator:
     run_id: str = None
@@ -112,7 +114,7 @@ class Orchestrator:
             exists = [bean.url for bean in beans]
             ic("new_beans query failed", e) # if the batch fails then don't process any in that batch
             
-        beans = list({bean.url: bean for bean in beans if bean.source and (bean.url not in exists)}.values())
+        beans = list({bean.url: bean for bean in beans if (bean.kind in FILTER_KINDS) and bean.source and (bean.url not in exists)}.values())
         for bean in beans:
             bean.id = bean.url
             bean.created = bean.created or bean.collected
@@ -259,21 +261,19 @@ class Orchestrator:
             log.error("local db backup failed", extra={"source": self.run_id, "num_items": 1})
 
     @log_runtime_async
-    async def run_collections_async(self):
+    async def run_collections_async(self, sources: str = os.getenv('COLLECTOR_SOURCES')):
         scraper = APICollector()        
-        current_directory = os.path.dirname(os.path.abspath(__file__))
-        rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
-        subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
-        random.shuffle(rssfeeds) # shuffling out to avoid failure of the same things
-        random.shuffle(subreddits) # shuffling out to avoid failure of the same things
-        
-        # awaiting on each group so that os is not overwhelmed by sockets
-        log.info("collecting", extra={"source": HACKERNEWS, "num_items": 1})
-        await self.triage_collection(scraper.collect_ychackernews())
-        log.info("collecting", extra={"source": REDDIT, "num_items": len(subreddits)})
-        await self.triage_collection(scraper.collect_subreddits(subreddits))
-        log.info("collecting", extra={"source": "rssfeeds", "num_items": len(rssfeeds)})
-        await self.triage_collection(scraper.collected_rssfeeds(rssfeeds))
+        # current_directory = os.path.dirname(os.path.abspath(__file__))
+        # rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
+        # subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
+        # random.shuffle(rssfeeds) # shuffling out to avoid failure of the same things
+        # random.shuffle(subreddits) # shuffling out to avoid failure of the same things
+        for source_type, source_paths in parse_sources(sources).items():
+            # awaiting on each group so that os is not overwhelmed by sockets
+            log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
+            if source_type == 'ychackernews': await self.triage_collection(scraper.collect_ychackernews(source_paths))
+            elif source_type == 'reddit': await self.triage_collection(scraper.collect_subreddits(source_paths))
+            elif source_type == 'rss': await self.triage_collection(scraper.collected_rssfeeds(source_paths))
 
     async def triage_collection(self, collection: list[tuple[Bean, Chatter]]|Awaitable[list[tuple[Bean, Chatter]]]):
         if isinstance(collection, Awaitable): collection = await collection
@@ -364,7 +364,7 @@ class Orchestrator:
     # 10. schedule clustering and then update clusters
     # 11. schedule trend ranking and then update trend ranking new beans 
     @log_runtime_async
-    async def run_async(self):    
+    async def run_async(self, sources: str = os.getenv('COLLECTOR_SOURCES')):    
         # instantiate the run specific work
         self._init_run()
 
@@ -375,7 +375,7 @@ class Orchestrator:
         # 5. wait for the downloading to finish and then put the end of stream for indexing
         # 6. wait for indexing to finish
 
-        await self.run_collections_async()
+        await self.run_collections_async(sources)
         await self.download_queue.put(END_OF_STREAM)
         # self.cleanup()
         self.trend_rank_beans()

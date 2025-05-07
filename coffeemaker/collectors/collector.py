@@ -19,6 +19,8 @@ from retry import retry
 import tldextract
 from dateutil.parser import parse as date_parser
 import re
+
+import yaml
 from coffeemaker.collectors import USER_AGENT, TIMEOUT, RATELIMIT_WAIT
 from coffeemaker.pybeansack.models import *
 from icecream import ic
@@ -68,7 +70,7 @@ BLOG_SITENAMES = ["blog", "magazine", "newsletter", "weekly"]
 NEWS_SITENAMES = ["daily", "wire", "times", "today",  "news", "the "]
 
 # assigning 16 io threads per cpu
-SCRAPER_BATCH_SIZE = 16*os.cpu_count()
+BATCH_SIZE = 16*os.cpu_count()
 
 # general utilities
 now = lambda: datetime.now(timezone.utc)
@@ -148,7 +150,7 @@ merge_lists = lambda results: list(chain(*(r for r in results if r)))
 
 def _batch_collect(collect: Callable, sources: list):
     results = None
-    with ThreadPoolExecutor(max_workers=SCRAPER_BATCH_SIZE, thread_name_prefix="collector") as executor:
+    with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="collector") as executor:
         results = list(executor.map(collect, sources))
     return results
 
@@ -167,6 +169,13 @@ def _guess_type(url: str, source: str) -> str:
     if any(sitename for sitename in NEWS_SITENAMES if sitename in source): return NEWS
 
     if "/news/" in url: return NEWS
+
+def parse_sources(sources: str) -> dict:
+    if os.path.exists(sources):
+        with open(sources, 'r') as file:
+            data = yaml.safe_load(file)
+    else: data = yaml.safe_load(sources)
+    return data['sources']
 
 class APICollector:
     md_generator: DefaultMarkdownGenerator = None
@@ -342,8 +351,8 @@ class APICollector:
             log.warning("collection failed", extra={"source": HACKERNEWS, "num_items": 1})
             ic(HACKERNEWS, e)
 
-    def collect_ychackernews(self) -> list[tuple[Bean, Chatter]]:
-        ids = merge_lists(_batch_collect(_fetch_json, HACKERNEWS_STORIES_URLS))
+    def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[tuple[Bean, Chatter]]:
+        ids = merge_lists(_batch_collect(_fetch_json, stories_urls))
         stories = _batch_collect(_fetch_json, [hackernews_story_metadata(id) for id in ids])
         return _batch_collect(
             lambda story: self._from_hackernews_story(story, BLOG), 
@@ -487,7 +496,7 @@ class WebScraper:
             cache_mode=CacheMode.BYPASS,
 
             # navigation & timing
-            semaphore_count=SCRAPER_BATCH_SIZE,
+            semaphore_count=BATCH_SIZE,
             wait_for_images=False,  
             page_timeout=30000,
 
@@ -521,7 +530,7 @@ class WebScraper:
             cache_mode=CacheMode.ENABLED,
 
             # navigation & timing
-            semaphore_count=SCRAPER_BATCH_SIZE,
+            semaphore_count=BATCH_SIZE,
             wait_for_images=False,
 
             # page interaction

@@ -1,0 +1,96 @@
+{
+    "topics": [
+      {
+        "verdict": "Critical infrastructure’s cybersecurity is a hot mess, and apparently, everyone’s just hoping thoughts and prayers will fend off nation-state hackers.",
+        "keywords": [
+          "critical infrastructure",
+          "cybersecurity",
+          "Salt Typhoon",
+          "CISA",
+          "budget cuts",
+          "wishful thinking",
+          "nation-state actors"
+        ]
+      },
+      {
+        "verdict": "AI’s playing both hero and villain in cybersecurity, because who doesn’t love a tech savior that also hands out phishing kits like candy?",
+        "keywords": [
+          "AI",
+          "cybersecurity",
+          "phishing",
+          "deepfakes",
+          "human oversight",
+          "collaboration",
+          "tech double-cross"
+        ]
+      },
+      {
+        "verdict": "Ransomware’s got governments and retailers by the throat, but sure, let’s keep pretending a quick reboot will fix it all.",
+        "keywords": [
+          "ransomware",
+          "government",
+          "retail",
+          "Marks & Spencer",
+          "Qilin",
+          "incident response",
+          "denial"
+        ]
+      },
+      {
+        "verdict": "North Korean operatives are waltzing into remote jobs, because apparently, “What’s your take on Kim Jong Un?” is the only vibe check companies can muster.",
+        "keywords": [
+          "North Korea",
+          "remote work",
+          "identity verification",
+          "AI profiles",
+          "Kim Jong Un",
+          "corporate laziness"
+        ]
+      },
+      {
+        "verdict": "AI rights and neuro-privacy laws are popping up, because nothing screams “future” like arguing over whether your brain’s data deserves a lawyer.",
+        "keywords": [
+          "AI rights",
+          "neuro-privacy",
+          "cybersecurity law",
+          "ELVIS Act",
+          "algorithmic discrimination",
+          "legal circus"
+        ]
+      },
+      {
+        "verdict": "Cybersecurity pros are stressed to the gills and there’s no one to replace them, but sure, let’s just pile on more alerts to fix burnout.",
+        "keywords": [
+          "cybersecurity workforce",
+          "stress",
+          "skills shortage",
+          "burnout",
+          "training",
+          "well-being",
+          "management genius"
+        ]
+      },
+      {
+        "verdict": "AI-powered phishing is so slick it’s basically a Netflix special, but we’re still telling users to “just be careful” like that’s a strategy.",
+        "keywords": [
+          "AI-driven phishing",
+          "social engineering",
+          "MFA bypass",
+          "WebAuthn",
+          "user education",
+          "cybersecurity fairy tales"
+        ]
+      },
+      {
+        "verdict": "Cybersecurity debt’s piling up like bad life choices, but organizations keep buying shiny new tools instead of fixing their ancient, creaky systems.",
+        "keywords": [
+          "cybersecurity debt",
+          "outdated tools",
+          "misconfigurations",
+          "operational discipline",
+          "risk management",
+          "tech hoarding"
+        ]
+      }
+    ]
+}
