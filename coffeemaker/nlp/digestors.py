@@ -130,7 +130,7 @@ def parse_compressed_digest(response: str) -> Digest:
             part = part.removeprefix(prefix)
             last = prefix
             if part == UNDETERMINED: continue # skip
-            digest.expr += f";{part}" if digest.expr else part
+            digest.expr += f";{prefix+part}" if digest.expr else prefix+part
         else:
             digest.expr += f"|{part}"
 
@@ -285,7 +285,7 @@ class RemoteDigestor(Digestor):
     
     @retry(tries=2, delay=5, logger=logger)
     def _run(self, text: str) -> Digest:
-        max_tokens = 400
+        max_tokens = 512
 
         resp = self.client.chat.completions.create(
             messages=create_prompt_for_generic_model(text),
