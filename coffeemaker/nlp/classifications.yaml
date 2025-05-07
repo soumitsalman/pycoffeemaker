@@ -1,0 +1,153 @@
+classifications:
+    sentiments:
+        - Alarmed
+        - Amused
+        - Analytical
+        - Angry
+        - Anxious
+        - Appreciative
+        - Assertive
+        - Bold
+        - Cautious
+        - Concerned
+        - Confident
+        - Contemplative
+        - Critical
+        - Curious
+        - Dark
+        - Delighted
+        - Disappointed
+        - Dramatic
+        - Emotional
+        - Encouraging
+        - Engaging
+        - Enthusiastic
+        - Exciting
+        - Fascinating
+        - Fearful
+        - Frustrated
+        - Hopeful
+        - Humorous
+        - Informative
+        - Inquisitive
+        - Inspiring
+        - Intriguing
+        - Ironic
+        - Joyful
+        - Melancholy
+        - Neutral
+        - Objective
+        - Optimistic
+        - Outraged
+        - Pessimistic
+        - Positive
+        - Provocative
+        - Reflective
+        - Sad
+        - Sarcastic
+        - Serious
+        - Shocking
+        - Skeptical
+        - Somber
+        - Supportive
+        - Surprising
+        - Thoughtful
+        - Tragic
+        - Troubling
+        - Uncertain
+        - Upsetting
+        - Witty
+        - Worried
+    categories:
+        - Aerospace
+        - Aviation
+        - Agriculture
+        - Aircraft Technology
+        - Application Security
+        - Artificial Intelligence
+        - Arts
+        - Automotive & Transportation
+        - Automotive Technology
+        - Banking
+        - Biology
+        - Blockchain
+        - Business
+        - Career Development
+        - Chemistry
+        - Clean Energy
+        - Cloud Computing
+        - Computer Vision
+        - Computing Infrastructure
+        - Consumer Electronics
+        - Cryptocurrency
+        - Culture
+        - Cybersecurity
+        - Data Centers
+        - Data Security
+        - Data Science
+        - Decentralized Finance
+        - Deep Learning
+        - Economy
+        - Education
+        - Electric Vehicles
+        - Energy
+        - Entertainment
+        - Environment
+        - Fashion
+        - Finance
+        - Funding
+        - Gadgets and Electronics
+        - Government Affairs
+        - Health
+        - History
+        - Human Rights
+        - Industry
+        - Information Security
+        - Intellectual Property
+        - International Relations
+        - Internet of Things
+        - Internet Security
+        - IoT Security
+        - Law
+        - Lifestyle
+        - Machine Learning
+        - Management
+        - Marketing
+        - Mathematics
+        - Media
+        - Natural Language Processing
+        - Networking
+        - Non-profit
+        - Parenting
+        - Philosophy
+        - Physics
+        - Politics
+        - Privacy
+        - Programming
+        - Public Policy
+        - Quantum Computing
+        - Real Estate
+        - Religion
+        - Retail
+        - Robotics
+        - Rockets
+        - Satellites
+        - Science
+        - Self-Driving Cars
+        - Semiconductors
+        - Serverless Computing
+        - Smart Home
+        - Smartphones
+        - Social Science
+        - Software Development
+        - Software Engineering
+        - Software Security
+        - Sports
+        - Startups
+        - Storage
+        - Technology
+        - Telecommunications
+        - Transportation
+        - Travel
+        - Venture Capital
+        - Wearable Technology

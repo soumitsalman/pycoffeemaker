@@ -227,13 +227,7 @@ def test_digest_parser():
 @log_runtime
 def test_run_async():
     orch = _create_orchestrator() 
-    # sources = "/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"
-    sources = """
-sources:
-  ychackernews:
-    - https://hacker-news.firebaseio.com/v0/newstories.json
-    - https://hacker-news.firebaseio.com/v0/askstories.json
-"""
+    sources = "/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"
     asyncio.run(orch.run_async(sources))
     orch.close()
 
@@ -291,14 +285,15 @@ def download_markdown(q: str = None, accuracy = DEFAULT_VECTOR_SEARCH_SCORE, key
     save_markdown(q or datetime.now().strftime("%Y-%m-%d-%H-%M-%S"), markdown)
 
 if __name__ == "__main__":
-    test_run_async()
+    # test_run_async()
     # test_embedder()
     # test_digestor()
     # test_digest_parser()
     # test_collection_and_download()
     # test_run_async()
     # topics['topics'][0]
-    # download_markdown(limit = 5000)
+    download_markdown(limit = 5000)
+    download_markdown(q="Cybersecurity", accuracy=0.6, limit=1000)
     # download_markdown("North Korean operatives generate $250 million to $600 million annually through remote IT job fraud (May 2, 2025).", accuracy=0.8)
     # [download_markdown(q = topic['verdict'], limit = 50) for topic in topics['topics']]
     
