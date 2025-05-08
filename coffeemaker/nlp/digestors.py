@@ -10,7 +10,6 @@ from retry import retry
 from .prompts import *
 from .utils import *
 from pydantic import BaseModel, Field
-from openai import OpenAI
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,7 +17,6 @@ logger = logging.getLogger(__name__)
 CONTEXT_LEN = 8192
 BATCH_SIZE = int(os.getenv("DIGESTOR_BATCH_SIZE", os.cpu_count()))
 NUM_THREADS = int(os.getenv("DIGESTOR_NUM_THREADS", os.cpu_count()))
-
 
 class Digest(BaseModel):
     expr: str
@@ -278,6 +276,8 @@ class RemoteDigestor(Digestor):
         context_len: int,
         use_short_digest: Callable
     ):
+        from openai import OpenAI
+
         self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=30, max_retries=2)
         self.model_name = model_name
         self.context_len = context_len

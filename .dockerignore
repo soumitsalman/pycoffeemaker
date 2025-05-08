@@ -1,5 +1,5 @@
 .venv
-.env*
+.env
 .chromadb
 .models
 .processingqueue
@@ -10,10 +10,10 @@
 .vscode
 .logs
 .scraper-queue
+test
 __azurite*
 __queuestorage__
 __pycache__
 *.log
 flagged
 unsloth*
-

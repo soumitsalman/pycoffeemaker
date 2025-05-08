@@ -44,7 +44,7 @@ class Orchestrator:
         self.out_queue = QueueClient.from_connection_string(queue_path, queue_name) if queue_path else None
 
         self.apicollector = APICollector(self.triage_beans)
-        self.webscraper = WebScraper(os.cpu_count())
+        self.webscraper = WebScraper(BATCH_SIZE)
         self.scraper_queue = Queue(".scraper-queue", tempdir=".")
 
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:

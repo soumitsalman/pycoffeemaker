@@ -16,7 +16,9 @@ logging.basicConfig(
 
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.simplecollector").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
+# logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.digestors").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
@@ -28,23 +30,28 @@ logging.getLogger("urllib3").propagate = False
 logging.getLogger("connectionpool").propagate = False
 # logging.getLogger("asyncio").propagate = False
 
-from coffeemaker.orchestrators.fullstack import Orchestrator
-
 if __name__ == "__main__":    
-    orch = Orchestrator(
-        os.getenv("DB_REMOTE"),
-        os.getenv("DB_LOCAL"),
-        os.getenv("DB_NAME"),
-        os.getenv("AZSTORAGE_CONNECTION_STRING")
-    )
-    
-    # NOTE: putthing this try catch to avoid the app from crashing when the indexing fails
-    try:
-        asyncio.run(orch.run_async())
-    except Exception as e:
-        log.error("failed run", extra={"source": "__BATCH__", "num_items": 1})
-        ic(e)
-    
-    orch.close()
+    mode = os.getenv("MODE")
+    if mode == "COLLECTOR_ONLY":
+        from coffeemaker.orchestrators.simplecollector import Orchestrator
+        orch = Orchestrator(
+            os.getenv("DB_REMOTE"),
+            os.getenv("DB_NAME"),
+            os.getenv("INDEXING_QUEUE_PATH"),
+            os.getenv("INDEXING_QUEUE_NAME")
+        )
+        orch.run()
+    else:
+        from coffeemaker.orchestrators.fullstack import Orchestrator
+        orch = Orchestrator(
+            os.getenv("DB_REMOTE"),
+            os.getenv("DB_LOCAL"),
+            os.getenv("DB_NAME"),
+            os.getenv("AZSTORAGE_CONNECTION_STRING")
+        )
+        
+        try: asyncio.run(orch.run_async())
+        except Exception as e: log.error("failed run", extra={"source": "__BATCH__", "num_items": 1})
+        orch.close()
     
  

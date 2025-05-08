@@ -1,12 +1,9 @@
 import logging
 import threading
-from openai import OpenAI
-from sentence_transformers import SentenceTransformer
 from retry import retry
 import os
 from abc import ABC, abstractmethod
 from .utils import truncate, LLAMA_CPP_PREFIX, API_URL_PREFIX
-import torch
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +51,9 @@ class RemoteEmbeddings(Embeddings):
     model_name: str
     context_len: int
 
-    def __init__(self, model_name: str, base_url: str, api_key: str, context_len: int):        
+    def __init__(self, model_name: str, base_url: str, api_key: str, context_len: int): 
+        from openai import OpenAI
+
         self.openai_client = OpenAI(base_url=base_url, api_key=api_key, max_retries=3, timeout=10)
         self.model_name = model_name
         self.context_len = context_len    
@@ -70,6 +69,9 @@ class TransformerEmbeddings(Embeddings):
     model = None
     lock = None
     def __init__(self, model_id: str, context_len: int):
+        import torch
+        from sentence_transformers import SentenceTransformer       
+
         self.lock = threading.Lock()
 
         tokenizer_kwargs = {

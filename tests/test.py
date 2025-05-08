@@ -291,9 +291,9 @@ def download_markdown(q: str = None, accuracy = DEFAULT_VECTOR_SEARCH_SCORE, key
 def test_simple_collector():
     from coffeemaker.orchestrators.simplecollector import Orchestrator
     orch = Orchestrator(
-        "mongodb://localhost:27017/",
+        os.getenv('DB_REMOTE_TEST'),
         "test", 
-        "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;",
+        os.getenv('INDEXING_QUEUE_PATH_TEST'),
         "index-queue"
     )
     orch.run("/home/soumitsr/codes/pycoffeemaker/tests/sources-1.yaml")
