@@ -150,7 +150,7 @@ def _fetch_json(content_url: str):
     try: return _fetch()
     except Exception as e: 
         log.warning("collection failed", extra={"source": content_url, "num_items": 1})
-        ic(content_url, e, e.__class__.__name__)
+        # ic(content_url, e, e.__class__.__name__)
 
 merge_lists = lambda results: list(chain(*(r for r in results if r))) 
 
@@ -578,7 +578,7 @@ class WebScraper:
                 results = [WebScraper._package_result(parsed_results[url]) for url in urls]            
             return results
         except Exception as e:
-            ic(e.__class__.__name__, e)
+            # ic(e.__class__.__name__, e)
             return [None]*len(urls)
 
     async def scrape_beans(self, beans: list[Bean], collect_metadata: bool = False) -> list[Bean]:
