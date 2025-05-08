@@ -1,0 +1,7 @@
+TASK:INPUT=List<ArticleString>;ArticleString=Format<U:YYYY-MM-DD;P:Summary|...;N:Entities|...;E:Events|...;C:Categories|...;S:Sentiment|...>;OUTPUT=Dict<Topic,Dict<frequency:Int,keywords:List<String>>>;
+INSTRUCTIONS:1=AnalyzeArticles;UseFields=P,N,E;GenerateTopics=Dynamic,Specific,Granular;Cluster=SemanticSimilarity;NotUse=GenericCategoriesFromC;AllowMultiTagging=True;
+2=CountFrequency;Frequency=NumArticlesPerTopic;
+3=FilterFrequency=Min2;KeepTopics=Frequency>=2;
+4=GenerateKeywords;Keywords=Specific,Searchable,FromP,N,E;MinimizeFalsePositives=True;Include=Entities,Events,Dates,Phrases;
+5=OutputFormat=Dict;Key=Topic;Value=Dict;ValueFormat=frequency:Int,keywords:List<String>;
+EXAMPLE_OUTPUT={"Topic1":{"frequency":4,"keywords":["kw1","kw2"]},"Topic2":{"frequency":2,"keywords":["kw3","kw4"]}}

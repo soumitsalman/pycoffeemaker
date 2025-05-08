@@ -13,7 +13,7 @@ from pymongo import MongoClient, UpdateOne
 from coffeemaker.collectors import ychackernews, redditor
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.ducksack import SQL_NOT_WHERE_URLS
-from coffeemaker.orchestrator import Orchestrator
+from coffeemaker.orchestrators.fullstack import Orchestrator
 
 K_RELATED = "related"
 LIMIT=40000
@@ -147,7 +147,7 @@ def setup_baristas():
 
 def port_beans_to_localsack():
     orch = create_orch()
-    beans = orch.remotesack.get_beans(
+    beans = orch.remotesack.query_beans(
         filter={
             K_EMBEDDING: {"$exists": True}
         }

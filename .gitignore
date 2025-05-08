@@ -9,6 +9,8 @@
 .mongodb
 .vscode
 .logs
+__azurite*
+__queuestorage__
 __pycache__
 *.log
 flagged

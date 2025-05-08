@@ -18,12 +18,11 @@ icecream
 python-dotenv
 scikit-learn
 praw
-retry
-azure-servicebus
 peft
 memoization
 duckdb
 azure-storage-blob
+azure-storage-queue
 crawl4ai
 nest-asyncio
 asyncpraw

@@ -28,7 +28,7 @@ logging.getLogger("urllib3").propagate = False
 logging.getLogger("connectionpool").propagate = False
 # logging.getLogger("asyncio").propagate = False
 
-from coffeemaker.orchestrator import Orchestrator
+from coffeemaker.orchestrators.fullstack import Orchestrator
 
 if __name__ == "__main__":    
     orch = Orchestrator(

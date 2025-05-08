@@ -81,17 +81,14 @@ class Beansack:
     ## BEANS STORING ##
     ###################
     def store_beans(self, beans: list[Bean]) -> int:   
-        beans = self.not_exists(beans)
+        # beans = self.not_exists(beans)
         if not beans: return 0
-
         res = self.beanstore.insert_many([bean.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for bean in beans], ordered=False)            
         return len(res.inserted_ids)
 
-    def not_exists(self, beans: list[Bean]):
+    def exists(self, beans: list[Bean]):
         if not beans: return beans
-
-        exists = [item[K_ID] for item in self.beanstore.find({K_ID: {"$in": [bean.url for bean in beans]}}, {K_ID: 1})]
-        return list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
+        return [item[K_ID] for item in self.beanstore.find({K_ID: {"$in": [bean.url for bean in beans]}}, {K_ID: 1})]
                 
     def store_chatters(self, chatters: list[Chatter]):
         if not chatters: return chatters
@@ -110,11 +107,24 @@ class Beansack:
     ################################
     ## BEANS RETRIEVAL AND SEARCH ##
     ################################
-    def get_beans(self, filter, sort_by = None, skip = 0, limit = 0,  projection = None) -> list[Bean]:
+    def query_beans(self, filter, sort_by = None, skip = 0, limit = 0,  projection = None) -> list[Bean]:
         cursor = self.beanstore.find(filter = filter, projection = projection, sort=sort_by, skip = skip, limit=limit)
         return _deserialize_beans(cursor)
     
-    def sample_related_beans(self, url: str, filter: dict = None, limit: int = 1, projection = {}) -> list[Bean]:
+    def query_sample_beans(self, filter: dict = None, sort_by = None, limit: int = 1, projection = None) -> list[Bean]:
+        pipeline = [
+            { 
+                "$match": filter 
+            },
+            { 
+                "$sample": {"size": limit} 
+            }
+        ]
+        if sort_by: pipeline.append({"$sort": sort_by})
+        if projection: pipeline.append({"$project": projection})
+        return _deserialize_beans(self.beanstore.aggregate(pipeline=pipeline))
+
+    def query_sample_related_beans(self, url: str, filter: dict = None, limit: int = 1, projection = {}) -> list[Bean]:
         match_filter = {K_ID: url}
         if filter:
             match_filter.update(filter)
@@ -183,7 +193,7 @@ class Beansack:
         pipeline = self._unique_beans_pipeline(filter, sort_by=sort_by, skip=skip, limit=limit, projection=projection, for_count=False)
         return _deserialize_beans(self.beanstore.aggregate(pipeline))
     
-    def count_unique_beans(self, filter, limit = 0):
+    def count_distinct_beans(self, filter, limit = 0):
         pipeline = self._unique_beans_pipeline(filter, sort_by=None, skip=0, limit=limit, projection=None, for_count=True)
         result = self.beanstore.aggregate(pipeline)
         return next(iter(result), {'total_count': 0})['total_count'] if result else 0

@@ -9,46 +9,28 @@ from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
 from coffeemaker.nlp import digestors, embedders, utils
+from coffeemaker.orchestrators.utils import *
 from pymongo import UpdateOne
 import os
 
 log = logging.getLogger(__name__)
 
 BATCH_SIZE = 16*os.cpu_count()
-END_OF_STREAM = "END_OF_STREAM"
 MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 256))
 
-FILTER_KINDS = [NEWS, BLOG]
-
 # MIN_WORDS_THRESHOLD = 150
-MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 200 # min words needed to not download the body
-MIN_WORDS_THRESHOLD_FOR_INDEXING = 70 # mininum words needed to put it through indexing
-MIN_WORDS_THRESHOLD_FOR_SUMMARY = 160 # min words needed to use the generated summary
+# MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 200 # min words needed to not download the body
+# MIN_WORDS_THRESHOLD_FOR_INDEXING = 70 # mininum words needed to put it through indexing
+# MIN_WORDS_THRESHOLD_FOR_SUMMARY = 160 # min words needed to use the generated summary
 
-is_text_above_threshold = lambda bean, threshold: bean.text and len(bean.text.split()) >= threshold
+# is_text_above_threshold = lambda bean, threshold: bean.text and len(bean.text.split()) >= threshold
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
-is_indexable = lambda bean: is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_INDEXING) # it has to have some text and the text has to be large enough
-is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_DOWNLOADING)) # if it is a post dont download it or if the body is large enough
-use_summary = lambda text: text and len(text.split()) >= MIN_WORDS_THRESHOLD_FOR_SUMMARY # if the body is large enough
+# is_indexable = lambda bean: is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_INDEXING) # it has to have some text and the text has to be large enough
+# is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_DOWNLOADING)) # if it is a post dont download it or if the body is large enough
+# use_summary = lambda text: text and len(text.split()) >= MIN_WORDS_THRESHOLD_FOR_SUMMARY # if the body is large enough
 storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
-indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
-downloadables = lambda beans: [bean for bean in beans if is_downloadable(bean)] if beans else beans
-
-def log_runtime(func):
-    def wrapper(*args, **kwargs):
-        start_time = datetime.now()
-        result = func(*args, **kwargs)
-        log.info("execution time", extra={"source": func.__name__, "num_items": int((datetime.now() - start_time).total_seconds())})
-        return result
-    return wrapper
-
-def log_runtime_async(func):
-    async def wrapper(*args, **kwargs):
-        start_time = datetime.now()
-        result = await func(*args, **kwargs)
-        log.info("execution time", extra={"source": func.__name__, "num_items": int((datetime.now() - start_time).total_seconds())})
-        return result
-    return wrapper
+# indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
+# downloadables = lambda beans: [bean for bean in beans if is_downloadable(bean)] if beans else beans
 
 def log_beans(level, msg, beans: list[Bean]):
     source_counts = {}
@@ -62,9 +44,9 @@ def log_beans(level, msg, beans: list[Bean]):
     else: func = log.debug
     [func(msg, extra={"source": source, "num_items": count}) for source, count in source_counts.items()]
 
-def _read_sources(file: str) -> list[str]:
-    with open(file, 'r') as file:
-        return [line.strip() for line in file.readlines() if line.strip()]
+# def _read_sources(file: str) -> list[str]:
+#     with open(file, 'r') as file:
+#         return [line.strip() for line in file.readlines() if line.strip()]
 
 async def _enqueue_beans(queue: Queue, source: str, beans: list[Bean]):
     if not beans: return
@@ -98,7 +80,7 @@ class Orchestrator:
         clus_eps: float = float(os.getenv("CLUSTER_EPS", 3))
     ): 
         self.embedder = embedders.from_path(embedder_path, embedder_context_len)
-        self.digestor = digestors.from_path(digestor_path, digestor_context_len, digestor_base_url, digestor_api_key, use_short_digest=lambda text: len(text.split()) < MIN_WORDS_THRESHOLD_FOR_SUMMARY)
+        self.digestor = digestors.from_path(digestor_path, digestor_context_len, digestor_base_url, digestor_api_key)
 
         self.az_storage_conn_str = backup_storage_conn_str
         self.remotesack = MongoSack(remote_db_conn_str, db_name)
@@ -114,7 +96,7 @@ class Orchestrator:
             exists = [bean.url for bean in beans]
             ic("new_beans query failed", e) # if the batch fails then don't process any in that batch
             
-        beans = list({bean.url: bean for bean in beans if (bean.kind in FILTER_KINDS) and bean.source and (bean.url not in exists)}.values())
+        beans = list({bean.url: bean for bean in beans if (bean.url not in exists)}.values())
         for bean in beans:
             bean.id = bean.url
             bean.created = bean.created or bean.collected
@@ -260,9 +242,9 @@ class Orchestrator:
         except Exception as e:
             log.error("local db backup failed", extra={"source": self.run_id, "num_items": 1})
 
-    @log_runtime_async
+    @log_runtime_async(logger=log)
     async def run_collections_async(self, sources: str = os.getenv('COLLECTOR_SOURCES')):
-        scraper = APICollector()        
+        apicollector = APICollector()        
         # current_directory = os.path.dirname(os.path.abspath(__file__))
         # rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
         # subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
@@ -271,9 +253,9 @@ class Orchestrator:
         for source_type, source_paths in parse_sources(sources).items():
             # awaiting on each group so that os is not overwhelmed by sockets
             log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
-            if source_type == 'ychackernews': await self.triage_collection(scraper.collect_ychackernews(source_paths))
-            elif source_type == 'reddit': await self.triage_collection(scraper.collect_subreddits(source_paths))
-            elif source_type == 'rss': await self.triage_collection(scraper.collected_rssfeeds(source_paths))
+            if source_type == 'ychackernews': await self.triage_collection(apicollector.collect_ychackernews(source_paths))
+            elif source_type == 'reddit': await self.triage_collection(apicollector.collect_subreddits(source_paths))
+            elif source_type == 'rss': await self.triage_collection(apicollector.collected_rssfeeds(source_paths))
 
     async def triage_collection(self, collection: list[tuple[Bean, Chatter]]|Awaitable[list[tuple[Bean, Chatter]]]):
         if isinstance(collection, Awaitable): collection = await collection
@@ -287,11 +269,11 @@ class Orchestrator:
         if not beans: return
 
         log_beans(logging.INFO, "triaged", beans)
-        needs_download = downloadables(beans)
-        await _enqueue_beans(self.download_queue, None, needs_download)   
-        await _enqueue_beans(self.index_queue, None, [bean for bean in beans if bean not in needs_download])
+        needs_scraping = scrapables(beans)
+        await _enqueue_beans(self.download_queue, None, needs_scraping)   
+        await _enqueue_beans(self.index_queue, None, [bean for bean in beans if bean not in needs_scraping])
 
-    @log_runtime_async
+    @log_runtime_async(logger=log)
     async def run_downloading_async(self):
         scraper = WebScraper()
         
@@ -315,7 +297,7 @@ class Orchestrator:
             log_beans(logging.INFO, "downloaded", downloaded_beans)
             await _enqueue_beans(self.index_queue, source, downloaded_beans)            
         
-    @log_runtime_async
+    @log_runtime_async(logger=log)
     async def run_indexing_async(self):
         total_new_beans = 0
         while True:
@@ -363,7 +345,7 @@ class Orchestrator:
     # 9. store beans
     # 10. schedule clustering and then update clusters
     # 11. schedule trend ranking and then update trend ranking new beans 
-    @log_runtime_async
+    @log_runtime_async(logger=log)
     async def run_async(self, sources: str = os.getenv('COLLECTOR_SOURCES')):    
         # instantiate the run specific work
         self._init_run()

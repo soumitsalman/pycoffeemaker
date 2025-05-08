@@ -7,8 +7,9 @@ import logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
 logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrator").setLevel(logging.INFO)
-logging.getLogger("colleemaker.collectors.collector").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.simplecollector").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.digestors").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
@@ -26,9 +27,8 @@ from datetime import datetime
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import collector
-from coffeemaker.orchestrator import Orchestrator, log_runtime, END_OF_STREAM
+from coffeemaker.orchestrators.utils import log_runtime, END_OF_STREAM
 from coffeemaker.nlp import digestors, embedders
-from azure.servicebus import ServiceBusClient, ServiceBusMessage
 
 os.makedirs(".test", exist_ok=True)
 
@@ -55,14 +55,16 @@ def save_models(items: list[Bean|Chatter], file_name: str = None):
             json.dump([item.model_dump(exclude_unset=True, exclude_none=True) for item in items], file)
         return ic(len(items))
 
-_create_orchestrator = lambda : Orchestrator(
-    os.getenv("DB_REMOTE_TEST"),
-    os.getenv("DB_LOCAL"),
-    os.getenv("DB_NAME"),
-    embedder_path=os.getenv("EMBEDDER_PATH"),
-    digestor_path=os.getenv("DIGESTOR_PATH"),
-    clus_eps=0.5
-)
+def _create_fullstack_orchestrator():
+    from coffeemaker.orchestrators.fullstack import Orchestrator
+    return Orchestrator(
+        os.getenv("DB_REMOTE_TEST"),
+        os.getenv("DB_LOCAL"),
+        os.getenv("DB_NAME"),
+        embedder_path=os.getenv("EMBEDDER_PATH"),
+        digestor_path=os.getenv("DIGESTOR_PATH"),
+        clus_eps=0.5
+    )
 
 
   
@@ -129,13 +131,14 @@ _create_orchestrator = lambda : Orchestrator(
 #     orch._trend_rank()
 
 def test_collection_and_download():
+    from coffeemaker.orchestrators.fullstack import Orchestrator
     async def _run(orch: Orchestrator):
         orch._init_run()
         await orch.run_collections_async("/home/soumitsr/codes/pycoffeemaker/tests/test-sources-1.yaml")
         await orch.download_queue.put(END_OF_STREAM)
         await orch.run_downloading_async()
 
-    orch = _create_orchestrator()
+    orch = _create_fullstack_orchestrator()
     asyncio.run(_run(orch))
     orch.close()
 
@@ -226,7 +229,7 @@ def test_digest_parser():
 
 @log_runtime
 def test_run_async():
-    orch = _create_orchestrator() 
+    orch = _create_fullstack_orchestrator() 
     sources = "/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"
     asyncio.run(orch.run_async(sources))
     orch.close()
@@ -235,6 +238,7 @@ lower_case = lambda items: {"$in": [item.lower() for item in items]} if isinstan
 case_insensitive = lambda items: {"$in": [re.compile(item, re.IGNORECASE) for item in items]} if isinstance(items, list) else re.compile(items, re.IGNORECASE)
 
 def download_beans():
+    from coffeemaker.orchestrators.fullstack import Orchestrator
     orch = Orchestrator(
         os.getenv("DB_REMOTE"),
         os.getenv("DB_LOCAL"),
@@ -242,7 +246,7 @@ def download_beans():
         embedder_path=os.getenv("EMBEDDER_PATH"),    
         digestor_path=os.getenv("DIGESTOR_PATH")
     )
-    beans = orch.remotesack.get_beans(
+    beans = orch.remotesack.query_beans(
         filter = {
             "collected": { "$gte": (datetime.now() - timedelta(hours=8))},
             "gist": {"$exists": True},
@@ -255,18 +259,15 @@ def download_beans():
         json.dump(to_write, file)
 
 def download_markdown(q: str = None, accuracy = DEFAULT_VECTOR_SEARCH_SCORE, keywords: str|list[str] = None, limit = 100):
-    orch = _create_orchestrator()
+    orch = _create_fullstack_orchestrator()
     filter = {K_KIND: { "$ne": POST}}
-    if keywords: filter.update(
-        {
-            "$or": [
-                { "entities": case_insensitive(keywords) },
-                { "tags": case_insensitive(keywords) },
-                { "categories": case_insensitive(keywords) }
-            ]
-        }
-    )
-    projection = {K_EMBEDDING: 0, K_TEXT: 0}
+    if keywords: 
+        filter.update(
+            { 
+                "tags": case_insensitive(keywords) 
+            }
+        )
+    projection = {K_SUMMARY: 1, K_URL: 1}
 
     if q:
         beans = orch.remotesack.vector_search_beans(
@@ -275,16 +276,31 @@ def download_markdown(q: str = None, accuracy = DEFAULT_VECTOR_SEARCH_SCORE, key
             filter=filter,
             sort_by=NEWEST,
             skip=0,
-            limit=100,
+            limit=limit,
             projection=projection
         )
     else:
-        beans = orch.remotesack.query_distinct_beans(filter, NEWEST, 0, 100, projection)
+        beans = orch.remotesack.query_sample_beans(filter, NEWEST, limit, projection)
 
     markdown = "\n\n".join([bean.digest() for bean in beans])
-    save_markdown(q or datetime.now().strftime("%Y-%m-%d-%H-%M-%S"), markdown)
+
+    filename = q or datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    if keywords: filename = "-".join(keywords)
+    save_markdown(filename, markdown)
+
+def test_simple_collector():
+    from coffeemaker.orchestrators.simplecollector import Orchestrator
+    orch = Orchestrator(
+        "mongodb://localhost:27017/",
+        "test", 
+        "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;",
+        "index-queue"
+    )
+    orch.run("/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml")
 
 if __name__ == "__main__":
+    test_simple_collector()
+
     # test_run_async()
     # test_embedder()
     # test_digestor()
@@ -292,8 +308,8 @@ if __name__ == "__main__":
     # test_collection_and_download()
     # test_run_async()
     # topics['topics'][0]
-    download_markdown(limit = 5000)
-    download_markdown(q="Cybersecurity", accuracy=0.6, limit=1000)
+    # download_markdown(limit = 110)
+    # download_markdown(keywords =  ["Cardano", "$0.62 support", "RSI oversold", "Fibonacci retracement", "volume confirmation"], limit=110)
     # download_markdown("North Korean operatives generate $250 million to $600 million annually through remote IT job fraud (May 2, 2025).", accuracy=0.8)
     # [download_markdown(q = topic['verdict'], limit = 50) for topic in topics['topics']]
     
