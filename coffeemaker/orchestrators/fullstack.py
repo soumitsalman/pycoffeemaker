@@ -17,20 +17,15 @@ log = logging.getLogger(__name__)
 
 BATCH_SIZE = 16*os.cpu_count()
 MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 256))
+END_OF_STREAM = "END_OF_STREAM"
 
-# MIN_WORDS_THRESHOLD = 150
-# MIN_WORDS_THRESHOLD_FOR_DOWNLOADING = 200 # min words needed to not download the body
-# MIN_WORDS_THRESHOLD_FOR_INDEXING = 70 # mininum words needed to put it through indexing
-# MIN_WORDS_THRESHOLD_FOR_SUMMARY = 160 # min words needed to use the generated summary
-
-# is_text_above_threshold = lambda bean, threshold: bean.text and len(bean.text.split()) >= threshold
+is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING) # it has to have some text and the text has to be large enough
+is_scrapable = lambda bean: not (bean.kind == POST or above_threshold(bean, WORDS_THRESHOLD_FOR_SCRAPING)) # if it is a post dont download it or if the body is large enough
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
-# is_indexable = lambda bean: is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_INDEXING) # it has to have some text and the text has to be large enough
-# is_downloadable = lambda bean: not (bean.kind == POST or is_text_above_threshold(bean, MIN_WORDS_THRESHOLD_FOR_DOWNLOADING)) # if it is a post dont download it or if the body is large enough
-# use_summary = lambda text: text and len(text.split()) >= MIN_WORDS_THRESHOLD_FOR_SUMMARY # if the body is large enough
+indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
+scrapables = lambda beans: [bean for bean in beans if is_scrapable(bean)] if beans else beans
 storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
-# indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
-# downloadables = lambda beans: [bean for bean in beans if is_downloadable(bean)] if beans else beans
+# use_summary = lambda text: text and len(text.split()) >= WORDS_THRESHOLD_FOR_DIGESTING # if the body is large enough
 
 def log_beans(level, msg, beans: list[Bean]):
     source_counts = {}
@@ -125,13 +120,13 @@ class Orchestrator:
         if not beans: return beans
 
         try:
-            digests = self.digestor.run_batch([bean.text for bean in beans])
+            digests = self.digestor.run_batch([bean.content for bean in beans])
             for bean, digest in zip(beans, digests):
                 if not digest: 
                     log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
                     continue
 
-                bean.summary = f"U:{bean.created.strftime('%Y-%m-%d')};"+digest.expr
+                bean.gist = f"U:{bean.created.strftime('%Y-%m-%d')};"+digest.expr
                 bean.regions = digest.regions
                 bean.entities = digest.entities
                 bean.categories = digest.categories

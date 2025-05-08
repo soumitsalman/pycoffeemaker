@@ -13,4 +13,4 @@ praw
 asyncpraw
 crawl4ai
 azure-storage-queue
-cython
+persist-queue

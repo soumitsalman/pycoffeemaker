@@ -9,6 +9,12 @@
 .mongodb
 .vscode
 .logs
+.scraper-queue
+coffeemaker/collectors/ychackernews.py
+coffeemaker/collectors/rssfeed.py
+coffeemaker/collectors/redditor.py
+coffeemaker/collectors/individual.py
+coffeemaker/collectors/espresso.py
 __azurite*
 __queuestorage__
 __pycache__

@@ -18,10 +18,11 @@ K_KIND = "kind"
 K_CATEGORIES = "categories"
 K_TAGS = "tags"
 K_TITLE = "title"
-K_TEXT = "text"
+K_CONTENT = "content"
 K_SOURCE = "source"
 K_CHANNEL = "channel"
 K_EMBEDDING = "embedding"
+K_GIST = "gist"
 K_SUMMARY = "summary"
 K_UPDATED = "updated"
 K_COLLECTED = "collected"
@@ -35,6 +36,7 @@ K_SIMILARS = "similars"
 K_LATEST_LIKES = "latest_likes"
 K_LATEST_COMMENTS = "latest_comments"
 K_LATEST_SHARES = "latest_shares"
+K_SHARED_IN = "shared_in"
 K_TRENDSCORE = "trend_score"
 K_CONTAINER_URL = "container_url"
 K_LIKES = "likes"
@@ -52,7 +54,7 @@ class Bean(BaseModel):
     source: Optional[str] = None
     title: Optional[str] = None
     kind: Optional[str] = None
-    text: Optional[str] = None
+    content: Optional[str] = None
     image_url: Optional[str] = None
     author: Optional[str] = None    
     created: Optional[datetime] = None 
@@ -85,7 +87,7 @@ class Bean(BaseModel):
     search_score: Optional[float|int] = None
 
     def digest(self) -> str:
-        return self.summary
+        return self.gist
         # lines = [
         #     "# "+(self.gist or self.title),
         #     "**Publish Date**: " + (self.created or self.collected).strftime('%Y-%m-%d %H:%M:%S')

@@ -36,7 +36,7 @@ def setup_categories():
             id = make_id(entry)
             updates.append({
                 K_ID: id,
-                K_TEXT: entry, 
+                K_CONTENT: entry, 
                 K_RELATED: list({make_id(item) for item in path}),
                 K_DESCRIPTION: " >> ".join(path), 
                 K_EMBEDDING:  orch.remotesack.embedder.embed( "category: " + (" >> ".join(path))), 
@@ -52,7 +52,7 @@ def setup_categories():
                 related = list(set(_make_category_entry(predecessors + [key], value)))
                 updates.append({
                     K_ID: id,
-                    K_TEXT: key,
+                    K_CONTENT: key,
                     K_RELATED: related,
                     K_SOURCE: "__SYSTEM__"
                 })

@@ -9,7 +9,7 @@ logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.simplecollector").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
+# logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.digestors").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
@@ -27,7 +27,7 @@ from datetime import datetime
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import collector
-from coffeemaker.orchestrators.utils import log_runtime, END_OF_STREAM
+from coffeemaker.orchestrators.utils import log_runtime
 from coffeemaker.nlp import digestors, embedders
 
 os.makedirs(".test", exist_ok=True)
@@ -131,7 +131,7 @@ def _create_fullstack_orchestrator():
 #     orch._trend_rank()
 
 def test_collection_and_download():
-    from coffeemaker.orchestrators.fullstack import Orchestrator
+    from coffeemaker.orchestrators.fullstack import Orchestrator, END_OF_STREAM
     async def _run(orch: Orchestrator):
         orch._init_run()
         await orch.run_collections_async("/home/soumitsr/codes/pycoffeemaker/tests/test-sources-1.yaml")
@@ -296,7 +296,7 @@ def test_simple_collector():
         "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;",
         "index-queue"
     )
-    orch.run("/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml")
+    orch.run("/home/soumitsr/codes/pycoffeemaker/tests/sources-1.yaml")
 
 if __name__ == "__main__":
     test_simple_collector()

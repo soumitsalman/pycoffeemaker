@@ -10,6 +10,7 @@ from urllib.parse import urljoin, urlparse
 from datetime import datetime, timezone
 import time
 import aiohttp
+from bs4 import BeautifulSoup
 import feedparser
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator
 import praw
@@ -97,17 +98,22 @@ def parse_date(date: str) -> datetime:
 def _excluded_url(url: str):
     return (not url) or any(re.search(pattern, url) for pattern in EXCLUDED_URL_PATTERNS)
 
+def _strip_html_tags(html):
+    if html: return BeautifulSoup(html, "lxml").get_text(separator="\n", strip=True)
+
 ### rss feed related utilities ###
-def _extract_body(entry: feedparser.FeedParserDict) -> str:
+def _extract_body(entry: feedparser.FeedParserDict) -> tuple[str, str]:
     # the body usually lives in <dc:content>, <content:encoded> or <description>
-    body_html: str = ""
+    summary, content = None, None
     if 'dc_content' in entry:
-        body_html = entry.dc_content
+        content = entry.dc_content
     elif 'content' in entry:        
-        body_html = entry.content[0]['value'] if isinstance(entry.content, list) else entry.content    
-    elif 'summary' in entry:
-        body_html = entry.summary
-    return body_html.strip()
+        content = entry.content[0]['value'] if isinstance(entry.content, list) else entry.content    
+    
+    if 'summary' in entry:
+        summary = entry.summary
+        
+    return summary, (content or summary)
 
 def _extract_main_image(entry: feedparser.FeedParserDict) -> str:
     if ('links' in entry) and any(item for item in entry.links if "image" in item.get('type', "")):
@@ -180,8 +186,9 @@ def parse_sources(sources: str) -> dict:
 class APICollector:
     md_generator: DefaultMarkdownGenerator = None
     reddit_client = None
+    collect_callback: Callable = None
 
-    def __init__(self):  
+    def __init__(self, collect_callback: Callable = None):  
         self.md_generator = DefaultMarkdownGenerator(options=MD_OPTIONS)
         self.reddit_client = praw.Reddit(
             check_for_updates=True,
@@ -193,6 +200,14 @@ class APICollector:
             timeout=TIMEOUT,
             rate_limit_seconds=RATELIMIT_WAIT,
         )
+        self.collect_callback = collect_callback
+
+    def _return_collected(self, source, collected: list|None):
+        if collected: log.info("collected", extra={"source": source, "num_items": len(collected)})
+        else: log.warning("collection failed", extra={"source": source, "num_items": 1})
+        
+        if self.collect_callback: self.collect_callback(source, collected)
+        else: return collected
 
     def collected_rssfeeds(self, feed_urls: list[str]) -> list[Bean]|list[tuple[Bean, Chatter]]:
         return merge_lists(_batch_collect(self.collect_rssfeed, feed_urls))
@@ -207,37 +222,29 @@ class APICollector:
             if feed.entries: 
                 source = extract_source(feed.entries[0].link)
                 collected = [self._from_rssfeed(entry, source, NEWS) for entry in feed.entries]
-        except Exception as e:
-            ic(url, e)
-
-        if collected: log.info("collected", extra={"source": url, "num_items": len(feed.entries)})
-        else: log.warning("collection failed", extra={"source": url, "num_items": 1})
-        return collected
+        except Exception as e: ic(url, e)
+        return self._return_collected(url, collected)
  
     ### rss feed related utilities  ###
     async def collect_rssfeed_async(self, url: str, default_kind: str = NEWS) -> list[Bean]|list[tuple[Bean, Chatter]]:
+        collected = None
         try:
-            collected = None
             async with aiohttp.ClientSession() as session:
                 resp = await session.get(url, headers=RSS_REQUEST_HEADERS, timeout=TIMEOUT)
                 resp.raise_for_status()
                 feed = feedparser.parse(await resp.text())
+
                 if feed.entries:
                     source = extract_source(feed.feed.get('link') or feed.entries[0].link)
                     collected = [self._from_rssfeed(entry, source, default_kind) for entry in feed.entries]
-                else:
-                    log.warning("collection failed", extra={"source": url, "num_items": 1})
-            return collected
-        except Exception as e:
-            log.warning("collection failed", extra={"source": url, "num_items": 1})
-            ic(url, e) # NOTE: this is for local debugging
+        except Exception as e: ic(url, e) # NOTE: this is for local debugging
+        return self._return_collected(source, collected)
 
     def _from_rssfeed(self, entry: feedparser.FeedParserDict, source: str, default_kind: str) -> tuple[Bean, Chatter]:
         current_time = now()
         published_time = entry.get("published_parsed") or entry.get("updated_parsed")
         created_time = from_timestamp(time.mktime(published_time)) if published_time else current_time
-        body_html = _extract_body(entry)
-        body = f"# {entry.title}\n\n{self._generate_markdown(body_html)}" if body_html else None
+        summary, content = _extract_body(entry)
         return (
             Bean(
                 url=entry.link,
@@ -248,7 +255,8 @@ class APICollector:
                 source=source,
                 title=entry.title,
                 kind=_guess_type(entry.link, source) or default_kind,
-                text=body,
+                summary=_strip_html_tags(summary),
+                content=self._generate_markdown(content),
                 author=entry.get('author'),        
                 image_url=_extract_main_image(entry)
             ),
@@ -260,35 +268,36 @@ class APICollector:
                 comments=entry.slash_comments
             ) if 'slash_comments' in entry else None
         )
-    
+
     def _generate_markdown(self, html: str) -> str:
         """Converts the given html into a markdown"""
-        # TODO: ideally this should be done with crawler.arun("raw:"+html)
-        return self.md_generator.generate_markdown(input_html=html).raw_markdown.strip()
+        if html: return self.md_generator.generate_markdown(input_html=html).raw_markdown.strip()
     
     def collect_subreddits(self, subreddit_names: list[str]):
         return merge_lists(_batch_collect(self.collect_subreddit, subreddit_names))
     
     def collect_subreddit(self, subreddit_name, default_kind: str = NEWS):
+        collected = None
         @retry(exceptions=(prawcore.exceptions.ResponseException), tries=2, delay=10, jitter=(5, 10))
         def _collect():
             sr = self.reddit_client.subreddit(subreddit_name)
             return [self._from_reddit(post, subreddit_name, default_kind) for post in sr.hot(limit=25) if not _excluded_url(post.url)]
-        try: return _collect()
-        except Exception as e:
-            log.warning("collection failed", extra={"source": subreddit_name, "num_items": 1})
-            ic(subreddit_name, e, e.__class__.__name__)            
+        
+        try: collected = _collect()
+        except Exception as e: ic(subreddit_name, e, e.__class__.__name__)   
+        return self._return_collected(subreddit_name, collected)       
     
     ### reddit related utilities ###
     async def collect_subreddit_async(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
-        # @retry(tries=2, delay=5, jitter=(0, 10))
+        collected = None
+        @retry(tries=2, delay=5, jitter=(0, 10))
         async def _collect():
             subreddit = await self.reddit_client.subreddit(subreddit_name)
             return [self._from_reddit(post, subreddit_name, default_kind) async for post in subreddit.hot(limit=25) if not _excluded_url(post.url)]
-        try: return await _collect()
-        except Exception as e:
-            log.warning("collection failed", extra={"source": subreddit_name, "num_items": 1})
-            ic(subreddit_name, e, e.__class__.__name__)
+        
+        try: collected = await _collect()
+        except Exception as e: ic(subreddit_name, e, e.__class__.__name__)
+        return self._return_collected(subreddit_name, collected) 
 
     def _from_reddit(self, post, sr_name, default_kind) -> tuple[Bean, Chatter]: 
         subreddit = f"r/{sr_name}"
@@ -320,7 +329,7 @@ class APICollector:
                 source=source,
                 title=post.title,
                 kind=kind,
-                text=post.selftext,
+                content=post.selftext,
                 author=post.author.name if post.author else None,
                 # fill in the defaults
                 shared_in=[chatter_link],
@@ -340,23 +349,25 @@ class APICollector:
     
     ### hackernews related utilities ###
     async def collect_ychackernews_async(self) -> list[tuple[Bean, Chatter]]:
+        collected = None
         try:
             async with aiohttp.ClientSession() as session:
                 entry_ids = await asyncio.gather(*[_fetch_json(session, ids_url) for ids_url in HACKERNEWS_STORIES_URLS])
                 entry_ids = set(chain(*entry_ids))
                 stories = await asyncio.gather(*[_fetch_json(session, hackernews_story_metadata(id)) for id in entry_ids])
                 collected = [self._from_hackernews_story(story, BLOG) for story in stories if story and not _excluded_url(story.get('url'))]
-            return collected
-        except Exception as e:
-            log.warning("collection failed", extra={"source": HACKERNEWS, "num_items": 1})
-            ic(HACKERNEWS, e)
+        except Exception as e: ic(HACKERNEWS, e)
+        return self._return_collected(collected)
 
     def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[tuple[Bean, Chatter]]:
         ids = merge_lists(_batch_collect(_fetch_json, stories_urls))
         stories = _batch_collect(_fetch_json, [hackernews_story_metadata(id) for id in ids])
-        return _batch_collect(
-            lambda story: self._from_hackernews_story(story, BLOG), 
-            [story for story in stories if story and not _excluded_url(story.get('url'))]
+        return self._return_collected(
+            HACKERNEWS,
+            _batch_collect(
+                lambda story: self._from_hackernews_story(story, BLOG), 
+                [story for story in stories if story and not _excluded_url(story.get('url'))]
+            )
         )
     
     def _from_hackernews_story(self, story: dict, default_kind: str) -> tuple[Bean, Chatter]:
@@ -385,7 +396,7 @@ class APICollector:
                 source=source,
                 title=story.get('title'),
                 kind=kind, # blog, post or job
-                text=self._generate_markdown(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
+                content=self._generate_markdown(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
                 author=story.get('by'),
                 # fill in the defaults
                 shared_in=[hackernews_story_permalink(id)],
@@ -454,7 +465,7 @@ METADATA_EXTRACTION_SCHEMA = {
         # all body selectors
         {"name": "title", "type": "text", "selector": "h1, title"},
         # all meta selectors
-        # {"name": "description", "type": "attribute", "selector": "meta[name='description']", "attribute": "content"},
+        {"name": "description", "type": "attribute", "selector": "meta[name='description']", "attribute": "content"},
         {"name": "meta_title", "type": "attribute", "selector": "meta[property='og:title'], meta[name='og:title']", "attribute": "content"},
         {"name": "published_time", "type": "attribute", "selector": "meta[property='rnews:datePublished'], meta[property='article:published_time'], meta[name='OriginalPublicationDate'], meta[itemprop='datePublished'], meta[property='og:published_time'], meta[name='article_date_original'], meta[name='publication_date'], meta[name='sailthru.date'], meta[name='PublishDate'], meta[property='pubdate']", "attribute": "content"},
         {"name": "top_image", "type": "attribute", "selector": "meta[property='og:image'], meta[property='og:image:url'], meta[name='og:image:url'], meta[name='og:image']", "attribute": "content"},
@@ -470,7 +481,7 @@ METADATA_EXTRACTION_SCHEMA = {
 class WebScraper:    
     browser_config = None
 
-    def __init__(self):
+    def __init__(self, batch_size: int = BATCH_SIZE):
         self.browser_config = BrowserConfig(
             headless=True,
             ignore_https_errors=False,
@@ -480,8 +491,9 @@ class WebScraper:
             text_mode=True,
             verbose=False
         )
+        self.batch_size = batch_size
 
-    def _run_config(collect_metadata: bool):
+    def _run_config(self, collect_metadata: bool):
         if collect_metadata: return CrawlerRunConfig(   
             # content processing
             word_count_threshold=100,
@@ -496,9 +508,8 @@ class WebScraper:
             cache_mode=CacheMode.BYPASS,
 
             # navigation & timing
-            semaphore_count=BATCH_SIZE,
+            # semaphore_count=self.batch_size,
             wait_for_images=False,  
-            page_timeout=30000,
 
             # page interaction
             scan_full_page=False,
@@ -527,10 +538,10 @@ class WebScraper:
             remove_forms=True,
 
             # caching and session
-            cache_mode=CacheMode.ENABLED,
+            cache_mode=CacheMode.BYPASS,
 
             # navigation & timing
-            semaphore_count=BATCH_SIZE,
+            # semaphore_count=self.batch_size,
             wait_for_images=False,
 
             # page interaction
@@ -554,7 +565,7 @@ class WebScraper:
         """Collects the body of the url as a markdown"""
         if _excluded_url(url): return
         async with AsyncWebCrawler(config=self.browser_config) as crawler:
-            parsed_result = await crawler.arun(url=url, config=WebScraper._run_config(collect_metadata))
+            parsed_result = await crawler.arun(url=url, config=self._run_config(collect_metadata))
             result = APICollector._package_result(parsed_result)
         return result
 
@@ -562,11 +573,12 @@ class WebScraper:
         """Collects the bodies of the urls as markdowns"""
         try:
             async with AsyncWebCrawler(config=self.browser_config) as crawler:
-                parsed_results = await crawler.arun_many(urls=urls, config=WebScraper._run_config(collect_metadata))
+                parsed_results = await crawler.arun_many(urls=urls, config=self._run_config(collect_metadata))
                 parsed_results = {result.url: result for result in parsed_results}
                 results = [WebScraper._package_result(parsed_results[url]) for url in urls]            
             return results
-        except:
+        except Exception as e:
+            ic(e.__class__.__name__, e)
             return [None]*len(urls)
 
     async def scrape_beans(self, beans: list[Bean], collect_metadata: bool = False) -> list[Bean]:
@@ -575,7 +587,7 @@ class WebScraper:
         current_time = now()
         for bean, result in zip(beans, results):
             if not result: continue
-            bean.text = result.get("markdown")
+            bean.content = result.get("markdown")
             bean.title = result.get("meta_title") or bean.title or result.get("title") # this sequence is important because result['title'] is often crap
             bean.image_url = result.get("top_image") or bean.image_url
             bean.author = result.get("author") or bean.author
@@ -584,7 +596,8 @@ class WebScraper:
         return beans
 
     def _package_result(result) -> dict:   
-        if not (result and result.status_code == 200): return        
+        if not result: return
+        # if not (result and ic(result.status_code) == 200): return        
 
         ret = {
             "url": result.url,
