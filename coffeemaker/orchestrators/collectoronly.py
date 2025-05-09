@@ -15,7 +15,6 @@ from coffeemaker.orchestrators.utils import *
 
 FILTER_KINDS = [NEWS, BLOG]
 BATCH_SIZE = int(os.getenv('COLLECTOR_BATCH_SIZE', 16*os.cpu_count()))
-MAX_TEXT_LEN = 40*1024
 
 log = logging.getLogger(__name__)
 
@@ -29,9 +28,6 @@ def _prepare_new(beans: list[Bean]):
         bean.id = bean.url
         bean.created = bean.created or bean.collected
         bean.updated = bean.updated or bean.collected
-        bean.tags = None
-        bean.cluster_id = bean.url
-        bean.content = bean.content[:MAX_TEXT_LEN] if bean.content else None
     return beans
 
 class Orchestrator:
@@ -39,16 +35,16 @@ class Orchestrator:
     queue: QueueClient = None
     scraper_queue: Queue = None
 
-    def __init__(self, db_path: str = None, db_name: str = "beansack", queue_path: str = None, queue_name: str = None):
-        self.db = MongoSack(db_path, db_name) if db_path else None
+    def __init__(self, db_path: str, db_name: str, queue_path: str = None, queue_name: str = None):
+        self.db = MongoSack(db_path, db_name)
         self.queue = QueueClient.from_connection_string(queue_path, queue_name) if queue_path else None
 
         self.apicollector = APICollector(self.triage_beans)
         self.webscraper = WebScraper(BATCH_SIZE)
-        self.scraper_queue = Queue(".scraper-queue", tempdir=".")
+        self.scraper_queue = Queue(".scrapingqueue", tempdir=".")
 
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
-        if not beans: beans
+        if not beans: return beans
         try: exists = self.db.exists(beans)
         except: exists = [bean.url for bean in beans]
         return list({bean.url: bean for bean in beans if (bean.kind in FILTER_KINDS) and (bean.url not in exists)}.values())  
@@ -74,7 +70,7 @@ class Orchestrator:
 
     def queue_beans(self, source, beans: list[Bean]) -> None:
         if not beans or not self.queue: return
-        [self.queue.send_message(bean.model_dump_json(exclude_none = True, exclude_unset=True, by_alias=True)) for bean in beans]
+        [self.queue.send_message(bean.url) for bean in beans]
         log.info(f"queued", extra={"source": source, "num_items": len(beans)})
 
     def store_beans(self, source: str, beans: list[Bean]):
@@ -86,20 +82,14 @@ class Orchestrator:
         beans = self._filter_new(beans)
         if not beans: return
         beans = _prepare_new(beans)
-        # self.store_beans(source, beans)
-        # self.queue_beans(source, indexables(beans))
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="commit") as executor:
-            futures = [
-                executor.submit(self.store_beans, source, beans),
-                executor.submit(self.queue_beans, source, indexables(beans))
-            ]
-            [future.result() for future in as_completed(futures)]
+            executor.submit(self.store_beans, source, beans),
+            executor.submit(self.queue_beans, source, indexables(beans))
         return beans
     
     def _scrape(self, source: str, beans: list[Bean]):
         if not beans: return
 
-        # log.info("scraping", extra={"source": source, "num_items": len(beans)})
         loop = asyncio.get_event_loop()
         beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
         log.info("scraped", extra={"source": source, "num_items": len(beans)})
@@ -111,6 +101,7 @@ class Orchestrator:
     @log_runtime(logger=log)
     def run(self, sources = os.getenv("COLLECTOR_SOURCES")):
         # first collect
+        self.queue.clear_messages()
         for source_type, source_paths in parse_sources(sources).items():
             # awaiting on each group so that os is not overwhelmed by sockets
             log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
@@ -122,4 +113,5 @@ class Orchestrator:
         while not self.scraper_queue.empty():
             source, beans = self.scraper_queue.get()
             self._scrape(source, beans)
+            self.scraper_queue.task_done()
 

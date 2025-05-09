@@ -96,9 +96,10 @@ class Beansack:
         res = self.chatterstore.insert_many([item.model_dump(exclude_unset=True, exclude_none=True, by_alias=True) for item in chatters])
         return len(res.inserted_ids or [])
 
-    def update_beans(self, updates):
+    def update_beans(self, updates: list):
+        if not updates: return 0
         return self.beanstore.bulk_write(updates, ordered=False, bypass_document_validation=True).matched_count
-      
+
     def delete_old(self, window: int):
         time_filter = {K_UPDATED: { "$lt": ndays_ago(window) }}
         return self.beanstore.delete_many(time_filter).deleted_count
@@ -165,6 +166,37 @@ class Beansack:
 
     def vector_search_beans(self, 
         embedding: list[float] = None, 
+        min_score = DEFAULT_VECTOR_SEARCH_SCORE, 
+        filter = None, 
+        sort_by = None,
+        skip = 0,
+        limit = DEFAULT_VECTOR_SEARCH_LIMIT, 
+        projection = None
+    ) -> list[Bean]:
+        pipeline = [            
+            {
+                "$search": {
+                    "cosmosSearch": {
+                        "vector": embedding,
+                        "path":   K_EMBEDDING,
+                        "filter": filter or {},
+                        "k":      skip+limit,
+                    }
+                }
+            },
+            {
+                "$addFields": { "search_score": {"$meta": "searchScore"} }
+            }
+        ]  
+        if min_score: pipeline.append({"$match": { "search_score": {"$gte": min_score}}})
+        if sort_by: pipeline.append({"$sort": sort_by})
+        if skip: pipeline.append({"$skip": skip})
+        if limit: pipeline.append({"$limit": limit})
+        if projection: pipeline.append({"$project": projection})
+        return _deserialize_beans(self.beanstore.aggregate(pipeline=pipeline))
+
+    def vector_search_distinct_beans(self, 
+        embedding: list[float] = None, 
         min_score = None, 
         filter = None, 
         sort_by = None,
@@ -175,7 +207,7 @@ class Beansack:
         pipline = self._vector_search_pipeline(embedding, min_score, filter, sort_by, skip, limit, projection)
         return _deserialize_beans(self.beanstore.aggregate(pipeline=pipline))
     
-    def count_vector_search_beans(self, embedding: list[float] = None, min_score = DEFAULT_VECTOR_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_VECTOR_SEARCH_LIMIT) -> int:
+    def count_vector_search_distinct_beans(self, embedding: list[float] = None, min_score = DEFAULT_VECTOR_SEARCH_SCORE, filter: dict = None, limit = DEFAULT_VECTOR_SEARCH_LIMIT) -> int:
         pipeline = self._count_vector_search_pipeline(embedding, min_score, filter, limit)
         result = list(self.beanstore.aggregate(pipeline))
         return result[0]['total_count'] if result else 0

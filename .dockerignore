@@ -9,7 +9,7 @@
 .mongodb
 .vscode
 .logs
-.scraper-queue
+.scrapingqueue
 test
 __azurite*
 __queuestorage__

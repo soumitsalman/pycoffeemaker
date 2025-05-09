@@ -33,7 +33,16 @@ logging.getLogger("connectionpool").propagate = False
 if __name__ == "__main__":    
     mode = os.getenv("MODE")
     if mode == "COLLECTOR_ONLY":
-        from coffeemaker.orchestrators.simplecollector import Orchestrator
+        from coffeemaker.orchestrators.collectoronly import Orchestrator
+        orch = Orchestrator(
+            os.getenv("DB_REMOTE"),
+            os.getenv("DB_NAME"),
+            os.getenv("INDEXING_QUEUE_PATH"),
+            os.getenv("INDEXING_QUEUE_NAME")
+        )
+        orch.run()
+    elif mode == "INDEXER_ONLY":
+        from coffeemaker.orchestrators.indexeronly import Orchestrator
         orch = Orchestrator(
             os.getenv("DB_REMOTE"),
             os.getenv("DB_NAME"),

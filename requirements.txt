@@ -27,3 +27,4 @@ crawl4ai
 nest-asyncio
 asyncpraw
 setuptools
+azure-storage-queue

@@ -7,7 +7,8 @@ import logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
 logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.simplecollector").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.collectoronly").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.indexeronly").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
 # logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
@@ -288,18 +289,42 @@ def download_markdown(q: str = None, accuracy = DEFAULT_VECTOR_SEARCH_SCORE, key
     if keywords: filename = "-".join(keywords)
     save_markdown(filename, markdown)
 
-def test_simple_collector():
-    from coffeemaker.orchestrators.simplecollector import Orchestrator
+def test_collector_orch():
+    from coffeemaker.orchestrators.collectoronly import Orchestrator
     orch = Orchestrator(
-        os.getenv('DB_REMOTE_TEST'),
+        os.getenv('DB_REMOTE'),
         "test", 
-        os.getenv('INDEXING_QUEUE_PATH_TEST'),
-        "index-queue"
+        os.getenv('INDEXING_QUEUE_PATH'),
+        "test-queue"
     )
-    orch.run("/home/soumitsr/codes/pycoffeemaker/tests/sources-1.yaml")
+    sources = """
+sources:
+  rss:
+    - https://api.quantamagazine.org/feed/
+    - https://securityintelligence.com/feed/
+    - https://lifehacker.com/feed/rss
+    - https://www.extremetech.com/feed
+    - https://theubj.com/feed/
+    - https://www.darkreading.com/rss.xml
+    """
+    orch.run(sources)
+
+def test_indexer_orch():
+    from coffeemaker.orchestrators.indexeronly import Orchestrator
+    orch = Orchestrator(
+        os.getenv('DB_REMOTE'),
+        "test", 
+        os.getenv('INDEXING_QUEUE_PATH'),
+        "test-queue",
+        embedder_path="avsolatorio/GIST-small-Embedding-v0",
+        embedder_context_len=512,
+        cluster_eps=0.2
+    )
+    orch.run()
 
 if __name__ == "__main__":
-    test_simple_collector()
+    test_collector_orch()
+    test_indexer_orch()
 
     # test_run_async()
     # test_embedder()
