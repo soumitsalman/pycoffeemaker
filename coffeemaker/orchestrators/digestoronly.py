@@ -59,11 +59,7 @@ class Orchestrator:
             log.error("failed digesting", extra={"source": beans[0].source, "num_items": len(beans)})
             ic(e.__class__.__name__, e)
 
-        return storables(beans)
-        
-    def update_digests(self, beans: list[Bean]) -> list[Bean]:
-        if not beans: return beans
-
+        beans = storables(beans)
         make_update = lambda bean: UpdateOne(
             {K_ID: bean.url}, 
             {
@@ -93,7 +89,6 @@ class Orchestrator:
             try:
                 beans = self.db.query_beans({K_URL: {"$in": urls}}, projection={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_CREATED: 1, K_CATEGORIES: 1})
                 beans = self.digest_beans(digestibles(beans))
-                self.update_digests(beans)
             except Exception as e:
                 log.error("failed digesting", extra={"source": run_id, "num_items": len(urls)})
                 ic(e)

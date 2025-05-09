@@ -32,12 +32,12 @@ def _prepare_new(beans: list[Bean]):
 
 class Orchestrator:
     db: MongoSack = None
-    queue: QueueClient = None
+    queues: QueueClient = None
     scraper_queue: Queue = None
 
-    def __init__(self, db_path: str, db_name: str, queue_path: str = None, queue_name: str = None):
+    def __init__(self, db_path: str, db_name: str, queue_path: str = None, queue_names: list[str] = None):
         self.db = MongoSack(db_path, db_name)
-        self.queue = QueueClient.from_connection_string(queue_path, queue_name) if queue_path else None
+        if queue_path: self.queues = [QueueClient.from_connection_string(queue_path, queue_name) for queue_name in queue_names]
 
         self.apicollector = APICollector(self.triage_beans)
         self.webscraper = WebScraper(BATCH_SIZE)
@@ -69,8 +69,10 @@ class Orchestrator:
         self._commit_new(source, [bean for bean in beans if bean not in needs_scraping])
 
     def queue_beans(self, source, beans: list[Bean]) -> None:
-        if not beans or not self.queue: return
-        [self.queue.send_message(bean.url) for bean in beans]
+        if not beans or not self.queues: return
+        urls = [bean.url for bean in beans]
+        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="queuing") as executor:
+            [executor.map(queue.send_message, urls) for queue in self.queues]
         log.info(f"queued", extra={"source": source, "num_items": len(beans)})
 
     def store_beans(self, source: str, beans: list[Bean]):
@@ -101,7 +103,6 @@ class Orchestrator:
     @log_runtime(logger=log)
     def run(self, sources = os.getenv("COLLECTOR_SOURCES")):
         # first collect
-        self.queue.clear_messages()
         for source_type, source_paths in parse_sources(sources).items():
             # awaiting on each group so that os is not overwhelmed by sockets
             log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})

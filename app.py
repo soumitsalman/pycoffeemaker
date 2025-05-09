@@ -37,8 +37,8 @@ if __name__ == "__main__":
         orch = Orchestrator(
             os.getenv("DB_REMOTE"),
             os.getenv("DB_NAME"),
-            os.getenv("INDEXING_QUEUE_PATH"),
-            os.getenv("INDEXING_QUEUE_NAME")
+            os.getenv("QUEUE_PATH"),
+            [queue_name.strip() for queue_name in os.getenv("COLLECTOR_OUT_QUEUES").split(",")],
         )
         orch.run()
     elif mode == "INDEXER_ONLY":
@@ -46,8 +46,17 @@ if __name__ == "__main__":
         orch = Orchestrator(
             os.getenv("DB_REMOTE"),
             os.getenv("DB_NAME"),
-            os.getenv("INDEXING_QUEUE_PATH"),
-            os.getenv("INDEXING_QUEUE_NAME")
+            os.getenv("QUEUE_PATH"),
+            os.getenv("INDEXER_IN_QUEUE")
+        )
+        orch.run()
+    elif mode == "DIGESTOR_ONLY":
+        from coffeemaker.orchestrators.digestoronly import Orchestrator
+        orch = Orchestrator(
+            os.getenv("DB_REMOTE"),
+            os.getenv("DB_NAME"),
+            os.getenv("QUEUE_PATH"),
+            os.getenv("DIGESTOR_IN_QUEUE")
         )
         orch.run()
     else:

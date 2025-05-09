@@ -295,8 +295,8 @@ def test_collector_orch():
     orch = Orchestrator(
         os.getenv('DB_REMOTE'),
         "test", 
-        os.getenv('INDEXING_QUEUE_PATH'),
-        "test-queue"
+        os.getenv('QUEUE_PATH_TEST'),
+        ["indexing-queue", "digesting-queue"]
     )
     sources = """
 sources:
@@ -307,6 +307,7 @@ sources:
     - https://www.extremetech.com/feed
     - https://theubj.com/feed/
     - https://www.darkreading.com/rss.xml
+    - https://venturebeat.com/feed/
     """
     orch.run(sources)
 
@@ -315,8 +316,8 @@ def test_indexer_orch():
     orch = Orchestrator(
         os.getenv('DB_REMOTE'),
         "test", 
-        os.getenv('INDEXING_QUEUE_PATH'),
-        "test-queue",
+        os.getenv('QUEUE_PATH_TEST'),
+        "indexing-queue",
         embedder_path="avsolatorio/GIST-small-Embedding-v0",
         embedder_context_len=512,
         cluster_eps=0.2
@@ -328,15 +329,16 @@ def test_digestor_orch():
     orch = Orchestrator(
         os.getenv('DB_REMOTE'),
         "test", 
-        os.getenv('INDEXING_QUEUE_PATH'),
-        "test-queue"
+        os.getenv('QUEUE_PATH_TEST'),
+        "digesting-queue"
     )
     orch.run()
 
 if __name__ == "__main__":
     test_collector_orch()
+    test_indexer_orch()
     test_digestor_orch()
-    # test_indexer_orch()
+    
 
     # test_run_async()
     # test_embedder()

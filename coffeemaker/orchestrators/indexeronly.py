@@ -22,7 +22,7 @@ MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
 
 is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING)
 is_storable = lambda bean: bool(bean.embedding) # if there is no embedding then no point storing
-storables = lambda beans: list(map(is_storable, beans)) if beans else beans 
+storables = lambda beans: list(filter(is_storable, beans)) if beans else beans 
 
 class Orchestrator:
     db: MongoSack = None
