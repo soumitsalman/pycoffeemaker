@@ -9,6 +9,7 @@ logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.collectoronly").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.indexeronly").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.digestoronly").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
 # logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
@@ -322,9 +323,20 @@ def test_indexer_orch():
     )
     orch.run()
 
+def test_digestor_orch():
+    from coffeemaker.orchestrators.digestoronly import Orchestrator
+    orch = Orchestrator(
+        os.getenv('DB_REMOTE'),
+        "test", 
+        os.getenv('INDEXING_QUEUE_PATH'),
+        "test-queue"
+    )
+    orch.run()
+
 if __name__ == "__main__":
     test_collector_orch()
-    test_indexer_orch()
+    test_digestor_orch()
+    # test_indexer_orch()
 
     # test_run_async()
     # test_embedder()

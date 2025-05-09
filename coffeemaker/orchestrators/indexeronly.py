@@ -22,7 +22,7 @@ MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
 
 is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING)
 is_storable = lambda bean: bool(bean.embedding) # if there is no embedding then no point storing
-storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
+storables = lambda beans: list(map(is_storable, beans)) if beans else beans 
 
 class Orchestrator:
     db: MongoSack = None
@@ -52,7 +52,7 @@ class Orchestrator:
         for bean, embedding in zip(beans, embeddings):
             bean.embedding = embedding
 
-        beans = [bean for bean in beans if bean.embedding]
+        beans = storables(beans)
         make_update = lambda bean: UpdateOne({K_ID: bean.url}, {"$set": {K_EMBEDDING: bean.embedding}})
         count = self.db.update_beans(list(map(make_update, beans)))
         log.info("embedded", extra={"source": beans[0].source, "num_items": count})
@@ -108,26 +108,17 @@ class Orchestrator:
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting indexer", extra={"source": run_id, "num_items": 1})
 
-        for batch in self.queue.receive_messages(messages_per_page=BATCH_SIZE).by_page():
+        for batch in self.queue.receive_messages(messages_per_page=min(MAX_QUEUE_PAGE, BATCH_SIZE)).by_page():
             urls = list(map(self._process_msg, batch))
-            # for msg in batch:
-            #     urls.append(msg.content)
-            #     self.queue.delete_message(msg)
             try:
                 beans = self.db.query_beans({K_URL: {"$in": urls}}, projection={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1})
                 beans = self.embed_beans(beans)
                 with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="indexer") as executor:
                     executor.submit(self.classify_beans, beans)
                     executor.submit(self.cluster_beans, beans)
-                # beans = self.classify_beans(beans)
-                # beans = self.cluster_beans(beans)
             except Exception as e:
                 log.error("failed indexing", extra={"source": run_id, "num_items": len(urls)})
                 ic(e)
 
         log.info("completed indexer", extra={"source": run_id, "num_items": 1})
 
-
-        
-    
-  
