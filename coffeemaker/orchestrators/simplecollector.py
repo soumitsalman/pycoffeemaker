@@ -19,7 +19,7 @@ MAX_TEXT_LEN = 40*1024
 
 log = logging.getLogger(__name__)
 
-is_indexable = lambda bean: above_threshold(bean.summary or bean.content, WORDS_THRESHOLD_FOR_INDEXING)
+is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING)
 is_scrapable = lambda bean: not above_threshold(bean.content, WORDS_THRESHOLD_FOR_SCRAPING) # if there is no summary and embedding then no point storing
 indexables = lambda beans: list(filter(is_indexable, beans)) if beans else beans
 scrapables = lambda beans: list(filter(is_scrapable, beans)) if beans else beans 
@@ -35,13 +35,13 @@ def _prepare_new(beans: list[Bean]):
     return beans
 
 class Orchestrator:
-    out_db: MongoSack = None
-    out_queue: QueueClient = None
+    db: MongoSack = None
+    queue: QueueClient = None
     scraper_queue: Queue = None
 
-    def __init__(self, db_path: str = None, db_name: str = None, queue_path: str = None, queue_name: str = None):
-        self.out_db = MongoSack(db_path, db_name) if (db_name and db_path) else None
-        self.out_queue = QueueClient.from_connection_string(queue_path, queue_name) if queue_path else None
+    def __init__(self, db_path: str = None, db_name: str = "beansack", queue_path: str = None, queue_name: str = None):
+        self.db = MongoSack(db_path, db_name) if db_path else None
+        self.queue = QueueClient.from_connection_string(queue_path, queue_name) if queue_path else None
 
         self.apicollector = APICollector(self.triage_beans)
         self.webscraper = WebScraper(BATCH_SIZE)
@@ -49,7 +49,7 @@ class Orchestrator:
 
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
         if not beans: beans
-        try: exists = self.out_db.exists(beans)
+        try: exists = self.db.exists(beans)
         except: exists = [bean.url for bean in beans]
         return list({bean.url: bean for bean in beans if (bean.kind in FILTER_KINDS) and (bean.url not in exists)}.values())  
 
@@ -73,13 +73,13 @@ class Orchestrator:
         self._commit_new(source, [bean for bean in beans if bean not in needs_scraping])
 
     def queue_beans(self, source, beans: list[Bean]) -> None:
-        if not beans or not self.out_queue: return
-        [self.out_queue.send_message(bean.model_dump_json(exclude_none = True, exclude_unset=True, by_alias=True)) for bean in beans]
+        if not beans or not self.queue: return
+        [self.queue.send_message(bean.model_dump_json(exclude_none = True, exclude_unset=True, by_alias=True)) for bean in beans]
         log.info(f"queued", extra={"source": source, "num_items": len(beans)})
 
     def store_beans(self, source: str, beans: list[Bean]):
-        if not beans or not self.out_db: return
-        count = self.out_db.store_beans(beans)
+        if not beans or not self.db: return
+        count = self.db.store_beans(beans)
         log.info("stored", extra={"source": source, "num_items": count})
     
     def _commit_new(self, source: str, beans: list[Bean]):
@@ -103,11 +103,10 @@ class Orchestrator:
         loop = asyncio.get_event_loop()
         beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
         log.info("scraped", extra={"source": source, "num_items": len(beans)})
-        self._commit_new(source, beans)
-        # failed = scrapables(beans)
-        # if failed: 
-        #     log.warning("scraping failed", extra={"source": source, "num_items": len(failed)})
-        #     ic(failed[0])
+        # nullify the contents for which the scraping failed to get anything substantial
+        for bean in beans:
+            if is_scrapable(bean): bean.content = None
+        self._commit_new(source, beans) 
     
     @log_runtime(logger=log)
     def run(self, sources = os.getenv("COLLECTOR_SOURCES")):
