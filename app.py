@@ -11,12 +11,14 @@ load_dotenv(CURR_DIR+"/.env")
 if not os.path.exists(f"{CURR_DIR}/.logs"): os.makedirs(f"{CURR_DIR}/.logs")
 logging.basicConfig(
     level=logging.WARNING, 
-    filename=f"{CURR_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
+    # filename=f"{CURR_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
     format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s")
 
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.simplecollector").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.collectoronly").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.indexeronly").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.digestoronly").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
 # logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False

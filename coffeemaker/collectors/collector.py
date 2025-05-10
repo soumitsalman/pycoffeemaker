@@ -222,7 +222,7 @@ class APICollector:
             if feed.entries: 
                 source = extract_source(feed.entries[0].link)
                 collected = [self._from_rssfeed(entry, source, NEWS) for entry in feed.entries]
-        except Exception as e: ic(url, e)
+        except Exception as e: print(url, e)
         return self._return_collected(url, collected)
  
     ### rss feed related utilities  ###

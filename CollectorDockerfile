@@ -29,7 +29,7 @@ RUN apt-get update && \
 WORKDIR /worker
 COPY ./coffeemaker/collectors ./coffeemaker/collectors
 COPY ./coffeemaker/pybeansack ./coffeemaker/pybeansack
-COPY ./coffeemaker/orchestrators/simplecollector.py ./coffeemaker/orchestrators/simplecollector.py
+COPY ./coffeemaker/orchestrators/collectoronly.py ./coffeemaker/orchestrators/collectoronly.py
 COPY ./coffeemaker/orchestrators/utils.py ./coffeemaker/orchestrators/utils.py
 COPY ./collector-requirements.txt ./collector-requirements.txt
 COPY ./app.py ./app.py
