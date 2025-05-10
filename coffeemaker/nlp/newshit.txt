@@ -1,3 +1,5 @@
+
+# topic generator
 TASK:INPUT=List<ArticleString>;ArticleString=Format<U:YYYY-MM-DD;P:Summary|...;N:Entities|...;E:Events|...;C:Categories|...;S:Sentiment|...>;OUTPUT=Dict<Topic,Dict<frequency:Int,keywords:List<String>>>;
 INSTRUCTIONS:1=AnalyzeArticles;UseFields=P,N,E;GenerateTopics=Dynamic,Specific,Granular;Cluster=SemanticSimilarity;NotUse=GenericCategoriesFromC;AllowMultiTagging=True;
 2=CountFrequency;Frequency=NumArticlesPerTopic;
@@ -5,3 +7,20 @@ INSTRUCTIONS:1=AnalyzeArticles;UseFields=P,N,E;GenerateTopics=Dynamic,Specific,G
 4=GenerateKeywords;Keywords=Specific,Searchable,FromP,N,E;MinimizeFalsePositives=True;Include=Entities,Events,Dates,Phrases;
 5=OutputFormat=Dict;Key=Topic;Value=Dict;ValueFormat=frequency:Int,keywords:List<String>;
 EXAMPLE_OUTPUT={"Topic1":{"frequency":4,"keywords":["kw1","kw2"]},"Topic2":{"frequency":2,"keywords":["kw3","kw4"]}}
+
+# article writer
+TASK:INPUT=Topic:String,Articles:List<ArticleString>;ArticleString=Format<U:YYYY-MM-DD;P:Summary|...;N:Entities|...;E:Events|...;C:Categories|...;S:Sentiment|...>;OUTPUT=OpinionPiece:Markdown;
+INSTRUCTIONS:1=AnalyzeArticles;UseFields=P,N,E,S;Identify=Patterns,Themes,Insights;Grounding=Normative,MultiArticle;Focus=TopicRelevance;
+2=GenerateOpinionPiece;Structure=Introduction,Analysis,Takeaways;Introduction=Context,TopicImportance;Analysis=SynthesizePatterns,QuoteEntitiesEvents,AddressSentiment;Takeaways=KeyInsights,Implications,Recommendations;Tone=Informed,Persuasive,Objective;Length=500-800Words;
+3=OutputFormat=Markdown;Sections=#Introduction,##Analysis,##KeyTakeaways;Include=TopicInTitle;
+EXAMPLE_OUTPUT=#OpinionPiece:TopicName\n#Introduction\nContext...\n##Analysis\nPatterns...\n##KeyTakeaways\n-Insight1\n-Insight2
+
+# digest generator
+TASK: Compress article digest in token-efficient, lossless format. 
+Use semicolon-separated key-value pairs with single-letter prefixes (P:KeyPoints;E:KeyEvents;D:DataPoints;R:Regions;N:Entities;C:Categories;S:Sentiment). 
+Pipe-separate values within sections. 
+Reduce whitespace
+Skip empty fields. 
+Retain all data for >98% recovery. 
+Avoid JSON, nesting. 
+Example: P:Point1|Point2;E:Event1|Event2;D:Data1|Data2;R:Country|City|Continent;N:Entity 1|Entity 2;C:Category 1|Category 2;S:negative
