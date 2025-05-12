@@ -1,4 +1,0 @@
-pymongo
-pydantic
-duckdb
-azure-storage-blob

@@ -9,7 +9,7 @@ from pymongo import UpdateOne
 from azure.storage.queue import QueueClient
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.models import *
-from coffeemaker.nlp import digestors, utils
+from coffeemaker.nlp import writers, utils
 from coffeemaker.orchestrators.utils import *
 
 log = logging.getLogger(__name__)
@@ -24,27 +24,24 @@ storables = lambda beans: list(filter(is_storable, beans)) if beans else beans
 class Orchestrator:
     db: MongoSack = None
     queue: QueueClient = None
-    digestor: digestors.Digestor = None
+    writer: writers.ArticleWriter = None
 
     def __init__(self, 
         db_path: str, 
         db_name: str, 
-        queue_path: str,
-        queue_name: str,
-        digestor_path: str = os.getenv("DIGESTOR_PATH"), 
-        digestor_base_url: str = os.getenv("DIGESTOR_BASE_URL"),
-        digestor_api_key: str = os.getenv("DIGESTOR_API_KEY"),
-        digestor_context_len: int = int(os.getenv("DIGESTOR_CONTEXT_LEN", digestors.CONTEXT_LEN))
+        writer_path: str = os.getenv("WRITER_PATH"), 
+        writer_base_url: str = os.getenv("WRITER_BASE_URL"),
+        writer_api_key: str = os.getenv("WRITER_API_KEY"),
+        writer_context_len: int = int(os.getenv("WRITER_CONTEXT_LEN", writers.CONTEXT_LEN))
     ): 
         self.db = MongoSack(db_path, db_name)
-        self.queue = QueueClient.from_connection_string(queue_path, queue_name)
-        self.digestor = digestors.from_path(digestor_path, digestor_context_len, base_url=digestor_base_url, api_key=digestor_api_key)
+        self.writer = digestors.from_path(writer_path, writer_context_len, base_url=writer_base_url, api_key=writer_api_key)
  
     def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:
         if not beans: return beans
 
         try:
-            digests = self.digestor.run_batch([bean.content for bean in beans])
+            digests = self.writer.run_batch([bean.content for bean in beans])
             for bean, digest in zip(beans, digests):
                 if not digest: 
                     log.error("failed digesting", extra={"source": bean.url, "num_items": 1})
@@ -75,9 +72,6 @@ class Orchestrator:
         log.info("digested", extra={"source": beans[0].source, "num_items": count})
         return beans
     
-    def _process_msg(self, msg):
-        self.queue.delete_message(msg)
-        return msg.content
 
     @log_runtime(logger=log)
     def run(self):
