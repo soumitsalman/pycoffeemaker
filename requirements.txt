@@ -3,6 +3,7 @@ transformers
 sentence-transformers
 optimum[onnxruntime]
 onnx
+hf_xet
 torch
 openai
 llama-index
