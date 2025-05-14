@@ -8,10 +8,14 @@ from icecream import ic
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR+"/.env")
 
-if not os.path.exists(f"{CURR_DIR}/.logs"): os.makedirs(f"{CURR_DIR}/.logs")
+log_dir, log_file = os.getenv("LOG_DIR"), None
+if log_dir:
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = f"{log_dir}/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log"
+    
 logging.basicConfig(
     level=logging.WARNING, 
-    # filename=f"{CURR_DIR}/.logs/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log", 
+    filename=log_file, 
     format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s")
 
 log = logging.getLogger("app")

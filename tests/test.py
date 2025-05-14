@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
-logger = logging.getLogger("app")
+logger = logging.getLogger("test")
 logger.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.collectoronly").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.indexeronly").setLevel(logging.INFO)
@@ -144,11 +144,16 @@ def test_collection_and_download():
     asyncio.run(_run(orch))
     orch.close()
 
+@log_runtime(logger=logger)
 def test_embedder():
-    inputs = load_json("/home/soumitsr/codes/pycoffeemaker/tests/digests-for-embedder.json") 
-    embedder = embedders.from_path(ic(os.getenv("EMBEDDER_PATH")))
-    vecs = embedder([i['digest'] for i in inputs])
-    ic(len(vecs), [(len(vec), vec[0]) for vec in vecs])
+    data = load_json("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")[:5] 
+    # path = "avsolatorio/GIST-small-Embedding-v0"
+    path = "llama-cpp:///home/soumitsr/codes/pycoffeemaker/.models/gist-small-embedding-v0-q8_0.gguf"
+
+    embedder = embedders.from_path(path, 512)
+    vecs = embedder([d['content'] for d in data])
+    ic(len(vecs))
+    ic([(vec[:2]+vec[-1:]) for vec in vecs])
 
 @log_runtime
 def test_digestor():
@@ -159,7 +164,7 @@ def test_digestor():
         os.getenv("DIGESTOR_BASE_URL"), 
         os.getenv("DIGESTOR_API_KEY"), 
         use_short_digest=lambda text: False)
-    [print(resp if resp else "N/A", '\n') for resp in digestor([b['text'] for b in inputs])]
+    [print(resp if resp else "N/A", '\n') for resp in digestor([b['content'] for b in inputs])]
 
 def test_digest_parser():
     responses = [
@@ -239,10 +244,10 @@ def test_run_async():
 lower_case = lambda items: {"$in": [item.lower() for item in items]} if isinstance(items, list) else items.lower()
 case_insensitive = lambda items: {"$in": [re.compile(item, re.IGNORECASE) for item in items]} if isinstance(items, list) else re.compile(items, re.IGNORECASE)
 
-def download_beans():
+def download_test_data(output_path):
     from coffeemaker.orchestrators.fullstack import Orchestrator
     orch = Orchestrator(
-        os.getenv("DB_REMOTE"),
+        os.getenv("DB_REMOTE_TEST"),
         os.getenv("DB_LOCAL"),
         os.getenv("DB_NAME"), 
         embedder_path=os.getenv("EMBEDDER_PATH"),    
@@ -250,14 +255,15 @@ def download_beans():
     )
     beans = orch.remotesack.query_beans(
         filter = {
-            "collected": { "$gte": (datetime.now() - timedelta(hours=8))},
-            "gist": {"$exists": True},
-            "highlights": {"$exists": True}
+            K_COLLECTED: { "$gte": (datetime.now() - timedelta(days=10))},
+            K_KIND: {"$ne": [NEWS, BLOG]},
+            K_CONTENT: {"$exists": True}
         },
-        limit=256
+        projection = {K_EMBEDDING: 0},
+        limit=512
     )
-    to_write = [{"digest": bean.digest()} for bean in beans]
-    with open("embedder-test-data.json", "w") as file:
+    to_write = [bean.model_dump_json(by_alias=True, exclude_none=True, exclude_unset=True, exclude_defaults=True) for bean in beans]
+    with open(output_path, "w") as file:
         json.dump(to_write, file)
 
 def download_markdown(q: str = None, accuracy = DEFAULT_VECTOR_SEARCH_SCORE, keywords: str|list[str] = None, limit = 100):
@@ -316,29 +322,29 @@ def test_indexer_orch():
     orch = Orchestrator(
         os.getenv('DB_REMOTE'),
         "test", 
-        os.getenv('QUEUE_PATH_TEST'),
+        os.getenv('QUEUE_PATH'),
         "indexing-queue",
         embedder_path="avsolatorio/GIST-small-Embedding-v0",
         embedder_context_len=512,
-        cluster_eps=0.2
+        cluster_eps=0.08
     )
-    orch.run()
+    asyncio.run(orch.run_async())
 
 def test_digestor_orch():
     from coffeemaker.orchestrators.digestoronly import Orchestrator
     orch = Orchestrator(
         os.getenv('DB_REMOTE'),
         "test", 
-        os.getenv('QUEUE_PATH_TEST'),
+        os.getenv('QUEUE_PATH'),
         "digesting-queue"
     )
     orch.run()
 
 if __name__ == "__main__":
-    test_collector_orch()
-    test_indexer_orch()
+    # test_collector_orch()
+    # test_indexer_orch()
     test_digestor_orch()
-    
+    # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
     # test_run_async()
     # test_embedder()

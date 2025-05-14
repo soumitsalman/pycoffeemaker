@@ -122,3 +122,24 @@ class Orchestrator:
 
         log.info("completed indexer", extra={"source": run_id, "num_items": 1})
 
+    @log_runtime_async(logger=log)
+    async def run_async(self):
+        run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log.info("starting indexer", extra={"source": run_id, "num_items": 1})
+
+        threads = []
+        for batch in self.queue.receive_messages(messages_per_page=min(MAX_QUEUE_PAGE, BATCH_SIZE)).by_page():
+            urls = list(map(self._process_msg, batch))
+            try:
+                beans = self.db.query_beans({K_URL: {"$in": urls}}, projection={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1})
+                beans = self.embed_beans(beans)
+                threads.append(asyncio.to_thread(self.classify_beans, beans))
+                threads.append(asyncio.to_thread(self.cluster_beans, beans))
+            except Exception as e:
+                log.error("failed indexing", extra={"source": run_id, "num_items": len(urls)})
+                ic(e)
+                
+        await asyncio.gather(*threads)
+
+        log.info("completed indexer", extra={"source": run_id, "num_items": 1})
+

@@ -53,6 +53,8 @@ class Orchestrator:
                 bean.gist = f"U:{bean.created.strftime('%Y-%m-%d')};"+digest.expr
                 bean.regions = digest.regions
                 bean.entities = digest.entities
+                bean.categories = digest.categories
+                bean.sentiments = digest.sentiments
                 bean.tags = utils.merge_tags(digest.regions, digest.entities, digest.categories)
                 
         except Exception as e:

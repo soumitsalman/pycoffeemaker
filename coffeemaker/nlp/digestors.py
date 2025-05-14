@@ -33,19 +33,11 @@ class Digest(BaseModel):
     summary: Optional[str] = Field(default=None)
     insight: Optional[str] = Field(default=None)    
 
-class Digestor(ABC):
-    @abstractmethod
-    def run(self, text: str) -> Digest:
-        raise NotImplementedError("Subclass must implement abstract method")
-    
-    def run_batch(self, texts: list[str]) -> list[Digest]:
-        return [self.run(text) for text in texts]
-
-    def __call__(self, input: str|list[str]) -> Digest|list[Digest]:
-        if isinstance(input, str): return self.run(input)
-        else: return self.run_batch(input)
-
-
+# MAX_VALUE_LEN = 20
+# MAX_PARTS = 3
+# DISALLOWED_CHARS = ['(', ')', '[', ']', '{', '}']
+# def sanitize_field_values(values: list[str]):
+#     remove = lambda text: (len(text) > MAX_VALUE_LEN) and (len(text.split(' ')) > MAX_PARTS) and ''
 
 def parse_json(response: str):  
     try:      
@@ -155,6 +147,18 @@ def create_prompt_for_tuned_model(input_text: str, use_short_digest: bool):
             "content":  template.format(input_text=input_text)
         }
     ]
+
+class Digestor(ABC):
+    @abstractmethod
+    def run(self, text: str) -> Digest:
+        raise NotImplementedError("Subclass must implement abstract method")
+    
+    def run_batch(self, texts: list[str]) -> list[Digest]:
+        return [self.run(text) for text in texts]
+
+    def __call__(self, input: str|list[str]) -> Digest|list[Digest]:
+        if isinstance(input, str): return self.run(input)
+        else: return self.run_batch(input)
 
 class LlamaCppDigestor(Digestor):
     model_path = None

@@ -1,5 +1,7 @@
+# Start Generation Here
 FROM python:3.12-bookworm
 
+# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
@@ -8,28 +10,38 @@ RUN apt-get update && \
     g++ \
     gcc \
     wget \
+    python3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /worker
 COPY . .
+# RUN mkdir .logs
 
-RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir -r coffeemaker/pybeansack/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+RUN mkdir .models .db
+
 RUN crawl4ai-setup
 RUN crawl4ai-doctor
 
-RUN mkdir .db .models .logs
-RUN wget https://huggingface.co/soumitsr/GIST-small-Embedding-v0-Q8_0-GGUF/resolve/main/gist-small-embedding-v0-q8_0.gguf -O .models/gist-small-embedding-v0-q8_0.gguf
+RUN transformers-cli download --cache-dir /worker/.models avsolatorio/GIST-small-Embedding-v0
 RUN wget https://huggingface.co/soumitsr/SmolLM2-135M-Instruct-article-digestor-gguf/resolve/main/unsloth.Q8_0.gguf -O .models/SmolLM2-135M-Instruct-article-digestor-q8.gguf
 
-ENV DB_LOCAL .db
-ENV DB_NAME beansackV2
-ENV EMBEDDER_PATH llama-cpp:///app/.models/gist-small-embeddingv-0-q8.gguf
-ENV LLM_PATH llama-cpp:///app/.models/SmolLM2-135M-Instruct-article-digestor-q8.gguf
-ENV LLM_N_CTX 4096
-ENV CLUSTER_EPS 3.6
+ENV HF_HOME=.models
+ENV HF_HUB_CACHE=.models
+ENV HF_ASSETS_CACHE=.models
 
-# End Generation Here
+ENV DB_LOCAL=.db
+
+ENV COLLECTOR_SOURCES=/worker/coffeemaker/collectors/sources.yaml
+
+ENV EMBEDDER_PATH=avsolatorio/GIST-small-Embedding-v0
+ENV EMBEDDER_CONTEXT_LEN=512
+ENV INDEXER_BATCH_SIZE=32
+ENV CLUSTER_EPS=3.75
+
+ENV DIGESTOR_BATCH_SIZE=32
+
 CMD ["python", "/worker/app.py"]
