@@ -2,6 +2,7 @@ from functools import wraps
 import os
 from logging import Logger
 from datetime import datetime
+from azure.storage.queue import QueueClient, QueueMessage
 
 MAX_QUEUE_PAGE = 32
 WORDS_THRESHOLD_FOR_SCRAPING = int(os.getenv('WORDS_THRESHOLD_FOR_SCRAPING', 200)) # min words needed to not download the body
@@ -31,4 +32,24 @@ def log_runtime_async(logger: Logger):
             return result
         return wrapper
     return decorator
+
+def dequeue_batch(queue: QueueClient, max_batch_size: int):
+    def delete_and_extract(msg: QueueMessage):
+        queue.delete_message(msg)
+        return msg.content
+        
+    batch = []    
+    for page in queue.receive_messages(messages_per_page=MAX_QUEUE_PAGE).by_page():
+        items = list(map(delete_and_extract, page))
+        while items:
+            remaining = max_batch_size - len(batch)
+            batch.extend(items[:remaining])
+            if len(batch) >= max_batch_size:
+                yield batch
+                batch = []
+            items = items[remaining:]
+            
+    if batch: yield batch
+
+    
 

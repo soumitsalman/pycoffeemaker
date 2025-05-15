@@ -76,23 +76,20 @@ class Orchestrator:
         count = self.db.update_beans(list(map(make_update, beans)))
         log.info("digested", extra={"source": beans[0].source, "num_items": count})
         return beans
-    
-    def _process_msg(self, msg):
-        self.queue.delete_message(msg)
-        return msg.content
 
     @log_runtime(logger=log)
     def run(self):
+        total = 0
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting digestor", extra={"source": run_id, "num_items": 1})
 
-        for batch in self.queue.receive_messages(messages_per_page=min(MAX_QUEUE_PAGE, BATCH_SIZE)).by_page():
-            urls = list(map(self._process_msg, batch))
+        for urls in dequeue_batch(self.queue, BATCH_SIZE):
             try:
                 beans = self.db.query_beans({K_URL: {"$in": urls}}, projection={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_CREATED: 1, K_CATEGORIES: 1})
                 beans = self.digest_beans(digestibles(beans))
+                total += len(beans)
             except Exception as e:
                 log.error("failed digesting", extra={"source": run_id, "num_items": len(urls)})
                 ic(e)
 
-        log.info("completed digestor", extra={"source": run_id, "num_items": 1})
+        log.info("completed digestor", extra={"source": run_id, "num_items": total})

@@ -34,6 +34,7 @@ class Orchestrator:
     db: MongoSack = None
     queues: QueueClient = None
     scraper_queue: Queue = None
+    total: int = 0
 
     def __init__(self, db_path: str, db_name: str, queue_path: str = None, queue_names: list[str] = None):
         self.db = MongoSack(db_path, db_name)
@@ -79,6 +80,7 @@ class Orchestrator:
         if not beans or not self.db: return
         count = self.db.store_beans(beans)
         log.info("stored", extra={"source": source, "num_items": count})
+        self.total += count
     
     def _commit_new(self, source: str, beans: list[Bean]):
         beans = self._filter_new(beans)
@@ -102,6 +104,10 @@ class Orchestrator:
     
     @log_runtime(logger=log)
     def run(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/sources.yaml")):
+        self.total = 0
+        run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log.info("starting collector", extra={"source": run_id, "num_items": 1})
+
         # first collect
         for source_type, source_paths in parse_sources(sources).items():
             # awaiting on each group so that os is not overwhelmed by sockets
@@ -115,4 +121,6 @@ class Orchestrator:
             source, beans = self.scraper_queue.get()
             self._scrape(source, beans)
             self.scraper_queue.task_done()
+
+        log.info("completed collector", extra={"source": run_id, "num_items": self.total})
 
