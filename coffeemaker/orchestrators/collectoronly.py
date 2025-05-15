@@ -101,7 +101,7 @@ class Orchestrator:
         self._commit_new(source, beans) 
     
     @log_runtime(logger=log)
-    def run(self, sources = os.getenv("COLLECTOR_SOURCES")):
+    def run(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/sources.yaml")):
         # first collect
         for source_type, source_paths in parse_sources(sources).items():
             # awaiting on each group so that os is not overwhelmed by sockets

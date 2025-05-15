@@ -117,7 +117,7 @@ class TransformerEmbeddings(Embeddings):
     lock = None
     splitter = None
     def __init__(self, model_id: str, context_len: int):
-        import torch
+        # import torch
         from sentence_transformers import SentenceTransformer    
 
         super().__init__(context_len)
@@ -126,9 +126,12 @@ class TransformerEmbeddings(Embeddings):
             "truncation": True,
             "max_length": context_len
         }
-        self.model = SentenceTransformer(model_id, trust_remote_code=True, device="cuda", tokenizer_kwargs=tokenizer_kwargs) \
-            if torch.cuda.is_available() else \
-            SentenceTransformer(model_id, trust_remote_code=True, backend="onnx", model_kwargs={"file_name": "model_quantized.onnx"}, tokenizer_kwargs=tokenizer_kwargs)
+        # NOTE: temporarily disabling this
+        # self.model = SentenceTransformer(model_id, trust_remote_code=True, device="cuda", tokenizer_kwargs=tokenizer_kwargs) \
+        #     if torch.cuda.is_available() else \
+        #     SentenceTransformer(model_id, trust_remote_code=True, backend="onnx", model_kwargs={"file_name": "model_quantized.onnx"}, tokenizer_kwargs=tokenizer_kwargs)
+        # self.model = SentenceTransformer(model_id, trust_remote_code=True, device="cpu", backend="onnx", model_kwargs={"file_name": "model_quantized.onnx"}, tokenizer_kwargs=tokenizer_kwargs)
+        self.model = SentenceTransformer(model_id, trust_remote_code=True, tokenizer_kwargs=tokenizer_kwargs)
 
     def _embed(self, texts: str|list[str]):
         with self.lock:
