@@ -213,21 +213,21 @@ class APICollector:
         return merge_lists(_batch_collect(self.collect_rssfeed, feed_urls))
 
     def collect_rssfeed(self, url: str) -> list[Bean]|list[tuple[Bean, Chatter]]:
-        collected = None
+        collected, source = None, url
         try:
             resp = requests.get(url, headers=RSS_REQUEST_HEADERS, timeout=TIMEOUT)  # Set timeout to 10 seconds
             resp.raise_for_status()  # Raise exception for bad status codes
             feed = feedparser.parse(BytesIO(resp.content))
                     
             if feed.entries: 
-                source = extract_source(feed.entries[0].link)
-                collected = [self._from_rssfeed(entry, source, NEWS) for entry in feed.entries]
+                source = extract_source(feed.feed.get('link') or feed.entries[0].link)
+                collected = [self._from_rssfeed(entry, NEWS) for entry in feed.entries]
         except Exception as e: print(url, e)
-        return self._return_collected(url, collected)
+        return self._return_collected(source, collected)
  
     ### rss feed related utilities  ###
     async def collect_rssfeed_async(self, url: str, default_kind: str = NEWS) -> list[Bean]|list[tuple[Bean, Chatter]]:
-        collected = None
+        collected, source = None, url
         try:
             async with aiohttp.ClientSession() as session:
                 resp = await session.get(url, headers=RSS_REQUEST_HEADERS, timeout=TIMEOUT)
@@ -236,15 +236,16 @@ class APICollector:
 
                 if feed.entries:
                     source = extract_source(feed.feed.get('link') or feed.entries[0].link)
-                    collected = [self._from_rssfeed(entry, source, default_kind) for entry in feed.entries]
+                    collected = [self._from_rssfeed(entry, default_kind) for entry in feed.entries]
         except Exception as e: ic(url, e) # NOTE: this is for local debugging
         return self._return_collected(source, collected)
 
-    def _from_rssfeed(self, entry: feedparser.FeedParserDict, source: str, default_kind: str) -> tuple[Bean, Chatter]:
+    def _from_rssfeed(self, entry: feedparser.FeedParserDict, default_kind: str) -> tuple[Bean, Chatter]:
         current_time = now()
         published_time = entry.get("published_parsed") or entry.get("updated_parsed")
         created_time = from_timestamp(time.mktime(published_time)) if published_time else current_time
         summary, content = _extract_body(entry)
+        source = extract_source(entry.link)
         return (
             Bean(
                 url=entry.link,
@@ -253,6 +254,7 @@ class APICollector:
                 collected=current_time,
                 updated=created_time,
                 source=source,
+                site_base_url=extract_base_url(entry.link),
                 title=entry.title,
                 kind=_guess_type(entry.link, source) or default_kind,
                 summary=_strip_html_tags(summary),
@@ -281,7 +283,7 @@ class APICollector:
         @retry(exceptions=(prawcore.exceptions.ResponseException), tries=2, delay=10, jitter=(5, 10))
         def _collect():
             sr = self.reddit_client.subreddit(subreddit_name)
-            return [self._from_reddit(post, subreddit_name, default_kind) for post in sr.hot(limit=25) if not _excluded_url(post.url)]
+            return [self._from_reddit_post(post, subreddit_name, default_kind) for post in sr.hot(limit=25) if not _excluded_url(post.url)]
         
         try: collected = _collect()
         except Exception as e: ic(subreddit_name, e, e.__class__.__name__)   
@@ -293,13 +295,13 @@ class APICollector:
         @retry(tries=2, delay=5, jitter=(0, 10))
         async def _collect():
             subreddit = await self.reddit_client.subreddit(subreddit_name)
-            return [self._from_reddit(post, subreddit_name, default_kind) async for post in subreddit.hot(limit=25) if not _excluded_url(post.url)]
+            return [self._from_reddit_post(post, subreddit_name, default_kind) async for post in subreddit.hot(limit=25) if not _excluded_url(post.url)]
         
         try: collected = await _collect()
         except Exception as e: ic(subreddit_name, e, e.__class__.__name__)
         return self._return_collected(subreddit_name, collected) 
 
-    def _from_reddit(self, post, sr_name, default_kind) -> tuple[Bean, Chatter]: 
+    def _from_reddit_post(self, post, sr_name, default_kind) -> tuple[Bean, Chatter]: 
         subreddit = f"r/{sr_name}"
         current_time = now()
         created_time = from_timestamp(post.created_utc)
@@ -327,6 +329,7 @@ class APICollector:
                 updated=created_time,
                 # this is done because sometimes is_self value is wrong
                 source=source,
+                site_base_url=extract_base_url(url),
                 title=post.title,
                 kind=kind,
                 content=post.selftext,
@@ -394,6 +397,7 @@ class APICollector:
                 collected=current_time,
                 updated=created_time,
                 source=source,
+                site_base_url=extract_base_url(url),
                 title=story.get('title'),
                 kind=kind, # blog, post or job
                 content=self._generate_markdown(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
@@ -592,7 +596,10 @@ class WebScraper:
             bean.image_url = result.get("top_image") or bean.image_url
             bean.author = result.get("author") or bean.author
             bean.created = min(result.get("published_time") or bean.created or bean.collected, current_time)
-            bean.source = result.get("site_name") or bean.source # override the source
+            bean.summary = result.get("description")
+            bean.site_rss_feed = result.get("rss_feed")
+            bean.site_name = result.get('site_name')
+            bean.site_favicon = result.get('favicon')
         return beans
 
     def _package_result(result) -> dict:   
