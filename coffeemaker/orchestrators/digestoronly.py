@@ -69,6 +69,8 @@ class Orchestrator:
                     K_GIST: bean.gist,
                     K_REGIONS: bean.regions,
                     K_ENTITIES: bean.entities,
+                    K_CATEGORIES: bean.categories,
+                    K_SENTIMENTS: bean.sentiments,
                     K_TAGS: bean.tags
                 }
             }
