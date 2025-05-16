@@ -110,7 +110,7 @@ class Orchestrator:
                 beans = self.db.query_beans({K_URL: {"$in": urls}}, projection={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1})
                 beans = self.embed_beans(beans)
                 with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="indexer") as executor:
-                    executor.submit(self.classify_beans, beans)
+                    # executor.submit(self.classify_beans, beans)
                     executor.submit(self.cluster_beans, beans)
                 total += len(beans)
             except Exception as e:
