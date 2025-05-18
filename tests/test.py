@@ -23,6 +23,16 @@ logging.getLogger("urllib3").propagate = False
 logging.getLogger("connectionpool").propagate = False
 logging.getLogger("asyncio").propagate = False
 
+DB_REMOTE_TEST="mongodb://localhost:27017/"
+DB_NAME_TEST="test3"
+QUEUE_PATH_TEST="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;"
+INDEXER_IN_QUEUE="indexing-queue"
+DIGESTOR_IN_QUEUE="digesting-queue"
+COLLECTOR_OUT_QUEUES=[INDEXER_IN_QUEUE, DIGESTOR_IN_QUEUE]
+EMBEDDER_PATH="avsolatorio/GIST-small-Embedding-v0"
+EMBEDDER_CONTEXT_LEN=512
+CLUSTER_EPS=0.1
+
 import json, re, random
 import asyncio
 from datetime import datetime
@@ -299,51 +309,39 @@ def download_markdown(q: str = None, accuracy = DEFAULT_VECTOR_SEARCH_SCORE, key
 def test_collector_orch():
     from coffeemaker.orchestrators.collectoronly import Orchestrator
     orch = Orchestrator(
-        os.getenv('DB_REMOTE'),
-        "test", 
-        os.getenv('QUEUE_PATH_TEST'),
-        ["indexing-queue", "digesting-queue"]
+        DB_REMOTE_TEST,
+        DB_NAME_TEST
     )
-    sources = """
-sources:
-  rss:
-    - https://api.quantamagazine.org/feed/
-    - https://securityintelligence.com/feed/
-    - https://lifehacker.com/feed/rss
-    - https://www.extremetech.com/feed
-    - https://theubj.com/feed/
-    - https://www.darkreading.com/rss.xml
-    - https://venturebeat.com/feed/
-    """
+    sources = """/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/sources.yaml"""
     orch.run(sources)
 
 def test_indexer_orch():
     from coffeemaker.orchestrators.indexeronly import Orchestrator
     orch = Orchestrator(
-        os.getenv('DB_REMOTE'),
-        "test", 
-        os.getenv('QUEUE_PATH'),
-        "indexing-queue",
-        embedder_path="avsolatorio/GIST-small-Embedding-v0",
-        embedder_context_len=512,
-        cluster_eps=0.08
+        DB_REMOTE_TEST,
+        DB_NAME_TEST, 
+        QUEUE_PATH_TEST,
+        INDEXER_IN_QUEUE,
+        embedder_path=EMBEDDER_PATH,
+        embedder_context_len=EMBEDDER_CONTEXT_LEN,
+        cluster_eps=CLUSTER_EPS
     )
     asyncio.run(orch.run_async())
 
 def test_digestor_orch():
     from coffeemaker.orchestrators.digestoronly import Orchestrator
     orch = Orchestrator(
-        os.getenv('DB_REMOTE'),
-        "test", 
-        os.getenv('QUEUE_PATH'),
-        "digesting-queue"
+        DB_REMOTE_TEST,
+        DB_NAME_TEST, 
+        QUEUE_PATH_TEST,
+        DIGESTOR_IN_QUEUE,
     )
     orch.run()
 
 if __name__ == "__main__":
-    # test_collector_orch()
+    test_collector_orch()
     # test_indexer_orch()
-    test_digestor_orch()
+    # test_digestor_orch()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
     # test_run_async()

@@ -20,7 +20,6 @@ from retry import retry
 import tldextract
 from dateutil.parser import parse as date_parser
 import re
-
 import yaml
 from coffeemaker.collectors import USER_AGENT, TIMEOUT, RATELIMIT_WAIT
 from coffeemaker.pybeansack.models import *
@@ -512,8 +511,8 @@ class WebScraper:
             cache_mode=CacheMode.BYPASS,
 
             # navigation & timing
-            # semaphore_count=self.batch_size,
-            wait_for_images=False,  
+            semaphore_count=self.batch_size,
+            wait_for_images=False, 
 
             # page interaction
             scan_full_page=False,
@@ -545,7 +544,7 @@ class WebScraper:
             cache_mode=CacheMode.BYPASS,
 
             # navigation & timing
-            # semaphore_count=self.batch_size,
+            semaphore_count=self.batch_size,
             wait_for_images=False,
 
             # page interaction
