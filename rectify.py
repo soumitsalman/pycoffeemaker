@@ -242,7 +242,7 @@ def download_sources():
     from coffeemaker.collectors.collector import extract_base_url, extract_source
 
     prod = Orchestrator(
-        db_path="mongodb+srv://soumitsalman:A14Xro2xNPa5fEnu@mediacontentembeddings.mongocluster.cosmos.azure.com/?tls=true&authMechanism=SCRAM-SHA-256&retrywrites=false&maxIdleTimeMS=120000",
+        db_path="",
         db_name="beansackV2"
     )
     local = Orchestrator(
@@ -250,18 +250,18 @@ def download_sources():
         db_name="test3"
     )
     
-    sources = prod.db.beanstore.distinct("source", filter = {K_SOURCE: {"$ne": ""}, K_KIND: {"$ne": POST}})[384:]
+    sources = prod.db.beanstore.distinct("source", filter = {K_SOURCE: {"$ne": ""}, K_KIND: {"$ne": POST}})[500+3840:]
+    
     batch_size = 128
-    for i in range(0, len(sources), batch_size):
+    for i in range(0, ic(len(sources)), batch_size):
         beans = prod.db.query_beans({K_SOURCE: {"$in": sources[ic(i) : i+batch_size]}}, distinct_field=K_SOURCE, project = {K_URL: 1})
         urls = list(set([bean.url for bean in beans]+["https://"+extract_base_url(bean.url) for bean in beans]))
         exists = [e[K_ID] for e in local.db.sourcestore.find({K_ID: {"$in": urls}}, projection = {K_ID: 1})]
         urls = list(filter(lambda url: url not in exists, urls))
         if not urls: continue
 
-        results = asyncio.run(local.webscraper.scrape_urls(urls, collect_metadata=True))
+        results = [res for res in asyncio.run(local.webscraper.scrape_urls(urls, collect_metadata=True)) if res]
         for res in results:
-            if not res: continue
             res[K_ID] = res[K_URL]
             res[K_SITE_BASE_URL] = extract_base_url(res[K_URL])
             res[K_SOURCE] = extract_source(res[K_URL])
@@ -278,7 +278,7 @@ def download_sources():
             if 'favicon' not in res:
                 res['favicon'] = urljoin(site, "/favicon.ico")
 
-        local.db.sourcestore.insert_many(results)
+        local.db.sourcestore.insert_many([res for res in results if res])
 
 
 # adding data porting logic
