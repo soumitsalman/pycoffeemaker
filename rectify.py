@@ -241,20 +241,16 @@ def download_sources():
     from coffeemaker.orchestrators.collectoronly import Orchestrator
     from coffeemaker.collectors.collector import extract_base_url, extract_source
 
-    prod = Orchestrator(
-        db_path="",
-        db_name="beansackV2"
-    )
     local = Orchestrator(
         db_path="mongodb://localhost:27017/",
         db_name="test3"
     )
     
-    sources = prod.db.beanstore.distinct("source", filter = {K_SOURCE: {"$ne": ""}, K_KIND: {"$ne": POST}})[500+3840:]
+    sources = local.db.beanstore.distinct("source", filter = {K_SOURCE: {"$ne": ""}, K_KIND: {"$ne": POST}})
     
     batch_size = 128
     for i in range(0, ic(len(sources)), batch_size):
-        beans = prod.db.query_beans({K_SOURCE: {"$in": sources[ic(i) : i+batch_size]}}, distinct_field=K_SOURCE, project = {K_URL: 1})
+        beans = local.db.query_beans({K_SOURCE: {"$in": sources[ic(i) : i+batch_size]}}, distinct_field=K_SOURCE, project = {K_URL: 1})
         urls = list(set([bean.url for bean in beans]+["https://"+extract_base_url(bean.url) for bean in beans]))
         exists = [e[K_ID] for e in local.db.sourcestore.find({K_ID: {"$in": urls}}, projection = {K_ID: 1})]
         urls = list(filter(lambda url: url not in exists, urls))
