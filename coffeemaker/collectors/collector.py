@@ -512,6 +512,7 @@ class WebScraper:
 
             # navigation & timing
             semaphore_count=self.batch_size,
+            page_timeout=30000,
             wait_for_images=False, 
 
             # page interaction
@@ -545,6 +546,7 @@ class WebScraper:
 
             # navigation & timing
             semaphore_count=self.batch_size,
+            page_timeout=30000,
             wait_for_images=False,
 
             # page interaction

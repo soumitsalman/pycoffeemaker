@@ -89,7 +89,7 @@ class Orchestrator:
     def cluster_beans(self, beans: list[Bean]):
         if not beans: return beans
 
-        find_cluster = lambda bean: self.db.vector_search_beans(bean.embedding, 1-self.cluster_eps, filter={K_URL: {"$ne": bean.url} }, limit=MAX_CLUSTER_SIZE, projection={K_URL: 1})
+        find_cluster = lambda bean: self.db.vector_search_beans(embedding=bean.embedding, similarity_score=1-self.cluster_eps, filter={K_URL: {"$ne": bean.url} }, limit=MAX_CLUSTER_SIZE, project={K_URL: 1})
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="cluster") as executor:
             clusters = list(executor.map(find_cluster, beans))
 
@@ -107,7 +107,7 @@ class Orchestrator:
 
         for urls in dequeue_batch(self.queue, BATCH_SIZE):
             try:
-                beans = self.db.query_beans({K_URL: {"$in": urls}}, projection={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1})
+                beans = self.db.query_beans(filter={K_URL: {"$in": urls}}, project={K_URL: 1, K_TITLE: 1, K_SUMMARY:1, K_CONTENT: 1, K_SOURCE: 1})
                 beans = self.embed_beans(beans)
                 with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="indexer") as executor:
                     # executor.submit(self.classify_beans, beans)
@@ -117,26 +117,26 @@ class Orchestrator:
                 log.error("failed indexing", extra={"source": run_id, "num_items": len(urls)})
                 ic(e)
 
-        log.info("completed indexer", extra={"source": run_id, "num_items": total})
+        log.info("total indexed", extra={"source": run_id, "num_items": total})
 
-    @log_runtime_async(logger=log)
-    async def run_async(self):
-        run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log.info("starting indexer", extra={"source": run_id, "num_items": 1})
+    # @log_runtime_async(logger=log)
+    # async def run_async(self):
+    #     run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    #     log.info("starting indexer", extra={"source": run_id, "num_items": 1})
 
-        threads = []
-        for batch in dequeue_batch(self.queue, BATCH_SIZE):
-            urls = list(map(self._process_msg, batch))
-            try:
-                beans = self.db.query_beans({K_URL: {"$in": urls}}, project={K_URL: 1, K_TITLE: 1, K_SUMMARY:1, K_CONTENT: 1, K_SOURCE: 1})
-                beans = self.embed_beans(beans)
-                threads.append(asyncio.to_thread(self.classify_beans, beans))
-                threads.append(asyncio.to_thread(self.cluster_beans, beans))
-            except Exception as e:
-                log.error("failed indexing", extra={"source": run_id, "num_items": len(urls)})
-                ic(e)
+    #     threads = []
+    #     for batch in dequeue_batch(self.queue, BATCH_SIZE):
+    #         urls = list(map(self._process_msg, batch))
+    #         try:
+    #             beans = self.db.query_beans(filter = {K_URL: {"$in": urls}}, project={K_URL: 1, K_TITLE: 1, K_SUMMARY:1, K_CONTENT: 1, K_SOURCE: 1})
+    #             beans = self.embed_beans(beans)
+    #             threads.append(asyncio.to_thread(self.classify_beans, beans))
+    #             threads.append(asyncio.to_thread(self.cluster_beans, beans))
+    #         except Exception as e:
+    #             log.error("failed indexing", extra={"source": run_id, "num_items": len(urls)})
+    #             ic(e)
                 
-        await asyncio.gather(*threads)
+    #     await asyncio.gather(*threads)
 
-        log.info("completed indexer", extra={"source": run_id, "num_items": 1})
+    #     log.info("completed indexer", extra={"source": run_id, "num_items": 1})
 

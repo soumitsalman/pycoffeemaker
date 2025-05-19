@@ -81,7 +81,7 @@ class Orchestrator:
         for batch in self.queue.receive_messages(messages_per_page=min(MAX_QUEUE_PAGE, BATCH_SIZE)).by_page():
             urls = list(map(self._process_msg, batch))
             try:
-                beans = self.db.query_beans({K_URL: {"$in": urls}}, projection={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_CREATED: 1, K_CATEGORIES: 1})
+                beans = self.db.query_beans({K_URL: {"$in": urls}}, project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_CREATED: 1, K_CATEGORIES: 1})
                 beans = self.digest_beans(digestibles(beans))
             except Exception as e:
                 log.error("failed digesting", extra={"source": run_id, "num_items": len(urls)})

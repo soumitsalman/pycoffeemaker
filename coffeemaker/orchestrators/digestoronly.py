@@ -95,4 +95,4 @@ class Orchestrator:
                 log.error("failed digesting", extra={"source": run_id, "num_items": len(urls)})
                 ic(e)
 
-        log.info("completed digestor", extra={"source": run_id, "num_items": total})
+        log.info("total digested", extra={"source": run_id, "num_items": total})
