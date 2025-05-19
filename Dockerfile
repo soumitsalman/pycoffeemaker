@@ -32,7 +32,7 @@ RUN wget https://huggingface.co/soumitsr/SmolLM2-135M-Instruct-article-digestor-
 
 ENV DB_LOCAL=.db
 
-ENV COLLECTOR_SOURCES=./coffeemaker/collectors/sources.yaml
+ENV COLLECTOR_SOURCES=./coffeemaker/collectors/feeds.yaml
 
 ENV COLLECTOR_OUT_QUEUES=indexing-queue,digesting-queue
 ENV INDEXER_IN_QUEUE=indexing-queue

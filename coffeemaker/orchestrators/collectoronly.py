@@ -103,7 +103,7 @@ class Orchestrator:
         self._commit_new(source, beans) 
     
     @log_runtime(logger=log)
-    def run(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/sources.yaml")):
+    def run(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/feeds.yaml")):
         self.total = 0
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting collector", extra={"source": run_id, "num_items": 1})

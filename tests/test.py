@@ -312,7 +312,7 @@ def test_collector_orch():
         DB_REMOTE_TEST,
         DB_NAME_TEST
     )
-    sources = """/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/sources.yaml"""
+    sources = """/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"""
     orch.run(sources)
 
 def test_indexer_orch():

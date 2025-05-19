@@ -246,7 +246,8 @@ def download_sources():
         db_name="test3"
     )
     
-    sources = local.db.beanstore.distinct("source", filter = {K_SOURCE: {"$ne": ""}, K_KIND: {"$ne": POST}})
+    # SCRAPE FOR DETAILS
+    sources = local.db.beanstore.distinct("source", filter = {K_SOURCE: {"$ne": ""}, K_KIND: {"$ne": POST}})[1950:]
     
     batch_size = 128
     for i in range(0, ic(len(sources)), batch_size):
@@ -277,6 +278,152 @@ def download_sources():
         local.db.sourcestore.insert_many([res for res in results if res])
 
 
+def merge_feeds():
+    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    from coffeemaker.collectors.collector import parse_sources
+    import yaml
+
+    local = Orchestrator(
+        db_path="mongodb://localhost:27017/",
+        db_name="test3"
+    )
+    
+    # SCRAPE FOR DETAILS
+    rss_feeds = local.db.sourcestore.distinct("rss_feed", filter = {"rss_feed": {"$nin": to_ignore}})
+    
+    existing = parse_sources("/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml")
+    existing['rss'] = list(set(existing['rss']+rss_feeds))
+    existing = {"sources": existing}
+    
+    with open("/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml", "w") as file:
+        yaml.dump(existing, file)
+
+
+to_ignore = [
+"feed://bjango.com/rss/articles.xml",
+"http://www.belgrade-news.com/search/?f=rss&t=article&c=business&l=50&s=start_time&sd=desc",
+    "http://www.kake.com/search/?f=rss&t=article&l=50&s=start_time&sd=desc&k%5B%5D=%23topstory",
+  "http://www.nola.com/search/?f=rss&t=article&l=50&s=start_time&sd=desc&k%5B%5D=%23topstory",
+
+  "http://www.stcatharinesstandard.ca/search/?f=rss&t=article&c=news/niagara-region&l=50&s=start_time&sd=desc",
+  "http://www.stltoday.com/search/?f=rss&t=article&l=50&s=start_time&sd=desc&k%5B%5D=%23topstory",
+
+  "http://www.thecentersquare.com/search/?f=rss&t=article&c=national&l=50&s=start_time&sd=desc",
+  "http://www.thecentersquare.com/search/?f=rss&t=article&l=50&s=start_time&sd=desc&k%5B%5D=%23topstory",
+  "http://www.thecincinnatisubway.com/feeds/posts/default?alt=rss",
+  "http://www.thestar.com/search/?f=rss&t=article&c=news/gta&l=50&s=start_time&sd=desc",
+  "http://www.thestar.com/search/?f=rss&t=article&l=50&s=start_time&sd=desc&k%5B%5D=%23topstory",
+  "http://www.wdel.com/search/?f=rss&t=article&l=50&s=start_time&sd=desc&k%5B%5D=%23topstory",
+ 
+  "https://99percentinvisible.org/episode/episode-76-the-modern-moloch/feed/",
+  "https://99percentinvisible.org/episode/the-real-book/feed/",
+
+   "https://blog.logrocket.com/product-management/goodbye-skype-product-insider-take/feed/",
+
+   "https://blog.meccabingo.com/bingo-calls-complete-list/feed/",
+ "https://blogs.lse.ac.uk/europpblog/2025/03/26/turkish-protests-is-this-the-end-for-erdogan/feed/",
+  "https://blogs.lse.ac.uk/impactofsocialsciences/2025/03/03/bluesky-will-trap-academics-in-the-same-way-twitter-x-did/feed/",
+ "https://blogs.opera.com/news/2025/03/opera-browser-operator-ai-agentics/feed/",
+  "https://blogs.windows.com/msedgedev/2025/03/19/minding-the-gaps-a-new-way-to-draw-separators-in-css/feed/",
+   "https://bolor.me/introducing-qipai-quantum-inspired-particle-ai-for-the-next-wave-of-intelligence/feed/",
+"https://business.inquirer.net/518369/green-lane-investment-pipeline-breaches-p-5-t-mark/feed",
+   "https://canadianbusiness.com/ideas/molson-non-alcoholic-drinks/feed/",
+
+  "https://carnewschina.com/2025/04/21/battery-giant-catl-showcases-three-innovations-1500km-range-battery-520km-in-5-minutes-ultra-fast-charging-and-2025-mass-production-sodium-ion-battery/feed/",
+  "https://carnewschina.com/homepage/feed/", 
+ "https://chemistry.princeton.edu/news/dinca-lab-researchers-demonstrate-high-performance-sodium-ion-cathode-towards-new-battery-technology/feed/",
+  "https://collective.flashbots.net/t/beyond-yocto-exploring-mkosi-for-tdx-images/4739.rss",
+    "https://consequence.net/2025/03/neil-young-free-concert-ukraine/feed/",
+  "https://consequence.net/2025/05/trump-warns-springsteen-keep-mouth-shut/feed/",
+  "https://courage.media/2025/03/21/the-heathrow-fires-accident-incompetence-or-accelerationism/feed/",
+ "https://devblogs.microsoft.com/azure-sdk/rust-in-time-announcing-the-azure-sdk-for-rust-beta/feed/",
+  "https://devblogs.microsoft.com/cppblog/cpp-dynamic-debugging-full-debuggability-for-optimized-builds/feed/",
+  "https://devblogs.microsoft.com/devops/new-overlapping-secrets-on-azure-devops-oauth/feed/",
+  "https://devblogs.microsoft.com/directx/announcing-directx-raytracing-1-2-pix-neural-rendering-and-more-at-gdc-2025/feed/",
+  "https://devblogs.microsoft.com/dotnet/modernizing-push-notification-api-for-teams/feed/",
+  "https://devblogs.microsoft.com/identity/openid-connect-external-identity-provider-support-ga/feed/",
+  "https://devblogs.microsoft.com/java/java-openjdk-april-2025-patch-security-update/feed/",
+  "https://devblogs.microsoft.com/oldnewthing/20250429-00/?p=111127/feed",
+      "https://domainincite.com/30979-the-soviet-union-might-be-safe-after-all/feed",
+ "https://earthsky.org/earth/fire-season-early-start-canada-and-minnesota-may-2025/feed/",
+  "https://earthsky.org/space/blaze-star-nova-corona-borealis-how-to-see-it/feed/",
+ "https://ethereum-magicians.org/t/long-term-l1-execution-layer-proposal-replace-the-evm-with-risc-v/23617.rss",
+  "https://foreignpolicy.com/2025/03/14/carney-mincemeat-second-raters-trump/feed/",
+  "https://foreignpolicy.com/2025/03/25/america-kleptocracy-trump-musk-corruption/feed/",
+  "https://foreignpolicy.com/2025/05/14/elon-musk-donald-trump-doge-russell-vought/feed/",
+  "https://habr.com/en/rss/post/454376/?fl=en",
+  "https://habr.com/en/rss/post/905288/?fl=en", 
+   "https://halifax.citynews.ca/2025/03/04/nova-scotia-hits-back-at-u-s-tariffs-with-procurement-limits-toll-hike-and-alcohol-ban/feed/",
+  "https://iai.tv/articles/information-and-data-will-never-deliver-creativity-auid-3132/rss",
+   "https://ifp.org/an-action-plan-for-american-leadership-in-ai/feed/",
+     "https://inl.int/neuromorphic-photonic-neuron-light-sensing/feed/",
+   "https://insider-gaming.com/final-fantasy-9-remake-seemingly-teased-by-square-enix/feed/",
+  "https://insights.samsung.com/2025/02/12/a-fresh-approach-to-secure-mobile-device-usage-in-classified-areas/feed/",
+ "https://internals.rust-lang.org/t/pre-rfc-explicit-proper-tail-calls/3797.rss",
+ "https://ipwatchdog.com/2025/04/20/fox-succeeds-scrapping-macine-learning-claims-cafc-101/id=188305/feed/",
+  "https://kernelnewbies.org/FirstKernelPatch?diffs=1&show_att=1&action=rss_rc&unique=0&page=FirstKernelPatch&ddiffs=1",
+  "https://kernelnewbies.org/Linux_Kernel_Newbies?action=rss_rc&unique=1&ddiffs=1",
+  "https://kk.org/thetechnium/1000-true-fans/feed/",
+ "https://krisp.ai/blog/improving-turn-taking-of-ai-voice-agents-with-background-voice-cancellation/feed/",
+   "https://ktar.com/arizona-news/mesa-butterfly/5684819/feed/",
+  "https://lethbridgenewsnow.com/2025/03/15/israeli-airstrikes-killed-8-people-in-the-gaza-strip-palestinian-medics-say/feed/",
+ "https://lostcity.rs/t/singleplayer-main-branch-scripts-and-desktop-start-launchers-on-windows-linux-freebsd/54.rss",
+  "https://metatalk.metafilter.com/26610/Introducing-Socky-An-AI-Assistant-for-MetaFilter/rss",
+
+"https://militarnyi.com/en/news/usa-unable-to-make-drones-without-components-from-china/feed/",
+   "https://mobilesyrup.com/2025/03/24/canadian-streaming-report-convergence-research/feed/",
+ 
+"https://mynorthwest.com/local/seattle-cruise-season/4075820/feed",
+   "https://nasawatch.com/education/you-can-still-read-nasas-deleted-first-woman-graphic-novels/feed/",
+ 
+"https://newsroom.arm.com/blog/arm-malaysia-silicon-vision/feed",
+  "https://nintendoeverything.com/nintendo-has-changed-how-the-switch-eshop-charts-work/feed/",
+  "https://openziti.discourse.group/t/netfoundry-raises-new-venture-round/4449.rss",
+    "https://panow.com/2025/03/20/liberals-revoke-aryas-nomination-after-removing-him-from-leadership-race/feed/",
+ "https://pears.com/news/introducing-bare-actually-run-javascript-everywhere/feed/",
+ 
+  "https://redmonk.com/jgovernor/2025/02/21/ai-disruption-code-editors-are-up-for-grabs/feed/",
+  "https://redmonk.com/kfitzpatrick/2025/04/11/three-things-that-matter/feed/",
+  "https://redmonk.com/kholterhoff/2025/04/02/is-frontend-observability-hipster-rum/feed/",
+  "https://redmonk.com/rstephens/2025/05/02/heroku/feed/",
+   "https://ritholtz.com/2014/02/the-joy-and-freedom-of-working-until-death/feed/",
+"https://securityaffairs.com/175344/hacking/coordinated-surge-exploitation-attempts-ssrf-vulnerabilities.html/feed",
+  "https://securityaffairs.com/176937/data-breach/yale-new-haven-health-ynhhs-data-breach-impacted-5-5-million-patients.html/feed",
+  "https://securityaffairs.com/177784/data-breach/marks-and-spencer-confirms-data-breach-after-april-cyber-attack.html/feed",
+  "https://techchannel.com/operating-system/ibm-i-7-6-and-7-5-tr6/feed/",
+   "https://thehistoryoftheweb.com/the-innovative-designs-of-1995/feed/",
+    "https://tosc.iacr.org/index.php/ToSC/gateway/plugin/APP%5Cplugins%5Cgeneric%5CwebFeed%5CWebFeedGatewayPlugin/rss2",
+    "https://uk.pcmag.com/lenovo-thinkpad-x1-carbon-gen-13-aura-edition.xml",
+  "https://web.archive.org/web/20080415175105/http://blogs.msdn.com/jensenh/rss.xml",
+  "https://web.archive.org/web/20190721030122/http://blog.modernmechanix.com/feed/",
+  "https://web.archive.org/web/20230204195941/https://simonberens.me/blog?format=rss",
+  "https://web.archive.org/web/20240618215938/https://thecrimereport.org/feed/",
+ "https://wenewsenglish.pk/israel-will-finish-the-job-against-iran-with-us-support-netanyahu/feed/",
+ "https://www.climatechangenews.com/2025/04/02/the-amazon-rainforest-emerges-as-the-new-global-oil-frontier/feed/",
+  "https://www.climatechangenews.com/2025/05/13/trump-shifts-us-energy-funding-from-shutting-down-foreign-fossil-fuels-to-expanding-them/feed/",
+ "https://www.deploymentresearch.com/delivery-optimization-not-listening/feed/",
+ "https://www.dezeen.com/2025/03/20/final-usonian-home-riverrock-frank-lloyd-wright-ohio-completed/feed/",
+  "https://www.electrive.com/2025/03/03/h2-mobility-to-shut-down-22-hydrogen-fuel-stations-in-germany/feed/",
+  "https://www.fiercebiotech.com/rss/Fierce Biotech Homepage/xml",
+  "https://www.fiercehealthcare.com/rss/Fierce Healthcare Homepage/xml",
+  "https://www.fiercepharma.com/rss/Fierce Pharma Homepage/xml",
+   "https://www.gematsu.com/2025/03/bexide-announces-fruit-mountain-party-for-pc/feed",
+  "https://www.lean.org/the-lean-post/articles/30-plus-years-with-hoshin-kanri/feed/",
+  "https://www.lean.org/the-lean-post/articles/hoshin-kanri-as-a-foundational-piece-of-a-lean-management-system/feed/",
+"https://www.lifenews.com/2025/02/26/trump-nominee-harmeet-dhillon-confirms-doj-will-stop-targeting-pro-life-christians/feed/",
+  "https://www.lifenews.com/2025/05/12/planned-parenthood-makes-over-2-billion-killing-a-record-402000-babies-in-abortions/feed/",
+  "https://www.metafilter.com/207938/Im-invasive-and-delicious-EAT-ME-Please/rss",
+   "https://www.newsshooter.com/2025/03/20/davinci-resolve-19-1-4-update/feed/",
+ "https://www.pushsquare.com/feeds/comments/news/2025/03/ps2-the-most-popular-console-ever-celebrates-its-25th-anniversary",
+  "https://www.pushsquare.com/feeds/comments/news/2025/05/ps5-fans-furious-as-microsoft-ships-doom-the-dark-ages-with-just-85mb-on-the-disc",
+  "https://www.themarysue.com/adam-kinzinger-roasts-elon-musk-for-losing-bigly-after-wisconsin-political-stunt/feed/",
+ "https://www.thetransmitter.org/human-neurotechnology/functional-mri-can-do-more-than-you-think/feed/",
+ "https://www.timeextension.com/feeds/comments/news/2025/03/activision-comes-under-fire-for-using-ai-art-to-gauge-interest-in-new-mobile-games",
+  "https://www.timesnownews.com/feeds/gns-en-latest.xml",
+  "https://www.timesofalarab.com/uae-promises-to-invest-1-4-trillion-in-the-us-over-10-years-report/feed/"
+]
+
+
 # adding data porting logic
 if __name__ == "__main__":
-    download_sources()
+    merge_feeds()
