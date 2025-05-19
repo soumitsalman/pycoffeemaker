@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from itertools import chain
 from operator import add
 import os
@@ -87,7 +88,7 @@ class Orchestrator:
 
         for urls in dequeue_batch(self.queue, BATCH_SIZE):
             try:
-                beans = self.db.query_beans({K_URL: {"$in": urls}}, projection={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_CREATED: 1, K_CATEGORIES: 1})
+                beans = self.db.query_beans({K_URL: {"$in": urls}, K_CREATED: {"$gte": datetime.now() - timedelta(days=2)}}, project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_CREATED: 1, K_CATEGORIES: 1})
                 beans = self.digest_beans(digestibles(beans))
                 total += len(beans)
             except Exception as e:

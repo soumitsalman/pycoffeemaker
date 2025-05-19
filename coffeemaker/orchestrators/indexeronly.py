@@ -48,7 +48,7 @@ class Orchestrator:
         if not beans: return beans
 
         # TODO: do some splitting here and then average it out
-        embeddings = self.embedder.embed([bean.content for bean in beans])
+        embeddings = self.embedder.embed([(bean.content or bean.summary or bean.title) for bean in beans])
         for bean, embedding in zip(beans, embeddings):
             bean.embedding = embedding
 
@@ -128,7 +128,7 @@ class Orchestrator:
         for batch in dequeue_batch(self.queue, BATCH_SIZE):
             urls = list(map(self._process_msg, batch))
             try:
-                beans = self.db.query_beans({K_URL: {"$in": urls}}, projection={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1})
+                beans = self.db.query_beans({K_URL: {"$in": urls}}, project={K_URL: 1, K_TITLE: 1, K_SUMMARY:1, K_CONTENT: 1, K_SOURCE: 1})
                 beans = self.embed_beans(beans)
                 threads.append(asyncio.to_thread(self.classify_beans, beans))
                 threads.append(asyncio.to_thread(self.cluster_beans, beans))

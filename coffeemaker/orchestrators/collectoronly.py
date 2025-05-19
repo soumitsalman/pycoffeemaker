@@ -96,6 +96,8 @@ class Orchestrator:
 
         loop = asyncio.get_event_loop()
         beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
+        for bean in beans:
+            bean.is_scraped = True
         log.info("scraped", extra={"source": source, "num_items": len(beans)})
         # nullify the contents for which the scraping failed to get anything substantial
         for bean in beans:
