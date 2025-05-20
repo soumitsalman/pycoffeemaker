@@ -1,10 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
-import json
 from operator import add
 import os
 import logging
-import asyncio
 from icecream import ic
 
 from pymongo import UpdateOne
@@ -12,7 +10,7 @@ from azure.storage.queue import QueueClient
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.models import *
-from coffeemaker.nlp import embedders, utils
+from coffeemaker.nlp import embedders
 from coffeemaker.orchestrators.utils import *
 
 log = logging.getLogger(__name__)
@@ -23,6 +21,30 @@ MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
 is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING)
 is_storable = lambda bean: bool(bean.embedding) # if there is no embedding then no point storing
 storables = lambda beans: list(filter(is_storable, beans)) if beans else beans 
+
+def _make_cluster_updates(bean: Bean, cluster: list[Bean]): 
+    updates = [
+        UpdateOne(
+            filter = {K_ID: related_bean.url }, 
+            update = { 
+                "$set": { 
+                    K_CLUSTER_ID: bean.url,
+                    K_RELATED: (related_bean.related or 0) + 1
+                } 
+            }
+        ) 
+        for related_bean in cluster
+    ]
+    updates.append(UpdateOne(
+        filter = {K_ID: bean.url}, 
+        update = {
+            "$set": { 
+                K_CLUSTER_ID: bean.url, 
+                K_RELATED: len(cluster)
+            }
+        }
+    ))
+    return updates
 
 class Orchestrator:
     db: MongoSack = None
@@ -89,13 +111,11 @@ class Orchestrator:
     def cluster_beans(self, beans: list[Bean]):
         if not beans: return beans
 
-        find_cluster = lambda bean: self.db.vector_search_beans(embedding=bean.embedding, similarity_score=1-self.cluster_eps, filter={K_URL: {"$ne": bean.url} }, limit=MAX_CLUSTER_SIZE, project={K_URL: 1})
+        find_cluster = lambda bean: self.db.vector_search_beans(embedding=bean.embedding, similarity_score=1-self.cluster_eps, filter={K_URL: {"$ne": bean.url} }, limit=MAX_CLUSTER_SIZE, project={K_URL: 1, K_RELATED: 1})
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="cluster") as executor:
             clusters = list(executor.map(find_cluster, beans))
 
-        make_update = lambda bean, cluster: [UpdateOne({K_ID: related.url }, { "$set": { K_CLUSTER_ID: bean.url } }) for related in cluster]+[UpdateOne({K_ID: bean.url}, {"$set": { K_CLUSTER_ID: bean.url}})]
-        updates = list(chain(*map(make_update, beans, clusters)))
-        count = self.db.update_beans(updates)
+        count = self.db.update_beans(list(chain(*map(_make_cluster_updates, beans, clusters))))
         log.info("clustered", extra={"source": beans[0].source, "num_items": count})
         return beans  
 
@@ -119,24 +139,4 @@ class Orchestrator:
 
         log.info("total indexed", extra={"source": run_id, "num_items": total})
 
-    # @log_runtime_async(logger=log)
-    # async def run_async(self):
-    #     run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    #     log.info("starting indexer", extra={"source": run_id, "num_items": 1})
-
-    #     threads = []
-    #     for batch in dequeue_batch(self.queue, BATCH_SIZE):
-    #         urls = list(map(self._process_msg, batch))
-    #         try:
-    #             beans = self.db.query_beans(filter = {K_URL: {"$in": urls}}, project={K_URL: 1, K_TITLE: 1, K_SUMMARY:1, K_CONTENT: 1, K_SOURCE: 1})
-    #             beans = self.embed_beans(beans)
-    #             threads.append(asyncio.to_thread(self.classify_beans, beans))
-    #             threads.append(asyncio.to_thread(self.cluster_beans, beans))
-    #         except Exception as e:
-    #             log.error("failed indexing", extra={"source": run_id, "num_items": len(urls)})
-    #             ic(e)
-                
-    #     await asyncio.gather(*threads)
-
-    #     log.info("completed indexer", extra={"source": run_id, "num_items": 1})
 

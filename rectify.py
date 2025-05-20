@@ -298,6 +298,35 @@ def merge_feeds():
     with open("/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml", "w") as file:
         yaml.dump(existing, file)
 
+def remove_non_functional_feeds():
+    import csv, yaml
+    csv_path = "/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/non-functional-rss.csv"
+    yaml_path = "/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"
+
+    # Read non-functional RSS feeds from CSV (handling quoted values)
+    with open(csv_path, newline='') as csvfile:
+        reader = csv.reader(csvfile)
+        non_functional = [row[0].strip().strip('"') for row in reader if row and row[0].strip()]
+
+    ic(len(non_functional))
+    # Load YAML feeds
+    with open(yaml_path, 'r') as file:
+        feeds_data = yaml.safe_load(file)
+
+    # Remove non-functional feeds from the rss list
+    if 'sources' in feeds_data and 'rss' in feeds_data['sources']:
+        original_count = len(feeds_data['sources']['rss'])
+        feeds_data['sources']['rss'] = sorted([
+            feed for feed in feeds_data['sources']['rss'] if feed not in non_functional
+        ])
+        print(f"Removed {original_count - len(feeds_data['sources']['rss'])} feeds.")
+
+
+    # Save the updated YAML
+    with open(yaml_path, 'w') as file:
+        yaml.dump(feeds_data, file)
+
+
 
 to_ignore = [
 "feed://bjango.com/rss/articles.xml",
@@ -426,4 +455,4 @@ to_ignore = [
 
 # adding data porting logic
 if __name__ == "__main__":
-    merge_feeds()
+    remove_non_functional_feeds()
