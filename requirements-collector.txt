@@ -4,9 +4,6 @@ nest-asyncio
 beautifulsoup4
 lxml_html_clean
 feedparser
-atoma
-newspaper3k
-nltk
 tldextract
 icecream
 praw

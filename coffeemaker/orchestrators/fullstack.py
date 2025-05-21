@@ -1,17 +1,19 @@
-import random
-from typing import Awaitable
-from icecream import ic
+
+import os
 import logging
 import asyncio
+
 from asyncio import Queue
+from azure.storage.blob import BlobClient
+from typing import Awaitable
+from pymongo import UpdateOne
+from icecream import ic
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
 from coffeemaker.nlp import digestors, embedders, utils
 from coffeemaker.orchestrators.utils import *
-from pymongo import UpdateOne
-import os
 
 log = logging.getLogger(__name__)
 
@@ -232,7 +234,8 @@ class Orchestrator:
         self.localsack.close()
         if not self.az_storage_conn_str: return 
         try:
-            self.localsack.backup_azblob(self.az_storage_conn_str)
+            client = BlobClient.from_connection_string(self.az_storage_conn_str, "backup", self.localsack.db_name)
+            self.localsack.backup(lambda data: client.upload_blob(data, overwrite=True)  )
             log.info("local db backed up", extra={"source": self.run_id, "num_items": 1})
         except Exception as e:
             log.error("local db backup failed", extra={"source": self.run_id, "num_items": 1})

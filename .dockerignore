@@ -10,7 +10,7 @@
 .vscode
 .logs
 .scrapingqueue
-test
+tests
 __azurite*
 __queuestorage__
 __pycache__

@@ -29,9 +29,7 @@ QUEUE_PATH_TEST="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;Acco
 INDEXER_IN_QUEUE="indexing-queue"
 DIGESTOR_IN_QUEUE="digesting-queue"
 COLLECTOR_OUT_QUEUES=[INDEXER_IN_QUEUE, DIGESTOR_IN_QUEUE]
-EMBEDDER_PATH="avsolatorio/GIST-small-Embedding-v0"
 EMBEDDER_CONTEXT_LEN=512
-CLUSTER_EPS=0.1
 
 import json, re, random
 import asyncio
@@ -310,7 +308,9 @@ def test_collector_orch():
     from coffeemaker.orchestrators.collectoronly import Orchestrator
     orch = Orchestrator(
         DB_REMOTE_TEST,
-        DB_NAME_TEST
+        DB_NAME_TEST,
+        QUEUE_PATH_TEST,
+        [INDEXER_IN_QUEUE]
     )
     sources = """/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"""
     orch.run(sources)
@@ -322,11 +322,11 @@ def test_indexer_orch():
         DB_NAME_TEST, 
         QUEUE_PATH_TEST,
         INDEXER_IN_QUEUE,
-        embedder_path=EMBEDDER_PATH,
+        embedder_path=ic(os.getenv('EMBEDDER_PATH')),
         embedder_context_len=EMBEDDER_CONTEXT_LEN,
-        cluster_eps=CLUSTER_EPS
+        cluster_eps=0.3
     )
-    asyncio.run(orch.run_async())
+    orch.run()
 
 def test_digestor_orch():
     from coffeemaker.orchestrators.digestoronly import Orchestrator
@@ -339,8 +339,8 @@ def test_digestor_orch():
     orch.run()
 
 if __name__ == "__main__":
-    test_collector_orch()
-    # test_indexer_orch()
+    # test_collector_orch()
+    test_indexer_orch()
     # test_digestor_orch()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
