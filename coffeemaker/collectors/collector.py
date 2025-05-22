@@ -12,7 +12,7 @@ import time
 import aiohttp
 from bs4 import BeautifulSoup
 import feedparser
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator
+from crawl4ai import AsyncWebCrawler, Crawl4aiDockerClient, BrowserConfig, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator
 import praw
 import prawcore
 import requests
@@ -354,9 +354,9 @@ class APICollector:
         collected = None
         try:
             async with aiohttp.ClientSession() as session:
-                entry_ids = await asyncio.gather(*[_fetch_json(session, ids_url) for ids_url in HACKERNEWS_STORIES_URLS])
+                entry_ids = await asyncio.gather(*[_fetch_json_async(session, ids_url) for ids_url in HACKERNEWS_STORIES_URLS])
                 entry_ids = set(chain(*entry_ids))
-                stories = await asyncio.gather(*[_fetch_json(session, hackernews_story_metadata(id)) for id in entry_ids])
+                stories = await asyncio.gather(*[_fetch_json_async(session, hackernews_story_metadata(id)) for id in entry_ids])
                 collected = [self._from_hackernews_story(story, BLOG) for story in stories if story and not _excluded_url(story.get('url'))]
         except Exception as e: ic(HACKERNEWS, e)
         return self._return_collected(collected)
@@ -481,10 +481,13 @@ METADATA_EXTRACTION_SCHEMA = {
     ]
 }
 
+REMOTE_SCRAPER_BATCH_SIZE = 32
 class WebScraper:    
     browser_config = None
+    batch_size = None
+    remote_crawler = None
 
-    def __init__(self, batch_size: int = BATCH_SIZE):
+    def __init__(self, remote_crawler: str = None, batch_size: int = BATCH_SIZE):
         self.browser_config = BrowserConfig(
             headless=True,
             ignore_https_errors=False,
@@ -495,8 +498,9 @@ class WebScraper:
             verbose=False
         )
         self.batch_size = batch_size
+        self.remote_crawler = ic(remote_crawler)
 
-    def _run_config(self, collect_metadata: bool):
+    def _config(self, collect_metadata: bool):
         if collect_metadata: return CrawlerRunConfig(   
             # content processing
             word_count_threshold=100,
@@ -512,7 +516,7 @@ class WebScraper:
 
             # navigation & timing
             semaphore_count=self.batch_size,
-            page_timeout=30000,
+            page_timeout=TIMEOUT*1000,
             wait_for_images=False, 
 
             # page interaction
@@ -529,7 +533,8 @@ class WebScraper:
             # exclude_external_links=True,
             exclude_social_media_links=True, 
 
-            verbose=False
+            verbose=False,
+            stream=False
         )
         else: return CrawlerRunConfig(   
             # content processing
@@ -546,7 +551,7 @@ class WebScraper:
 
             # navigation & timing
             semaphore_count=self.batch_size,
-            page_timeout=30000,
+            page_timeout=TIMEOUT*1000,
             wait_for_images=False,
 
             # page interaction
@@ -563,27 +568,38 @@ class WebScraper:
             # exclude_external_links=True,
             exclude_social_media_links=True, 
 
-            verbose=False
+            verbose=False,
+            stream=False
         )
 
-    async def scrape_url(self, url: str, collect_metadata: bool = False) -> dict:
+    async def _scrape(self, urls: list[str], collect_metadata: bool):
+        run_config = self._config(collect_metadata)
+        if self.remote_crawler:
+            batches = [urls[i:i+REMOTE_SCRAPER_BATCH_SIZE] for i in range(0, len(urls), REMOTE_SCRAPER_BATCH_SIZE)]
+            async with Crawl4aiDockerClient(self.remote_crawler, timeout=TIMEOUT*10, verbose=False) as crawler:
+                crawler._token = "AND THIS IS HOW YOU BYPASS AUTHENTICATION. BRO WTF!"
+                batch_responses = await asyncio.gather(
+                    *(crawler.crawl(urls=batch, browser_config=self.browser_config, crawler_config=run_config) for batch in batches)
+                )
+                results = list(chain(*batch_responses))
+        else:
+            async with AsyncWebCrawler(config = self.browser_config) as crawler:
+                results = await crawler.arun_many(urls=urls, config=run_config)
+        return {result.url: result for result in results}
+
+    async def scrape_url(self, url: str, collect_metadata: bool) -> dict:
         """Collects the body of the url as a markdown"""
         if _excluded_url(url): return
-        async with AsyncWebCrawler(config=self.browser_config) as crawler:
-            parsed_result = await crawler.arun(url=url, config=self._run_config(collect_metadata))
-            result = APICollector._package_result(parsed_result)
-        return result
+        results = await self._scrape([url], collect_metadata)
+        return WebScraper._package_result(results[url])
 
-    async def scrape_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
+    async def scrape_urls(self, urls: list[str], collect_metadata: bool) -> list[dict]:
         """Collects the bodies of the urls as markdowns"""
         try:
-            async with AsyncWebCrawler(config=self.browser_config) as crawler:
-                parsed_results = await crawler.arun_many(urls=urls, config=self._run_config(collect_metadata))
-                parsed_results = {result.url: result for result in parsed_results}
-                results = [WebScraper._package_result(parsed_results[url]) for url in urls]            
-            return results
+            results = await self._scrape(urls, collect_metadata)
+            return [WebScraper._package_result(results[url]) for url in urls]            
         except Exception as e:
-            # ic(e.__class__.__name__, e)
+            ic(e)
             return [None]*len(urls)
 
     async def scrape_beans(self, beans: list[Bean], collect_metadata: bool = False) -> list[Bean]:
@@ -604,8 +620,7 @@ class WebScraper:
         return beans
 
     def _package_result(result) -> dict:   
-        if not result: return
-        # if not (result and ic(result.status_code) == 200): return        
+        if not(result and result.success): return
 
         ret = {
             "url": result.url,

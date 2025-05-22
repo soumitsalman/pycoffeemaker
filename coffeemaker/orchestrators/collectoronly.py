@@ -33,16 +33,18 @@ def _prepare_new(beans: list[Bean]):
 class Orchestrator:
     db: MongoSack = None
     queues: QueueClient = None
-    scraper_queue: Queue = None
-    total: int = 0
+    # scraper_queue: Queue = None
+    run_total: int = 0
+    # executor: ThreadPoolExecutor = None
 
     def __init__(self, db_path: str, db_name: str, queue_path: str = None, queue_names: list[str] = None):
         self.db = MongoSack(db_path, db_name)
         if queue_path: self.queues = [QueueClient.from_connection_string(queue_path, queue_name) for queue_name in queue_names]
 
         self.apicollector = APICollector(self.triage_beans)
-        self.webscraper = WebScraper(BATCH_SIZE)
-        self.scraper_queue = Queue(".scrapingqueue", tempdir=".")
+        self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
+        # self.scraper_queue = Queue(".scrapingqueue", tempdir=".")
+        # self.executor = ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="collector-only-orch")
 
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
         if not beans: return beans
@@ -65,9 +67,13 @@ class Orchestrator:
         if not beans: return   
         log.info("triaged", extra={"source": source, "num_items": len(beans)})
 
-        needs_scraping = scrapables(beans)
-        if needs_scraping: self.scraper_queue.put_nowait((source, needs_scraping)) 
-        self._commit_new(source, [bean for bean in beans if bean not in needs_scraping])
+        # needs_scraping = scrapables(beans)
+        self._commit_new(source, list(filter(lambda x: not is_scrapable(x), beans)))
+        self._scrape(source, scrapables(beans))
+        # if needs_scraping: self.scraper_queue.put_nowait((source, needs_scraping)) 
+        # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="new-beans") as executor:
+        #     executor.submit(self._commit_new, source, [bean for bean in beans if bean not in needs_scraping])
+        #     executor.submit(self._scrape, source, needs_scraping)
 
     def queue_beans(self, source, beans: list[Bean]) -> None:
         if not beans or not self.queues: return
@@ -80,7 +86,7 @@ class Orchestrator:
         if not beans or not self.db: return
         count = self.db.store_beans(beans)
         log.info("stored", extra={"source": source, "num_items": count})
-        self.total += count
+        self.run_total += count
     
     def _commit_new(self, source: str, beans: list[Bean]):
         beans = self._filter_new(beans)
@@ -89,27 +95,28 @@ class Orchestrator:
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="commit") as executor:
             executor.submit(self.store_beans, source, beans),
             executor.submit(self.queue_beans, source, indexables(beans))
+        # self.store_beans(source, beans)
+        # self.queue_beans(source, indexables(beans))
         return beans
     
     def _scrape(self, source: str, beans: list[Bean]):
         if not beans: return
 
-        loop = asyncio.get_event_loop()
-        beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
-        for bean in beans:
-            bean.is_scraped = True
-        log.info("scraped", extra={"source": source, "num_items": len(beans)})
-        # nullify the contents for which the scraping failed to get anything substantial
+        beans = asyncio.get_event_loop().run_until_complete(self.webscraper.scrape_beans(beans, True))
+        # mark the contents where scraping was successful
         for bean in beans:
             if is_scrapable(bean): bean.content = None
+            else: bean.is_scraped = True
+
+        log.info("scraped", extra={"source": source, "num_items": len([bean for bean in beans if bean.is_scraped])})
         self._commit_new(source, beans) 
     
     @log_runtime(logger=log)
     def run(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/feeds.yaml")):
-        self.total = 0
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting collector", extra={"source": run_id, "num_items": 1})
 
+        self.run_total = 0
         # first collect
         for source_type, source_paths in parse_sources(sources).items():
             # awaiting on each group so that os is not overwhelmed by sockets
@@ -119,10 +126,10 @@ class Orchestrator:
             elif source_type == 'rss': self._collect(self.apicollector.collect_rssfeed, source_paths)
 
         # then scrape
-        while not self.scraper_queue.empty():
-            source, beans = self.scraper_queue.get()
-            self._scrape(source, beans)
-            self.scraper_queue.task_done()
+        # while not self.scraper_queue.empty():
+        #     source, beans = self.scraper_queue.get()
+        #     self._scrape(source, beans)
+        #     self.scraper_queue.task_done()
 
-        log.info("completed collector", extra={"source": run_id, "num_items": self.total})
+        log.info("total collected", extra={"source": run_id, "num_items": self.run_total})
 

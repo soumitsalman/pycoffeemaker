@@ -17,7 +17,7 @@ RUN mkdir .logs
 
 RUN pip install --no-cache-dir -r coffeemaker/pybeansack/requirements.txt
 RUN pip install --no-cache-dir -r collector-requirements.txt
-RUN crawl4ai-setup
+# RUN crawl4ai-setup
 
 ENV MODE=COLLECTOR_ONLY
 ENV COLLECTOR_SOURCES=/worker/coffeemaker/collectors/sources.yaml

@@ -11,7 +11,7 @@ COPY . .
 RUN pip install --no-cache-dir torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r ./coffeemaker/pybeansack/requirements.txt
 RUN pip install --no-cache-dir -r ./requirements-cpu.txt
-RUN crawl4ai-setup
+# RUN crawl4ai-setup
 
 ENV DB_LOCAL=.db
 ENV COLLECTOR_SOURCES=/worker/coffeemaker/collectors/feeds.yaml
