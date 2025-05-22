@@ -12,7 +12,7 @@ import time
 import aiohttp
 from bs4 import BeautifulSoup
 import feedparser
-from crawl4ai import AsyncWebCrawler, Crawl4aiDockerClient, BrowserConfig, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator
+from crawl4ai import AsyncWebCrawler, Crawl4aiDockerClient, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator
 import praw
 import prawcore
 import requests
@@ -581,7 +581,7 @@ class WebScraper:
                 batch_responses = await asyncio.gather(
                     *(crawler.crawl(urls=batch, browser_config=self.browser_config, crawler_config=run_config) for batch in batches)
                 )
-                results = list(chain(*batch_responses))
+                results = list(chain(*([resp] if isinstance(resp, CrawlResult) else resp for resp in batch_responses)))
         else:
             async with AsyncWebCrawler(config = self.browser_config) as crawler:
                 results = await crawler.arun_many(urls=urls, config=run_config)
