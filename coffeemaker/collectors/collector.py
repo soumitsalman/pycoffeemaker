@@ -498,7 +498,7 @@ class WebScraper:
             verbose=False
         )
         self.batch_size = batch_size
-        self.remote_crawler = ic(remote_crawler)
+        self.remote_crawler = remote_crawler
 
     def _config(self, collect_metadata: bool):
         if collect_metadata: return CrawlerRunConfig(   
@@ -576,7 +576,7 @@ class WebScraper:
         run_config = self._config(collect_metadata)
         if self.remote_crawler:
             batches = [urls[i:i+REMOTE_SCRAPER_BATCH_SIZE] for i in range(0, len(urls), REMOTE_SCRAPER_BATCH_SIZE)]
-            async with Crawl4aiDockerClient(self.remote_crawler, timeout=TIMEOUT*10, verbose=False) as crawler:
+            async with Crawl4aiDockerClient(self.remote_crawler, timeout=TIMEOUT*100, verbose=False) as crawler:
                 crawler._token = "AND THIS IS HOW YOU BYPASS AUTHENTICATION. BRO WTF!"
                 batch_responses = await asyncio.gather(
                     *(crawler.crawl(urls=batch, browser_config=self.browser_config, crawler_config=run_config) for batch in batches)

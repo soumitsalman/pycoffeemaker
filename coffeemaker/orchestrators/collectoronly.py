@@ -102,7 +102,14 @@ class Orchestrator:
     def _scrape(self, source: str, beans: list[Bean]):
         if not beans: return
 
-        beans = asyncio.get_event_loop().run_until_complete(self.webscraper.scrape_beans(beans, True))
+        # beans = asyncio.get_event_loop().run_until_complete(self.webscraper.scrape_beans(beans, True))
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
         # mark the contents where scraping was successful
         for bean in beans:
             if is_scrapable(bean): bean.content = None
