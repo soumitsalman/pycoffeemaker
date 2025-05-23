@@ -481,11 +481,11 @@ METADATA_EXTRACTION_SCHEMA = {
     ]
 }
 
-REMOTE_SCRAPER_BATCH_SIZE = 32
 class WebScraper:    
     browser_config = None
     batch_size = None
     remote_crawler = None
+    crawling_semaphore = None
 
     def __init__(self, remote_crawler: str = None, batch_size: int = BATCH_SIZE):
         self.browser_config = BrowserConfig(
@@ -499,6 +499,7 @@ class WebScraper:
         )
         self.batch_size = batch_size
         self.remote_crawler = remote_crawler
+        self.crawling_semaphore = asyncio.Semaphore(batch_size if remote_crawler else 1)
 
     def _config(self, collect_metadata: bool):
         if collect_metadata: return CrawlerRunConfig(   
@@ -572,20 +573,31 @@ class WebScraper:
             stream=False
         )
 
+    async def _scrape_with_remote_crawler(self, urls, run_config):
+        async with Crawl4aiDockerClient(self.remote_crawler, timeout=TIMEOUT*100, verbose=False) as crawler:
+            crawler._token = "AND THIS IS HOW YOU BYPASS AUTHENTICATION. BRO WTF!"
+            async def process_batch(batch):
+                async with self.crawling_semaphore:
+                    return await crawler.crawl(
+                        urls=batch, 
+                        browser_config=self.browser_config, 
+                        crawler_config=run_config
+                    )
+            batches = [urls[i:i+self.batch_size] for i in range(0, len(urls), self.batch_size)]
+            batch_responses = await asyncio.gather(*(process_batch(batch) for batch in batches))
+        return list(chain(*([resp] if isinstance(resp, CrawlResult) else resp for resp in batch_responses)))
+
+    async def _scrape_with_local_crawler(self, urls, run_config):
+        async with self.crawling_semaphore:
+            async with AsyncWebCrawler(config=self.browser_config) as crawler:
+                results = await crawler.arun_many(urls=urls, config=run_config)
+        return results
+
     async def _scrape(self, urls: list[str], collect_metadata: bool):
         run_config = self._config(collect_metadata)
-        if self.remote_crawler:
-            batches = [urls[i:i+REMOTE_SCRAPER_BATCH_SIZE] for i in range(0, len(urls), REMOTE_SCRAPER_BATCH_SIZE)]
-            async with Crawl4aiDockerClient(self.remote_crawler, timeout=TIMEOUT*100, verbose=False) as crawler:
-                crawler._token = "AND THIS IS HOW YOU BYPASS AUTHENTICATION. BRO WTF!"
-                batch_responses = await asyncio.gather(
-                    *(crawler.crawl(urls=batch, browser_config=self.browser_config, crawler_config=run_config) for batch in batches)
-                )
-                results = list(chain(*([resp] if isinstance(resp, CrawlResult) else resp for resp in batch_responses)))
-        else:
-            async with AsyncWebCrawler(config = self.browser_config) as crawler:
-                results = await crawler.arun_many(urls=urls, config=run_config)
-        return {result.url: result for result in results}
+        if self.remote_crawler: task = self._scrape_with_remote_crawler(urls, run_config)
+        else: task = self._scrape_with_local_crawler(urls, run_config)
+        return {result.url: result for result in (await task)}
 
     async def scrape_url(self, url: str, collect_metadata: bool) -> dict:
         """Collects the body of the url as a markdown"""
@@ -595,12 +607,8 @@ class WebScraper:
 
     async def scrape_urls(self, urls: list[str], collect_metadata: bool) -> list[dict]:
         """Collects the bodies of the urls as markdowns"""
-        try:
-            results = await self._scrape(urls, collect_metadata)
-            return [WebScraper._package_result(results[url]) for url in urls]            
-        except Exception as e:
-            ic(e)
-            return [None]*len(urls)
+        results = await self._scrape(urls, collect_metadata)
+        return [WebScraper._package_result(results[url]) for url in urls]    
 
     async def scrape_beans(self, beans: list[Bean], collect_metadata: bool = False) -> list[Bean]:
         """Collects the bodies of the beans as markdowns"""

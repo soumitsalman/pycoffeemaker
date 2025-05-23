@@ -23,4 +23,4 @@ ENV MODE=COLLECTOR_ONLY
 ENV COLLECTOR_SOURCES=/worker/coffeemaker/collectors/sources.yaml
 
 # End Generation Here
-CMD ["python", "/worker/app.py"]
+CMD ["python", "./run.py"]

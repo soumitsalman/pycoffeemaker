@@ -29,4 +29,4 @@ ENV EMBEDDER_CONTEXT_LEN=512
 ENV CLUSTER_EPS=0.09
 ENV DIGESTOR_CONTEXT_LEN=8192
 
-CMD ["python", "./app.py"]
+CMD ["python", "./run.py"]
