@@ -87,8 +87,7 @@ class Orchestrator:
     def embed_beans(self, beans: list[Bean]) -> list[Bean]|None:   
         if not beans: return beans
 
-        # TODO: do some splitting here and then average it out
-        embeddings = self.embedder.embed([(bean.content or bean.summary or bean.title) for bean in beans])
+        embeddings = self.embedder.embed([bean.content for bean in beans])
         for bean, embedding in zip(beans, embeddings):
             bean.embedding = embedding
 
@@ -165,8 +164,14 @@ class Orchestrator:
         log.info("starting indexer", extra={"source": run_id, "num_items": 1})
 
         for urls in dequeue_batch(self.input_queue, BATCH_SIZE):
+            beans = self.db.query_beans(
+                {
+                    K_URL: {"$in": urls}, 
+                    K_CONTENT: VALUE_EXISTS
+                }, 
+                project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1}
+            )
             try:
-                beans = self.db.query_beans(filter={K_URL: {"$in": urls}}, project={K_URL: 1, K_TITLE: 1, K_SUMMARY:1, K_CONTENT: 1, K_SOURCE: 1})
                 beans = self.embed_beans(beans)
                 with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="indexer") as executor:
                     # executor.submit(self.classify_beans, beans)

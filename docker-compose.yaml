@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:05-23
+    image: soumitsr/coffeemaker:05-24
     depends_on:
       - localcrawler
       - localdb
@@ -20,6 +20,40 @@ services:
     networks:
       - coffeemaker-bridge
 
+  localindexer:
+    image: soumitsr/coffeemaker:05-24
+    depends_on:
+      - localdb
+      - localqueue
+    environment:
+      - MODE=INDEXER_ONLY
+      - DB_NAME=test
+      - MONGODB_CONN_STR=mongodb://localdb:27017
+      - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
+      - INPUT_QUEUE_NAME=indexing-queue
+      - BATCH_SIZE=64
+    env_file:
+      - dockertest.env
+    networks:
+      - coffeemaker-bridge
+
+  localdigestor:
+    image: soumitsr/coffeemaker:05-24
+    depends_on:
+      - localdb
+      - localqueue
+    environment:
+      - MODE=DIGESTOR_ONLY
+      - DB_NAME=test
+      - MONGODB_CONN_STR=mongodb://localdb:27017
+      - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
+      - INPUT_QUEUE_NAME=digesting-queue
+      - BATCH_SIZE=16
+    env_file:
+      - dockertest.env
+    networks:
+      - coffeemaker-bridge
+
   localcrawler:
     image: unclecode/crawl4ai:latest
     ports:
@@ -29,11 +63,9 @@ services:
 
   localqueue:
     image: mcr.microsoft.com/azure-storage/azurite
-    command: azurite-queue
+    command: azurite-queue --queueHost 0.0.0.0 
     ports:
       - "10001:10001"
-    volumes:
-      - /home/soumitsr/codes/.azuritequeue:/data
     networks:
       - coffeemaker-bridge
 
@@ -41,8 +73,6 @@ services:
     image: mongodb/mongodb-community-server:latest
     ports:
       - "27017:27017"
-    volumes:
-      - /home/soumitsr/codes/.mongodb2:/data/db
     networks:
       - coffeemaker-bridge
 

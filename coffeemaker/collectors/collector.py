@@ -256,7 +256,7 @@ class APICollector:
                 site_base_url=extract_base_url(entry.link),
                 title=entry.title,
                 kind=_guess_type(entry.link, source) or default_kind,
-                summary=_strip_html_tags(summary),
+                summary=self._generate_markdown(summary),
                 content=self._generate_markdown(content),
                 author=entry.get('author'),        
                 image_url=_extract_main_image(entry)
