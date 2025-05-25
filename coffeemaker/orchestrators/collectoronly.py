@@ -1,7 +1,6 @@
 import os
 import logging
 import asyncio
-import threading
 from typing import Callable
 from icecream import ic
 
@@ -14,7 +13,7 @@ from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sou
 from coffeemaker.orchestrators.utils import *
 
 FILTER_KINDS = [NEWS, BLOG]
-BATCH_SIZE = int(os.getenv('COLLECTOR_BATCH_SIZE', 16*os.cpu_count()))
+BATCH_SIZE = int(os.getenv('BATCH_SIZE', 16*os.cpu_count()))
 
 log = logging.getLogger(__name__)
 
@@ -33,16 +32,16 @@ def _prepare_new(beans: list[Bean]):
 class Orchestrator:
     db: MongoSack = None
     queues: QueueClient = None
-    scraper_queue: Queue = None
+    processing_queue: Queue = None
     run_total: int = 0
 
-    def __init__(self, db_path: str, db_name: str, queue_path: str = None, queue_names: list[str] = None):
-        self.db = MongoSack(db_path, db_name)
-        if queue_path: self.queues = [QueueClient.from_connection_string(queue_path, queue_name) for queue_name in queue_names]
+    def __init__(self, mongodb_conn_str: str, db_name: str, azqueue_conn_str: str = None, output_queue_names: list[str] = None):
+        self.db = MongoSack(mongodb_conn_str, db_name)
+        if output_queue_names: self.queues = initialize_azqueues(azqueue_conn_str, output_queue_names)
 
         self.apicollector = APICollector(self.triage_beans)
         self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
-        self.scraper_queue = Queue(".scrapingqueue", tempdir=".")
+        self.processing_queue = Queue(".processingqueue", tempdir=".")
 
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
         if not beans: return beans
@@ -65,7 +64,7 @@ class Orchestrator:
         if not beans: return   
         log.info("triaged", extra={"source": source, "num_items": len(beans)})
         self._commit_new(source, list(filter(lambda x: not is_scrapable(x), beans)))
-        self.scraper_queue.put_nowait((source, scrapables(beans))) 
+        self.processing_queue.put_nowait((source, scrapables(beans))) 
 
     def queue_beans(self, source, beans: list[Bean]) -> None:
         if not beans or not self.queues: return
@@ -135,10 +134,10 @@ class Orchestrator:
         # then scrape
         async def _run_scraping_async():
             tasks = []
-            while not self.scraper_queue.empty():
-                source, beans = self.scraper_queue.get()
+            while not self.processing_queue.empty():
+                source, beans = self.processing_queue.get()
                 tasks.append(self._scrape_async(source, beans))
-                self.scraper_queue.task_done()
+                self.processing_queue.task_done()
             await asyncio.gather(*tasks)
 
         asyncio.run(_run_scraping_async())

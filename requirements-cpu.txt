@@ -1,4 +1,4 @@
-optimum[onnxruntime]
+sentence-transformers
 openai
 llama-index
 tiktoken

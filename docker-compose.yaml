@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  localcollector:
+    image: soumitsr/coffeemaker:05-23
+    depends_on:
+      - localcrawler
+      - localdb
+      - localqueue
+    environment:
+      - MODE=COLLECTOR_ONLY
+      - DB_NAME=test
+      - MONGODB_CONN_STR=mongodb://localdb:27017
+      - REMOTE_CRAWLER_URL=http://localcrawler:11235
+      - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
+      - OUTPUT_QUEUE_NAMES=indexing-queue,digesting-queue
+      - BATCH_SIZE=128
+    env_file:
+      - dockertest.env
+    networks:
+      - coffeemaker-bridge
+
+  localcrawler:
+    image: unclecode/crawl4ai:latest
+    ports:
+      - "11235:11235"
+    networks:
+      - coffeemaker-bridge
+
+  localqueue:
+    image: mcr.microsoft.com/azure-storage/azurite
+    command: azurite-queue
+    ports:
+      - "10001:10001"
+    volumes:
+      - /home/soumitsr/codes/.azuritequeue:/data
+    networks:
+      - coffeemaker-bridge
+
+  localdb:
+    image: mongodb/mongodb-community-server:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - /home/soumitsr/codes/.mongodb2:/data/db
+    networks:
+      - coffeemaker-bridge
+
+networks:
+  coffeemaker-bridge:
+    driver: bridge

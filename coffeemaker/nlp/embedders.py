@@ -120,39 +120,36 @@ class TransformerEmbeddings(Embeddings):
     splitter = None
 
     def __init__(self, model_path: str, context_len: int):
-        from optimum.onnxruntime import ORTModelForFeatureExtraction
-        from transformers import AutoTokenizer
+        # from optimum.onnxruntime import ORTModelForFeatureExtraction
+        # from transformers import AutoTokenizer
+        from sentence_transformers import SentenceTransformer
 
         super().__init__(context_len)
         # self.lock = threading.Lock()
-        provider = "CUDAExecutionProvider" if torch.cuda.is_available() else "CPUExecutionProvider"
-        self.model = ORTModelForFeatureExtraction.from_pretrained(model_path, provider=provider)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        # provider = "CUDAExecutionProvider" if torch.cuda.is_available() else "CPUExecutionProvider"
+        # self.model = ORTModelForFeatureExtraction.from_pretrained(model_path, provider=provider)
+        # self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.context_len = context_len
 
-        # tokenizer_kwargs = {
-        #     "truncation": True,
-        #     "max_length": context_len
-        # }
+        tokenizer_kwargs = {
+            "truncation": True,
+            "max_length": self.context_len,
+            "padding": True
+        }
         # NOTE: temporarily disabling this
         # self.model = SentenceTransformer(model_id, trust_remote_code=True, device="cuda", tokenizer_kwargs=tokenizer_kwargs) \
         #     if torch.cuda.is_available() else \
         #     SentenceTransformer(model_id, trust_remote_code=True, backend="onnx", model_kwargs={"file_name": "model_quantized.onnx"}, tokenizer_kwargs=tokenizer_kwargs)
         # self.model = SentenceTransformer(model_id, trust_remote_code=True, device="cpu", backend="onnx", model_kwargs={"file_name": "model_quantized.onnx"}, tokenizer_kwargs=tokenizer_kwargs)
-        # self.model = SentenceTransformer(model_path, trust_remote_code=True, tokenizer_kwargs=tokenizer_kwargs)
+        self.model = SentenceTransformer(model_path, trust_remote_code=True, cache_folder=os.getenv('HF_HOME'), tokenizer_kwargs=tokenizer_kwargs)
 
     def _embed(self, texts: str|list[str]):
         # with self.lock:
-        #     embeddings = self.model.encode(texts, batch_size=len(texts))
-        # return embeddings
-        inputs = self.tokenizer(texts, return_tensors='pt', padding=True, max_length=self.context_len, truncation=True)
-        outputs = self.model(**inputs)
-        return outputs.last_hidden_state.mean(dim=1).detach().tolist()
-
-# def _prep_input(input, context_len):
-#     if isinstance(input, str):
-#         return truncate(input, context_len)
-#     return [truncate(t, context_len) for t in input]
+        embeddings = self.model.encode(texts, batch_size=len(texts), convert_to_numpy=True)
+        return embeddings
+        # inputs = self.tokenizer(texts, return_tensors='pt', padding=True, max_length=self.context_len, truncation=True)
+        # outputs = self.model(**inputs)
+        # return outputs.last_hidden_state.mean(dim=1).detach().tolist()
 
 def from_path(
     embedder_path: str, 
@@ -161,6 +158,7 @@ def from_path(
     api_key: str = None
 ) -> Embeddings:
     # initialize digestor
+    context_len = context_len or CONTEXT_LEN
     if embedder_path.startswith(LLAMA_CPP_PREFIX):
         return LlamaCppEmbeddings(embedder_path.removeprefix(LLAMA_CPP_PREFIX), context_len)
     elif base_url:

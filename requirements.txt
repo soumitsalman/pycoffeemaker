@@ -1,5 +1,5 @@
 llama-cpp-python
-optimum[onnxruntime-gpu]
+sentence-transformers
 openai
 llama-index
 tiktoken

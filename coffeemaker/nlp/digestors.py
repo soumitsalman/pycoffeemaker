@@ -106,12 +106,15 @@ C_CATEGORIES = "C:"
 C_SENTIMENTS = "S:"
 COMPRESSED_FIELDS = [C_KEYPOINTS, C_KEYEVENTS, C_DATAPOINTS, C_REGIONS, C_ENTITIES, C_CATEGORIES, C_SENTIMENTS]
 
+def isalphaorspace(text: str):
+    return all(char.isalpha() or char.isspace() for char in text)
+
 def parse_compressed_digest(response: str) -> Digest:
     response = response.strip()
     if not response: return
     
     digest = Digest(expr = "")
-    parts = [part for part in split_parts(response, r'[;\|\n]+') if part != UNDETERMINED]
+    parts = [part.strip() for part in split_parts(response, r'[;\|\n]+') if part != UNDETERMINED]
     last = None
     for part in parts:
         prefix = next((field for field in COMPRESSED_FIELDS if part.startswith(field)), None)
@@ -123,19 +126,19 @@ def parse_compressed_digest(response: str) -> Digest:
             digest.expr += f";{prefix+part}" if digest.expr else prefix+part
         else:
             digest.expr += f"|{part}"
-
+        
         if last == C_REGIONS:
             if not digest.regions: digest.regions = []
-            digest.regions.append(part)
-        if last == C_ENTITIES:
+            if isalphaorspace(part): digest.regions.append(part)
+        elif last == C_ENTITIES:
             if not digest.entities: digest.entities = []
             digest.entities.append(part)
-        if last == C_CATEGORIES:
+        elif last == C_CATEGORIES:
             if not digest.categories: digest.categories = []
-            digest.categories.append(part)
-        if last == C_SENTIMENTS:
+            if isalphaorspace(part): digest.categories.append(part)
+        elif last == C_SENTIMENTS:
             if not digest.sentiments: digest.sentiments = []
-            digest.sentiments.append(part)
+            if part.isalpha(): digest.sentiments.append(part)
 
     return digest
 
@@ -351,11 +354,12 @@ def remove_after(text: str, sub: str) -> str:
 
 def from_path(
     digestor_path: str,
-    context_len: int = CONTEXT_LEN, 
+    context_len: int, 
     base_url: str = None, 
     api_key: str = None,
     use_short_digest = None
 ) -> Digestor:
+    context_len = context_len or CONTEXT_LEN
     if digestor_path.startswith(LLAMA_CPP_PREFIX):
         return LlamaCppDigestor(digestor_path.removeprefix(LLAMA_CPP_PREFIX), context_len=context_len, use_short_digest=use_short_digest)
     elif base_url:

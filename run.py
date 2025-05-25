@@ -21,10 +21,8 @@ logging.basicConfig(
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.collectoronly").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.indexeronly").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.digestoronly").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.chainable").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
-# logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.digestors").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
@@ -41,37 +39,44 @@ if __name__ == "__main__":
     if mode == "COLLECTOR_ONLY":
         from coffeemaker.orchestrators.collectoronly import Orchestrator
         orch = Orchestrator(
-            os.getenv("DB_REMOTE"),
+            os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
-            os.getenv("QUEUE_PATH"),
-            [queue_name.strip() for queue_name in os.getenv("COLLECTOR_OUT_QUEUES").split(",")],
+            azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
+            output_queue_names=[queue_name.strip() for queue_name in os.getenv("OUTPUT_QUEUE_NAMES").split(",")],
         )
         orch.run()
     elif mode == "INDEXER_ONLY":
-        from coffeemaker.orchestrators.indexeronly import Orchestrator
+        from coffeemaker.orchestrators.chainable import Orchestrator
         orch = Orchestrator(
-            os.getenv("DB_REMOTE"),
+            os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
-            os.getenv("QUEUE_PATH"),
-            os.getenv("INDEXER_IN_QUEUE")
+            azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
+            input_queue_name=os.getenv("INPUT_QUEUE_NAME"),
+            embedder_path=os.getenv("EMBEDDER_PATH"),
+            embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
+            cluster_eps=float(os.getenv("CLUSTER_EPS", 0))
         )
-        orch.run()
+        orch.run_indexer()
     elif mode == "DIGESTOR_ONLY":
-        from coffeemaker.orchestrators.digestoronly import Orchestrator
+        from coffeemaker.orchestrators.chainable import Orchestrator
         orch = Orchestrator(
-            os.getenv("DB_REMOTE"),
+            os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
-            os.getenv("QUEUE_PATH"),
-            os.getenv("DIGESTOR_IN_QUEUE")
+            azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
+            input_queue_name=os.getenv("INPUT_QUEUE_NAME"),
+            digestor_path=os.getenv("DIGESTOR_PATH"), 
+            digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
+            digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
+            digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN"))
         )
-        orch.run()
+        orch.run_digestor()
     else:
         from coffeemaker.orchestrators.fullstack import Orchestrator
         orch = Orchestrator(
-            os.getenv("DB_REMOTE"),
+            os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_LOCAL"),
             os.getenv("DB_NAME"),
-            os.getenv("AZSTORAGE_CONNECTION_STRING")
+            os.getenv("AZQUEUE_CONN_STR")
         )
         
         try: asyncio.run(orch.run_async())

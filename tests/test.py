@@ -10,6 +10,7 @@ logger.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.collectoronly").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.indexeronly").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.digestoronly").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.chainable").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
 # logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
@@ -312,7 +313,23 @@ def test_collector_orch():
         QUEUE_PATH_TEST,
         [INDEXER_IN_QUEUE]
     )
-    sources = """/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"""
+    # sources = """/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"""
+    # sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-1.yaml"""
+    sources = """
+sources:
+  ychackernews:
+    - https://hacker-news.firebaseio.com/v0/newstories.json
+    - https://hacker-news.firebaseio.com/v0/askstories.json
+  reddit:
+    - news
+    - worldnews
+    - InternationalNews
+    - GlobalNews
+    - GlobalMarketNews
+    - FinanceNews
+    - StockNews
+    - CryptoNews
+"""
     orch.run(sources)
 
 def test_indexer_orch():
@@ -329,7 +346,7 @@ def test_indexer_orch():
     orch.run()
 
 def test_digestor_orch():
-    from coffeemaker.orchestrators.digestoronly import Orchestrator
+    from coffeemaker.orchestrators.chainable import Orchestrator
     orch = Orchestrator(
         DB_REMOTE_TEST,
         DB_NAME_TEST, 
@@ -339,8 +356,8 @@ def test_digestor_orch():
     orch.run()
 
 if __name__ == "__main__":
-    # test_collector_orch()
-    test_indexer_orch()
+    test_collector_orch()
+    # test_indexer_orch()
     # test_digestor_orch()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 

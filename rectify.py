@@ -242,7 +242,7 @@ def download_sources():
     from coffeemaker.collectors.collector import extract_base_url, extract_source
 
     local = Orchestrator(
-        db_path="mongodb://localhost:27017/",
+        mongodb_conn_str="mongodb://localhost:27017/",
         db_name="test3"
     )
     
@@ -284,7 +284,7 @@ def merge_feeds():
     import yaml
 
     local = Orchestrator(
-        db_path="mongodb://localhost:27017/",
+        mongodb_conn_str="mongodb://localhost:27017/",
         db_name="test3"
     )
     
@@ -453,6 +453,96 @@ to_ignore = [
 ]
 
 
+def port_beans_locally():
+    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    orch = Orchestrator(
+        os.getenv('DB_REMOTE'),
+        "test"
+    )
+    local_orch = Orchestrator(
+        os.getenv('DB_REMOTE_TEST'),
+        "test"
+    )
+    beans = orch.db.query_beans(
+        filter={
+            K_COLLECTED: {"$gte": datetime.now() - timedelta(days=10)},
+            K_GIST: {"$exists": True},
+            K_EMBEDDING: {"$exists": True}
+        }
+    )
+    local_orch.db.store_beans(beans)
+    print(datetime.now(), "ported beans|%d", len(beans))
+
+def port_pages_locally():
+    from coffeemaker.orchestrators.indexeronly import Orchestrator
+    orch = Orchestrator(
+        os.getenv('DB_REMOTE'),
+        "beansackV2",
+        os.getenv('QUEUE_PATH_TEST'),
+        "test"
+    )
+    local_orch = Orchestrator(
+        os.getenv('DB_REMOTE_TEST'),
+        "test",
+        os.getenv('QUEUE_PATH_TEST'),
+        "test"
+    )
+
+    pages = list(orch.db.db['baristas'].find({}))
+    for page in pages:
+        if K_EMBEDDING in page:
+            page[K_EMBEDDING] = local_orch.embedder.embed("category/classification/domain: "+page[K_DESCRIPTION])
+    local_orch.db.db['pages'].insert_many(pages)
+
+    print(datetime.now(), "ported pages|%d", len(pages))
+
+def port_sources_locally():
+    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    orch = Orchestrator(
+        os.getenv('DB_REMOTE_TEST'),
+        "test3"
+    )
+    local_orch = Orchestrator(
+        os.getenv('DB_REMOTE_TEST'),
+        "test"
+    )
+    sources = {}
+    allowed_fields = [K_ID, K_SOURCE, K_SITE_BASE_URL, K_SITE_NAME, K_SITE_RSS_FEED, K_SITE_FAVICON, K_DESCRIPTION]
+
+    for new in orch.db.sourcestore.find({}):
+        new[K_ID] = new[K_SITE_BASE_URL]
+        new[K_SITE_FAVICON] = new.get("favicon")
+        new[K_SITE_RSS_FEED] = new.get('rss_feed')
+        new[K_SITE_NAME] = new.get(K_SITE_NAME) or new.get(K_TITLE)
+        new = {k:v for k,v in new.items() if v and (k in allowed_fields)}
+        
+        if new[K_ID] in sources: 
+            updated = {**sources[new[K_ID]], **new}
+            if any(not v for v in updated.values()): ic(updated, sources[new[K_ID]], new)
+            if (K_SITE_NAME in updated) and (K_SITE_NAME in new): updated[K_SITE_NAME] = updated[K_SITE_NAME] if len(updated[K_SITE_NAME]) < len(new[K_SITE_NAME]) else new[K_SITE_NAME]
+            if (K_DESCRIPTION in updated) and (K_DESCRIPTION in new): updated[K_DESCRIPTION] = updated[K_DESCRIPTION] if len(updated[K_DESCRIPTION] ) < len(new[K_DESCRIPTION]) else new[K_DESCRIPTION]
+            if (K_SITE_RSS_FEED in updated) and (K_SITE_RSS_FEED in new): updated[K_SITE_RSS_FEED] = updated[K_SITE_RSS_FEED] if len(updated[K_SITE_RSS_FEED]) < len(new[K_SITE_RSS_FEED]) else new[K_SITE_RSS_FEED]
+            sources[new[K_ID]] = updated
+        else:
+            sources[new[K_ID]] = new
+
+    local_orch.db.sourcestore.insert_many(list(sources.values()))
+
+def port_stuff_to_remote():
+    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    orch = Orchestrator(
+        os.getenv('DB_REMOTE'),
+        "test"
+    )
+    local_orch = Orchestrator(
+        os.getenv('DB_REMOTE_TEST'),
+        "test"
+    )
+
+    orch.db.pagestore.insert_many(local_orch.db.pagestore.find({}))
+    orch.db.sourcestore.insert_many(local_orch.db.sourcestore.find({}))
+
+
 # adding data porting logic
 if __name__ == "__main__":
-    remove_non_functional_feeds()
+    port_stuff_to_remote()

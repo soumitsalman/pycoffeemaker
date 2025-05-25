@@ -499,7 +499,7 @@ class WebScraper:
         )
         self.batch_size = batch_size
         self.remote_crawler = remote_crawler
-        self.crawling_semaphore = asyncio.Semaphore(batch_size if remote_crawler else 1)
+        self.crawling_semaphore = asyncio.Semaphore(batch_size)
 
     def _config(self, collect_metadata: bool):
         if collect_metadata: return CrawlerRunConfig(   

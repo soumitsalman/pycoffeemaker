@@ -1,4 +1,5 @@
 from functools import wraps
+import logging
 import os
 from logging import Logger
 from datetime import datetime
@@ -50,6 +51,14 @@ def dequeue_batch(queue: QueueClient, max_batch_size: int):
             items = items[remaining:]
             
     if batch: yield batch
+
+def initialize_azqueues(azqueue_conn_str, queue_names: list[str]):
+    log = logging.getLogger(__name__)
+    queues = [QueueClient.from_connection_string(azqueue_conn_str, name) for name in queue_names]
+    for q in queues:
+        try: q.create_queue()
+        except: log.debug("queue already exists %s", q.queue_name)
+    return queues
 
     
 

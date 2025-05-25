@@ -3,13 +3,14 @@
 .chromadb
 .models
 .processingqueue
+.scrapingqueue
 .clustering
 .test
 .db
 .mongodb
 .vscode
 .logs
-.scrapingqueue
+.delete-models
 tests
 __azurite*
 __queuestorage__
