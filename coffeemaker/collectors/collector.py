@@ -142,7 +142,7 @@ async def _fetch_json_async(session: aiohttp.ClientSession, url: str):
         return body
     except Exception as e: 
         log.warning("collection failed", extra={"source": url, "num_items": 1})    
-        log.exception(e, extra={'source': url, "num_items": 1})
+        log.error(e, extra={'source': url, "num_items": 1})
 
 def _fetch_json(url: str):
     # @retry(tries=2, delay=10, jitter=(5, 10))
@@ -156,7 +156,7 @@ def _fetch_json(url: str):
         return resp.json()
     except Exception as e: 
         log.warning("collection failed", extra={"source": url, "num_items": 1})
-        log.exception(e, extra={'source': url, "num_items": 1})
+        log.error(e, extra={'source': url, "num_items": 1})
 
 merge_lists = lambda results: list(chain(*(r for r in results if r))) 
 
@@ -249,7 +249,7 @@ class APICollector:
             if feed.entries: 
                 source = extract_source(feed.feed.get('link') or feed.entries[0].link)
                 collected = [self._from_rssfeed(entry, NEWS) for entry in feed.entries]
-        except Exception as e: log.exception(e, extra={'source': url, "num_items": 1})
+        except Exception as e: log.error(e, extra={'source': url, "num_items": 1})
         return self._return_collected(source, collected)
  
     ### rss feed related utilities  ###
@@ -264,7 +264,7 @@ class APICollector:
                 if feed.entries:
                     source = extract_source(feed.feed.get('link') or feed.entries[0].link)
                     collected = [self._from_rssfeed(entry, default_kind) for entry in feed.entries]
-        except Exception as e: log.exception(e, extra={'source': url, "num_items": 1})
+        except Exception as e: log.error(e, extra={'source': url, "num_items": 1})
         return self._return_collected(source, collected)
 
     def _from_rssfeed(self, entry: feedparser.FeedParserDict, default_kind: str) -> tuple[Bean, Chatter]:
@@ -313,7 +313,7 @@ class APICollector:
             return [self._from_reddit_post(post, subreddit_name, default_kind) for post in sr.hot(limit=25) if not _excluded_url(post.url)]
         
         try: collected = _collect()
-        except Exception as e: log.exception(e, extra={'source': subreddit_name, "num_items": 1})
+        except Exception as e: log.error(e, extra={'source': subreddit_name, "num_items": 1})
         return self._return_collected(subreddit_name, collected)       
     
     ### reddit related utilities ###
@@ -325,7 +325,7 @@ class APICollector:
             return [self._from_reddit_post(post, subreddit_name, default_kind) async for post in sr.hot(limit=25) if not _excluded_url(post.url)]
         
         try: collected = await _collect()
-        except Exception as e: log.exception(e, extra={'source': subreddit_name, "num_items": 1})
+        except Exception as e: log.error(e, extra={'source': subreddit_name, "num_items": 1})
         return self._return_collected(subreddit_name, collected) 
 
     def _from_reddit_post(self, post, sr_name, default_kind) -> tuple[Bean, Chatter]: 

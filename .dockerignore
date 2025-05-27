@@ -11,6 +11,10 @@
 .vscode
 .logs
 .delete-models
+.git
+.docker-compose.yaml
+.deployment.sh
+dockertest.env
 tests
 __azurite*
 __queuestorage__
