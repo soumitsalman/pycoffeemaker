@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:05-24
+    image: soumitsr/coffeemaker:05-27
     depends_on:
       - localcrawler
       - localdb
@@ -14,7 +14,7 @@ services:
       - REMOTE_CRAWLER_URL=http://localcrawler:11235
       - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
       - OUTPUT_QUEUE_NAMES=indexing-queue,digesting-queue
-      - BATCH_SIZE=128
+      - BATCH_SIZE=64
     env_file:
       - dockertest.env
     networks:

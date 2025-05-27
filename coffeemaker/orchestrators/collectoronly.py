@@ -2,10 +2,12 @@ import os
 import logging
 import asyncio
 import random
+from typing import Callable
 import persistqueue
 from concurrent.futures import ThreadPoolExecutor
 from icecream import ic
 from azure.storage.queue import QueueClient
+from pymongo import UpdateOne
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
@@ -41,6 +43,9 @@ class Orchestrator:
         self.db = MongoSack(mongodb_conn_str, db_name)
         if output_queue_names: self.queues = initialize_azqueues(azqueue_conn_str, output_queue_names)
 
+        self.apicollector = APICollector()
+        self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
+
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
         if not beans: return beans
         try: exists = self.db.exists(beans)
@@ -51,12 +56,15 @@ class Orchestrator:
         if not collection: return
 
         beans, chatters = zip(*collection)
-        # chatters = [chatter for chatter in chatters if chatter] if chatters else None
-        # if chatters: self.localsack.store_chatters(chatters)
         beans = self._filter_new([bean for bean in beans if bean] if beans else None)
-        if not beans: return   
-        log.info("triaged", extra={"source": source, "num_items": len(beans)})
-        self._commit_new(source, list(filter(lambda x: not is_scrapable(x), beans)))
+        chatters = [chatter for chatter in chatters if chatter] if chatters else None
+
+        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="commit") as executor:
+            if chatters: executor.submit(self.db.store_chatters, chatters)
+            if beans: 
+                beans = _prepare_new(beans)
+                executor.submit(self.store_beans, source, beans)
+                executor.submit(self.queue_beans, source, indexables(beans))
         return scrapables(beans)
     
     def _triage_scrape(self, source, beans):
@@ -65,8 +73,10 @@ class Orchestrator:
             if is_scrapable(bean): bean.content = None
             else: bean.is_scraped = True
 
-        log.info("scraped", extra={"source": source, "num_items": len([bean for bean in beans if bean.is_scraped])})
-        self._commit_new(source, beans) 
+        scraped = [bean for bean in beans if bean.is_scraped]
+        log.info("scraped", extra={"source": source, "num_items": len(scraped)})
+        self.db.update_beans(beans, [K_CONTENT, "is_scraped"])
+        self.queue_beans(source, scraped) 
     
     def queue_beans(self, source, beans: list[Bean]) -> None:
         if not beans or not self.queues: return
@@ -81,25 +91,28 @@ class Orchestrator:
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count
     
-    def _commit_new(self, source: str, beans: list[Bean]):
-        beans = self._filter_new(beans)
-        if not beans: return
-        beans = _prepare_new(beans)
-        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="commit") as executor:
-            executor.submit(self.store_beans, source, beans),
-            executor.submit(self.queue_beans, source, indexables(beans))
-        return beans
-    
-    # def _scrape(self, source: str, beans: list[Bean]):
-    #     if not beans: return beans
-
-    #     loop = asyncio.new_event_loop()
-    #     asyncio.set_event_loop(loop)
-    #     try: beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
-    #     except Exception as e: log.exception(e, extra={"source": source, "num_items": len(beans)})
-    #     finally: asyncio.set_event_loop(loop.close())
-
-    #     return beans
+    def run_trend_ranking(self):
+        trends = self.db.get_latest_chatters(None)
+        for trend in trends:
+            trend.trend_score = calculate_trend_score(trend)
+        updates = [UpdateOne(
+            filter={K_ID: trend.url}, 
+            update={
+                "$set": {
+                    K_LIKES: trend.likes,
+                    K_COMMENTS: trend.comments,
+                    K_SHARES: trend.shares,
+                    K_SHARED_IN: trend.shared_in,
+                    K_LATEST_LIKES: trend.likes_change,
+                    K_LATEST_COMMENTS: trend.comments_change,
+                    K_LATEST_SHARES: trend.shares_change,
+                    K_TRENDSCORE: trend.trend_score,
+                    K_UPDATED: trend.collected      
+                }
+            }
+        ) for trend in trends if trend.trend_score] 
+        count = self.db.custom_update_beans(updates)
+        log.info("trend ranked", extra={"source": self.run_id, "num_items": count})
     
     def _get_collect_funcs(self, sources):
         tasks = []
@@ -186,35 +199,34 @@ class Orchestrator:
     @log_runtime(logger=log)
     def run(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/feeds.yaml")):
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log.info("starting collector", extra={"source": run_id, "num_items": 1})
-
         self.run_total = 0
-        self.apicollector = APICollector()
-        self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
         self.scraping_queue = persistqueue.Queue(".scrapingqueue", tempdir=os.curdir)
 
+        log.info("starting collector", extra={"source": run_id, "num_items": 1})
+
         self.run_collection(sources)
+        self.run_trend_ranking(None)
         self.run_scraping()
+
         log.info("total collected", extra={"source": run_id, "num_items": self.run_total})
 
     @log_runtime(logger=log)
     async def run_async(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/feeds.yaml")):
-        run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log.info("starting collector", extra={"source": run_id, "num_items": 1})
-
-        #initialize run
+        self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.run_total = 0        
-        self.apicollector = APICollector()
-        self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
         self.scraping_queue = asyncio.Queue()
 
-        await self.apicollector.start()
-        await asyncio.gather(*[
-            self.run_collection_async(sources), 
-            self.run_scraping_async()
-        ])
-        await self.apicollector.close()
-        log.info("total collected", extra={"source": run_id, "num_items": self.run_total})
+        log.info("starting collector", extra={"source": self.run_id, "num_items": 1})
+
+        await self.apicollector.start_session()
+        collection = asyncio.create_task(self.run_collection_async(sources))
+        scraping = asyncio.create_task(self.run_scraping_async())
+        await collection
+        self.run_trend_ranking()
+        await scraping
+        await self.apicollector.close_session()
+
+        log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 
 
 

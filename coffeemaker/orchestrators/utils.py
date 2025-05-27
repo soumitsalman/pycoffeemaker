@@ -60,5 +60,5 @@ def initialize_azqueues(azqueue_conn_str, queue_names: list[str]):
         except: log.debug("queue already exists %s", q.queue_name)
     return queues
 
-    
+calculate_trend_score = lambda chatter_delta: 100*chatter_delta.comments_change + 10*chatter_delta.shares_change + chatter_delta.likes_change    
 

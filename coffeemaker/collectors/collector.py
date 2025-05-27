@@ -198,26 +198,6 @@ class APICollector:
     def __init__(self, collect_callback: Callable = None):  
         self.md_generator = DefaultMarkdownGenerator(options=MD_OPTIONS)
         self.collect_callback = collect_callback
-        # self._reddit_client = praw.Reddit(
-        #     check_for_updates=True,
-        #     client_id=os.getenv("REDDIT_APP_ID"),
-        #     client_secret=os.getenv("REDDIT_APP_SECRET"),
-        #     user_agent=USER_AGENT+" (by u/randomizer_000)",
-        #     username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
-        #     password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
-        #     timeout=TIMEOUT,
-        #     rate_limit_seconds=RATELIMIT_WAIT,
-        # )
-        # self._reddit_client_async = asyncpraw.Reddit(
-        #     check_for_updates=True,
-        #     client_id=os.getenv("REDDIT_APP_ID"),
-        #     client_secret=os.getenv("REDDIT_APP_SECRET"),
-        #     user_agent=USER_AGENT+" (by u/randomizer_000)",
-        #     username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
-        #     password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
-        #     timeout=TIMEOUT,
-        #     rate_limit_seconds=RATELIMIT_WAIT,
-        # )
 
     @property
     def reddit_client(self):
@@ -234,22 +214,7 @@ class APICollector:
             )
         return self._reddit_client
     
-    # @property
-    # def reddit_client_async(self): 
-    #     if not self._reddit_client_async:
-    #         self._reddit_client_async = asyncpraw.Reddit(
-    #             check_for_updates=True,
-    #             client_id=os.getenv("REDDIT_APP_ID"),
-    #             client_secret=os.getenv("REDDIT_APP_SECRET"),
-    #             user_agent=USER_AGENT+" (by u/randomizer_000)",
-    #             username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
-    #             password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
-    #             timeout=TIMEOUT,
-    #             rate_limit_seconds=RATELIMIT_WAIT,
-    #         )
-    #     return self._reddit_client_async
-    
-    async def start(self):
+    async def start_session(self):
         self._reddit_client = asyncpraw.Reddit(
             check_for_updates=True,
             client_id=os.getenv("REDDIT_APP_ID"),
@@ -261,7 +226,7 @@ class APICollector:
             rate_limit_seconds=RATELIMIT_WAIT,
         )
 
-    async def close(self):
+    async def close_session(self):
         if self._reddit_client: await self._reddit_client.close()
 
     def _return_collected(self, source, collected: list|None):
