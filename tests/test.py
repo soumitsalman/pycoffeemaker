@@ -314,9 +314,18 @@ def test_collector_orch():
         [INDEXER_IN_QUEUE]
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"""
-    # sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-1.yaml"""
+    # sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"""
     sources = """
 sources:
+  rss:
+    - https://newatlas.com/index.rss
+    - https://www.channele2e.com/feed/topic/latest
+    - https://www.ghacks.net/feed/
+    - https://thenewstack.io/feed
+    - https://scitechdaily.com/feed/
+    - https://www.techradar.com/feeds/articletype/news
+    - https://www.geekwire.com/feed/
+    - https://investorplace.com/content-feed/
   ychackernews:
     - https://hacker-news.firebaseio.com/v0/newstories.json
     - https://hacker-news.firebaseio.com/v0/askstories.json
@@ -329,31 +338,37 @@ sources:
     - FinanceNews
     - StockNews
     - CryptoNews
+    - energyStocks
 """
-    orch.run(sources)
+    asyncio.run(orch.run_async(sources))
+    # orch.run(sources)
 
 def test_indexer_orch():
-    from coffeemaker.orchestrators.indexeronly import Orchestrator
+    from coffeemaker.orchestrators.chainable import Orchestrator
     orch = Orchestrator(
         DB_REMOTE_TEST,
         DB_NAME_TEST, 
-        QUEUE_PATH_TEST,
-        INDEXER_IN_QUEUE,
-        embedder_path=ic(os.getenv('EMBEDDER_PATH')),
-        embedder_context_len=EMBEDDER_CONTEXT_LEN,
-        cluster_eps=0.3
+        azqueue_conn_str=QUEUE_PATH_TEST,
+        input_queue_name=INDEXER_IN_QUEUE,
+        embedder_path=os.getenv("EMBEDDER_PATH"),
+        embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
+        cluster_eps=0.1
     )
-    orch.run()
+    orch.run_indexer()
 
 def test_digestor_orch():
     from coffeemaker.orchestrators.chainable import Orchestrator
     orch = Orchestrator(
         DB_REMOTE_TEST,
         DB_NAME_TEST, 
-        QUEUE_PATH_TEST,
-        DIGESTOR_IN_QUEUE,
+        azqueue_conn_str=QUEUE_PATH_TEST,
+        input_queue_name=DIGESTOR_IN_QUEUE,
+        digestor_path=os.getenv("DIGESTOR_PATH"), 
+        digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
+        digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
+        digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN"))
     )
-    orch.run()
+    orch.run_digestor()
 
 if __name__ == "__main__":
     test_collector_orch()

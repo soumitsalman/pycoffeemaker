@@ -1,17 +1,17 @@
 import os
 import logging
 import asyncio
-from typing import Callable
+import random
+import persistqueue
+from concurrent.futures import ThreadPoolExecutor
 from icecream import ic
-
-from persistqueue import Queue
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from azure.storage.queue import QueueClient
 from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
 from coffeemaker.orchestrators.utils import *
 
+END_OF_STREAM = "END_OF_STREAM"
 FILTER_KINDS = [NEWS, BLOG]
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', 16*os.cpu_count()))
 
@@ -32,29 +32,22 @@ def _prepare_new(beans: list[Bean]):
 class Orchestrator:
     db: MongoSack = None
     queues: QueueClient = None
-    processing_queue: Queue = None
+    workers_semaphore: int = BATCH_SIZE
+    collection_queue = None
+    scraping_queue = None
     run_total: int = 0
 
     def __init__(self, mongodb_conn_str: str, db_name: str, azqueue_conn_str: str = None, output_queue_names: list[str] = None):
         self.db = MongoSack(mongodb_conn_str, db_name)
         if output_queue_names: self.queues = initialize_azqueues(azqueue_conn_str, output_queue_names)
 
-        self.apicollector = APICollector(self.triage_beans)
-        self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
-        self.processing_queue = Queue(".processingqueue", tempdir=".")
-
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
         if not beans: return beans
         try: exists = self.db.exists(beans)
         except: exists = [bean.url for bean in beans]
         return list({bean.url: bean for bean in beans if (bean.kind in FILTER_KINDS) and (bean.url not in exists)}.values())  
-
-    def _collect(self, collect_func: Callable, sources: list):
-        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="collector") as executor: 
-            results = list(executor.map(collect_func, sources))
-        return results
-            
-    def triage_beans(self, source: str, collection: list[tuple[Bean, Chatter]]):
+    
+    def _triage_collection(self, source: str, collection):
         if not collection: return
 
         beans, chatters = zip(*collection)
@@ -64,8 +57,17 @@ class Orchestrator:
         if not beans: return   
         log.info("triaged", extra={"source": source, "num_items": len(beans)})
         self._commit_new(source, list(filter(lambda x: not is_scrapable(x), beans)))
-        self.processing_queue.put_nowait((source, scrapables(beans))) 
+        return scrapables(beans)
+    
+    def _triage_scrape(self, source, beans):
+        # mark scraped beans to indicated that these are not from apis
+        for bean in beans:
+            if is_scrapable(bean): bean.content = None
+            else: bean.is_scraped = True
 
+        log.info("scraped", extra={"source": source, "num_items": len([bean for bean in beans if bean.is_scraped])})
+        self._commit_new(source, beans) 
+    
     def queue_beans(self, source, beans: list[Bean]) -> None:
         if not beans or not self.queues: return
         urls = [bean.url for bean in beans]
@@ -88,35 +90,98 @@ class Orchestrator:
             executor.submit(self.queue_beans, source, indexables(beans))
         return beans
     
-    def _scrape(self, source: str, beans: list[Bean]):
-        if not beans: return
+    # def _scrape(self, source: str, beans: list[Bean]):
+    #     if not beans: return beans
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try: beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
-        except Exception as e: log.exception(e, extra={"source": source, "num_items": len(beans)})
-        finally: asyncio.set_event_loop(loop.close())
+    #     loop = asyncio.new_event_loop()
+    #     asyncio.set_event_loop(loop)
+    #     try: beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
+    #     except Exception as e: log.exception(e, extra={"source": source, "num_items": len(beans)})
+    #     finally: asyncio.set_event_loop(loop.close())
 
-        # mark the contents where scraping was successful
-        for bean in beans:
-            if is_scrapable(bean): bean.content = None
-            else: bean.is_scraped = True
+    #     return beans
+    
+    def _get_collect_funcs(self, sources):
+        tasks = []
+        for source_type, source_paths in parse_sources(sources).items():
+            log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
+            if source_type == 'ychackernews': func = self.apicollector.collect_ychackernews
+            elif source_type == 'reddit': func = self.apicollector.collect_subreddit
+            elif source_type == 'rss': func = self.apicollector.collect_rssfeed
 
-        log.info("scraped", extra={"source": source, "num_items": len([bean for bean in beans if bean.is_scraped])})
-        self._commit_new(source, beans) 
+            tasks.extend((source, func) for source in source_paths)
+        random.shuffle(tasks)
+        return tasks
+    
+    @log_runtime(logger=log)
+    def run_collection(self, sources):
+        def collect(task):
+            source, func = task
+            needs_scraping = self._triage_collection(source, func(source))
+            if needs_scraping: self.scraping_queue.put((source, needs_scraping))
 
-    async def _scrape_async(self, source, beans: list[Bean]):
-        if not beans: return
+        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="collecting-") as executor:
+            executor.map(collect, self._get_collect_funcs(sources))
+        self.scraping_queue.put(END_OF_STREAM) 
 
-        try: beans = await self.webscraper.scrape_beans(beans, True)
-        except Exception as e: log.exception(e, extra={"source": source, "num_items": len(beans)})
-        # mark scraped beans to indicated that these are not from apis
-        for bean in beans:
-            if is_scrapable(bean): bean.content = None
-            else: bean.is_scraped = True
+    @log_runtime(logger=log)
+    def run_scraping(self):
+        def scrape(source, beans):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
+            if beans: self._triage_scrape(source, beans)    
+            asyncio.set_event_loop(loop.close())        
 
-        log.info("scraped", extra={"source": source, "num_items": len([bean for bean in beans if bean.is_scraped])})
-        self._commit_new(source, beans) 
+        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="scraping-") as executor:
+            while True:
+                token = self.scraping_queue.get()
+                if token == END_OF_STREAM: break
+                if not token: continue
+                source, beans = token
+                executor.submit(scrape, source, beans)
+                self.scraping_queue.task_done()
+
+    def _get_async_collect_funcs(self, sources):
+        tasks = []
+        for source_type, source_paths in parse_sources(sources).items():
+            log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
+            if source_type == 'ychackernews': func = self.apicollector.collect_ychackernews_async
+            elif source_type == 'reddit': func = self.apicollector.collect_subreddit_async
+            elif source_type == 'rss': func = self.apicollector.collect_rssfeed_async
+
+            tasks.extend((source, func) for source in source_paths)
+        random.shuffle(tasks)
+        return tasks
+
+    @log_runtime_async(logger=log)
+    async def run_collection_async(self, sources):        
+        workers_semaphore = asyncio.Semaphore(BATCH_SIZE)
+        async def collect(source, func):
+            async with workers_semaphore:
+                needs_scraping = self._triage_collection(source, await func(source))
+                if needs_scraping: await self.scraping_queue.put((source, needs_scraping))
+
+        async with asyncio.TaskGroup() as tg:
+            [tg.create_task(collect(source, beans), name = f"collecting-{source}") for source, beans in self._get_async_collect_funcs(sources)]     
+        await self.scraping_queue.put(END_OF_STREAM)        
+
+    @log_runtime_async(logger=log)
+    async def run_scraping_async(self):
+        workers_semaphore = asyncio.Semaphore(BATCH_SIZE)
+        async def scrape(source, beans):
+            async with workers_semaphore:
+                beans = await self.webscraper.scrape_beans(beans, collect_metadata=True)
+                if beans: self._triage_scrape(source, beans)
+
+        async with asyncio.TaskGroup() as tg:
+            while True:
+                token = await self.scraping_queue.get()
+                if token == END_OF_STREAM: break
+                if not token: continue
+                source, beans = token
+                tg.create_task(scrape(source, beans), name=f"scraping-{source}")
+                self.scraping_queue.task_done() 
     
     @log_runtime(logger=log)
     def run(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/feeds.yaml")):
@@ -124,22 +189,32 @@ class Orchestrator:
         log.info("starting collector", extra={"source": run_id, "num_items": 1})
 
         self.run_total = 0
-        # first collect
-        for source_type, source_paths in parse_sources(sources).items():
-            log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
-            if source_type == 'ychackernews': self.triage_beans(source_type, self.apicollector.collect_ychackernews(source_paths))
-            elif source_type == 'reddit': self._collect(self.apicollector.collect_subreddit, source_paths)
-            elif source_type == 'rss': self._collect(self.apicollector.collect_rssfeed, source_paths)
+        self.apicollector = APICollector()
+        self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
+        self.scraping_queue = persistqueue.Queue(".scrapingqueue", tempdir=os.curdir)
 
-        # then scrape
-        async def _run_scraping_async():
-            tasks = []
-            while not self.processing_queue.empty():
-                source, beans = self.processing_queue.get()
-                tasks.append(self._scrape_async(source, beans))
-                self.processing_queue.task_done()
-            await asyncio.gather(*tasks)
-
-        asyncio.run(_run_scraping_async())
+        self.run_collection(sources)
+        self.run_scraping()
         log.info("total collected", extra={"source": run_id, "num_items": self.run_total})
+
+    @log_runtime(logger=log)
+    async def run_async(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/feeds.yaml")):
+        run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log.info("starting collector", extra={"source": run_id, "num_items": 1})
+
+        #initialize run
+        self.run_total = 0        
+        self.apicollector = APICollector()
+        self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
+        self.scraping_queue = asyncio.Queue()
+
+        await self.apicollector.start()
+        await asyncio.gather(*[
+            self.run_collection_async(sources), 
+            self.run_scraping_async()
+        ])
+        await self.apicollector.close()
+        log.info("total collected", extra={"source": run_id, "num_items": self.run_total})
+
+
 

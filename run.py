@@ -44,7 +44,7 @@ if __name__ == "__main__":
             azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
             output_queue_names=[queue_name.strip() for queue_name in os.getenv("OUTPUT_QUEUE_NAMES").split(",")],
         )
-        orch.run()
+        asyncio.run(orch.run_async())
     elif mode == "INDEXER_ONLY":
         from coffeemaker.orchestrators.chainable import Orchestrator
         orch = Orchestrator(

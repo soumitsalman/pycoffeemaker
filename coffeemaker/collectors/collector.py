@@ -10,6 +10,7 @@ from urllib.parse import urljoin, urlparse
 from datetime import datetime, timezone
 import time
 import aiohttp
+import asyncpraw
 from bs4 import BeautifulSoup
 import feedparser
 from crawl4ai import AsyncWebCrawler, Crawl4aiDockerClient, BrowserConfig, CrawlResult, CrawlerRunConfig, CacheMode, JsonCssExtractionStrategy, DefaultMarkdownGenerator
@@ -133,30 +134,36 @@ def _clean_markdown(markdown: str) -> str:
             return "\n".join(lines[i+1:])
     return markdown
 
-async def _fetch_json_async(session: aiohttp.ClientSession, url: str) -> dict:
-    body = None
-    async with session.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT) as response:
-        response.raise_for_status()
-        body = await response.json()
-    return body
+async def _fetch_json_async(session: aiohttp.ClientSession, url: str):
+    try:
+        async with session.get(url, headers=JSON_REQUEST_HEADERS, timeout=TIMEOUT) as response:
+            response.raise_for_status()
+            body = await response.json()
+        return body
+    except Exception as e: 
+        log.warning("collection failed", extra={"source": url, "num_items": 1})    
+        log.exception(e, extra={'source': url, "num_items": 1})
 
-def _fetch_json(content_url: str):
+def _fetch_json(url: str):
     # @retry(tries=2, delay=10, jitter=(5, 10))
-    def _fetch():
-        resp = requests.get(content_url, headers=JSON_REQUEST_HEADERS, timeout=TIMEOUT)
+    # def _fetch():
+    #     resp = requests.get(content_url, headers=JSON_REQUEST_HEADERS, timeout=TIMEOUT)
+    #     resp.raise_for_status()
+    #     return resp.json()
+    try: 
+        resp = requests.get(url, headers=JSON_REQUEST_HEADERS, timeout=TIMEOUT)
         resp.raise_for_status()
         return resp.json()
-    try: return _fetch()
     except Exception as e: 
-        log.warning("collection failed", extra={"source": content_url, "num_items": 1})
-        # ic(content_url, e, e.__class__.__name__)
+        log.warning("collection failed", extra={"source": url, "num_items": 1})
+        log.exception(e, extra={'source': url, "num_items": 1})
 
 merge_lists = lambda results: list(chain(*(r for r in results if r))) 
 
-def _batch_collect(collect: Callable, sources: list):
+def _batch_run(func: Callable, sources: list):
     results = None
     with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="collector") as executor:
-        results = list(executor.map(collect, sources))
+        results = list(executor.map(func, sources))
     return results
 
 def _guess_type(url: str, source: str) -> str:
@@ -184,12 +191,66 @@ def parse_sources(sources: str) -> dict:
 
 class APICollector:
     md_generator: DefaultMarkdownGenerator = None
-    reddit_client = None
+    _reddit_client = None
+    # _reddit_client_async = None
     collect_callback: Callable = None
 
     def __init__(self, collect_callback: Callable = None):  
         self.md_generator = DefaultMarkdownGenerator(options=MD_OPTIONS)
-        self.reddit_client = praw.Reddit(
+        self.collect_callback = collect_callback
+        # self._reddit_client = praw.Reddit(
+        #     check_for_updates=True,
+        #     client_id=os.getenv("REDDIT_APP_ID"),
+        #     client_secret=os.getenv("REDDIT_APP_SECRET"),
+        #     user_agent=USER_AGENT+" (by u/randomizer_000)",
+        #     username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
+        #     password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
+        #     timeout=TIMEOUT,
+        #     rate_limit_seconds=RATELIMIT_WAIT,
+        # )
+        # self._reddit_client_async = asyncpraw.Reddit(
+        #     check_for_updates=True,
+        #     client_id=os.getenv("REDDIT_APP_ID"),
+        #     client_secret=os.getenv("REDDIT_APP_SECRET"),
+        #     user_agent=USER_AGENT+" (by u/randomizer_000)",
+        #     username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
+        #     password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
+        #     timeout=TIMEOUT,
+        #     rate_limit_seconds=RATELIMIT_WAIT,
+        # )
+
+    @property
+    def reddit_client(self):
+        if not self._reddit_client:
+            self._reddit_client = praw.Reddit(
+                check_for_updates=True,
+                client_id=os.getenv("REDDIT_APP_ID"),
+                client_secret=os.getenv("REDDIT_APP_SECRET"),
+                user_agent=USER_AGENT+" (by u/randomizer_000)",
+                username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
+                password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
+                timeout=TIMEOUT,
+                rate_limit_seconds=RATELIMIT_WAIT,
+            )
+        return self._reddit_client
+    
+    # @property
+    # def reddit_client_async(self): 
+    #     if not self._reddit_client_async:
+    #         self._reddit_client_async = asyncpraw.Reddit(
+    #             check_for_updates=True,
+    #             client_id=os.getenv("REDDIT_APP_ID"),
+    #             client_secret=os.getenv("REDDIT_APP_SECRET"),
+    #             user_agent=USER_AGENT+" (by u/randomizer_000)",
+    #             username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
+    #             password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
+    #             timeout=TIMEOUT,
+    #             rate_limit_seconds=RATELIMIT_WAIT,
+    #         )
+    #     return self._reddit_client_async
+    
+    async def start(self):
+        self._reddit_client = asyncpraw.Reddit(
             check_for_updates=True,
             client_id=os.getenv("REDDIT_APP_ID"),
             client_secret=os.getenv("REDDIT_APP_SECRET"),
@@ -199,7 +260,9 @@ class APICollector:
             timeout=TIMEOUT,
             rate_limit_seconds=RATELIMIT_WAIT,
         )
-        self.collect_callback = collect_callback
+
+    async def close(self):
+        if self._reddit_client: await self._reddit_client.close()
 
     def _return_collected(self, source, collected: list|None):
         if collected: log.info("collected", extra={"source": source, "num_items": len(collected)})
@@ -209,7 +272,7 @@ class APICollector:
         else: return collected
 
     def collected_rssfeeds(self, feed_urls: list[str]) -> list[Bean]|list[tuple[Bean, Chatter]]:
-        return merge_lists(_batch_collect(self.collect_rssfeed, feed_urls))
+        return merge_lists(_batch_run(self.collect_rssfeed, feed_urls))
 
     def collect_rssfeed(self, url: str) -> list[Bean]|list[tuple[Bean, Chatter]]:
         collected, source = None, url
@@ -221,22 +284,22 @@ class APICollector:
             if feed.entries: 
                 source = extract_source(feed.feed.get('link') or feed.entries[0].link)
                 collected = [self._from_rssfeed(entry, NEWS) for entry in feed.entries]
-        except Exception as e: print(url, e)
+        except Exception as e: log.exception(e, extra={'source': url, "num_items": 1})
         return self._return_collected(source, collected)
  
     ### rss feed related utilities  ###
     async def collect_rssfeed_async(self, url: str, default_kind: str = NEWS) -> list[Bean]|list[tuple[Bean, Chatter]]:
         collected, source = None, url
         try:
-            async with aiohttp.ClientSession() as session:
-                resp = await session.get(url, headers=RSS_REQUEST_HEADERS, timeout=TIMEOUT)
-                resp.raise_for_status()
+            async with aiohttp.ClientSession(headers=RSS_REQUEST_HEADERS, timeout=aiohttp.ClientTimeout(total=TIMEOUT), raise_for_status=True) as session:
+                resp = await session.get(url)
+                # resp.raise_for_status()
                 feed = feedparser.parse(await resp.text())
 
                 if feed.entries:
                     source = extract_source(feed.feed.get('link') or feed.entries[0].link)
                     collected = [self._from_rssfeed(entry, default_kind) for entry in feed.entries]
-        except Exception as e: ic(url, e) # NOTE: this is for local debugging
+        except Exception as e: log.exception(e, extra={'source': url, "num_items": 1})
         return self._return_collected(source, collected)
 
     def _from_rssfeed(self, entry: feedparser.FeedParserDict, default_kind: str) -> tuple[Bean, Chatter]:
@@ -275,7 +338,7 @@ class APICollector:
         if html: return self.md_generator.generate_markdown(input_html=html).raw_markdown.strip()
     
     def collect_subreddits(self, subreddit_names: list[str]):
-        return merge_lists(_batch_collect(self.collect_subreddit, subreddit_names))
+        return merge_lists(_batch_run(self.collect_subreddit, subreddit_names))
     
     def collect_subreddit(self, subreddit_name, default_kind: str = NEWS):
         collected = None
@@ -285,19 +348,19 @@ class APICollector:
             return [self._from_reddit_post(post, subreddit_name, default_kind) for post in sr.hot(limit=25) if not _excluded_url(post.url)]
         
         try: collected = _collect()
-        except Exception as e: ic(subreddit_name, e, e.__class__.__name__)   
+        except Exception as e: log.exception(e, extra={'source': subreddit_name, "num_items": 1})
         return self._return_collected(subreddit_name, collected)       
     
     ### reddit related utilities ###
     async def collect_subreddit_async(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
         collected = None
-        @retry(tries=2, delay=5, jitter=(0, 10))
+        @retry(tries=2, delay=10, jitter=(5, 10))
         async def _collect():
-            subreddit = await self.reddit_client.subreddit(subreddit_name)
-            return [self._from_reddit_post(post, subreddit_name, default_kind) async for post in subreddit.hot(limit=25) if not _excluded_url(post.url)]
+            sr = await self.reddit_client.subreddit(subreddit_name)
+            return [self._from_reddit_post(post, subreddit_name, default_kind) async for post in sr.hot(limit=25) if not _excluded_url(post.url)]
         
         try: collected = await _collect()
-        except Exception as e: ic(subreddit_name, e, e.__class__.__name__)
+        except Exception as e: log.exception(e, extra={'source': subreddit_name, "num_items": 1})
         return self._return_collected(subreddit_name, collected) 
 
     def _from_reddit_post(self, post, sr_name, default_kind) -> tuple[Bean, Chatter]: 
@@ -350,23 +413,30 @@ class APICollector:
         )
     
     ### hackernews related utilities ###
-    async def collect_ychackernews_async(self) -> list[tuple[Bean, Chatter]]:
-        collected = None
-        try:
-            async with aiohttp.ClientSession() as session:
-                entry_ids = await asyncio.gather(*[_fetch_json_async(session, ids_url) for ids_url in HACKERNEWS_STORIES_URLS])
-                entry_ids = set(chain(*entry_ids))
-                stories = await asyncio.gather(*[_fetch_json_async(session, hackernews_story_metadata(id)) for id in entry_ids])
-                collected = [self._from_hackernews_story(story, BLOG) for story in stories if story and not _excluded_url(story.get('url'))]
-        except Exception as e: ic(HACKERNEWS, e)
-        return self._return_collected(collected)
-
-    def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[tuple[Bean, Chatter]]:
-        ids = merge_lists(_batch_collect(_fetch_json, stories_urls))
-        stories = _batch_collect(_fetch_json, [hackernews_story_metadata(id) for id in ids])
+    async def collect_ychackernews_async(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[tuple[Bean, Chatter]]:
+        if isinstance(stories_urls, str): stories_urls = [stories_urls]
+        async with aiohttp.ClientSession() as session:
+            ids = await asyncio.gather(*[_fetch_json_async(session, ids_url) for ids_url in stories_urls])
+            ids = set(chain(*ids))
+            stories = await asyncio.gather(*[_fetch_json_async(session, hackernews_story_metadata(id)) for id in ids])
+        
         return self._return_collected(
             HACKERNEWS,
-            _batch_collect(
+            _batch_run(
+                lambda story: self._from_hackernews_story(story, BLOG), 
+                [story for story in stories if story and not _excluded_url(story.get('url'))]
+            )
+        )
+
+    def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[tuple[Bean, Chatter]]:
+        if isinstance(stories_urls, str): stories_urls = [stories_urls]
+        ids = _batch_run(_fetch_json, stories_urls)
+        ids = set(chain(*ids))
+        stories = _batch_run(_fetch_json, [hackernews_story_metadata(id) for id in ids])
+
+        return self._return_collected(
+            HACKERNEWS,
+            _batch_run(
                 lambda story: self._from_hackernews_story(story, BLOG), 
                 [story for story in stories if story and not _excluded_url(story.get('url'))]
             )
