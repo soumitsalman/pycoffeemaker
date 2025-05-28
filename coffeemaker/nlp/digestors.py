@@ -140,6 +140,11 @@ def parse_compressed_digest(response: str) -> Digest:
             if not digest.sentiments: digest.sentiments = []
             if part.isalpha(): digest.sentiments.append(part)
 
+    digest.regions = distinct_items(digest.regions)
+    digest.entities = distinct_items(digest.entities)
+    digest.categories = distinct_items(digest.categories)
+    digest.sentiments = distinct_items(digest.sentiments)
+
     return digest
 
 def create_prompt_for_tuned_model(input_text: str, use_short_digest: bool): 

@@ -30,7 +30,7 @@ def _make_cluster_updates(bean: Bean, cluster: list[Bean]):
     updated_fields = { 
         "$set": { 
             K_CLUSTER_ID: bean.url,
-            K_RELATED: len(cluster) - 1
+            K_RELATED: len(cluster)
         } 
     } 
     return [UpdateOne({K_ID: related_bean.url}, updated_fields) for related_bean in cluster]+[UpdateOne({K_ID: bean.url},  updated_fields)]
