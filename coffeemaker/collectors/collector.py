@@ -273,6 +273,16 @@ class APICollector:
         created_time = from_timestamp(time.mktime(published_time)) if published_time else current_time
         summary, content = _extract_body(entry)
         source = extract_source(entry.link)
+
+        if 'slash_comments' in entry: chatter = Chatter(
+            url=entry.link,
+            source=source,
+            chatter_url=entry.get('wfw_commentrss', entry.link+"#comments"),
+            collected=current_time,
+            comments=entry.slash_comments
+        ) 
+        else: chatter = None
+        
         return (
             Bean(
                 url=entry.link,
@@ -289,13 +299,7 @@ class APICollector:
                 author=entry.get('author'),        
                 image_url=_extract_main_image(entry)
             ),
-            Chatter(
-                url=entry.link,
-                source=source,
-                chatter_url=entry.get('wfw_commentrss'),
-                collected=current_time,
-                comments=entry.slash_comments
-            ) if 'slash_comments' in entry else None
+            chatter
         )
 
     def _generate_markdown(self, html: str) -> str:

@@ -305,6 +305,15 @@ def download_markdown(q: str = None, accuracy = DEFAULT_VECTOR_SEARCH_SCORE, key
     if keywords: filename = "-".join(keywords)
     save_markdown(filename, markdown)
 
+def test_trend_analysis():
+    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    orch = Orchestrator(
+        os.getenv('MONGODB_CONN_STR'),
+        "test"
+    )
+    items = orch.db.get_latest_chatters()
+    ic(random.sample(items, 5))
+
 def test_collector_orch():
     from coffeemaker.orchestrators.collectoronly import Orchestrator
     orch = Orchestrator(
@@ -371,7 +380,9 @@ def test_digestor_orch():
     orch.run_digestor()
 
 if __name__ == "__main__":
-    test_collector_orch()
+    test_trend_analysis()
+    # test_collector_orch()
+    
     # test_indexer_orch()
     # test_digestor_orch()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
