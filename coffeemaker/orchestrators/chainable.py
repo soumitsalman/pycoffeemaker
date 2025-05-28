@@ -93,7 +93,7 @@ class Orchestrator:
 
         beans = index_storables(beans)
         make_update = lambda bean: UpdateOne({K_ID: bean.url}, {"$set": {K_EMBEDDING: bean.embedding}})
-        count = self.db.update_beans(list(map(make_update, beans)))
+        count = self.db.custom_update_beans(list(map(make_update, beans)))
         log.info("embedded", extra={"source": beans[0].source, "num_items": count})
         return beans
 
@@ -103,7 +103,7 @@ class Orchestrator:
             pass
             # TODO: search sentiments
             # TODO: search categories
-        count = self.db.update_beans(list(map(_make_classification_update, beans)))
+        count = self.db.custom_update_beans(list(map(_make_classification_update, beans)))
         log.info("classified", extra={"source": beans[0].source, "num_items": count})
         return beans
     
@@ -122,12 +122,12 @@ class Orchestrator:
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="cluster") as executor:
             clusters = list(executor.map(find_cluster, beans))
 
-        count = self.db.update_beans(list(chain(*map(_make_cluster_updates, beans, clusters))))
+        count = self.db.custom_update_beans(list(chain(*map(_make_cluster_updates, beans, clusters))))
         log.info("clustered", extra={"source": beans[0].source, "num_items": count})
         return beans  
     
     # def _push_updates(self, task, source, updates):
-    #     self.db.update_beans(updates)
+    #     self.db.custom_update_beans(updates)
     #     log.info(task, extra={"source": source, "num_items": len(updates)})
         
     def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:
@@ -150,10 +150,9 @@ class Orchestrator:
         except Exception as e:
             log.error("failed digesting", extra={"source": beans[0].source, "num_items": len(beans)})
             log.exception(e, extra={"source": beans[0].source, "num_items": len(beans)})
-            ic(e.__class__.__name__, e)
 
         beans = digest_storables(beans)
-        count = self.db.update_beans(list(map(_make_digest_update, beans)))
+        count = self.db.custom_update_beans(list(map(_make_digest_update, beans)))
         log.info("digested", extra={"source": beans[0].source, "num_items": count})
         return beans
     
@@ -179,7 +178,7 @@ class Orchestrator:
                 total += len(beans)
             except Exception as e:
                 log.error("failed indexing", extra={"source": run_id, "num_items": len(urls)})
-                ic(e)
+                log.exception(e, extra={"source": run_id, "num_items": len(urls)})
 
         log.info("total indexed", extra={"source": run_id, "num_items": total})
 
