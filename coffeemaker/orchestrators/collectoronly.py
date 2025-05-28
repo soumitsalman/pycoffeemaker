@@ -33,7 +33,7 @@ def _prepare_new(beans: list[Bean]):
 
 class Orchestrator:
     db: MongoSack = None
-    queues: QueueClient = None
+    queues: list[QueueClient] = None
     workers_semaphore: int = BATCH_SIZE
     collection_queue = None
     scraping_queue = None
@@ -59,12 +59,18 @@ class Orchestrator:
         beans = self._filter_new([bean for bean in beans if bean] if beans else None)
         chatters = [chatter for chatter in chatters if chatter] if chatters else None
 
-        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="commit") as executor:
-            if chatters: executor.submit(self.db.store_chatters, chatters)
-            if beans: 
-                beans = _prepare_new(beans)
-                executor.submit(self.store_beans, source, beans)
-                executor.submit(self.queue_beans, source, indexables(beans))
+        if chatters: self.db.store_chatters(chatters)
+        if beans: 
+            beans = _prepare_new(beans)
+            self.store_beans(source, beans)
+            self.queue_beans(source, indexables(beans))
+
+        # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="commit") as executor:
+        #     if chatters: executor.submit(self.db.store_chatters, chatters)
+        #     if beans: 
+        #         beans = _prepare_new(beans)
+        #         executor.submit(self.store_beans, source, beans)
+        #         executor.submit(self.queue_beans, source, indexables(beans))
         return scrapables(beans)
     
     def _triage_scrape(self, source, beans):
@@ -75,14 +81,16 @@ class Orchestrator:
 
         scraped = [bean for bean in beans if bean.is_scraped]
         log.info("scraped", extra={"source": source, "num_items": len(scraped)})
-        self.db.update_beans(beans, [K_CONTENT, "is_scraped"])
+        self.db.update_bean_fields(beans, [K_CONTENT, "is_scraped"])
         self.queue_beans(source, scraped) 
     
     def queue_beans(self, source, beans: list[Bean]) -> None:
         if not beans or not self.queues: return
         urls = [bean.url for bean in beans]
-        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="queuing") as executor:
-            [executor.map(queue.send_message, urls) for queue in self.queues]
+        for queue in self.queues:
+            list(map(queue.send_message, urls)) 
+        # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="queuing") as executor:
+        #     [executor.map(queue.send_message, urls) for queue in self.queues]
         log.info(f"queued", extra={"source": source, "num_items": len(beans)})
 
     def store_beans(self, source: str, beans: list[Bean]):
@@ -111,7 +119,7 @@ class Orchestrator:
                 }
             }
         ) for trend in trends if trend.trend_score] 
-        count = self.db.custom_update_beans(updates)
+        count = self.db.update_beans(updates)
         log.info("trend ranked", extra={"source": self.run_id, "num_items": count})
     
     def _get_collect_funcs(self, sources):

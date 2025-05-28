@@ -1,14 +1,16 @@
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urljoin
-from dotenv import load_dotenv
-import yaml
-load_dotenv()
-
-from itertools import chain
+import sys
 import json
 import os
 import re
+import asyncio
+from dotenv import load_dotenv
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+load_dotenv()
+
+from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urljoin
+from itertools import chain
 from icecream import ic
 from datetime import datetime, timedelta
 from pymongo import MongoClient, UpdateOne
@@ -456,22 +458,32 @@ to_ignore = [
 def port_beans_locally():
     from coffeemaker.orchestrators.collectoronly import Orchestrator
     orch = Orchestrator(
-        os.getenv('DB_REMOTE'),
+        os.getenv('MONGODB_CONN_STR'),
         "test"
     )
     local_orch = Orchestrator(
-        os.getenv('DB_REMOTE_TEST'),
-        "test"
+        "mongodb://localhost:27017/",
+        "trainingdata"
     )
-    beans = orch.db.query_beans(
-        filter={
-            K_COLLECTED: {"$gte": datetime.now() - timedelta(days=10)},
-            K_GIST: {"$exists": True},
-            K_EMBEDDING: {"$exists": True}
-        }
-    )
-    local_orch.db.store_beans(beans)
-    print(datetime.now(), "ported beans|%d", len(beans))
+    
+    batch_size = 10000
+    def port(skip):
+        beans = orch.db.beanstore.find(
+            filter={
+                K_GIST: {
+                    "$exists": True, 
+                    "$ne": None
+                }
+            },
+            skip=skip,
+            limit=batch_size,
+            projection={K_EMBEDDING: 0}
+        )
+        local_orch.db.beanstore.insert_many(beans, ordered=False)
+        print(datetime.now(), "ported beans|%d", skip)
+
+    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+        executor.map(port, range(0, 235000, batch_size))
 
 def port_pages_locally():
     from coffeemaker.orchestrators.indexeronly import Orchestrator
@@ -545,4 +557,4 @@ def port_stuff_to_remote():
 
 # adding data porting logic
 if __name__ == "__main__":
-    port_stuff_to_remote()
+    port_beans_locally()

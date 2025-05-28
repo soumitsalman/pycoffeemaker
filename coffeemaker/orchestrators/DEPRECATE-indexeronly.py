@@ -76,7 +76,7 @@ class Orchestrator:
 
         beans = storables(beans)
         make_update = lambda bean: UpdateOne({K_ID: bean.url}, {"$set": {K_EMBEDDING: bean.embedding}})
-        count = self.db.update_beans(list(map(make_update, beans)))
+        count = self.db.update_bean_fields(list(map(make_update, beans)))
         log.info("embedded", extra={"source": beans[0].source, "num_items": count})
         return beans
 
@@ -96,7 +96,7 @@ class Orchestrator:
                 }
             }
         )
-        count = self.db.update_beans(list(map(make_update, beans)))
+        count = self.db.update_bean_fields(list(map(make_update, beans)))
         log.info("classified", extra={"source": beans[0].source, "num_items": count})
         return beans
     
@@ -115,7 +115,7 @@ class Orchestrator:
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="cluster") as executor:
             clusters = list(executor.map(find_cluster, beans))
 
-        count = self.db.update_beans(list(chain(*map(_make_cluster_updates, beans, clusters))))
+        count = self.db.update_bean_fields(list(chain(*map(_make_cluster_updates, beans, clusters))))
         log.info("clustered", extra={"source": beans[0].source, "num_items": count})
         return beans  
 
