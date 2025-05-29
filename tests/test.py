@@ -318,37 +318,37 @@ def test_collector_orch():
     from coffeemaker.orchestrators.collectoronly import Orchestrator
     orch = Orchestrator(
         DB_REMOTE_TEST,
-        DB_NAME_TEST,
-        QUEUE_PATH_TEST,
-        [INDEXER_IN_QUEUE]
+        now().strftime("%Y%m%d"),
+        azqueue_conn_str=os.getenv('AZQUEUE_CONN_STR'),
+        output_queue_names=[INDEXER_IN_QUEUE, DIGESTOR_IN_QUEUE]
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"""
-    # sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"""
-    sources = """
-sources:
-  rss:
-    - https://newatlas.com/index.rss
-    - https://www.channele2e.com/feed/topic/latest
-    - https://www.ghacks.net/feed/
-    - https://thenewstack.io/feed
-    - https://scitechdaily.com/feed/
-    - https://www.techradar.com/feeds/articletype/news
-    - https://www.geekwire.com/feed/
-    - https://investorplace.com/content-feed/
-  ychackernews:
-    - https://hacker-news.firebaseio.com/v0/newstories.json
-    - https://hacker-news.firebaseio.com/v0/askstories.json
-  reddit:
-    - news
-    - worldnews
-    - InternationalNews
-    - GlobalNews
-    - GlobalMarketNews
-    - FinanceNews
-    - StockNews
-    - CryptoNews
-    - energyStocks
-"""
+    sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"""
+#     sources = """
+# sources:
+#   rss:
+#     - https://newatlas.com/index.rss
+#     - https://www.channele2e.com/feed/topic/latest
+#     - https://www.ghacks.net/feed/
+#     - https://thenewstack.io/feed
+#     - https://scitechdaily.com/feed/
+#     - https://www.techradar.com/feeds/articletype/news
+#     - https://www.geekwire.com/feed/
+#     - https://investorplace.com/content-feed/
+#   ychackernews:
+#     - https://hacker-news.firebaseio.com/v0/newstories.json
+#     - https://hacker-news.firebaseio.com/v0/askstories.json
+#   reddit:
+#     - news
+#     - worldnews
+#     - InternationalNews
+#     - GlobalNews
+#     - GlobalMarketNews
+#     - FinanceNews
+#     - StockNews
+#     - CryptoNews
+#     - energyStocks
+# """
     asyncio.run(orch.run_async(sources))
     # orch.run(sources)
 
@@ -356,8 +356,8 @@ def test_indexer_orch():
     from coffeemaker.orchestrators.chainable import Orchestrator
     orch = Orchestrator(
         DB_REMOTE_TEST,
-        DB_NAME_TEST, 
-        azqueue_conn_str=QUEUE_PATH_TEST,
+        now().strftime("%Y%m%d"), 
+        azqueue_conn_str=os.getenv('AZQUEUE_CONN_STR'),
         input_queue_name=INDEXER_IN_QUEUE,
         embedder_path=os.getenv("EMBEDDER_PATH"),
         embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
@@ -369,8 +369,8 @@ def test_digestor_orch():
     from coffeemaker.orchestrators.chainable import Orchestrator
     orch = Orchestrator(
         DB_REMOTE_TEST,
-        DB_NAME_TEST, 
-        azqueue_conn_str=QUEUE_PATH_TEST,
+        now().strftime("%Y%m%d"),
+        azqueue_conn_str=os.getenv('AZQUEUE_CONN_STR'),
         input_queue_name=DIGESTOR_IN_QUEUE,
         digestor_path=os.getenv("DIGESTOR_PATH"), 
         digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
@@ -379,12 +379,24 @@ def test_digestor_orch():
     )
     orch.run_digestor()
 
+def test_static_db():
+    from coffeemaker.pybeansack.staticdb import StaticDB
+    from coffeemaker.nlp.embedders import from_path
+    print("starting")
+    categories = StaticDB("/home/soumitsr/codes/pycoffeemaker/coffeemaker/nlp/categories.parquet")
+    sentiments = StaticDB("/home/soumitsr/codes/pycoffeemaker/coffeemaker/nlp/sentiments.parquet")
+    print("db loaded")
+    embedder = from_path(os.getenv('EMBEDDER_PATH'), 512)
+    print("embedder loaded")
+    ic(categories.vector_search(embedder.embed("category/domain classification: artificial intelligence"), limit=10))
+    ic(sentiments.vector_search(embedder.embed("sentiment classification: ecstatic"), limit=5))
+
 if __name__ == "__main__":
-    test_trend_analysis()
+    # test_static_db()
+    # test_trend_analysis()
     # test_collector_orch()
-    
     # test_indexer_orch()
-    # test_digestor_orch()
+    test_digestor_orch()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
     # test_run_async()

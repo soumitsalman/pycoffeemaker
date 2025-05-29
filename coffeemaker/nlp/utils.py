@@ -45,6 +45,5 @@ def batch_run(func: Callable, items, num_threads: int = os.cpu_count()):
     return results  
 
 distinct_items = lambda items: list({item.strip().lower(): item for item in items}.values()) if items else items
-merge_tags = lambda *args: list({item.lower() for arg in args if arg for item in arg})
 first_n = lambda items, n: items[:n] if items else items
 split_parts = lambda text, sep=r'[,]+': [part.strip() for part in re.split(sep, text) if part.strip()]

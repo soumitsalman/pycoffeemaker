@@ -555,34 +555,42 @@ def port_stuff_to_remote():
     orch.db.sourcestore.insert_many(local_orch.db.sourcestore.find({}))
 
 def create_sentiments_locally():
-    from coffeemaker.orchestrators.chainable import Orchestrator
-    orch = Orchestrator(
-        os.getenv('MONGODB_CONN_STR'),
-        "test"
-    )
-    sentiments = orch.db.beanstore.distinct("sentiments", filter={"sentiments": VALUE_EXISTS})
-    categories = orch.db.beanstore.distinct("categories", filter={"categories": VALUE_EXISTS})
-    with open("setup/sentiments-temp.txt", "r") as file:
-        sentiments = file.readlines()
+    # from coffeemaker.orchestrators.chainable import Orchestrator
+    # orch = Orchestrator(
+    #     os.getenv('MONGODB_CONN_STR'),
+    #     "test"
+    # )
+    # sentiments = orch.db.beanstore.distinct("sentiments", filter={"sentiments": VALUE_EXISTS})
+    # categories = orch.db.beanstore.distinct("categories", filter={"categories": VALUE_EXISTS})
+    # with open("setup/sentiments-temp.txt", "r") as file:
+    #     sentiments = file.readlines()
 
-    sentiments = [s.strip() for s in sentiments if s.strip()]
-    for i in range(len(sentiments)):
-        sentiments[i] = sentiments[i].split()[0]
+    # sentiments = [s.strip() for s in sentiments if s.strip()]
+    # for i in range(len(sentiments)):
+    #     sentiments[i] = sentiments[i].split()[0]
 
-    sentiments = [s.strip()+"\n" for s in sentiments if s.isalpha()]
-    sentiments = list(set(sentiments))
-    with open("setup/sentiments-proc-1.txt", "w") as file:
-        file.writelines(sentiments)
+    # sentiments = [s.strip()+"\n" for s in sentiments if s.isalpha()]
+    # sentiments = list(set(sentiments))
+    # with open("setup/sentiments-proc-1.txt", "w") as file:
+    #     file.writelines(sentiments)
 
-    import pandas as pd
+    # with open("setup/sentiments-proc-4.txt", "r") as file:
+    #     sentiments = file.readlines()
+
+    
     from coffeemaker.nlp import embedders
 
     embedder = embedders.from_path(os.getenv('EMBEDDER_PATH'), 512)
-    with open("setup/sentiments-proc-4.txt", "r") as file:
-        sentiments = file.readlines()
+    
+    import yaml
 
-    sentiments = [s.strip() for s in sentiments]
-    vecs = embedder(["sentiment classification: "+s for s in sentiments])
+    with open("./coffeemaker/nlp/classifications.yaml", "r") as file:
+        classifications = yaml.safe_load(file)
+
+    sentiments = classifications['sentiments']
+    vecs = embedder(["sentiment: "+s for s in sentiments])
+
+    import pandas as pd
 
     df = pd.DataFrame(
         {
@@ -607,15 +615,19 @@ def create_categories_locally():
     # with open("setup/categories-proc-1.txt", "w") as file:
     #     file.writelines(categories)
 
-    import pandas as pd
     from coffeemaker.nlp import embedders
 
     embedder = embedders.from_path(os.getenv('EMBEDDER_PATH'), 512)
-    with open("setup/category-proc-2.txt", "r") as file:
-        categories = file.readlines()
+    
+    import yaml
 
-    categories = [s.strip() for s in categories]
-    vecs = embedder(["category/domain classification: "+cat for cat in categories])
+    with open("./coffeemaker/nlp/classifications.yaml", "r") as file:
+        classifications = yaml.safe_load(file)
+
+    categories = classifications['categories']
+    vecs = embedder(["domain: "+cat for cat in categories])
+
+    import pandas as pd
 
     df = pd.DataFrame(
         {
@@ -625,6 +637,7 @@ def create_categories_locally():
     )
     ic(df.sample(n=3))
     df.to_parquet("setup/categories.parquet", engine='pyarrow')
+
 
 def merge_to_classification():
     import yaml
@@ -648,4 +661,6 @@ def merge_to_classification():
 
 # adding data porting logic
 if __name__ == "__main__":
-    merge_to_classification()
+    # merge_to_classification()
+    create_categories_locally()
+    create_sentiments_locally()

@@ -7,7 +7,7 @@ from icecream import ic
 
 from pymongo import UpdateOne
 from azure.storage.queue import QueueClient
-from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
+from coffeemaker.pybeansack.mongosack import Beansack
 from coffeemaker.pybeansack.models import *
 from coffeemaker.nlp import writers, utils
 from coffeemaker.orchestrators.utils import *
@@ -22,7 +22,7 @@ digestibles = lambda beans: list(filter(is_digestible, beans)) if beans else bea
 storables = lambda beans: list(filter(is_storable, beans)) if beans else beans 
 
 class Orchestrator:
-    db: MongoSack = None
+    db: Beansack = None
     queue: QueueClient = None
     writer: writers.ArticleWriter = None
 
@@ -34,7 +34,7 @@ class Orchestrator:
         writer_api_key: str = os.getenv("WRITER_API_KEY"),
         writer_context_len: int = int(os.getenv("WRITER_CONTEXT_LEN", writers.CONTEXT_LEN))
     ): 
-        self.db = MongoSack(db_path, db_name)
+        self.db = Beansack(db_path, db_name)
         self.writer = digestors.from_path(writer_path, writer_context_len, base_url=writer_base_url, api_key=writer_api_key)
  
     def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:

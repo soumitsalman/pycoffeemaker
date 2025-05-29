@@ -9,7 +9,7 @@ from typing import Awaitable
 from pymongo import UpdateOne
 from icecream import ic
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
-from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
+from coffeemaker.pybeansack.mongosack import Beansack
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
 from coffeemaker.nlp import digestors, embedders, utils
@@ -55,7 +55,7 @@ class Orchestrator:
     index_queue: Queue = None
 
     az_storage_conn_str: str = None
-    remotesack: MongoSack = None
+    remotesack: Beansack = None
     localsack: DuckSack = None
     cluster_eps: float = None
 
@@ -80,7 +80,7 @@ class Orchestrator:
         self.digestor = digestors.from_path(digestor_path, digestor_context_len, digestor_base_url, digestor_api_key)
 
         self.az_storage_conn_str = backup_storage_conn_str
-        self.remotesack = MongoSack(remote_db_conn_str, db_name)
+        self.remotesack = Beansack(remote_db_conn_str, db_name)
         self.localsack = DuckSack(local_db_path, db_name)
         self.cluster_eps = clus_eps            
         

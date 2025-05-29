@@ -61,4 +61,4 @@ def initialize_azqueues(azqueue_conn_str, queue_names: list[str]):
     return queues
 
 calculate_trend_score = lambda chatter_delta: 100*chatter_delta.comments_change + 10*chatter_delta.shares_change + chatter_delta.likes_change    
-
+merge_tags = lambda *args: list(set(item.lower() for arg in args if arg for item in arg))
