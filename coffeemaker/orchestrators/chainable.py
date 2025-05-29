@@ -192,10 +192,9 @@ class Orchestrator:
             beans = self.db.query_beans(
                 {
                     K_URL: {"$in": urls}, 
-                    K_CREATED: {"$gte": datetime.now() - timedelta(days=2)},
                     K_CONTENT: VALUE_EXISTS
                 }, 
-                project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_CREATED: 1, K_CATEGORIES: 1}
+                project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_CREATED: 1, K_COLLECTED: 1, K_CATEGORIES: 1}
             )
             try:
                 beans = self.digest_beans(digestibles(beans))

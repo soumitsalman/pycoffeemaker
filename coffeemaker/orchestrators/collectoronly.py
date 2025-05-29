@@ -2,13 +2,13 @@ import os
 import logging
 import asyncio
 import random
-from typing import Callable
 import persistqueue
 from concurrent.futures import ThreadPoolExecutor
 from icecream import ic
+from datetime import timezone
 from azure.storage.queue import QueueClient
 from pymongo import UpdateOne
-from coffeemaker.pybeansack.mongosack import Beansack as MongoSack
+from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
 from coffeemaker.orchestrators.utils import *
@@ -19,7 +19,7 @@ BATCH_SIZE = int(os.getenv('BATCH_SIZE', 16*os.cpu_count()))
 
 log = logging.getLogger(__name__)
 
-is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING)
+is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING) and (bean.created > ndays_ago(2))
 is_scrapable = lambda bean: not above_threshold(bean.content, WORDS_THRESHOLD_FOR_SCRAPING) # if there is no summary and embedding then no point storing
 indexables = lambda beans: list(filter(is_indexable, beans)) if beans else beans
 scrapables = lambda beans: list(filter(is_scrapable, beans)) if beans else beans 
@@ -29,10 +29,11 @@ def _prepare_new(beans: list[Bean]):
         bean.id = bean.url
         bean.created = bean.created or bean.collected
         bean.updated = bean.updated or bean.collected
+        if not bean.created.tzinfo: bean.created.replace(tzinfo=timezone.utc)
     return beans
 
 class Orchestrator:
-    db: MongoSack = None
+    db: Beansack = None
     queues: list[QueueClient] = None
     workers_semaphore: int = BATCH_SIZE
     collection_queue = None
@@ -40,7 +41,7 @@ class Orchestrator:
     run_total: int = 0
 
     def __init__(self, mongodb_conn_str: str, db_name: str, azqueue_conn_str: str = None, output_queue_names: list[str] = None):
-        self.db = MongoSack(mongodb_conn_str, db_name)
+        self.db = Beansack(mongodb_conn_str, db_name)
         if output_queue_names: self.queues = initialize_azqueues(azqueue_conn_str, output_queue_names)
 
         self.apicollector = APICollector()
@@ -74,15 +75,10 @@ class Orchestrator:
         return scrapables(beans)
     
     def _triage_scrape(self, source, beans):
-        # mark scraped beans to indicated that these are not from apis
-        for bean in beans:
-            if is_scrapable(bean): bean.content = None
-            else: bean.is_scraped = True
-
-        scraped = [bean for bean in beans if bean.is_scraped]
-        log.info("scraped", extra={"source": source, "num_items": len(scraped)})
-        self.db.update_bean_fields(beans, [K_CONTENT, "is_scraped"])
-        self.queue_beans(source, scraped) 
+        beans = [bean for bean in beans if not is_scrapable(bean)]
+        log.info("scraped", extra={"source": source, "num_items": len(beans)})
+        self.db.update_bean_fields(beans, [K_CONTENT, K_TITLE, K_IMAGEURL, K_AUTHOR, K_CREATED, K_SUMMARY, K_SITE_RSS_FEED, K_SITE_NAME, K_SITE_FAVICON, "is_scraped"])
+        self.queue_beans(source, beans) 
     
     def queue_beans(self, source, beans: list[Bean]) -> None:
         if not beans or not self.queues: return
@@ -138,8 +134,12 @@ class Orchestrator:
     def run_collection(self, sources):
         def collect(task):
             source, func = task
-            needs_scraping = self._triage_collection(source, func(source))
-            if needs_scraping: self.scraping_queue.put((source, needs_scraping))
+            try:
+                needs_scraping = self._triage_collection(source, func(source))
+                if needs_scraping: self.scraping_queue.put((source, needs_scraping))
+            except Exception as e:
+                log.warning("collection failed", extra={"source": source, "num_items": 1})
+                log.error(e, extra={"source": source, "num_items": 1})
 
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="collecting-") as executor:
             executor.map(collect, self._get_collect_funcs(sources))
@@ -150,8 +150,12 @@ class Orchestrator:
         def scrape(source, beans):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
-            if beans: self._triage_scrape(source, beans)    
+            try:
+                beans = loop.run_until_complete(self.webscraper.scrape_beans(beans, True))
+                if beans: self._triage_scrape(source, beans)    
+            except Exception as e:
+                log.warning("scraping failed", extra={"source": source, "num_items": len(beans)})
+                log.error(e, extra={"source": source, "num_items": len(beans)})
             asyncio.set_event_loop(loop.close())        
 
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="scraping-") as executor:
@@ -180,8 +184,12 @@ class Orchestrator:
         workers_semaphore = asyncio.Semaphore(BATCH_SIZE)
         async def collect(source, func):
             async with workers_semaphore:
-                needs_scraping = self._triage_collection(source, await func(source))
-                if needs_scraping: await self.scraping_queue.put((source, needs_scraping))
+                try: 
+                    needs_scraping = self._triage_collection(source, await func(source))
+                    if needs_scraping: await self.scraping_queue.put((source, needs_scraping))
+                except Exception as e:
+                    log.warning("collection failed", extra={"source": source, "num_items": 1})
+                    log.error(e, extra={"source": source, "num_items": 1})
 
         async with asyncio.TaskGroup() as tg:
             [tg.create_task(collect(source, beans), name = f"collecting-{source}") for source, beans in self._get_async_collect_funcs(sources)]     
@@ -192,8 +200,12 @@ class Orchestrator:
         workers_semaphore = asyncio.Semaphore(BATCH_SIZE)
         async def scrape(source, beans):
             async with workers_semaphore:
-                beans = await self.webscraper.scrape_beans(beans, collect_metadata=True)
-                if beans: self._triage_scrape(source, beans)
+                try:
+                    beans = await self.webscraper.scrape_beans(beans, collect_metadata=True)
+                    if beans: self._triage_scrape(source, beans)
+                except Exception as e:
+                    log.warning("scraping failed", extra={"source": source, "num_items": len(beans)})
+                    log.error(e, extra={"source": source, "num_items": len(beans)})
 
         async with asyncio.TaskGroup() as tg:
             while True:
@@ -218,7 +230,7 @@ class Orchestrator:
 
         log.info("total collected", extra={"source": run_id, "num_items": self.run_total})
 
-    @log_runtime(logger=log)
+    @log_runtime_async(logger=log)
     async def run_async(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/feeds.yaml")):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.run_total = 0        
