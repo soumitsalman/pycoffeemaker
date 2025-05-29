@@ -15,6 +15,7 @@ from icecream import ic
 from datetime import datetime, timedelta
 from pymongo import MongoClient, UpdateOne
 from coffeemaker.pybeansack.models import *
+from coffeemaker.pybeansack.mongosack import VALUE_EXISTS
 from coffeemaker.pybeansack.ducksack import SQL_NOT_WHERE_URLS
 from coffeemaker.orchestrators.fullstack import Orchestrator
 
@@ -463,17 +464,16 @@ def port_beans_locally():
     )
     local_orch = Orchestrator(
         "mongodb://localhost:27017/",
-        "trainingdata"
+        "test"
     )
     
-    batch_size = 10000
+    batch_size = 1000
     def port(skip):
         beans = orch.db.beanstore.find(
             filter={
-                K_GIST: {
-                    "$exists": True, 
-                    "$ne": None
-                }
+                K_GIST: VALUE_EXISTS,
+                K_EMBEDDING: VALUE_EXISTS,
+                K_CREATED: {"$gte": ndays_ago(15)}
             },
             skip=skip,
             limit=batch_size,
@@ -483,10 +483,10 @@ def port_beans_locally():
         print(datetime.now(), "ported beans|%d", skip)
 
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-        executor.map(port, range(0, 235000, batch_size))
+        executor.map(port, range(0, 100000, batch_size))
 
 def port_pages_locally():
-    from coffeemaker.orchestrators.indexeronly import Orchestrator
+    from coffeemaker.orchestrators.chainable import Orchestrator
     orch = Orchestrator(
         os.getenv('DB_REMOTE'),
         "beansackV2",
@@ -554,7 +554,98 @@ def port_stuff_to_remote():
     orch.db.pagestore.insert_many(local_orch.db.pagestore.find({}))
     orch.db.sourcestore.insert_many(local_orch.db.sourcestore.find({}))
 
+def create_sentiments_locally():
+    from coffeemaker.orchestrators.chainable import Orchestrator
+    orch = Orchestrator(
+        os.getenv('MONGODB_CONN_STR'),
+        "test"
+    )
+    sentiments = orch.db.beanstore.distinct("sentiments", filter={"sentiments": VALUE_EXISTS})
+    categories = orch.db.beanstore.distinct("categories", filter={"categories": VALUE_EXISTS})
+    with open("setup/sentiments-temp.txt", "r") as file:
+        sentiments = file.readlines()
+
+    sentiments = [s.strip() for s in sentiments if s.strip()]
+    for i in range(len(sentiments)):
+        sentiments[i] = sentiments[i].split()[0]
+
+    sentiments = [s.strip()+"\n" for s in sentiments if s.isalpha()]
+    sentiments = list(set(sentiments))
+    with open("setup/sentiments-proc-1.txt", "w") as file:
+        file.writelines(sentiments)
+
+    import pandas as pd
+    from coffeemaker.nlp import embedders
+
+    embedder = embedders.from_path(os.getenv('EMBEDDER_PATH'), 512)
+    with open("setup/sentiments-proc-4.txt", "r") as file:
+        sentiments = file.readlines()
+
+    sentiments = [s.strip() for s in sentiments]
+    vecs = embedder(["sentiment classification: "+s for s in sentiments])
+
+    df = pd.DataFrame(
+        {
+            K_ID: sentiments,
+            K_EMBEDDING: vecs
+        }
+    )
+    ic(df.sample(n=3))
+    df.to_parquet("setup/sentiments.parquet", engine='pyarrow')
+    
+def create_categories_locally():  
+    # with open("setup/categories-temp.txt", "r") as file:
+    #     categories = file.readlines()
+
+    # categories = [s.strip() for s in categories if s.strip()]
+    # for i in range(len(categories)):
+    #     categories[i] = categories[i].split("(")[0].strip()
+
+    # cat_filter = lambda cat: cat and re.fullmatch(r"[a-zA-Z]+", cat.replace(' ', '')) and len(cat) > 3 and cat[0].isupper()
+    # categories = sorted(list(set([cat+"\n" for cat in categories if cat_filter(cat)])))
+    
+    # with open("setup/categories-proc-1.txt", "w") as file:
+    #     file.writelines(categories)
+
+    import pandas as pd
+    from coffeemaker.nlp import embedders
+
+    embedder = embedders.from_path(os.getenv('EMBEDDER_PATH'), 512)
+    with open("setup/category-proc-2.txt", "r") as file:
+        categories = file.readlines()
+
+    categories = [s.strip() for s in categories]
+    vecs = embedder(["category/domain classification: "+cat for cat in categories])
+
+    df = pd.DataFrame(
+        {
+            K_ID: categories,
+            K_EMBEDDING: vecs
+        }
+    )
+    ic(df.sample(n=3))
+    df.to_parquet("setup/categories.parquet", engine='pyarrow')
+
+def merge_to_classification():
+    import yaml
+    # with open("coffeemaker/nlp/categories.txt", "r") as file:
+    #     categories = file.readlines()
+    # with open("coffeemaker/nlp/sentiments.txt", "r") as file:
+    #     sentiments = file.readlines()
+    
+    # classifications = {
+    #     K_SENTIMENTS: [s.strip() for s in sentiments],
+    #     K_CATEGORIES: [cat.strip() for cat in categories]
+    # }
+
+    # with open("coffeemaker/nlp/classifications.yaml", "w") as file:
+    #     yaml.dump(classifications, file)
+
+    with open("coffeemaker/nlp/classifications.yaml", "r") as file:
+        classifications = yaml.safe_load(file)
+    ic(classifications)
+
 
 # adding data porting logic
 if __name__ == "__main__":
-    port_beans_locally()
+    merge_to_classification()

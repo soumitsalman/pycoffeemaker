@@ -1,153 +1,279 @@
-classifications:
-    sentiments:
-        - Alarmed
-        - Amused
-        - Analytical
-        - Angry
-        - Anxious
-        - Appreciative
-        - Assertive
-        - Bold
-        - Cautious
-        - Concerned
-        - Confident
-        - Contemplative
-        - Critical
-        - Curious
-        - Dark
-        - Delighted
-        - Disappointed
-        - Dramatic
-        - Emotional
-        - Encouraging
-        - Engaging
-        - Enthusiastic
-        - Exciting
-        - Fascinating
-        - Fearful
-        - Frustrated
-        - Hopeful
-        - Humorous
-        - Informative
-        - Inquisitive
-        - Inspiring
-        - Intriguing
-        - Ironic
-        - Joyful
-        - Melancholy
-        - Neutral
-        - Objective
-        - Optimistic
-        - Outraged
-        - Pessimistic
-        - Positive
-        - Provocative
-        - Reflective
-        - Sad
-        - Sarcastic
-        - Serious
-        - Shocking
-        - Skeptical
-        - Somber
-        - Supportive
-        - Surprising
-        - Thoughtful
-        - Tragic
-        - Troubling
-        - Uncertain
-        - Upsetting
-        - Witty
-        - Worried
-    categories:
-        - Aerospace
-        - Aviation
-        - Agriculture
-        - Aircraft Technology
-        - Application Security
-        - Artificial Intelligence
-        - Arts
-        - Automotive & Transportation
-        - Automotive Technology
-        - Banking
-        - Biology
-        - Blockchain
-        - Business
-        - Career Development
-        - Chemistry
-        - Clean Energy
-        - Cloud Computing
-        - Computer Vision
-        - Computing Infrastructure
-        - Consumer Electronics
-        - Cryptocurrency
-        - Culture
-        - Cybersecurity
-        - Data Centers
-        - Data Security
-        - Data Science
-        - Decentralized Finance
-        - Deep Learning
-        - Economy
-        - Education
-        - Electric Vehicles
-        - Energy
-        - Entertainment
-        - Environment
-        - Fashion
-        - Finance
-        - Funding
-        - Gadgets and Electronics
-        - Government Affairs
-        - Health
-        - History
-        - Human Rights
-        - Industry
-        - Information Security
-        - Intellectual Property
-        - International Relations
-        - Internet of Things
-        - Internet Security
-        - IoT Security
-        - Law
-        - Lifestyle
-        - Machine Learning
-        - Management
-        - Marketing
-        - Mathematics
-        - Media
-        - Natural Language Processing
-        - Networking
-        - Non-profit
-        - Parenting
-        - Philosophy
-        - Physics
-        - Politics
-        - Privacy
-        - Programming
-        - Public Policy
-        - Quantum Computing
-        - Real Estate
-        - Religion
-        - Retail
-        - Robotics
-        - Rockets
-        - Satellites
-        - Science
-        - Self-Driving Cars
-        - Semiconductors
-        - Serverless Computing
-        - Smart Home
-        - Smartphones
-        - Social Science
-        - Software Development
-        - Software Engineering
-        - Software Security
-        - Sports
-        - Startups
-        - Storage
-        - Technology
-        - Telecommunications
-        - Transportation
-        - Travel
-        - Venture Capital
-        - Wearable Technology
+categories:
+- Artificial General Intelligence
+- Artificial Intelligence
+- Artificial Intelligence Safety
+- Artificial Life
+- Artificial Neural Networks
+- Artificial Plants
+- Artificial Sweeteners
+- Artificial Vision
+- Academic and Research
+- Accessibility
+- Advertising
+- Agriculture
+- Air and Aviation
+- Alcohol
+- Algorithm and Computation
+- Alien and Extraterrestrial Life
+- Alternative Energy
+- Anatomy and Physiology
+- Animation and Animation Industry
+- Anthropology
+- Antibiotics and Antimicrobial Resistance
+- Archaeology and Ancient History
+- Architecture and Design
+- Art and Art History
+- Artificial Intelligence Ethics and Governance
+- Astronomy and Astrophysics
+- Athletics and Sports
+- Audio and Sound Technology
+- Automation and Robotics
+- Banking and Finance
+- Behavioral Science
+- Biochemistry and Molecular Biology
+- Biotechnology
+- Blockchain and Cryptocurrency
+- Body and Health
+- Books and Literature
+- Business and Management
+- Cannabis and Cannabinoids
+- Career and Employment
+- Chemistry
+- Child Development and Welfare
+- Cloud Computing
+- Climate and Environment
+- Coding and Programming Languages
+- Communication and Media
+- Community and Society
+- Computing and Information Technology
+- Construction and Infrastructure
+- Consumer Goods and Retail
+- Cybersecurity and Cybercrime
+- Data Science and Analytics
+- Dentistry
+- Design and Creative Arts
+- Digital Media and Internet
+- Disaster and Emergency Management
+- Diversity and Inclusion
+- Drug and Medication
+- Earth Sciences and Geology
+- Education
+- Elder Care and Aging
+- Election and Voting
+- Energy and Utilities
+- Engineering
+- Entertainment and Performing Arts
+- Environment and Conservation
+- Esports and Gaming
+- Ethics and Philosophy
+- Family and Relationships
+- Fashion and Style
+- Film and Cinema
+- Food and Nutrition
+- Forensics and Crime Investigation
+- Gambling and Betting
+- Gender Studies
+- Genetics and Genomics
+- Government and Politics
+- Health and Medicine
+- History
+- High Performance Computing
+- Home and Lifestyle
+- Human Rights and Social Justice
+- Humanities and Cultural Studies
+- Immunology and Infectious Diseases
+- Industry and Manufacturing
+- Innovation and Startups
+- Insurance
+- Internet and Web Technologies
+- Justice and Legal System
+- Labor and Workforce
+- Languages and Linguistics
+- Law Enforcement and Public Safety
+- Legal Studies
+- LGBTQ+ Issues
+- Literacy and Education Development
+- Machine Learning and AI Applications
+- Marketing
+- Mathematics and Statistics
+- Mechanical Systems
+- Media and Journalism
+- Medical Research and Healthcare Technology
+- Mental Health and Psychology
+- Migration and Immigration
+- Military and Defense
+- Mining and Natural Resources
+- Music and Music Industry
+- Nanotechnology
+- Natural Disasters and Hazards
+- Nutrition and Dietetics
+- Nuclear Science and Energy
+- Nutrition and Supplements
+- Occupational Health and Safety
+- Ocean and Marine Science
+- Paleontology and Evolution
+- Parental and Childcare
+- Parks and Recreation
+- Pharmaceuticals and Drug Development
+- Philosophy and Theology
+- Physical Fitness and Sports Medicine
+- Physics
+- Planetary Science and Space Exploration
+- Political Science
+- Pollution and Environmental Hazards
+- Privacy and Data Protection
+- Product Development and Technology
+- Professional Development
+- Public Administration and Policy
+- Public Health
+- Real Estate
+- Rehabilitation and Therapy
+- Religion and Spirituality
+- Renewable Energy
+- Research and Development
+- Retail Industry
+- Robotics and Automation
+- Rural and Urban Development
+- Science and Technology
+- Security and Defense Technology
+- Social Media and Digital Culture
+- Social Sciences
+- Software Development
+- Space Industry and Technologies
+- Sports and Physical Activities
+- Sustainability and Environmental Management
+- Technology and Innovation
+- Transportation and Mobility
+- Urban Planning and Development
+- Veterinary Medicine and Animal Science
+- Virtual and Augmented Reality
+- Water Resources and Management
+- Weaponry and Military Technology
+- Wildlife and Conservation
+- "Women\u2019s Issues and Gender Equality"
+- Workplace and Employment Law
+- Youth and Education
+- Zoology and Animal Behavior
+sentiments:
+- bewildered
+- doubtful
+- empathetic
+- optimistic
+- humble
+- loyal
+- overwhelmed
+- proud
+- cruel
+- dynamic
+- curious
+- cheerful
+- joyful
+- trusting
+- generous
+- subtle
+- graceful
+- desperate
+- resentful
+- fair
+- bitter
+- refined
+- focused
+- moral
+- intrigued
+- frustrated
+- vulnerable
+- serene
+- productive
+- peaceful
+- philosophical
+- perplexed
+- stunned
+- compassionate
+- love
+- disturbed
+- jealous
+- elegant
+- understanding
+- angry
+- striking
+- wise
+- hateful
+- helpless
+- positive
+- delicate
+- vigorous
+- mysterious
+- vivid
+- ethical
+- honorable
+- powerful
+- thoughtful
+- amazed
+- confident
+- conflicted
+- beautiful
+- inspiring
+- responsible
+- cooperative
+- ambivalent
+- analytical
+- ashamed
+- passionate
+- negative
+- objective
+- hopeful
+- rational
+- professional
+- friendly
+- intense
+- brave
+- worried
+- investigative
+- cautious
+- innovative
+- restless
+- bold
+- vengeful
+- hostile
+- fearful
+- complexpractical
+- admiring
+- fascinated
+- artistic
+- resilient
+- critical
+- energetic
+- disciplined
+- grateful
+- bittersweet
+- just
+- surprised
+- harmonious
+- protective
+- honest
+- enthusiastic
+- decisive
+- efficient
+- determined
+- competent
+- anxious
+- delightful
+- insightful
+- dramatic
+- strategic
+- righteous
+- accepting
+- nostalgic
+- skeptical
+- neutral
+- contemplative
+- sad
+- respectful
+- principled
+- depressed
+- supportive
+- astonished
+- shocked
+- assertive
+- reflective
+- disgusted

@@ -20,3 +20,5 @@ persist-queue
 icecream
 python-dotenv
 setuptools
+pandas
+pyarrow
