@@ -36,40 +36,54 @@ logging.getLogger("connectionpool").propagate = False
 
 if __name__ == "__main__":    
     mode = os.getenv("MODE")
-    if mode == "COLLECTOR_ONLY":
-        from coffeemaker.orchestrators.collectoronly import Orchestrator
+    if mode == "COLLECTOR":
+        from coffeemaker.orchestrators.collectororch import Orchestrator
         orch = Orchestrator(
             os.getenv("MONGODB_CONN_STR"),
-            os.getenv("DB_NAME"),
-            azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
-            output_queue_names=[queue_name.strip() for queue_name in os.getenv("OUTPUT_QUEUE_NAMES").split(",")],
+            os.getenv("DB_NAME")
+            # azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
+            # output_queue_names=[queue_name.strip() for queue_name in os.getenv("OUTPUT_QUEUE_NAMES").split(",")],
         )
         asyncio.run(orch.run_async())
-    elif mode == "INDEXER_ONLY":
-        from coffeemaker.orchestrators.chainable import Orchestrator
+    elif mode == "INDEXER":
+        from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
-            azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
-            input_queue_name=os.getenv("INPUT_QUEUE_NAME"),
+            # azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
+            # input_queue_name=os.getenv("INPUT_QUEUE_NAME"),
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
-            cluster_eps=float(os.getenv("CLUSTER_EPS", 0))
+            cluster_distance=float(os.getenv("CLUSTER_EPS", 0))
         )
         orch.run_indexer()
-    elif mode == "DIGESTOR_ONLY":
-        from coffeemaker.orchestrators.chainable import Orchestrator
+    elif mode == "DIGESTOR":
+        from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
-            azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
-            input_queue_name=os.getenv("INPUT_QUEUE_NAME"),
+            # azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
+            # input_queue_name=os.getenv("INPUT_QUEUE_NAME"),
             digestor_path=os.getenv("DIGESTOR_PATH"), 
             digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
             digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
             digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN"))
         )
         orch.run_digestor()
+    elif mode == "COMPOSER":
+        from writers import Orchestrator
+        orch = Orchestrator(
+            os.getenv("MONGODB_CONN_STR"),
+            os.getenv("DB_NAME"),
+            embedder_path=os.getenv("EMBEDDER_PATH"),
+            embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
+            bean_distance=float(os.getenv("BEAN_DISTANCE", 0)),
+            writer_path=os.getenv("WRITER_PATH"), 
+            writer_base_url=os.getenv("WRITER_BASE_URL"),
+            writer_api_key=os.getenv("WRITER_API_KEY"),
+            writer_context_len=int(os.getenv("WRITER_CONTEXT_LEN"))
+        )
+        orch.run()
     else:
         from coffeemaker.orchestrators.fullstack import Orchestrator
         orch = Orchestrator(

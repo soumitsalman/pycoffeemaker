@@ -8,7 +8,9 @@ from azure.storage.queue import QueueClient
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.staticdb import *
-from coffeemaker.nlp import embedders, digestors
+from coffeemaker.nlp import embedders, agents
+from coffeemaker.nlp.models import Digest
+from coffeemaker.nlp.prompts import DIGESTOR_SYSTEM_PROMPT
 from coffeemaker.orchestrators.utils import *
 from icecream import ic
 
@@ -55,8 +57,8 @@ def _make_classification_update(bean: Bean, cat: list[str], sent: list[str]):
         }
     )    
 
-def _make_digest_update(bean: Bean, digest):
-    if not digest: return
+def _make_digest_update(bean: Bean, digest: Digest):
+    if not ic(digest): return
 
     bean.gist = f"U:{bean.created.strftime('%Y-%m-%d')};"+digest.expr
     bean.regions = digest.regions
@@ -85,25 +87,29 @@ class Orchestrator:
     def __init__(self, 
         mongodb_conn_str: str, 
         db_name: str, 
-        azqueue_conn_str: str = None,
-        input_queue_name: str = None,
-        output_queue_names: list[str] = None,
+        # azqueue_conn_str: str = None,
+        # input_queue_name: str = None,
+        # output_queue_names: list[str] = None,
         embedder_path: str = None, 
         embedder_context_len: int = None,
-        cluster_eps: float = 0,
+        cluster_distance: float = 0,
         digestor_path: str = None, 
         digestor_base_url: str = None,
         digestor_api_key: str = None,
         digestor_context_len: int = None
     ): 
         self.db = Beansack(mongodb_conn_str, db_name)
-        self.processing_queue = Queue(".processingqueue", tempdir=".")
+        # self.processing_queue = Queue(".processingqueue", tempdir=".")
 
-        if input_queue_name: self.input_queue = QueueClient.from_connection_string(azqueue_conn_str, input_queue_name)
-        if output_queue_names: self.output_queues = initialize_azqueues(azqueue_conn_str, output_queue_names)
+        # if input_queue_name: self.input_queue = QueueClient.from_connection_string(azqueue_conn_str, input_queue_name)
+        # if output_queue_names: self.output_queues = initialize_azqueues(azqueue_conn_str, output_queue_names)
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
-        if cluster_eps: self.cluster_eps = cluster_eps
-        if digestor_path: self.digestor = digestors.from_path(digestor_path, digestor_context_len, base_url=digestor_base_url, api_key=digestor_api_key)
+        if cluster_distance: self.cluster_distance = cluster_distance
+        if digestor_path: self.digestor = agents.from_path(
+            model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 
+            max_input_tokens=digestor_context_len, max_output_tokens=512, 
+            system_prompt=DIGESTOR_SYSTEM_PROMPT, output_parser=Digest.parse_compressed_digest, temperature=0.2
+        )
 
     @property
     def categories(self):
@@ -147,7 +153,7 @@ class Orchestrator:
     def cluster_beans(self, beans: list[Bean]):
         if not beans: return beans
 
-        find_cluster = lambda bean: self.db.vector_search_beans(embedding=bean.embedding, similarity_score=1-self.cluster_eps, filter={K_URL: {"$ne": bean.url} }, limit=MAX_CLUSTER_SIZE, project={K_URL: 1, K_RELATED: 1})
+        find_cluster = lambda bean: self.db.vector_search_beans(embedding=bean.embedding, similarity_score=1-self.cluster_distance, filter={K_URL: {"$ne": bean.url} }, limit=MAX_CLUSTER_SIZE, project={K_URL: 1, K_RELATED: 1})
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="cluster") as executor:
             clusters = list(executor.map(find_cluster, beans))
             updates = list(executor.map(_make_cluster_update, beans, clusters))
@@ -166,15 +172,24 @@ class Orchestrator:
         log.info("digested", extra={"source": beans[0].source, "num_items": count}) 
         return digest_storables(beans)
     
-    def _dequeue_beans(self):
-        for urls in dequeue_batch(self.input_queue, BATCH_SIZE):
-            yield self.db.query_beans(
-                {
-                    K_URL: {"$in": urls}, 
-                    K_CONTENT: VALUE_EXISTS
-                }, 
-                project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_TAGS: 1, K_CREATED: 1, K_TITLE: 1}
+    def _dequeue_beans(self, filter):
+        while True:
+            beans = self.db.query_beans(
+                filter, 
+                sort_by=NEWEST,
+                project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_TAGS: 1, K_CREATED: 1, K_TITLE: 1},
+                limit=BATCH_SIZE
             )
+            if beans: yield beans
+            else: break
+        # for urls in dequeue_batch(self.input_queue, BATCH_SIZE):
+        #     yield self.db.query_beans(
+        #         {
+        #             K_URL: {"$in": urls}, 
+        #             K_CONTENT: VALUE_EXISTS
+        #         }, 
+        #         project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_TAGS: 1, K_CREATED: 1, K_TITLE: 1}
+        #     )
     
     @log_runtime(logger=log)
     def run_indexer(self):
@@ -182,7 +197,12 @@ class Orchestrator:
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting indexer", extra={"source": run_id, "num_items": 1})
 
-        for beans in self._dequeue_beans():
+        filter = {
+            K_CREATED: {"$gte": ndays_ago(2)},
+            K_EMBEDDING: {"$exists": False},
+            K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_INDEXING}
+        }
+        for beans in self._dequeue_beans(filter):
             try:
                 beans = self.embed_beans(indexables(beans))
                 self.classify_beans(beans)
@@ -200,7 +220,12 @@ class Orchestrator:
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting digestor", extra={"source": run_id, "num_items": 1})
 
-        for beans in self._dequeue_beans():
+        filter = {
+            K_CREATED: {"$gte": ndays_ago(2)},
+            K_GIST: {"$exists": False},
+            K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_DIGESTING}
+        }
+        for beans in self._dequeue_beans(filter):
             try:
                 beans = self.digest_beans(digestibles(beans))
                 total += len(beans)

@@ -2,13 +2,13 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:05-29
+    image: soumitsr/coffeemaker:05-30
     depends_on:
       - localcrawler
       - localdb
       - localqueue
     environment:
-      - MODE=COLLECTOR_ONLY
+      - MODE=COLLECTOR
       - DB_NAME=test
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - REMOTE_CRAWLER_URL=http://localcrawler:11235
@@ -21,12 +21,12 @@ services:
       - coffeemaker-bridge
 
   localindexer:
-    image: soumitsr/coffeemaker:05-29
+    image: soumitsr/coffeemaker:05-30
     depends_on:
       - localdb
       - localqueue
     environment:
-      - MODE=INDEXER_ONLY
+      - MODE=INDEXER
       - DB_NAME=test
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
@@ -38,12 +38,12 @@ services:
       - coffeemaker-bridge
 
   localdigestor:
-    image: soumitsr/coffeemaker:05-29
+    image: soumitsr/coffeemaker:05-30
     depends_on:
       - localdb
       - localqueue
     environment:
-      - MODE=DIGESTOR_ONLY
+      - MODE=DIGESTOR
       - DB_NAME=test
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
@@ -54,6 +54,23 @@ services:
     networks:
       - coffeemaker-bridge
 
+    localcomposer:
+      image: soumitsr/coffeemaker:05-30
+      depends_on:
+        - localdb
+        - localqueue
+      environment:
+        - MODE=DIGESTOR
+        - DB_NAME=test
+        - MONGODB_CONN_STR=mongodb://localdb:27017
+        - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
+        - INPUT_QUEUE_NAME=digesting-queue
+        - BATCH_SIZE=8
+      env_file:
+        - dockertest.env
+      networks:
+        - coffeemaker-bridge
+
   localcrawler:
     image: unclecode/crawl4ai:latest
     ports:
@@ -61,13 +78,13 @@ services:
     networks:
       - coffeemaker-bridge
 
-  localqueue:
-    image: mcr.microsoft.com/azure-storage/azurite
-    command: azurite-queue --queueHost 0.0.0.0 
-    ports:
-      - "10001:10001"
-    networks:
-      - coffeemaker-bridge
+  # localqueue:
+  #   image: mcr.microsoft.com/azure-storage/azurite
+  #   command: azurite-queue --queueHost 0.0.0.0 
+  #   ports:
+  #     - "10001:10001"
+  #   networks:
+  #     - coffeemaker-bridge
 
   localdb:
     image: mongodb/mongodb-community-server:latest

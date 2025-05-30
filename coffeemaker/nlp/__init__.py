@@ -1,4 +1,6 @@
-__all__ = ['digestors', 'embedders']  # Specify modules to be exported
+__all__ = ['agents', 'embedders', 'models', 'prompts']  # Specify modules to be exported
 
-from .digestors import *
+from .prompts import *
+from .models import *
+from .agents import *
 from .embedders import *

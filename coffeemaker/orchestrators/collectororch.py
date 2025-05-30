@@ -19,17 +19,20 @@ BATCH_SIZE = int(os.getenv('BATCH_SIZE', 16*os.cpu_count()))
 
 log = logging.getLogger(__name__)
 
-is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING) and (bean.created > ndays_ago(2))
+# is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING) and (bean.created > ndays_ago(2))
 is_scrapable = lambda bean: not above_threshold(bean.content, WORDS_THRESHOLD_FOR_SCRAPING) # if there is no summary and embedding then no point storing
-indexables = lambda beans: list(filter(is_indexable, beans)) if beans else beans
+# indexables = lambda beans: list(filter(is_indexable, beans)) if beans else beans
 scrapables = lambda beans: list(filter(is_scrapable, beans)) if beans else beans 
 
-def _prepare_new(beans: list[Bean]):
+def _prepare_for_storing(beans: list[Bean]):
     for bean in beans:
         bean.id = bean.url
         bean.created = bean.created or bean.collected
         bean.updated = bean.updated or bean.collected
         if not bean.created.tzinfo: bean.created.replace(tzinfo=timezone.utc)
+        bean.num_words_in_title = num_words(bean.title)
+        bean.num_words_in_summary = num_words(bean.summary)
+        bean.num_words_in_content = num_words(bean.content)
     return beans
 
 class Orchestrator:
@@ -42,8 +45,7 @@ class Orchestrator:
 
     def __init__(self, mongodb_conn_str: str, db_name: str, azqueue_conn_str: str = None, output_queue_names: list[str] = None):
         self.db = Beansack(mongodb_conn_str, db_name)
-        if output_queue_names: self.queues = initialize_azqueues(azqueue_conn_str, output_queue_names)
-
+        # if output_queue_names: self.queues = initialize_azqueues(azqueue_conn_str, output_queue_names)
         self.apicollector = APICollector()
         self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
 
@@ -61,10 +63,8 @@ class Orchestrator:
         chatters = [chatter for chatter in chatters if chatter] if chatters else None
 
         if chatters: self.db.store_chatters(chatters)
-        if beans: 
-            beans = _prepare_new(beans)
-            self.store_beans(source, beans)
-            self.queue_beans(source, indexables(beans))
+        if beans: self.store_beans(source, beans)
+            # self.queue_beans(source, indexables(beans))
 
         # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="commit") as executor:
         #     if chatters: executor.submit(self.db.store_chatters, chatters)
@@ -76,22 +76,30 @@ class Orchestrator:
     
     def _triage_scrape(self, source, beans):
         beans = [bean for bean in beans if not is_scrapable(bean)]
-        log.info("scraped", extra={"source": source, "num_items": len(beans)})
-        self.db.update_bean_fields(beans, [K_CONTENT, K_TITLE, K_IMAGEURL, K_AUTHOR, K_CREATED, K_SUMMARY, K_SITE_RSS_FEED, K_SITE_NAME, K_SITE_FAVICON, "is_scraped"])
-        self.queue_beans(source, beans) 
+        count = self.db.update_bean_fields(
+            _prepare_for_storing(beans), 
+            [
+                K_CONTENT, K_SUMMARY, K_TITLE, K_IS_SCRAPED,
+                K_NUM_WORDS_CONTENT, K_NUM_WORDS_SUMMARY, K_NUM_WORDS_TITLE,
+                K_IMAGEURL, K_AUTHOR, K_CREATED, 
+                K_SITE_RSS_FEED, K_SITE_NAME, K_SITE_FAVICON 
+            ]
+        )
+        log.info("scraped", extra={"source": source, "num_items": count})
+        # self.queue_beans(source, beans) 
     
-    def queue_beans(self, source, beans: list[Bean]) -> None:
-        if not beans or not self.queues: return
-        urls = [bean.url for bean in beans]
-        for queue in self.queues:
-            list(map(queue.send_message, urls)) 
-        # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="queuing") as executor:
-        #     [executor.map(queue.send_message, urls) for queue in self.queues]
-        log.info(f"queued", extra={"source": source, "num_items": len(beans)})
+    # def queue_beans(self, source, beans: list[Bean]) -> None:
+    #     if not beans or not self.queues: return
+    #     urls = [bean.url for bean in beans]
+    #     for queue in self.queues:
+    #         list(map(queue.send_message, urls)) 
+    #     # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="queuing") as executor:
+    #     #     [executor.map(queue.send_message, urls) for queue in self.queues]
+    #     log.info(f"queued", extra={"source": source, "num_items": len(beans)})
 
     def store_beans(self, source: str, beans: list[Bean]):
-        if not beans or not self.db: return
-        count = self.db.store_beans(beans)
+        if not beans: return
+        count = self.db.store_beans(_prepare_for_storing(beans))
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count
     

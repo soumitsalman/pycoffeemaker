@@ -241,7 +241,7 @@ def refresh_localsack():
     print(datetime.now(), "refresh complete")
 
 def download_sources():
-    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    from coffeemaker.orchestrators.collectororch import Orchestrator
     from coffeemaker.collectors.collector import extract_base_url, extract_source
 
     local = Orchestrator(
@@ -282,7 +282,7 @@ def download_sources():
 
 
 def merge_feeds():
-    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    from coffeemaker.orchestrators.collectororch import Orchestrator
     from coffeemaker.collectors.collector import parse_sources
     import yaml
 
@@ -457,7 +457,7 @@ to_ignore = [
 
 
 def port_beans_locally():
-    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    from coffeemaker.orchestrators.collectororch import Orchestrator
     orch = Orchestrator(
         os.getenv('MONGODB_CONN_STR'),
         "test"
@@ -486,7 +486,7 @@ def port_beans_locally():
         executor.map(port, range(0, 100000, batch_size))
 
 def port_pages_locally():
-    from coffeemaker.orchestrators.chainable import Orchestrator
+    from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
         os.getenv('DB_REMOTE'),
         "beansackV2",
@@ -509,7 +509,7 @@ def port_pages_locally():
     print(datetime.now(), "ported pages|%d", len(pages))
 
 def port_sources_locally():
-    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    from coffeemaker.orchestrators.collectororch import Orchestrator
     orch = Orchestrator(
         os.getenv('DB_REMOTE_TEST'),
         "test3"
@@ -541,7 +541,7 @@ def port_sources_locally():
     local_orch.db.sourcestore.insert_many(list(sources.values()))
 
 def port_stuff_to_remote():
-    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    from coffeemaker.orchestrators.collectororch import Orchestrator
     orch = Orchestrator(
         os.getenv('DB_REMOTE'),
         "test"

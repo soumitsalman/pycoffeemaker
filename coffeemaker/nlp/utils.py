@@ -47,3 +47,14 @@ def batch_run(func: Callable, items, num_threads: int = os.cpu_count()):
 distinct_items = lambda items: list({item.strip().lower(): item for item in items}.values()) if items else items
 first_n = lambda items, n: items[:n] if items else items
 split_parts = lambda text, sep=r'[,]+': [part.strip() for part in re.split(sep, text) if part.strip()]
+isalphaorspace = lambda text: bool(re.match(r"^[a-zA-Z\s]+$", text))
+
+def remove_before(text: str, sub: str) -> str:
+    index = text.find(sub)
+    if index > 0: return text[index:]
+    return text
+
+def remove_after(text: str, sub: str) -> str:
+    index = text.find(sub)
+    if index > 0: return text[:index]
+    return text

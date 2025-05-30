@@ -4,13 +4,17 @@ import os
 from logging import Logger
 from datetime import datetime
 from azure.storage.queue import QueueClient, QueueMessage
+from azure.storage.blob import ContainerClient
 
 MAX_QUEUE_PAGE = 32
 WORDS_THRESHOLD_FOR_SCRAPING = int(os.getenv('WORDS_THRESHOLD_FOR_SCRAPING', 200)) # min words needed to not download the body
 WORDS_THRESHOLD_FOR_INDEXING = int(os.getenv('WORDS_THRESHOLD_FOR_INDEXING', 70)) # mininum words needed to put it through indexing
 WORDS_THRESHOLD_FOR_DIGESTING = int(os.getenv('WORDS_THRESHOLD_FOR_DIGESTING', 160)) # min words needed to use the generated summary
 
-above_threshold = lambda text, threshold: text and len(text.split()) >= threshold
+num_words = lambda text: len(text.split()) if text else 0
+above_threshold = lambda text, threshold: num_words(text) >= threshold
+
+log = logging.getLogger(__name__)
 
 def log_runtime(logger: Logger):
     def decorator(func):
@@ -53,12 +57,18 @@ def dequeue_batch(queue: QueueClient, max_batch_size: int):
     if batch: yield batch
 
 def initialize_azqueues(azqueue_conn_str, queue_names: list[str]):
-    log = logging.getLogger(__name__)
+    
     queues = [QueueClient.from_connection_string(azqueue_conn_str, name) for name in queue_names]
     for q in queues:
         try: q.create_queue()
         except: log.debug("queue already exists %s", q.queue_name)
     return queues
+
+def initialize_azblobstore(azstorage_conn_str, container_name):
+    container = ContainerClient.from_connection_string(azstorage_conn_str, container_name)
+    try: container.create_container()
+    except: log.debug("blob container already exists %s", container_name)
+    return container
 
 calculate_trend_score = lambda chatter_delta: 100*chatter_delta.comments_change + 10*chatter_delta.shares_change + chatter_delta.likes_change    
 merge_tags = lambda *args: list(set(item.lower() for arg in args if arg for item in arg))

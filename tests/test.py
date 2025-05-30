@@ -7,10 +7,9 @@ import logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
 logger = logging.getLogger("test")
 logger.setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.collectoronly").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.indexeronly").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.digestoronly").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.chainable").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.collectororch").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
 # logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
@@ -39,7 +38,7 @@ from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import collector
 from coffeemaker.orchestrators.utils import log_runtime
-from coffeemaker.nlp import digestors, embedders
+from coffeemaker.nlp import agents, embedders
 
 os.makedirs(".test", exist_ok=True)
 
@@ -306,7 +305,7 @@ def download_markdown(q: str = None, accuracy = DEFAULT_VECTOR_SEARCH_SCORE, key
     save_markdown(filename, markdown)
 
 def test_trend_analysis():
-    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    from coffeemaker.orchestrators.collectororch import Orchestrator
     orch = Orchestrator(
         os.getenv('MONGODB_CONN_STR'),
         "test"
@@ -315,63 +314,61 @@ def test_trend_analysis():
     ic(random.sample(items, 5))
 
 def test_collector_orch():
-    from coffeemaker.orchestrators.collectoronly import Orchestrator
+    from coffeemaker.orchestrators.collectororch import Orchestrator
     orch = Orchestrator(
         DB_REMOTE_TEST,
-        now().strftime("%Y%m%d"),
-        azqueue_conn_str=os.getenv('AZQUEUE_CONN_STR'),
-        output_queue_names=[INDEXER_IN_QUEUE, DIGESTOR_IN_QUEUE]
+        now().strftime("%Y%m%d")
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"""
-    sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"""
-#     sources = """
-# sources:
-#   rss:
-#     - https://newatlas.com/index.rss
-#     - https://www.channele2e.com/feed/topic/latest
-#     - https://www.ghacks.net/feed/
-#     - https://thenewstack.io/feed
-#     - https://scitechdaily.com/feed/
-#     - https://www.techradar.com/feeds/articletype/news
-#     - https://www.geekwire.com/feed/
-#     - https://investorplace.com/content-feed/
-#   ychackernews:
-#     - https://hacker-news.firebaseio.com/v0/newstories.json
-#     - https://hacker-news.firebaseio.com/v0/askstories.json
-#   reddit:
-#     - news
-#     - worldnews
-#     - InternationalNews
-#     - GlobalNews
-#     - GlobalMarketNews
-#     - FinanceNews
-#     - StockNews
-#     - CryptoNews
-#     - energyStocks
-# """
+    # sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"""
+    sources = """
+sources:
+  rss:
+    - https://newatlas.com/index.rss
+    - https://www.channele2e.com/feed/topic/latest
+    - https://www.ghacks.net/feed/
+    - https://thenewstack.io/feed
+    - https://scitechdaily.com/feed/
+    - https://www.techradar.com/feeds/articletype/news
+    - https://www.geekwire.com/feed/
+    - https://investorplace.com/content-feed/
+  ychackernews:
+    - https://hacker-news.firebaseio.com/v0/newstories.json
+    - https://hacker-news.firebaseio.com/v0/askstories.json
+  reddit:
+    - news
+    - worldnews
+    - InternationalNews
+    - GlobalNews
+    - GlobalMarketNews
+    - FinanceNews
+    - StockNews
+    - CryptoNews
+    - energyStocks
+"""
     asyncio.run(orch.run_async(sources))
     # orch.run(sources)
 
 def test_indexer_orch():
-    from coffeemaker.orchestrators.chainable import Orchestrator
+    from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
         DB_REMOTE_TEST,
         now().strftime("%Y%m%d"), 
-        azqueue_conn_str=os.getenv('AZQUEUE_CONN_STR'),
-        input_queue_name=INDEXER_IN_QUEUE,
+        # azqueue_conn_str=os.getenv('AZQUEUE_CONN_STR'),
+        # input_queue_name=INDEXER_IN_QUEUE,
         embedder_path=os.getenv("EMBEDDER_PATH"),
         embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
-        cluster_eps=0.1
+        cluster_distance=0.1
     )
     orch.run_indexer()
 
 def test_digestor_orch():
-    from coffeemaker.orchestrators.chainable import Orchestrator
+    from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
         DB_REMOTE_TEST,
         now().strftime("%Y%m%d"),
-        azqueue_conn_str=os.getenv('AZQUEUE_CONN_STR'),
-        input_queue_name=DIGESTOR_IN_QUEUE,
+        # azqueue_conn_str=os.getenv('AZQUEUE_CONN_STR'),
+        # input_queue_name=DIGESTOR_IN_QUEUE,
         digestor_path=os.getenv("DIGESTOR_PATH"), 
         digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
         digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
