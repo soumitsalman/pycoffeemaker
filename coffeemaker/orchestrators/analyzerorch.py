@@ -58,7 +58,7 @@ def _make_classification_update(bean: Bean, cat: list[str], sent: list[str]):
     )    
 
 def _make_digest_update(bean: Bean, digest: Digest):
-    if not ic(digest): return
+    if not digest: return
 
     bean.gist = f"U:{bean.created.strftime('%Y-%m-%d')};"+digest.expr
     bean.regions = digest.regions
@@ -87,9 +87,6 @@ class Orchestrator:
     def __init__(self, 
         mongodb_conn_str: str, 
         db_name: str, 
-        # azqueue_conn_str: str = None,
-        # input_queue_name: str = None,
-        # output_queue_names: list[str] = None,
         embedder_path: str = None, 
         embedder_context_len: int = None,
         cluster_distance: float = 0,
@@ -99,10 +96,6 @@ class Orchestrator:
         digestor_context_len: int = None
     ): 
         self.db = Beansack(mongodb_conn_str, db_name)
-        # self.processing_queue = Queue(".processingqueue", tempdir=".")
-
-        # if input_queue_name: self.input_queue = QueueClient.from_connection_string(azqueue_conn_str, input_queue_name)
-        # if output_queue_names: self.output_queues = initialize_azqueues(azqueue_conn_str, output_queue_names)
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if cluster_distance: self.cluster_distance = cluster_distance
         if digestor_path: self.digestor = agents.from_path(

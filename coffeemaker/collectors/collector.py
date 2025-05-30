@@ -192,7 +192,6 @@ def parse_sources(sources: str) -> dict:
 class APICollector:
     md_generator: DefaultMarkdownGenerator = None
     _reddit_client = None
-    # _reddit_client_async = None
     collect_callback: Callable = None
 
     def __init__(self, collect_callback: Callable = None):  

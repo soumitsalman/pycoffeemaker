@@ -20,8 +20,9 @@ logging.basicConfig(
 
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.collectoronly").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.chainable").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.collectororch").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.digestors").propagate = False
@@ -41,8 +42,6 @@ if __name__ == "__main__":
         orch = Orchestrator(
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME")
-            # azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
-            # output_queue_names=[queue_name.strip() for queue_name in os.getenv("OUTPUT_QUEUE_NAMES").split(",")],
         )
         asyncio.run(orch.run_async())
     elif mode == "INDEXER":
@@ -50,8 +49,6 @@ if __name__ == "__main__":
         orch = Orchestrator(
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
-            # azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
-            # input_queue_name=os.getenv("INPUT_QUEUE_NAME"),
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
             cluster_distance=float(os.getenv("CLUSTER_EPS", 0))
@@ -62,8 +59,6 @@ if __name__ == "__main__":
         orch = Orchestrator(
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
-            # azqueue_conn_str=os.getenv("AZQUEUE_CONN_STR"),
-            # input_queue_name=os.getenv("INPUT_QUEUE_NAME"),
             digestor_path=os.getenv("DIGESTOR_PATH"), 
             digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
             digestor_api_key=os.getenv("DIGESTOR_API_KEY"),

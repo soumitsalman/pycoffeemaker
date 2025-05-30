@@ -43,9 +43,8 @@ class Orchestrator:
     scraping_queue = None
     run_total: int = 0
 
-    def __init__(self, mongodb_conn_str: str, db_name: str, azqueue_conn_str: str = None, output_queue_names: list[str] = None):
+    def __init__(self, mongodb_conn_str: str, db_name: str):
         self.db = Beansack(mongodb_conn_str, db_name)
-        # if output_queue_names: self.queues = initialize_azqueues(azqueue_conn_str, output_queue_names)
         self.apicollector = APICollector()
         self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
 

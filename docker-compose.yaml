@@ -6,7 +6,6 @@ services:
     depends_on:
       - localcrawler
       - localdb
-      - localqueue
     environment:
       - MODE=COLLECTOR
       - DB_NAME=test
@@ -24,7 +23,6 @@ services:
     image: soumitsr/coffeemaker:05-30
     depends_on:
       - localdb
-      - localqueue
     environment:
       - MODE=INDEXER
       - DB_NAME=test
@@ -41,7 +39,6 @@ services:
     image: soumitsr/coffeemaker:05-30
     depends_on:
       - localdb
-      - localqueue
     environment:
       - MODE=DIGESTOR
       - DB_NAME=test
@@ -54,22 +51,21 @@ services:
     networks:
       - coffeemaker-bridge
 
-    localcomposer:
-      image: soumitsr/coffeemaker:05-30
-      depends_on:
-        - localdb
-        - localqueue
-      environment:
-        - MODE=DIGESTOR
-        - DB_NAME=test
-        - MONGODB_CONN_STR=mongodb://localdb:27017
-        - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
-        - INPUT_QUEUE_NAME=digesting-queue
-        - BATCH_SIZE=8
-      env_file:
-        - dockertest.env
-      networks:
-        - coffeemaker-bridge
+  localcomposer:
+    image: soumitsr/coffeemaker:05-30
+    depends_on:
+      - localdb
+    environment:
+      - MODE=DIGESTOR
+      - DB_NAME=test
+      - MONGODB_CONN_STR=mongodb://localdb:27017
+      - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
+      - INPUT_QUEUE_NAME=digesting-queue
+      - BATCH_SIZE=8
+    env_file:
+      - dockertest.env
+    networks:
+      - coffeemaker-bridge
 
   localcrawler:
     image: unclecode/crawl4ai:latest
@@ -77,14 +73,6 @@ services:
       - "11235:11235"
     networks:
       - coffeemaker-bridge
-
-  # localqueue:
-  #   image: mcr.microsoft.com/azure-storage/azurite
-  #   command: azurite-queue --queueHost 0.0.0.0 
-  #   ports:
-  #     - "10001:10001"
-  #   networks:
-  #     - coffeemaker-bridge
 
   localdb:
     image: mongodb/mongodb-community-server:latest
