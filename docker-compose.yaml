@@ -18,6 +18,8 @@ services:
       - dockertest.env
     networks:
       - coffeemaker-bridge
+    cpus: 1
+    mem_limit: 1g
 
   localindexer:
     image: soumitsr/coffeemaker:05-30
@@ -27,13 +29,13 @@ services:
       - MODE=INDEXER
       - DB_NAME=test
       - MONGODB_CONN_STR=mongodb://localdb:27017
-      - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
-      - INPUT_QUEUE_NAME=indexing-queue
-      - BATCH_SIZE=8
+      - BATCH_SIZE=64
     env_file:
       - dockertest.env
     networks:
       - coffeemaker-bridge
+    cpus: 2
+    mem_limit: 4g
 
   localdigestor:
     image: soumitsr/coffeemaker:05-30
@@ -50,6 +52,8 @@ services:
       - dockertest.env
     networks:
       - coffeemaker-bridge
+    cpus: 1
+    mem_limit: 1g
 
   localcomposer:
     image: soumitsr/coffeemaker:05-30
@@ -73,6 +77,8 @@ services:
       - "11235:11235"
     networks:
       - coffeemaker-bridge
+    cpus: 1
+    mem_limit: 1g
 
   localdb:
     image: mongodb/mongodb-community-server:latest
@@ -80,6 +86,8 @@ services:
       - "27017:27017"
     networks:
       - coffeemaker-bridge
+    cpus: 1
+    mem_limit: 4g
 
 networks:
   coffeemaker-bridge:

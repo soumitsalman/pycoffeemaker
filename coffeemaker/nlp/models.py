@@ -139,42 +139,37 @@ class TopicsExtractionResponse(BaseModel):
         except json.JSONDecodeError: return
 
 
-M_VERDICT = "## Verdict"
-class ArticleGenerationResponse(BaseModel):
+M_INTRODUCTION = ["# Introduction", "## Introduction"]
+M_ANALYSIS = ["## Analysis"]
+M_TAKEAWAYS = ["## Key Datapoints", "## Key Takeaways", "## Key Trends & Insights"]
+M_VERDICT = ["## Verdict", "## Conclusion"]
+class Composition(BaseModel):
     raw: str
-    title: Optional[str] = None
-    intro: Optional[str] = None
-    analysis: Optional[str] = None
-    takeaways: Optional[list[str]]
-    verdict: Optional[str]
-    markdown: Optional[str]
+    title: str = Field(default=None)
+    intro: list[str] = Field(default=[])
+    analysis: list[str] = Field(default=[])
+    insights: list[str] = Field(default=[])
+    verdict: list[str] = Field(default=[])
 
     def parse_markdown(text: str):
         text = text.strip().removeprefix(M_START).removesuffix(M_END).strip()
-        response = ArticleGenerationResponse(raw=text)
-        last = None
-        for line in text.splitlines():
+        response = Composition(raw=text)
+        
+        lines = text.splitlines()
+        response.title = lines[0].removeprefix("#").strip()
+        add_to = None
+        for line in lines[1:]:
             line = line.strip()
 
-            if any(field in line for field in M_FIELDS):
-                last = line
-            elif M_GIST in last:
-                response.gist = line
-            elif M_CATEGORIES in last:
-                response.categories = split_parts(line)
-            elif C_ENTITIES in last:
-                response.entities = split_parts(line)
-            elif M_TOPIC in last:
-                response.topic = line 
-            elif C_REGIONS in last:
-                response.regions = split_parts(line)
-            elif M_SUMMARY in last:
-                response.summary = (response.summary+"\n"+line) if response.summary else line
-            elif C_KEYPOINTS in last:
-                if not response.keypoints: response.keypoints = []
-                response.keypoints.append(line.removeprefix("- ").removeprefix("* "))
-            elif M_INSIGHT in last:
-                response.insight = line
+            if line in M_INTRODUCTION: add_to = M_INTRODUCTION
+            elif line in M_ANALYSIS: add_to = M_ANALYSIS
+            elif line in M_TAKEAWAYS: add_to = M_TAKEAWAYS
+            elif line in M_VERDICT: add_to = M_VERDICT
+
+            elif add_to == M_INTRODUCTION: response.intro.append(line)
+            elif add_to == M_ANALYSIS: response.analysis.append(line)
+            elif add_to == M_TAKEAWAYS: response.insights.append(line)
+            elif add_to == M_VERDICT: response.verdict.append(line)
 
         return response   
 

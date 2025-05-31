@@ -420,7 +420,7 @@ INSTRUCTIONS:
 EXAMPLE_OUTPUT={"TopicTitle1":{"frequency":4,"keywords":["kw1","kw2"]},"TopicTitle2":{"frequency":2,"keywords":["kw3","kw4"]}}
 """
 
-OPINION_COMPOSER_SYSTEM_PROMPT="""
+OLD_OPINION_COMPOSER_SYSTEM_PROMPT="""
 TASK:INPUT=Topic:String,Articles:List<ArticleString>;ArticleString=Format<U:YYYY-MM-DD;P:Summary|...;N:Entities|...;E:Events|...;C:Categories|...;S:Sentiment|...>;OUTPUT=OpinionPiece:Markdown;"
 INSTRUCTIONS:
 1=AnalyzeArticles;UseFields=P,N,E,S;Identify=Patterns,Themes,Insights;Grounding=Normative,MultiArticle;Focus=TopicRelevance;
@@ -429,13 +429,13 @@ INSTRUCTIONS:
 EXAMPLE_OUTPUT=# Title\n## Introduction\nContext...\n## Analysis\nPatterns...\n## KeyTakeaways\n- Insight1\n- Insight2\n## Verdict\nSummary...
 """
 
-NEWSRECAP_COMPOSER_SYSTEM_PROMPT="""
+NEWRECAPT_SYSTEM_PROMPT="""
 TASK:
-INPUT=Topic:String,Articles:List<ArticleString>;ArticleString=Format<U:YYYY-MM-DD;P:Summary|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;S:Sentiment|...>
+INPUT=List<NewsDigest>;NewsDigest=Format<U:YYYY-MM-DD;P:Summary|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;S:Sentiment|...>
 OUTPUT=NewsRecap:Markdown
 INSTRUCTIONS:
-1=AnalyzeArticles;UseFields=P,E,D,R,N,S;Identify=Patterns,Themes,Insights;Grounding=Normative,MultiArticle;Focus=TopicRelevance;
-2=GenerateNewsRecap;Structure=Introduction,Analysis,Datapoints,Verdict;Introduction=Context,TopicOverview;Analysis=SynthesizePatterns,ReportEntitiesEvents,PresentSentiment;Datapoints=KeyData,Implications;Verdict=TechnicalSummary;Content=CoreFindings,KeyData;Style=Direct,Technical,Factual;Length=400-600Words;Avoid=Speculation,Narrative,EmotiveLanguage;VerdictLength=10-20Words;
+1=AnalyzeArticles;UseFields=U,P,E,D,R,N,S;Identify=Patterns,Themes,Insights,TimeTrends;Grounding=Normative,MultiArticle;
+2=GenerateNewsRecap;Structure=Introduction,Analysis,Datapoints,Verdict;Introduction=Context,TopicOverview;Analysis=SynthesizePatterns,ReportEntitiesEvents,PresentSentiment;Datapoints=KeyData,Implications;Verdict=TechnicalSummary;Content=CoreFindings,KeyData;Style=Direct,Technical,Factual,DataCentric;Length=400-600Words;Avoid=Speculation,Narrative,EmotiveLanguage;VerdictLength=10-20Words;
 3=OutputFormat=Markdown;Sections=## Introduction,## Analysis,## KeyDatapoints,## Verdict;Include=TopicInTitle;
 EXAMPLE_OUTPUT=# Title\n## Introduction\nContext...\n## Analysis\nPatterns...\n## Key Datapoints\n- Insight1\n- Insight2\n## Verdict\nSummary...
 """
