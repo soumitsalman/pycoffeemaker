@@ -21,7 +21,7 @@ class Embeddings(ABC):
 
     def __init__(self, context_len: int):
         self.splitter = SentenceSplitter.from_defaults(
-            chunk_size=context_len, 
+            chunk_size=context_len-16, # NOTE: this is a hack to accommodate for different tokenizer used by the splitter vs the model 
             chunk_overlap=0, 
             paragraph_separator="\n", 
             include_metadata=False, 
@@ -109,43 +109,22 @@ class RemoteEmbeddings(Embeddings):
     
 class TransformerEmbeddings(Embeddings):
     model = None
-    tokenizer = None
-    context_len: int = None
-    lock = None
-    splitter = None
 
     def __init__(self, model_path: str, context_len: int):
-        # from optimum.onnxruntime import ORTModelForFeatureExtraction
-        # from transformers import AutoTokenizer
         from sentence_transformers import SentenceTransformer
 
         super().__init__(context_len)
-        # self.lock = threading.Lock()
-        # provider = "CUDAExecutionProvider" if torch.cuda.is_available() else "CPUExecutionProvider"
-        # self.model = ORTModelForFeatureExtraction.from_pretrained(model_path, provider=provider)
-        # self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.context_len = context_len
-
         tokenizer_kwargs = {
             "truncation": True,
-            "max_length": self.context_len,
+            "max_length": context_len,
             "padding": True
         }
-        # NOTE: temporarily disabling this
-        # self.model = SentenceTransformer(model_id, trust_remote_code=True, device="cuda", tokenizer_kwargs=tokenizer_kwargs) \
-        #     if torch.cuda.is_available() else \
-        #     SentenceTransformer(model_id, trust_remote_code=True, backend="onnx", model_kwargs={"file_name": "model_quantized.onnx"}, tokenizer_kwargs=tokenizer_kwargs)
-        # self.model = SentenceTransformer(model_id, trust_remote_code=True, device="cpu", backend="onnx", model_kwargs={"file_name": "model_quantized.onnx"}, tokenizer_kwargs=tokenizer_kwargs)
         self.model = SentenceTransformer(model_path, trust_remote_code=True, cache_folder=os.getenv('HF_HOME'), tokenizer_kwargs=tokenizer_kwargs)
 
     def _embed(self, texts: str|list[str]):
-        # with self.lock:
-        embeddings = self.model.encode(texts, batch_size=len(texts), convert_to_numpy=True)
-        return embeddings
-        # inputs = self.tokenizer(texts, return_tensors='pt', padding=True, max_length=self.context_len, truncation=True)
-        # outputs = self.model(**inputs)
-        # return outputs.last_hidden_state.mean(dim=1).detach().tolist()
-
+        return self.model.encode(texts, batch_size=len(texts), convert_to_numpy=True)
+    
+    
 def from_path(
     embedder_path: str, 
     context_len: int = 512,
