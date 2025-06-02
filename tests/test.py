@@ -154,13 +154,12 @@ def test_collection_and_download():
 
 @log_runtime(logger=logger)
 def test_embedder():
-    data = load_json("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")[:5] 
-    # path = "avsolatorio/GIST-small-Embedding-v0"
-    path = "llama-cpp:///home/soumitsr/codes/pycoffeemaker/.models/gist-small-embedding-v0-q8_0.gguf"
+    from coffeemaker.nlp import embedders, utils
 
-    embedder = embedders.from_path(path, 512)
-    vecs = embedder([d['content'] for d in data])
-    ic(len(vecs))
+    embedder = embedders.from_path(os.getenv('EMBEDDER_PATH'), 512)
+    data = load_json("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
+    inputs = [d['content'] for d in random.sample(data, 5)]       
+    vecs = embedder(inputs)
     ic([(vec[:2]+vec[-1:]) for vec in vecs])
 
 @log_runtime(logger=logger)
@@ -184,6 +183,7 @@ def test_digestor():
     
 
 def test_digest_parser():
+    from coffeemaker.nlp.models import Digest
     responses = [
         "P:AI model training acceleration|Data compression advancements|AIOps framework rollout|Channel sales leadership change|Real-time AI data store|Storage system upgrade|Log data infrastructure replacement|CMO appointment|Sales leadership expansion|File collaboration VP appointment|CRO appointment|RAID integration for AI;E:Alluxio introduces Cache Only Write Mode|Atombeam raises $20M in A+ funding|CloudFabrix rebrands to Fabrix.ai|DDN appoints Wendy Stusrud|GridGain launches GridGain for AI|Hitachi Vantara wins pharmaceutical customer|Hydrolix ships Spark connector for Databricks|MinIO appoints Erik Frieberg|Quobyte expands to New York|Resilio appoints Eric Soffin|Scality appoints Emilio Roman|Xinnor wins customer with BeeGFS integration;D:Atombeam funding: $35M total|$84 patents issued to Atombeam|115 patents pending for Atombeam|HP overlap: Riahi & Ignomirello - 4 years|Read speeds: 29.2 GBps|Write speeds: 25.8 GBps;R:Financial sector (Quobyte expansion);N:Alluxio|Atombeam|CloudFabrix/Fabrix.ai|DDN|GridGain|Hitachi Vantara|Hydrolix|MinIO|Quobyte|Resilio|Scality|Xinnor|Asghar Riahi|Brian Ignomirello|Wendy Stusrud|Erik Frieberg|Emilio Roman|Peter Brennan;C:AI|Storage|Data Management|Cloud Computing|AIOps;S:neutral",
 
@@ -249,7 +249,7 @@ def test_digest_parser():
 
         "P:Trump invites influencers to briefings|Broadening media access is a good idea in principle|Concerns about repeating past briefing practices|Potential to undermine public trust in journalism|Polarization of media expected to increase|Legal threats to journalists may increase|Rise of partisan influencers with dangerous language;E:Karoline Leavitt announces new briefing policy|White House received 7,400 accreditation applications|Trump favored friendly media (Fox News) in first term|Breitbart & Axios selected for first questions|Acosta leaves CNN;D:7400 applications received|2017-2021: Trump's first term|January 28: Acosta's final CNN broadcast;R:United States|White House;N:Donald Trump|Karoline Leavitt|Elon Musk|Tucker Carlson|Jim Acosta|George Stephanopoulos|Taylor Lorenz|Ken Klippenstein|Mark Zuckerberg|Steven Buckley;C:Politics|Media|Journalism|Misinformation|Social Media;S:negative|concerned|critical"
     ]
-    [ic(digestors.parse_compressed_digest(resp)) for resp in responses]
+    [ic(Digest.parse_compressed(resp)) for resp in responses]
 
 @log_runtime
 def test_run_async():
@@ -365,7 +365,9 @@ def test_indexer_orch():
         now().strftime("%Y%m%d"), 
         embedder_path=os.getenv("EMBEDDER_PATH"),
         embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
-        cluster_distance=0.065
+        cluster_distance=0.03,
+        category_defs="./factory/categories.parquet",
+        sentiment_defs="./factory/sentiments.parquet"
     )
     orch.run_indexer()
 
@@ -374,8 +376,6 @@ def test_digestor_orch():
     orch = Orchestrator(
         DB_REMOTE_TEST,
         now().strftime("%Y%m%d"),
-        # azqueue_conn_str=os.getenv('AZQUEUE_CONN_STR'),
-        # input_queue_name=DIGESTOR_IN_QUEUE,
         digestor_path=os.getenv("DIGESTOR_PATH"), 
         digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
         digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
@@ -412,7 +412,7 @@ def test_composer_orch():
 if __name__ == "__main__":
     # test_static_db()
     # test_trend_analysis()
-    # test_collector_orch()
+    test_collector_orch()
     test_indexer_orch()
     # test_digestor_orch()
     # test_composer_orch()

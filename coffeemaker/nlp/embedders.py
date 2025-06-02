@@ -9,15 +9,15 @@ from llama_index.core.text_splitter import SentenceSplitter
 from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 from retry import retry
-from .utils import LLAMA_CPP_PREFIX
+from .utils import LLAMA_CPP_PREFIX, batch_run
 
 logger = logging.getLogger(__name__)
 
-CONTEXT_LEN = 512
-MAX_CHUNKS = 4 # this is an approximation assuming that getting 4 (max) chunks are good enough gauge for generating embedding
+# CONTEXT_LEN = 512
+# MAX_CHUNKS = 4 # this is an approximation assuming that getting 4 (max) chunks are good enough gauge for generating embedding
 
-class _TextSplitter:
-    splitter = None
+class Embeddings(ABC):
+    splitter: SentenceSplitter = None
 
     def __init__(self, context_len: int):
         self.splitter = SentenceSplitter.from_defaults(
@@ -30,38 +30,33 @@ class _TextSplitter:
 
     def _split(self, text: str):
         splits = self.splitter.split_text(text)
-        return random.sample(splits, k=min(len(splits), MAX_CHUNKS))        
+        # return random.sample(splits, k=min(len(splits), MAX_CHUNKS)) 
+        return splits       
 
-    def split_texts(self, texts: list[str]) -> tuple[list[str], list[int], list[int]]:
+    def _create_chunks(self, texts: list[str]) -> tuple[list[str], list[int], list[int]]:
         texts = texts if isinstance(texts, list) else [texts]
         
-        chunks = list(map(self._split, texts))
+        chunks = batch_run(self._split, texts)
         counts = list(map(len, chunks))
         start_idx = [0]*len(chunks)
         for i in range(1,len(counts)):
             start_idx[i] = start_idx[i-1]+counts[i-1]
         return list(chain(*chunks)), start_idx, counts
     
-    def merge_embeddings(self, embeddings, start_idx: list[int], counts: list[int]):
+    def _merge_chunks(self, embeddings, start_idx: list[int], counts: list[int]):
         merged_embeddings = lambda start, count: np.median(embeddings[start:start+count], axis=0).tolist()
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            embeddings = list(executor.map(merged_embeddings, start_idx, counts))
-        return embeddings   
-
-class Embeddings(ABC):
-    splitter: _TextSplitter = None
-
-    def __init__(self, context_len: int):
-        self.splitter = _TextSplitter(context_len)    
+        with ThreadPoolExecutor(max_workers=os.cpu_count(), thread_name_prefix="merge_chunks") as exec:
+            embeddings = list(exec.map(merged_embeddings, start_idx, counts))
+        return embeddings
 
     @abstractmethod
     def _embed(self, texts: list[str]):
         raise NotImplementedError("Subclass must implement abstract method")
     
     def embed(self, texts: str|list[str]):
-        chunks, start_idx, counts = self.splitter.split_texts(texts)
+        chunks, start_idx, counts = self._create_chunks(texts)
         embeddings = self._embed(chunks)
-        embeddings = self.splitter.merge_embeddings(embeddings, start_idx, counts)
+        embeddings = self._merge_chunks(embeddings, start_idx, counts)
         return embeddings[0] if isinstance(texts, str) else embeddings
     
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -153,7 +148,7 @@ class TransformerEmbeddings(Embeddings):
 
 def from_path(
     embedder_path: str, 
-    context_len: int = CONTEXT_LEN,
+    context_len: int = 512,
     base_url: str = None,
     api_key: str = None
 ) -> Embeddings:

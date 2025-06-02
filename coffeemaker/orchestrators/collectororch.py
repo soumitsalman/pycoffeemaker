@@ -207,7 +207,7 @@ class Orchestrator:
                 self.scraping_queue.task_done() 
     
     @log_runtime(logger=log)
-    def run(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/feeds.yaml")):
+    def run(self, sources):
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.run_total = 0
         self.scraping_queue = persistqueue.Queue(".scrapingqueue", tempdir=os.curdir)
@@ -221,7 +221,7 @@ class Orchestrator:
         log.info("total collected", extra={"source": run_id, "num_items": self.run_total})
 
     @log_runtime_async(logger=log)
-    async def run_async(self, sources = os.getenv("COLLECTOR_SOURCES", "./coffeemaker/collectors/feeds.yaml")):
+    async def run_async(self, sources):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.run_total = 0        
         self.scraping_queue = asyncio.Queue()

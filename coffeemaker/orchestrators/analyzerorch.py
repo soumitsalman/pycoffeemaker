@@ -87,10 +87,6 @@ def _make_digest_update(bean: Bean, digest: Digest):
 
 class Orchestrator:
     db: Beansack = None
-    input_queue: QueueClient = None
-    output_queues: list[QueueClient] = None
-    processing_queue: Queue = None
-    indexingexec: ThreadPoolExecutor = None
 
     def __init__(self, 
         mongodb_conn_str: str, 
@@ -98,6 +94,8 @@ class Orchestrator:
         embedder_path: str = None, 
         embedder_context_len: int = 0,
         cluster_distance: float = 0,
+        category_defs: str = None,
+        sentiment_defs: str = None,
         digestor_path: str = None, 
         digestor_base_url: str = None,
         digestor_api_key: str = None,
@@ -106,23 +104,13 @@ class Orchestrator:
         self.db = Beansack(mongodb_conn_str, db_name)
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if cluster_distance: self.cluster_distance = cluster_distance
+        if category_defs: self.categories = StaticDB(category_defs)
+        if sentiment_defs: self.sentiments = StaticDB(sentiment_defs)
         if digestor_path: self.digestor = agents.from_path(
             model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 
             max_input_tokens=digestor_context_len, max_output_tokens=512, 
             system_prompt=DIGESTOR_SYSTEM_PROMPT, output_parser=Digest.parse_compressed, temperature=0.2
         )
-
-    @property
-    def categories(self):
-        if not hasattr(self, '_categories'):
-            self._categories = StaticDB(os.getenv('INDEXER_CATEGORIES', "./coffeemaker/nlp/categories.parquet"))
-        return self._categories
-    
-    @property
-    def sentiments(self):
-        if not hasattr(self, '_sentiments'):
-            self._sentiments = StaticDB(os.getenv('INDEXER_SENTIMENTS', "./coffeemaker/nlp/sentiments.parquet"))
-        return self._sentiments
 
     def embed_beans(self, beans: list[Bean]) -> list[Bean]|None:   
         if not beans: return beans
@@ -139,34 +127,22 @@ class Orchestrator:
     def classify_beans(self, beans: list[Bean]) -> list[Bean]:
         if not beans: return beans
 
-        # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="classification") as executor:
-        #     cats = list(executor.map(lambda bean: self.categories.vector_search(bean.embedding, limit=3), beans))
-        #     sents = list(executor.map(lambda bean: self.sentiments.vector_search(bean.embedding, limit=3), beans))
-        #     updates = list(executor.map(_make_classification_update, beans, cats, sents))
-        # count = self.db.update_beans(updates)
-        # log.info("classified", extra={"source": beans[0].source, "num_items": count})
-
         cats = list(self.indexingexec.map(lambda bean: self.categories.vector_search(bean.embedding, limit=3), beans))
         sents = list(self.indexingexec.map(lambda bean: self.sentiments.vector_search(bean.embedding, limit=3), beans))
         updates = list(self.indexingexec.map(_make_classification_update, beans, cats, sents))
         self._queue_update(updates, "classified", beans[0].source)
         return beans
     
+    find_cluster = lambda self, bean: self.db.vector_search_beans(embedding=bean.embedding, similarity_score=1-self.cluster_distance, filter={K_URL: {"$ne": bean.url} }, limit=MAX_CLUSTER_SIZE, project={K_URL: 1, K_RELATED: 1})
+
     # current clustering approach
     # new beans (essentially beans without cluster gets priority for defining cluster)
     # for each bean without a cluster_id (essentially a new bean) find the related beans within cluster_eps threshold
     # override their current cluster_id (if any) with the new bean's url   
     def cluster_beans(self, beans: list[Bean]):
         if not beans: return beans
-
-        find_cluster = lambda bean: self.db.vector_search_beans(embedding=bean.embedding, similarity_score=1-self.cluster_distance, filter={K_URL: {"$ne": bean.url} }, limit=MAX_CLUSTER_SIZE, project={K_URL: 1, K_RELATED: 1})
-        # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="cluster") as executor:
-        #     clusters = list(executor.map(find_cluster, beans))
-        #     updates = list(executor.map(_make_cluster_update, beans, clusters))
-        # count = self.db.update_beans(updates)
-        # log.info("clustered", extra={"source": beans[0].source, "num_items": count})
         
-        clusters = list(self.indexingexec.map(find_cluster, beans))
+        clusters = list(self.indexingexec.map(self.find_cluster, beans))
         updates = list(self.indexingexec.map(_make_cluster_update, beans, clusters))
         self._queue_update(updates, "clustered", beans[0].source)
         return beans  

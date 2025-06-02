@@ -46,7 +46,7 @@ if __name__ == "__main__":
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME")
         )
-        asyncio.run(orch.run_async())
+        asyncio.run(orch.run_async(os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml")))
     elif mode == "INDEXER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
@@ -54,7 +54,9 @@ if __name__ == "__main__":
             os.getenv("DB_NAME"),
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
-            cluster_distance=float(os.getenv("CLUSTER_EPS", 0))
+            cluster_distance=float(os.getenv("CLUSTER_EPS", 0)),
+            category_defs=os.getenv('INDEXER_CATEGORIES', "./factory/categories.parquet"),
+            sentiment_defs=os.getenv('INDEXER_SENTIMENTS', "./factory/sentiments.parquet")
         )
         orch.run_indexer()
     elif mode == "DIGESTOR":
