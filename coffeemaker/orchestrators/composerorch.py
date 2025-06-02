@@ -19,16 +19,16 @@ log = logging.getLogger(__name__)
 
 MAX_TOPICS =  int(os.getenv('MAX_TOPICS', 32))
 MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', MAX_TOPICS))
-MIN_ITEMS_THRESHOLD = 10
-MAX_CONTENT_LEN = 2048
-LAST_NDAYS = 2
+MAX_ARTICLE_LEN = 2048
 
-GIST_FILTER = {
+LAST_NDAYS = 1
+MIN_BEANS_THRESHOLD = 8
+BEAN_FILTER = {
     K_GIST: {"$exists": True}, 
     K_EMBEDDING: {"$exists": True},  
     K_CREATED: {"$gte": ndays_ago(LAST_NDAYS)}
 }
-GIST_PROJECT = {K_URL: 1, K_EMBEDDING: 1, K_GIST: 1}
+BEAN_PROJECT = {K_URL: 1, K_EMBEDDING: 1, K_GIST: 1}
 # _PAGES = ["Cybersecurity", "Artificial Intelligence", "Government", "Innovation and Startups" ]
 
 make_article_id = lambda title, current: title.lower().replace(' ', '-')+current.strftime("-%Y-%m-%d-%H-%M-%S")+".md"
@@ -83,21 +83,21 @@ class Orchestrator:
         backup_azstorage_conn_str: str = None
     ):
         self.db = Beansack(mongodb_conn_str, db_name)
-        self.news_writer = from_path(composer_path, composer_base_url, composer_api_key, max_input_tokens=composer_context_len, max_output_tokens=MAX_CONTENT_LEN, system_prompt=NEWRECAPT_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False)
-        self.blog_writer = from_path(composer_path, composer_base_url, composer_api_key, max_input_tokens=composer_context_len, max_output_tokens=MAX_CONTENT_LEN, system_prompt=OLD_OPINION_COMPOSER_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False)
+        self.news_writer = from_path(composer_path, composer_base_url, composer_api_key, max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, system_prompt=NEWRECAPT_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False)
+        self.blog_writer = from_path(composer_path, composer_base_url, composer_api_key, max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, system_prompt=OLD_OPINION_COMPOSER_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False)
 
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 
     def _get_beans(self, query: str = None, embedding: list[float] = None,  filter: dict = None):
-        if filter: filter.update(GIST_FILTER)
-        else: filter = GIST_FILTER
+        if filter: filter.update(BEAN_FILTER)
+        else: filter = BEAN_FILTER
 
         if query: embedding = self.embedder.embed(query)
 
-        if embedding: beans = self.db.vector_search_beans(embedding, filter=filter, project=GIST_PROJECT)
-        else: beans = self.db.query_beans(filter, project=GIST_PROJECT)
-        return beans if len(beans) >= MIN_ITEMS_THRESHOLD else None
+        if embedding: beans = self.db.vector_search_beans(embedding, filter=filter, project=BEAN_PROJECT)
+        else: beans = self.db.query_beans(filter, project=BEAN_PROJECT)
+        return beans if len(beans) >= MIN_BEANS_THRESHOLD else None
     
     def extract_clusters(self, beans):
         if not beans: return 
@@ -113,22 +113,11 @@ class Orchestrator:
         for bean, label in zip(beans, labels):
             clusters[label].append(bean)        
         # Step 4: Sort clusters by size descending
-        clusters = sorted(filter(lambda x: len(x) >= MIN_ITEMS_THRESHOLD, clusters), key=len, reverse=True)
+        clusters = sorted(filter(lambda x: len(x) >= MIN_BEANS_THRESHOLD, clusters), key=len, reverse=True)
 
         if clusters: log.info("found topics", extra={'source': self.run_id, 'num_items': len(clusters)})
         else: log.info(f"no topic found", extra={'source': self.run_id, 'num_items': 0})
         return clusters
-    
-    # def extract_topics(self, page, kind = None):
-    #     topic_input = self.create_input(
-    #         # query=f"domain: {page}",
-    #         filter={K_KIND: kind, K_TAGS: lower_case(page)} if kind else None
-    #     )
-    #     if not topic_input: return 
-    #     response = self.topic_extractor.run(topic_input)
-
-    #     self.backup_content("topics", topic_input, response.raw)
-    #     return response
             
     def compose_article(self, beans: list, kind = NEWS):  
         if not beans: return 
@@ -167,5 +156,6 @@ class Orchestrator:
         if not clusters: return    
 
         num_articles = min(MAX_ARTICLES, len(clusters))
-        articles = batch_run(self.compose_article, random.sample(clusters, num_articles))
+        # articles = batch_run(self.compose_article, random.sample(clusters, num_articles))
+        articles = list(map(self.compose_article, random.sample(clusters, num_articles)))
         self.store_beans(articles)

@@ -96,10 +96,6 @@ class Digest(BaseModel):
             if prefix:
                 part = part.removeprefix(prefix)
                 add_to = prefix
-                # if part in [UNDETERMINED]: continue # skip
-                # digest.expr += f";{prefix+part}" if digest.expr else prefix+part
-            # else:
-                # digest.expr += f"|{part}"
             
             if add_to == C_REGIONS:
                 if isalphaorspace(part): digest.regions.append(part)
@@ -116,22 +112,6 @@ class Digest(BaseModel):
         digest.sentiments = clean_up(digest.sentiments)
 
         return digest
-
-class TopicAttributes(BaseModel):
-    frequency: Optional[int] = Field(default=None)
-    keywords: Optional[list[str]] = Field(default=None)
-
-class TopicsExtractionResponse(BaseModel):
-    """Extracted topics of articles that can be written"""
-    raw: str
-    topics: dict[str, TopicAttributes] = Field(description="Dict<Topic,Dict<frequency:Int,keywords:List<String>>>")
-
-    def parse_json(text: str):
-        try: 
-            topics = {k: TopicAttributes(**v) for k,v in json.loads(text).items()}
-            if topics: return TopicsExtractionResponse(raw=text, topics = topics)
-        except json.JSONDecodeError: return
-
 
 M_INTRODUCTION = ["# Introduction", "## Introduction"]
 M_ANALYSIS = ["## Analysis"]
@@ -152,7 +132,7 @@ class GeneratedArticle(BaseModel):
         response = GeneratedArticle(raw=text)
         
         lines = text.splitlines()
-        response.title = lines[0].removeprefix("#").strip()
+        response.title = remove_before(lines[0].removeprefix("##").removeprefix("#"), "Title:").strip()
         add_to = None
         for line in lines[1:]:
             line = line.strip()
