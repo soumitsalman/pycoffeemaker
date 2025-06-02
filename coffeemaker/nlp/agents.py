@@ -98,6 +98,42 @@ class TransformerClient(TextGenerationClient):
         generated_texts = self.tokenizer.batch_decode(output_tokens, skip_special_tokens=False)
         return batch_run(self._extract_response, generated_texts, BATCH_SIZE)
     
+class LlamaCppClient(TextGenerationClient):
+    model = None
+    max_output_tokens = None
+    model = None
+    lock = None
+    
+    def __init__(self, model_path: str, max_input_tokens: int, max_output_tokens: int, temperature: float, json_mode: bool):
+        import threading
+        from llama_cpp import Llama
+
+        self.lock = threading.Lock()
+        self.max_output_tokens = max_output_tokens
+        self.temperature = temperature
+        self.json_mode = json_mode
+        self.model = Llama(
+            model_path=model_path, n_ctx=max_input_tokens*2, # this extension is needed to accommodate occasional overflows
+            n_batch=max_input_tokens, n_threads_batch=NUM_THREADS, n_threads=NUM_THREADS, 
+            embedding=False, verbose=False
+        )             
+  
+    def run(self, prompt: str) -> str:
+        with self.lock:
+            resp = self.model.create_chat_completion(
+                messages=prompt,
+                max_tokens=self.max_output_tokens,
+                response_format={ "type": "json_object" } if self.json_mode else None,
+                temperature=self.temperature,
+                seed=666
+            )['choices'][0]['message']['content'].strip()      
+        return resp
+    
+    def run_batch(self, prompts: list[str]) -> list[str]:
+        with self.lock:
+            results = [self.run(text) for text in prompts]
+        return results
+    
 class SimpleAgent:
     client: TextGenerationClient
     max_input_tokens: int = None

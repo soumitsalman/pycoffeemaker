@@ -48,19 +48,30 @@ def _make_classification_update(bean: Bean, cat: list[str], sent: list[str]):
     bean.categories = cat
     bean.sentiments = sent
     bean.tags = merge_tags(bean.categories, bean.tags)
+
+    # if bean already exists append to it
+    gist = f"C:{'|'.join(cat)};S:{'|'.join(sent)};"
+    if bean.gist: bean.gist += ";"+gist
+    else: bean.gist = gist
+
     return _make_update_one(
         bean.url, 
         {
             K_CATEGORIES: bean.categories,
             K_SENTIMENTS: bean.sentiments,
-            K_TAGS: bean.tags
+            K_TAGS: bean.tags,
+            K_GIST: bean.gist
         }
     )    
 
 def _make_digest_update(bean: Bean, digest: Digest):
     if not digest: return
 
-    bean.gist = f"U:{bean.created.strftime('%Y-%m-%d')};"+digest.raw
+    # if gist already exists then prepend to it
+    gist = f"U:{bean.created.strftime('%Y-%m-%d')};"+digest.raw
+    if bean.gist: bean.gist = gist+";"+bean.gist
+    else: bean.gist = gist
+
     bean.regions = digest.regions
     bean.entities = digest.entities
     bean.tags = merge_tags(digest.regions, digest.entities, bean.tags)
@@ -79,6 +90,7 @@ class Orchestrator:
     input_queue: QueueClient = None
     output_queues: list[QueueClient] = None
     processing_queue: Queue = None
+    indexingexec: ThreadPoolExecutor = None
 
     def __init__(self, 
         mongodb_conn_str: str, 
@@ -127,12 +139,17 @@ class Orchestrator:
     def classify_beans(self, beans: list[Bean]) -> list[Bean]:
         if not beans: return beans
 
-        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="classification") as executor:
-            cats = list(executor.map(lambda bean: self.categories.vector_search(bean.embedding, limit=3), beans))
-            sents = list(executor.map(lambda bean: self.sentiments.vector_search(bean.embedding, limit=2), beans))
-            updates = list(executor.map(_make_classification_update, beans, cats, sents))
-        count = self.db.update_beans(updates)
-        log.info("classified", extra={"source": beans[0].source, "num_items": count})
+        # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="classification") as executor:
+        #     cats = list(executor.map(lambda bean: self.categories.vector_search(bean.embedding, limit=3), beans))
+        #     sents = list(executor.map(lambda bean: self.sentiments.vector_search(bean.embedding, limit=3), beans))
+        #     updates = list(executor.map(_make_classification_update, beans, cats, sents))
+        # count = self.db.update_beans(updates)
+        # log.info("classified", extra={"source": beans[0].source, "num_items": count})
+
+        cats = list(self.indexingexec.map(lambda bean: self.categories.vector_search(bean.embedding, limit=3), beans))
+        sents = list(self.indexingexec.map(lambda bean: self.sentiments.vector_search(bean.embedding, limit=3), beans))
+        updates = list(self.indexingexec.map(_make_classification_update, beans, cats, sents))
+        self._queue_update(updates, "classified", beans[0].source)
         return beans
     
     # current clustering approach
@@ -143,13 +160,15 @@ class Orchestrator:
         if not beans: return beans
 
         find_cluster = lambda bean: self.db.vector_search_beans(embedding=bean.embedding, similarity_score=1-self.cluster_distance, filter={K_URL: {"$ne": bean.url} }, limit=MAX_CLUSTER_SIZE, project={K_URL: 1, K_RELATED: 1})
-        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="cluster") as executor:
-            clusters = list(executor.map(find_cluster, beans))
-            updates = list(executor.map(_make_cluster_update, beans, clusters))
-
-        # count = self.db.update_beans(list(chain(*map(_make_cluster_update, beans, clusters))))
-        count = self.db.update_beans(updates)
-        log.info("clustered", extra={"source": beans[0].source, "num_items": count})
+        # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="cluster") as executor:
+        #     clusters = list(executor.map(find_cluster, beans))
+        #     updates = list(executor.map(_make_cluster_update, beans, clusters))
+        # count = self.db.update_beans(updates)
+        # log.info("clustered", extra={"source": beans[0].source, "num_items": count})
+        
+        clusters = list(self.indexingexec.map(find_cluster, beans))
+        updates = list(self.indexingexec.map(_make_cluster_update, beans, clusters))
+        self._queue_update(updates, "clustered", beans[0].source)
         return beans  
         
     def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:
@@ -166,32 +185,42 @@ class Orchestrator:
             beans = self.db.query_beans(
                 filter, 
                 sort_by=NEWEST,
-                project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_TAGS: 1, K_CREATED: 1, K_TITLE: 1},
+                project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_TAGS: 1, K_CREATED: 1, K_TITLE: 1, K_GIST: 1},
                 limit=BATCH_SIZE
             )
             if beans: yield beans
             else: break
-    
+
+    def _queue_update(self, updates, task, source):
+        def _push_update(updates, task, source):
+            count = self.db.update_beans(updates)
+            log.info(task, extra={"source": source, "num_items": count}) 
+        self.indexingexec.submit(_push_update, updates, task, source)
+            
     @log_runtime(logger=log)
     def run_indexer(self):
         total = 0
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting indexer", extra={"source": run_id, "num_items": 1})
-
         filter = {
             K_CREATED: {"$gte": ndays_ago(LAST_NDAYS)},
             K_EMBEDDING: {"$exists": False},
             K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_INDEXING}
         }
-        for beans in self._dequeue_beans(filter):
-            try:
-                beans = self.embed_beans(indexables(beans))
-                self.classify_beans(beans)
-                self.cluster_beans(beans)
-                total += len(beans)
-            except Exception as e:
-                log.error("failed indexing", extra={"source": run_id, "num_items": len(beans)})
-                log.exception(e, extra={"source": run_id, "num_items": len(beans)})
+
+        self.indexingexec = ThreadPoolExecutor(BATCH_SIZE, thread_name_prefix="indexer")
+        with self.indexingexec: 
+            for beans in self._dequeue_beans(filter):
+                try:
+                    beans = self.embed_beans(indexables(beans))
+                    # self.classify_beans(beans)
+                    # self.cluster_beans(beans)
+                    self.indexingexec.submit(self.classify_beans, beans)
+                    self.indexingexec.submit(self.cluster_beans, beans)
+                    total += len(beans)
+                except Exception as e:
+                    log.error("failed indexing", extra={"source": run_id, "num_items": len(beans)})
+                    log.exception(e, extra={"source": run_id, "num_items": len(beans)})
 
         log.info("total indexed", extra={"source": run_id, "num_items": total})
 

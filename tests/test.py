@@ -363,11 +363,9 @@ def test_indexer_orch():
     orch = Orchestrator(
         DB_REMOTE_TEST,
         now().strftime("%Y%m%d"), 
-        # azqueue_conn_str=os.getenv('AZQUEUE_CONN_STR'),
-        # input_queue_name=INDEXER_IN_QUEUE,
         embedder_path=os.getenv("EMBEDDER_PATH"),
         embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
-        cluster_distance=0.1
+        cluster_distance=0.065
     )
     orch.run_indexer()
 
@@ -411,21 +409,18 @@ def test_composer_orch():
     )
     orch.run()
 
-    # output = """# NBA Conference Finals and Other Sports Highlights\n\n## Introduction\nThe Indiana Pacers advanced to the NBA Finals for the second time in franchise history, defeating the New York Knicks 4-2 in the Eastern Conference Finals. Meanwhile, other sports news includes Shane Bieber\'s rehab progress, the cancellation of "Around the Horn" on ESPN, and various college sports championships.\n\n## Analysis\nThe Pacers\' victory was fueled by strong performances from Pascal Siakam, Tyrese Haliburton, and Obi Toppin. The team\'s ability to control the tempo and capitalize on Knicks\' turnovers was crucial. In other news, the end of "Inside the NBA" on TNT after 36 years has sparked discussions about the future of sports broadcasting. The show\'s move to ESPN and ABC next season will likely bring changes to the format and talent.\n\n## Key Datapoints\n- Pacers won Game 6 against Knicks 125-108\n- Siakam scored 31 points, Haliburton had 21 points and 13 assists\n- Toppin scored 18 points and 6 rebounds\n- Knicks committed 17 turnovers, resulting in 34 points for Pacers\n- "Inside the NBA" on TNT ends after 36 years\n- NBA Finals begin June 5, 2025\n- Oklahoma City Thunder will face Indiana Pacers in NBA Finals\n\n## Verdict\nThe Pacers\' advancement to the NBA Finals marks a significant milestone for the franchise. The team\'s success is a testament to their hard work and determination.\n\n## Keywords\nPacers, NBA Finals, Oklahoma City Thunder, Indiana, New York Knicks, Tyrese Haliburton, Pascal Siakam, "Inside the NBA", TNT, ESPN, ABC"""
-    # ic(GeneratedArticle.parse_markdown(output))
-
 if __name__ == "__main__":
     # test_static_db()
     # test_trend_analysis()
     # test_collector_orch()
-    # test_indexer_orch()
+    test_indexer_orch()
     # test_digestor_orch()
     # test_composer_orch()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
     # test_run_async()
     # test_embedder()
-    test_digestor()
+    # test_digestor()
     # test_digest_parser()
     # test_collection_and_download()
     # test_run_async()

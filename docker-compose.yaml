@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:06-01
+    image: soumitsr/coffeemaker:06-02
     depends_on:
       - localcrawler
       - localdb
@@ -11,7 +11,7 @@ services:
       - DB_NAME=test
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - REMOTE_CRAWLER_URL=http://localcrawler:11235
-      - BATCH_SIZE=32
+      - BATCH_SIZE=64
     env_file:
       - dockertest.env
     networks:
@@ -20,7 +20,7 @@ services:
     mem_limit: 1g
 
   localindexer:
-    image: soumitsr/coffeemaker:06-01
+    image: soumitsr/coffeemaker:06-02
     depends_on:
       - localdb
     environment:
@@ -36,7 +36,7 @@ services:
     mem_limit: 4g
 
   localdigestor:
-    image: soumitsr/coffeemaker:06-01
+    image: soumitsr/coffeemaker:06-02
     depends_on:
       - localdb
     environment:

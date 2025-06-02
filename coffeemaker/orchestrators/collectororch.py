@@ -46,7 +46,7 @@ class Orchestrator:
     def __init__(self, mongodb_conn_str: str, db_name: str):
         self.db = Beansack(mongodb_conn_str, db_name)
         self.apicollector = APICollector()
-        self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), BATCH_SIZE)
+        self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), 16) # NOTE: this value is hard-coded for now
 
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
         if not beans: return beans
@@ -61,16 +61,9 @@ class Orchestrator:
         beans = self._filter_new([bean for bean in beans if bean] if beans else None)
         chatters = [chatter for chatter in chatters if chatter] if chatters else None
 
-        if chatters: self.db.store_chatters(chatters)
         if beans: self.store_beans(source, beans)
-            # self.queue_beans(source, indexables(beans))
+        if chatters: self.db.store_chatters(chatters)
 
-        # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="commit") as executor:
-        #     if chatters: executor.submit(self.db.store_chatters, chatters)
-        #     if beans: 
-        #         beans = _prepare_new(beans)
-        #         executor.submit(self.store_beans, source, beans)
-        #         executor.submit(self.queue_beans, source, indexables(beans))
         return scrapables(beans)
     
     def _triage_scrape(self, source, beans):
@@ -85,16 +78,6 @@ class Orchestrator:
             ]
         )
         log.info("scraped", extra={"source": source, "num_items": count})
-        # self.queue_beans(source, beans) 
-    
-    # def queue_beans(self, source, beans: list[Bean]) -> None:
-    #     if not beans or not self.queues: return
-    #     urls = [bean.url for bean in beans]
-    #     for queue in self.queues:
-    #         list(map(queue.send_message, urls)) 
-    #     # with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="queuing") as executor:
-    #     #     [executor.map(queue.send_message, urls) for queue in self.queues]
-    #     log.info(f"queued", extra={"source": source, "num_items": len(beans)})
 
     def store_beans(self, source: str, beans: list[Bean]):
         if not beans: return
