@@ -35,7 +35,7 @@ class RemoteClient(TextGenerationClient):
     ):
         from openai import OpenAI
 
-        self.openai_client = OpenAI(api_key=api_key, base_url=base_url, timeout=30, max_retries=2)
+        self.openai_client = OpenAI(api_key=api_key, base_url=base_url, timeout=180, max_retries=2)
         self.model_name = model_name
         self.max_output_tokens = max_output_tokens
         self.temperature = temperature

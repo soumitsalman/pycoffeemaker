@@ -32,61 +32,61 @@ create_orch = lambda: Orchestrator(
     digestor_path = os.getenv("DIGESTOR_PATH")
 )
 
-def setup_categories():   
-    updates = []
-    def _make_category_entry(predecessors, entry):        
-        if isinstance(entry, str):
-            path = predecessors + [entry]
-            id = make_id(entry)
-            updates.append({
-                K_ID: id,
-                K_CONTENT: entry, 
-                K_RELATED: list({make_id(item) for item in path}),
-                K_DESCRIPTION: " >> ".join(path), 
-                K_EMBEDDING:  orch.remotesack.embedder.embed( "category: " + (" >> ".join(path))), 
-                K_SOURCE: "__SYSTEM__"
-            })
-            return [id]
-        if isinstance(entry, list):
-            return list(chain(*(_make_category_entry(predecessors, item) for item in entry)))
-        if isinstance(entry, dict):
-            res = []
-            for key, value in entry.items():
-                id = make_id(key)
-                related = list(set(_make_category_entry(predecessors + [key], value)))
-                updates.append({
-                    K_ID: id,
-                    K_CONTENT: key,
-                    K_RELATED: related,
-                    K_SOURCE: "__SYSTEM__"
-                })
-                res.extend(related+[id])
-            return res    
+# def setup_categories():   
+#     updates = []
+#     def _make_category_entry(predecessors, entry):        
+#         if isinstance(entry, str):
+#             path = predecessors + [entry]
+#             id = make_id(entry)
+#             updates.append({
+#                 K_ID: id,
+#                 K_CONTENT: entry, 
+#                 K_RELATED: list({make_id(item) for item in path}),
+#                 K_DESCRIPTION: " >> ".join(path), 
+#                 K_EMBEDDING:  orch.remotesack.embedder.embed( "category: " + (" >> ".join(path))), 
+#                 K_SOURCE: "__SYSTEM__"
+#             })
+#             return [id]
+#         if isinstance(entry, list):
+#             return list(chain(*(_make_category_entry(predecessors, item) for item in entry)))
+#         if isinstance(entry, dict):
+#             res = []
+#             for key, value in entry.items():
+#                 id = make_id(key)
+#                 related = list(set(_make_category_entry(predecessors + [key], value)))
+#                 updates.append({
+#                     K_ID: id,
+#                     K_CONTENT: key,
+#                     K_RELATED: related,
+#                     K_SOURCE: "__SYSTEM__"
+#                 })
+#                 res.extend(related+[id])
+#             return res    
         
-    with open("factory_settings.json", 'r') as file:
-        _make_category_entry([], json.load(file)['categories'])
-    # orch.categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
-    # orch.categorystore.insert_many(list({item[K_ID]: item for item in updates}.values()))   
-    orch.localsack.store_categories(list({item[K_ID]: item for item in updates}.values()))
+#     with open("factory_settings.json", 'r') as file:
+#         _make_category_entry([], json.load(file)['categories'])
+#     # orch.categorystore.delete_many({K_SOURCE: "__SYSTEM__"})
+#     # orch.categorystore.insert_many(list({item[K_ID]: item for item in updates}.values()))   
+#     orch.localsack.store_categories(list({item[K_ID]: item for item in updates}.values()))
 
-def setup_baristas():   
-    baristas = MongoClient(os.getenv("DB_CONNECTION_STRING"))['espresso']['baristas']
-    updates = [
-        {
-            K_ID: "hackernews", 
-            K_TITLE: "Hackernews (by Y Combinator)", 
-            K_DESCRIPTION: "News, blogs and posts shared in Y Combinator's Hackernews.", 
-            K_SOURCE: ychackernews.YC,
-            "owner": "__SYSTEM__"
-        },
-        {
-            K_ID: "reddit", 
-            K_TITLE: "Reddit", 
-            K_DESCRIPTION: "News, blogs and posts shared in Reddit.", 
-            K_SOURCE: redditor.REDDIT,
-            "owner": "__SYSTEM__"
-        }
-    ]
+# def setup_baristas():   
+#     baristas = MongoClient(os.getenv("DB_CONNECTION_STRING"))['espresso']['baristas']
+#     updates = [
+#         {
+#             K_ID: "hackernews", 
+#             K_TITLE: "Hackernews (by Y Combinator)", 
+#             K_DESCRIPTION: "News, blogs and posts shared in Y Combinator's Hackernews.", 
+#             K_SOURCE: YC,
+#             "owner": "__SYSTEM__"
+#         },
+#         {
+#             K_ID: "reddit", 
+#             K_TITLE: "Reddit", 
+#             K_DESCRIPTION: "News, blogs and posts shared in Reddit.", 
+#             K_SOURCE: REDDIT,
+#             "owner": "__SYSTEM__"
+#         }
+#     ]
     # updates = []
     # def make_barista_entry(entry) -> list[str]:        
     #     if isinstance(entry, str):
@@ -116,7 +116,7 @@ def setup_baristas():
     #     json.dump(updates, file)
     
     # baristas.delete_many({"owner": "__SYSTEM__"})
-    baristas.insert_many(list({item[K_ID]: item for item in updates}.values())) 
+    # baristas.insert_many(list({item[K_ID]: item for item in updates}.values())) 
 
 # def embed_categories():
 #     cats = orch.categorystore.find({K_EMBEDDING: {"$exists": False}})
@@ -464,7 +464,7 @@ def port_beans_locally():
     )
     local_orch = Orchestrator(
         "mongodb://localhost:27017/",
-        "test"
+        "20250601"
     )
     
     batch_size = 1000
@@ -473,14 +473,15 @@ def port_beans_locally():
             filter={
                 K_GIST: VALUE_EXISTS,
                 K_EMBEDDING: VALUE_EXISTS,
-                K_CREATED: {"$gte": ndays_ago(15)}
+                K_CREATED: {"$gte": ndays_ago(7)}
             },
             skip=skip,
-            limit=batch_size,
-            projection={K_EMBEDDING: 0}
+            limit=batch_size
         )
-        local_orch.db.beanstore.insert_many(beans, ordered=False)
-        print(datetime.now(), "ported beans|%d", skip)
+        try:
+            local_orch.db.beanstore.insert_many(beans, ordered=False)
+            ic(skip)
+        except Exception as e: ic(e.__class__)
 
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
         executor.map(port, range(0, 100000, batch_size))
@@ -662,5 +663,6 @@ def merge_to_classification():
 # adding data porting logic
 if __name__ == "__main__":
     # merge_to_classification()
-    create_categories_locally()
-    create_sentiments_locally()
+    # create_categories_locally()
+    # create_sentiments_locally()
+    port_beans_locally()

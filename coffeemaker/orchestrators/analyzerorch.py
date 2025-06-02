@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', 16*os.cpu_count()))
 MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
+LAST_NDAYS = 2
 
 is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING)
 is_digestible = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_DIGESTING)
@@ -42,7 +43,6 @@ def _make_cluster_update(bean: Bean, cluster: list[Bean]):
             } 
         } 
     )
-    # return [UpdateOne({K_ID: related_bean.url}, updated_fields) for related_bean in cluster]+[UpdateOne({K_ID: bean.url},  updated_fields)]
 
 def _make_classification_update(bean: Bean, cat: list[str], sent: list[str]): 
     bean.categories = cat
@@ -60,11 +60,9 @@ def _make_classification_update(bean: Bean, cat: list[str], sent: list[str]):
 def _make_digest_update(bean: Bean, digest: Digest):
     if not digest: return
 
-    bean.gist = f"U:{bean.created.strftime('%Y-%m-%d')};"+digest.expr
+    bean.gist = f"U:{bean.created.strftime('%Y-%m-%d')};"+digest.raw
     bean.regions = digest.regions
     bean.entities = digest.entities
-    # bean.categories = digest.categories
-    # bean.sentiments = digest.sentiments
     bean.tags = merge_tags(digest.regions, digest.entities, bean.tags)
     return _make_update_one(
         bean.url,
@@ -72,8 +70,6 @@ def _make_digest_update(bean: Bean, digest: Digest):
             K_GIST: bean.gist,
             K_REGIONS: bean.regions,
             K_ENTITIES: bean.entities,
-            # K_CATEGORIES: bean.categories,
-            # K_SENTIMENTS: bean.sentiments,
             K_TAGS: bean.tags
         }
     )
@@ -88,12 +84,12 @@ class Orchestrator:
         mongodb_conn_str: str, 
         db_name: str, 
         embedder_path: str = None, 
-        embedder_context_len: int = None,
+        embedder_context_len: int = 0,
         cluster_distance: float = 0,
         digestor_path: str = None, 
         digestor_base_url: str = None,
         digestor_api_key: str = None,
-        digestor_context_len: int = None
+        digestor_context_len: int = 0
     ): 
         self.db = Beansack(mongodb_conn_str, db_name)
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
@@ -101,7 +97,7 @@ class Orchestrator:
         if digestor_path: self.digestor = agents.from_path(
             model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 
             max_input_tokens=digestor_context_len, max_output_tokens=512, 
-            system_prompt=DIGESTOR_SYSTEM_PROMPT, output_parser=Digest.parse_compressed_digest, temperature=0.2
+            system_prompt=DIGESTOR_SYSTEM_PROMPT, output_parser=Digest.parse_compressed, temperature=0.2
         )
 
     @property
@@ -175,14 +171,6 @@ class Orchestrator:
             )
             if beans: yield beans
             else: break
-        # for urls in dequeue_batch(self.input_queue, BATCH_SIZE):
-        #     yield self.db.query_beans(
-        #         {
-        #             K_URL: {"$in": urls}, 
-        #             K_CONTENT: VALUE_EXISTS
-        #         }, 
-        #         project={K_URL: 1, K_CONTENT: 1, K_SOURCE: 1, K_TAGS: 1, K_CREATED: 1, K_TITLE: 1}
-        #     )
     
     @log_runtime(logger=log)
     def run_indexer(self):
@@ -191,7 +179,7 @@ class Orchestrator:
         log.info("starting indexer", extra={"source": run_id, "num_items": 1})
 
         filter = {
-            K_CREATED: {"$gte": ndays_ago(2)},
+            K_CREATED: {"$gte": ndays_ago(LAST_NDAYS)},
             K_EMBEDDING: {"$exists": False},
             K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_INDEXING}
         }
@@ -214,9 +202,10 @@ class Orchestrator:
         log.info("starting digestor", extra={"source": run_id, "num_items": 1})
 
         filter = {
-            K_CREATED: {"$gte": ndays_ago(2)},
+            K_CREATED: {"$gte": ndays_ago(LAST_NDAYS)},
             K_GIST: {"$exists": False},
-            K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_DIGESTING}
+            K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_DIGESTING},
+            K_KIND: {"$ne": GENERATED}
         }
         for beans in self._dequeue_beans(filter):
             try:

@@ -16,7 +16,6 @@ M_INSIGHT = "# ACTIONABLE INSIGHT"
 M_FIELDS = [M_GIST, M_CATEGORIES, M_ENTITIES, M_TOPIC, M_REGIONS, M_SUMMARY, M_KEYPOINTS, M_KEYEVENTS, M_DATAPOINTS, M_INSIGHT]
 M_START = "```markdown"
 M_END="```"
-UNDETERMINED = "N/A"
 MARKDOWN_HEADERS = ["# ", "## ", "### ", "#### ", "**"]
 
 C_KEYPOINTS = "P:"
@@ -27,21 +26,20 @@ C_ENTITIES = "N:"
 C_CATEGORIES = "C:"
 C_SENTIMENTS = "S:"
 COMPRESSED_FIELDS = [C_KEYPOINTS, C_KEYEVENTS, C_DATAPOINTS, C_REGIONS, C_ENTITIES, C_CATEGORIES, C_SENTIMENTS]
+UNDETERMINED = ["n/a", "none", "undetermined", "not specified", "not mentioned"]
+
+clean_up = lambda items: list(filter(lambda x: x.lower() not in UNDETERMINED, distinct_items(items)))
 
 class Digest(BaseModel):
-    expr: str
-    keypoints: Optional[list[str]] = Field(default=None)
-    keyevents: Optional[list[str]] = Field(default=None)
-    datapoints: Optional[list[str]] = Field(default=None)
-    categories: Optional[list[str]] = Field(default=None)
-    entities: Optional[list[str]] = Field(default=None)
-    regions: Optional[list[str]] = Field(default=None)
-    sentiments: Optional[list[str]] = Field(default=None)
-
-    gist: Optional[str] = Field(default=None)
-    topic: Optional[str] = Field(default=None)
-    summary: Optional[str] = Field(default=None)
-    insight: Optional[str] = Field(default=None)  
+    raw: str
+    # expr: Optional[str] = Field(default="")
+    keypoints: Optional[list[str]] = Field(default=[])
+    keyevents: Optional[list[str]] = Field(default=[])
+    datapoints: Optional[list[str]] = Field(default=[])
+    categories: Optional[list[str]] = Field(default=[])
+    entities: Optional[list[str]] = Field(default=[])
+    regions: Optional[list[str]] = Field(default=[])
+    sentiments: Optional[list[str]] = Field(default=[])
 
     def parse_json(response: str):  
         try:      
@@ -85,41 +83,37 @@ class Digest(BaseModel):
 
         return digest   
 
-    def parse_compressed_digest(response: str):
+    def parse_compressed(response: str):
         response = response.strip()
         if not response: return
         
-        digest = Digest(expr = "")
+        digest = Digest(raw = response)
         parts = [part.strip() for part in split_parts(response, r'[;\|\n]+') if part != UNDETERMINED]
-        last = None
+        add_to = None
         for part in parts:
             prefix = next((field for field in COMPRESSED_FIELDS if part.startswith(field)), None)
 
             if prefix:
                 part = part.removeprefix(prefix)
-                last = prefix
-                if part == UNDETERMINED: continue # skip
-                digest.expr += f";{prefix+part}" if digest.expr else prefix+part
-            else:
-                digest.expr += f"|{part}"
+                add_to = prefix
+                # if part in [UNDETERMINED]: continue # skip
+                # digest.expr += f";{prefix+part}" if digest.expr else prefix+part
+            # else:
+                # digest.expr += f"|{part}"
             
-            if last == C_REGIONS:
-                if not digest.regions: digest.regions = []
+            if add_to == C_REGIONS:
                 if isalphaorspace(part): digest.regions.append(part)
-            elif last == C_ENTITIES:
-                if not digest.entities: digest.entities = []
+            elif add_to == C_ENTITIES:
                 digest.entities.append(part)
-            elif last == C_CATEGORIES:
-                if not digest.categories: digest.categories = []
+            elif add_to == C_CATEGORIES:
                 if isalphaorspace(part): digest.categories.append(part)
-            elif last == C_SENTIMENTS:
-                if not digest.sentiments: digest.sentiments = []
+            elif add_to == C_SENTIMENTS:
                 if part.isalpha(): digest.sentiments.append(part)
 
-        digest.regions = distinct_items(digest.regions)
-        digest.entities = distinct_items(digest.entities)
-        digest.categories = distinct_items(digest.categories)
-        digest.sentiments = distinct_items(digest.sentiments)
+        digest.regions = clean_up(digest.regions)
+        digest.entities = clean_up(digest.entities)
+        digest.categories = clean_up(digest.categories)
+        digest.sentiments = clean_up(digest.sentiments)
 
         return digest
 
@@ -143,17 +137,19 @@ M_INTRODUCTION = ["# Introduction", "## Introduction"]
 M_ANALYSIS = ["## Analysis"]
 M_TAKEAWAYS = ["## Key Datapoints", "## Key Takeaways", "## Key Trends & Insights"]
 M_VERDICT = ["## Verdict", "## Conclusion"]
-class Composition(BaseModel):
+M_KEYWORDS = ["## Keywords"]
+class GeneratedArticle(BaseModel):
     raw: str
     title: str = Field(default=None)
     intro: list[str] = Field(default=[])
     analysis: list[str] = Field(default=[])
     insights: list[str] = Field(default=[])
     verdict: list[str] = Field(default=[])
+    keywords: Optional[list[str]] = None
 
     def parse_markdown(text: str):
         text = text.strip().removeprefix(M_START).removesuffix(M_END).strip()
-        response = Composition(raw=text)
+        response = GeneratedArticle(raw=text)
         
         lines = text.splitlines()
         response.title = lines[0].removeprefix("#").strip()
@@ -165,11 +161,13 @@ class Composition(BaseModel):
             elif line in M_ANALYSIS: add_to = M_ANALYSIS
             elif line in M_TAKEAWAYS: add_to = M_TAKEAWAYS
             elif line in M_VERDICT: add_to = M_VERDICT
+            elif line in M_KEYWORDS: add_to = M_KEYWORDS
 
             elif add_to == M_INTRODUCTION: response.intro.append(line)
             elif add_to == M_ANALYSIS: response.analysis.append(line)
             elif add_to == M_TAKEAWAYS: response.insights.append(line)
             elif add_to == M_VERDICT: response.verdict.append(line)
+            elif add_to == M_KEYWORDS: response.keywords = [kw.strip().removesuffix('.') for kw in line.split(',')]
 
         return response   
 

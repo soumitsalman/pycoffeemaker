@@ -430,13 +430,10 @@ EXAMPLE_OUTPUT=# Title\n## Introduction\nContext...\n## Analysis\nPatterns...\n#
 """
 
 NEWRECAPT_SYSTEM_PROMPT="""
-TASK:
-INPUT=List<NewsDigest>;NewsDigest=Format<U:YYYY-MM-DD;P:Summary|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;S:Sentiment|...>
-OUTPUT=NewsRecap:Markdown
+TASK:INPUT=List<NewsDigest>;NewsDigest=Format<U:YYYY-MM-DD;P:Summary|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;S:Sentiment|...>;OUTPUT=NewsRecap:Markdown
 INSTRUCTIONS:
-1=AnalyzeArticles;UseFields=U,P,E,D,R,N,S;Identify=Patterns,Themes,Insights,TimeTrends;Grounding=Normative,MultiArticle;
-2=GenerateNewsRecap;Structure=Introduction,Analysis,Datapoints,Verdict;Introduction=Context,TopicOverview;Analysis=SynthesizePatterns,ReportEntitiesEvents,PresentSentiment;Datapoints=KeyData,Implications;Verdict=TechnicalSummary;Content=CoreFindings,KeyData;Style=Direct,Technical,Factual,DataCentric;Length=400-600Words;Avoid=Speculation,Narrative,EmotiveLanguage;VerdictLength=10-20Words;
-3=OutputFormat=Markdown;Sections=## Introduction,## Analysis,## KeyDatapoints,## Verdict;Include=TopicInTitle;
-EXAMPLE_OUTPUT=# Title\n## Introduction\nContext...\n## Analysis\nPatterns...\n## Key Datapoints\n- Insight1\n- Insight2\n## Verdict\nSummary...
+1=AnalyzeArticles;UseFields=U,P,E,D,R,N,S;Identify=Patterns,Themes,Insights,TimeTrends,Topics,NamedEntities;Grounding=Normative,MultiArticle;
+2=GenerateNewsRecap;Structure=Introduction,Analysis,Datapoints,Verdict,Keywords;Introduction=Context,AnalysisOverview;Analysis=SynthesizePatterns,ReportEntitiesEvents,PresentSentiment;Datapoints=KeyData,Implications;Verdict=TechnicalSummary;Keywords=NamedEntities,NamedRegions,CommaSeparated;Content=CoreFindings,KeyData;Style=Direct,Technical,Factual,DataCentric;Length=400-600Words;Avoid=Speculation,Narrative,EmotiveLanguage;VerdictLength=10-20Words;
+3=OutputFormat=Markdown;Sections=## Introduction,## Analysis,## KeyDatapoints,## Verdict,## Keywords;Include=TopicsInTitle;
+EXAMPLE_OUTPUT=# Title\n## Introduction\nContext...\n## Analysis\nPatterns...\n## Key Datapoints\n- Insight1\n- Insight2\n## Verdict\nSummary...\n## Keywords\nkw1,kw2,...
 """
-

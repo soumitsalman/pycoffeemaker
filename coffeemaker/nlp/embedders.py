@@ -153,12 +153,11 @@ class TransformerEmbeddings(Embeddings):
 
 def from_path(
     embedder_path: str, 
-    context_len: int,
+    context_len: int = CONTEXT_LEN,
     base_url: str = None,
     api_key: str = None
 ) -> Embeddings:
     # initialize digestor
-    context_len = context_len or CONTEXT_LEN
     if embedder_path.startswith(LLAMA_CPP_PREFIX):
         return LlamaCppEmbeddings(embedder_path.removeprefix(LLAMA_CPP_PREFIX), context_len)
     elif base_url:

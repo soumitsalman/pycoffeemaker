@@ -25,7 +25,7 @@ logging.getLogger("asyncio").propagate = False
 
 DB_REMOTE_TEST="mongodb://localhost:27017/"
 DB_NAME_TEST="test3"
-QUEUE_PATH_TEST="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;"
+AZSTORAGE_PATH_TEST="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;BlobEndpoint=http://localhost:10000/devstoreaccount1;"
 INDEXER_IN_QUEUE="indexing-queue"
 DIGESTOR_IN_QUEUE="digesting-queue"
 COLLECTOR_OUT_QUEUES=[INDEXER_IN_QUEUE, DIGESTOR_IN_QUEUE]
@@ -163,16 +163,25 @@ def test_embedder():
     ic(len(vecs))
     ic([(vec[:2]+vec[-1:]) for vec in vecs])
 
-@log_runtime
+@log_runtime(logger=logger)
 def test_digestor():
-    inputs = load_json("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-digestor-1.json")
-    digestor = digestors.from_path(
-        "google/gemma-3-27b-it",
-        int(os.getenv("DIGESTOR_CONTEXT_LEN", 8192)), 
+    from coffeemaker.nlp import prompts, agents, models, utils
+    
+    digestor = agents.from_path(
+        "google/gemma-3-12b-it",
         os.getenv("DIGESTOR_BASE_URL"), 
-        os.getenv("DIGESTOR_API_KEY"), 
-        use_short_digest=lambda text: False)
-    [print(resp if resp else "N/A", '\n') for resp in digestor([b['content'] for b in inputs])]
+        os.getenv("DIGESTOR_API_KEY"),
+        max_input_tokens=4096,
+        max_output_tokens=512,
+        system_prompt=prompts.DIGESTOR_SYSTEM_PROMPT,
+        output_parser=models.Digest.parse_compressed,
+        temperature=0.3,
+        json_mode=False
+    )
+    inputs = load_json("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
+    responses = utils.batch_run(digestor.run, random.sample([b['content'] for b in inputs], 5))
+    [ic(r) for r in responses]
+    
 
 def test_digest_parser():
     responses = [
@@ -388,17 +397,35 @@ def test_static_db():
     ic(categories.vector_search(embedder.embed("category/domain classification: artificial intelligence"), limit=10))
     ic(sentiments.vector_search(embedder.embed("sentiment classification: ecstatic"), limit=5))
 
+def test_composer_orch():
+    from coffeemaker.orchestrators.composerorch import Orchestrator
+    from coffeemaker.nlp.models import GeneratedArticle
+    orch = Orchestrator(
+        DB_REMOTE_TEST,
+        "20250601",
+        composer_path="google/gemma-3-27b-it", 
+        composer_base_url=os.getenv("DIGESTOR_BASE_URL"),
+        composer_api_key=os.getenv("DIGESTOR_API_KEY"),
+        composer_context_len=120000,
+        backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
+    )
+    orch.run()
+
+    # output = """# NBA Conference Finals and Other Sports Highlights\n\n## Introduction\nThe Indiana Pacers advanced to the NBA Finals for the second time in franchise history, defeating the New York Knicks 4-2 in the Eastern Conference Finals. Meanwhile, other sports news includes Shane Bieber\'s rehab progress, the cancellation of "Around the Horn" on ESPN, and various college sports championships.\n\n## Analysis\nThe Pacers\' victory was fueled by strong performances from Pascal Siakam, Tyrese Haliburton, and Obi Toppin. The team\'s ability to control the tempo and capitalize on Knicks\' turnovers was crucial. In other news, the end of "Inside the NBA" on TNT after 36 years has sparked discussions about the future of sports broadcasting. The show\'s move to ESPN and ABC next season will likely bring changes to the format and talent.\n\n## Key Datapoints\n- Pacers won Game 6 against Knicks 125-108\n- Siakam scored 31 points, Haliburton had 21 points and 13 assists\n- Toppin scored 18 points and 6 rebounds\n- Knicks committed 17 turnovers, resulting in 34 points for Pacers\n- "Inside the NBA" on TNT ends after 36 years\n- NBA Finals begin June 5, 2025\n- Oklahoma City Thunder will face Indiana Pacers in NBA Finals\n\n## Verdict\nThe Pacers\' advancement to the NBA Finals marks a significant milestone for the franchise. The team\'s success is a testament to their hard work and determination.\n\n## Keywords\nPacers, NBA Finals, Oklahoma City Thunder, Indiana, New York Knicks, Tyrese Haliburton, Pascal Siakam, "Inside the NBA", TNT, ESPN, ABC"""
+    # ic(GeneratedArticle.parse_markdown(output))
+
 if __name__ == "__main__":
     # test_static_db()
     # test_trend_analysis()
     # test_collector_orch()
     # test_indexer_orch()
-    test_digestor_orch()
+    # test_digestor_orch()
+    # test_composer_orch()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
     # test_run_async()
     # test_embedder()
-    # test_digestor()
+    test_digestor()
     # test_digest_parser()
     # test_collection_and_download()
     # test_run_async()

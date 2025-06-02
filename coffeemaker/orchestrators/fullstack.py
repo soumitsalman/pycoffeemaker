@@ -8,11 +8,13 @@ from azure.storage.blob import BlobClient
 from typing import Awaitable
 from pymongo import UpdateOne
 from icecream import ic
+from coffeemaker.nlp.models import Digest
+from coffeemaker.nlp.prompts import DIGESTOR_SYSTEM_PROMPT
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
-from coffeemaker.nlp import digestors, embedders, utils
+from coffeemaker.nlp import agents, embedders, utils
 from coffeemaker.orchestrators.utils import *
 
 log = logging.getLogger(__name__)
@@ -21,13 +23,15 @@ BATCH_SIZE = 16*os.cpu_count()
 MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 256))
 END_OF_STREAM = "END_OF_STREAM"
 
+EMBEDDER_CONTEXT_LEN = 512
+DIGESTOR_CONTEXT_LEN = 4096
+
 is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING) # it has to have some text and the text has to be large enough
 is_scrapable = lambda bean: not (bean.kind == POST or above_threshold(bean, WORDS_THRESHOLD_FOR_SCRAPING)) # if it is a post dont download it or if the body is large enough
 is_storable = lambda bean: bean.embedding and bean.summary # if there is no summary and embedding then no point storing
 indexables = lambda beans: [bean for bean in beans if is_indexable(bean)] if beans else beans
 scrapables = lambda beans: [bean for bean in beans if is_scrapable(bean)] if beans else beans
 storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans 
-# use_summary = lambda text: text and len(text.split()) >= WORDS_THRESHOLD_FOR_DIGESTING # if the body is large enough
 
 def log_beans(level, msg, beans: list[Bean]):
     source_counts = {}
@@ -40,10 +44,6 @@ def log_beans(level, msg, beans: list[Bean]):
     elif level == logging.ERROR: func = log.error
     else: func = log.debug
     [func(msg, extra={"source": source, "num_items": count}) for source, count in source_counts.items()]
-
-# def _read_sources(file: str) -> list[str]:
-#     with open(file, 'r') as file:
-#         return [line.strip() for line in file.readlines() if line.strip()]
 
 async def _enqueue_beans(queue: Queue, source: str, beans: list[Bean]):
     if not beans: return
@@ -69,15 +69,19 @@ class Orchestrator:
         db_name: str, 
         backup_storage_conn_str: str = None, 
         embedder_path: str = os.getenv("EMBEDDER_PATH"), 
-        embedder_context_len: int = int(os.getenv("EMBEDDER_CONTEXT_LEN", embedders.CONTEXT_LEN)),
+        embedder_context_len: int = int(os.getenv("EMBEDDER_CONTEXT_LEN", 512)),
         digestor_path: str = os.getenv("DIGESTOR_PATH"), 
         digestor_base_url: str = os.getenv("DIGESTOR_BASE_URL"),
         digestor_api_key: str = os.getenv("DIGESTOR_API_KEY"),
-        digestor_context_len: int = int(os.getenv("DIGESTOR_CONTEXT_LEN", digestors.CONTEXT_LEN)),
+        digestor_context_len: int = int(os.getenv("DIGESTOR_CONTEXT_LEN", 4096)),
         clus_eps: float = float(os.getenv("CLUSTER_EPS", 3))
     ): 
         self.embedder = embedders.from_path(embedder_path, embedder_context_len)
-        self.digestor = digestors.from_path(digestor_path, digestor_context_len, digestor_base_url, digestor_api_key)
+        self.digestor = agents.from_path(
+            model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 
+            max_input_tokens=digestor_context_len or DIGESTOR_CONTEXT_LEN, max_output_tokens=512, 
+            system_prompt=DIGESTOR_SYSTEM_PROMPT, output_parser=Digest.parse_compressed, temperature=0.2
+        )
 
         self.az_storage_conn_str = backup_storage_conn_str
         self.remotesack = Beansack(remote_db_conn_str, db_name)

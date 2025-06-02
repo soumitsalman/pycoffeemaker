@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:05-30
+    image: soumitsr/coffeemaker:06-01
     depends_on:
       - localcrawler
       - localdb
@@ -11,9 +11,7 @@ services:
       - DB_NAME=test
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - REMOTE_CRAWLER_URL=http://localcrawler:11235
-      - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
-      - OUTPUT_QUEUE_NAMES=indexing-queue,digesting-queue
-      - BATCH_SIZE=64
+      - BATCH_SIZE=32
     env_file:
       - dockertest.env
     networks:
@@ -22,7 +20,7 @@ services:
     mem_limit: 1g
 
   localindexer:
-    image: soumitsr/coffeemaker:05-30
+    image: soumitsr/coffeemaker:06-01
     depends_on:
       - localdb
     environment:
@@ -38,15 +36,13 @@ services:
     mem_limit: 4g
 
   localdigestor:
-    image: soumitsr/coffeemaker:05-30
+    image: soumitsr/coffeemaker:06-01
     depends_on:
       - localdb
     environment:
       - MODE=DIGESTOR
       - DB_NAME=test
       - MONGODB_CONN_STR=mongodb://localdb:27017
-      - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
-      - INPUT_QUEUE_NAME=digesting-queue
       - BATCH_SIZE=8
     env_file:
       - dockertest.env
@@ -56,16 +52,17 @@ services:
     mem_limit: 1g
 
   localcomposer:
-    image: soumitsr/coffeemaker:05-30
+    image: soumitsr/coffeemaker:06-01
     depends_on:
       - localdb
+      - azurite
     environment:
-      - MODE=DIGESTOR
+      - MODE=COMPOSER
       - DB_NAME=test
       - MONGODB_CONN_STR=mongodb://localdb:27017
-      - AZQUEUE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://localqueue:10001/devstoreaccount1;
-      - INPUT_QUEUE_NAME=digesting-queue
-      - BATCH_SIZE=8
+      - AZSTORAGE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      - MAX_TOPIC=4
+      - MAX_ARTICLES=2
     env_file:
       - dockertest.env
     networks:
@@ -88,6 +85,17 @@ services:
       - coffeemaker-bridge
     cpus: 1
     mem_limit: 4g
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+    command: azurite-blob --blobHost 0.0.0.0 
+    networks:
+      - coffeemaker-bridge
+    cpus: 1
+    mem_limit: 1g
 
 networks:
   coffeemaker-bridge:

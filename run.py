@@ -3,7 +3,10 @@ import os
 from datetime import datetime as dt
 import logging
 from dotenv import load_dotenv
-from icecream import ic
+
+EMBEDDER_CONTEXT_LEN = 512
+DIGESTOR_CONTEXT_LEN = 4096
+COMPOSER_CONTEXT_LEN = 110760
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR+"/.env")
@@ -50,7 +53,7 @@ if __name__ == "__main__":
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
             embedder_path=os.getenv("EMBEDDER_PATH"),
-            embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
+            embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
             cluster_distance=float(os.getenv("CLUSTER_EPS", 0))
         )
         orch.run_indexer()
@@ -62,21 +65,19 @@ if __name__ == "__main__":
             digestor_path=os.getenv("DIGESTOR_PATH"), 
             digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
             digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
-            digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN"))
+            digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN))
         )
         orch.run_digestor()
     elif mode == "COMPOSER":
-        from writers import Orchestrator
+        from coffeemaker.orchestrators.composerorch import Orchestrator
         orch = Orchestrator(
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
-            embedder_path=os.getenv("EMBEDDER_PATH"),
-            embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")),
-            bean_distance=float(os.getenv("BEAN_DISTANCE", 0)),
-            writer_path=os.getenv("WRITER_PATH"), 
-            writer_base_url=os.getenv("WRITER_BASE_URL"),
-            writer_api_key=os.getenv("WRITER_API_KEY"),
-            writer_context_len=int(os.getenv("WRITER_CONTEXT_LEN"))
+            composer_path=os.getenv("COMPOSER_PATH"), 
+            composer_base_url=os.getenv("COMPOSER_BASE_URL"),
+            composer_api_key=os.getenv("COMPOSER_API_KEY"),
+            composer_context_len=int(os.getenv("COMPOSER_CONTEXT_LEN", COMPOSER_CONTEXT_LEN)),
+            backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
         )
         orch.run()
     else:
