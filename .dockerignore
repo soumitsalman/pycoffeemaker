@@ -21,4 +21,7 @@ __queuestorage__
 __pycache__
 *.log
 flagged
-unsloth*
+coffeemaker/nlp/foundry
+coffeemaker/nlp/test
+coffeemaker/nlp/.gitignore
+

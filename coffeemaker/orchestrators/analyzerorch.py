@@ -8,9 +8,9 @@ from azure.storage.queue import QueueClient
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.staticdb import *
-from coffeemaker.nlp import embedders, agents
-from coffeemaker.nlp.models import Digest
-from coffeemaker.nlp.prompts import DIGESTOR_SYSTEM_PROMPT
+from coffeemaker.nlp.src import embedders, agents
+from coffeemaker.nlp.src.models import Digest
+from coffeemaker.nlp.src.prompts import DIGESTOR_SYSTEM_PROMPT
 from coffeemaker.orchestrators.utils import *
 from icecream import ic
 

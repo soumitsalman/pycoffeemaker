@@ -4,11 +4,11 @@ import random
 
 import numpy as np
 from sklearn.cluster import KMeans
-from coffeemaker.nlp.prompts import *
-from coffeemaker.nlp.models import *
-from coffeemaker.nlp.utils import *
-from coffeemaker.nlp.agents import *
-from coffeemaker.nlp import embedders
+from coffeemaker.nlp.src.prompts import *
+from coffeemaker.nlp.src.models import *
+from coffeemaker.nlp.src.utils import *
+from coffeemaker.nlp.src.agents import *
+from coffeemaker.nlp.src import embedders
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.orchestrators.utils import *

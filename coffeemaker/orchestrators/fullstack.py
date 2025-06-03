@@ -8,13 +8,13 @@ from azure.storage.blob import BlobClient
 from typing import Awaitable
 from pymongo import UpdateOne
 from icecream import ic
-from coffeemaker.nlp.models import Digest
-from coffeemaker.nlp.prompts import DIGESTOR_SYSTEM_PROMPT
+from coffeemaker.nlp.src.models import Digest
+from coffeemaker.nlp.src.prompts import DIGESTOR_SYSTEM_PROMPT
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
-from coffeemaker.nlp import agents, embedders, utils
+from coffeemaker.nlp.src import agents, embedders, utils
 from coffeemaker.orchestrators.utils import *
 
 log = logging.getLogger(__name__)
