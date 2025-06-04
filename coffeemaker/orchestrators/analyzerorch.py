@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()))
 MAX_RELATED = int(os.getenv('MAX_RELATED', 128))
 MAX_RELATED_NDAYS = int(os.getenv('MAX_RELATED_NDAYS', 7))
-MAX_RELATED_EPS=float(os.getenv("MAX_RELATED_EPS", 0.4))
+MAX_RELATED_EPS=float(os.getenv("MAX_RELATED_EPS", 0.2))
 MAX_ANALYZE_NDAYS =  int(os.getenv('MAX_ANALYZE_NDAYS', 2))
 
 index_storables = lambda beans: [bean for bean in beans if bean.embedding]

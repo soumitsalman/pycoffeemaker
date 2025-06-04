@@ -308,7 +308,7 @@ if __name__ == "__main__":
     # test_collector_and_scraper()
 
     # test_collector_orch()
-    test_indexer_orch()
+    # test_indexer_orch()
     test_digestor_orch()
     test_composer_orch()
     # test_run_async()
