@@ -1,9 +1,3 @@
-llama-cpp-python
-sentence-transformers
-openai
-llama-index
-tiktoken
-numpy
 retry
 requests
 nest-asyncio
@@ -20,5 +14,5 @@ persist-queue
 icecream
 python-dotenv
 setuptools
-pandas
 pyarrow
+pandas

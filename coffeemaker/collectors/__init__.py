@@ -2,7 +2,6 @@ USER_AGENT = "Cafecito-Coffeemaker/v0.2.0+https://github.com/soumitsalman/pycoff
 TIMEOUT =  60 # 1 minute
 RATELIMIT_WAIT = 600 # 600 seconds / 10 minutes
 
-__all__ = ['collector']  # Specify modules to be exported
 
 # from .rssfeed import *
 # from .ychackernews import *
@@ -10,3 +9,5 @@ __all__ = ['collector']  # Specify modules to be exported
 # from .espresso import *
 # from .individual import *
 from .collector import *
+
+__all__ = ['extract_base_url', 'extract_domain', 'parse_date', 'parse_sources', 'APICollector', 'WebScraper', 'REDDIT', 'HACKERNEWS']  # Specify modules to be exported

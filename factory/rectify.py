@@ -13,10 +13,9 @@ from urllib.parse import urljoin
 from itertools import chain
 from icecream import ic
 from datetime import datetime, timedelta
-from pymongo import MongoClient, UpdateOne
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.mongosack import VALUE_EXISTS
-from coffeemaker.pybeansack.ducksack import SQL_NOT_WHERE_URLS
+from coffeemaker.pybeansack.mongosack import *
+from coffeemaker.pybeansack.ducksack import *
 from coffeemaker.orchestrators.fullstack import Orchestrator
 
 K_RELATED = "related"
@@ -329,8 +328,6 @@ def remove_non_functional_feeds():
     with open(yaml_path, 'w') as file:
         yaml.dump(feeds_data, file)
 
-
-
 to_ignore = [
 "feed://bjango.com/rss/articles.xml",
 "http://www.belgrade-news.com/search/?f=rss&t=article&c=business&l=50&s=start_time&sd=desc",
@@ -456,35 +453,7 @@ to_ignore = [
 ]
 
 
-def port_beans_locally():
-    from coffeemaker.orchestrators.collectororch import Orchestrator
-    orch = Orchestrator(
-        os.getenv('MONGODB_CONN_STR'),
-        "test"
-    )
-    local_orch = Orchestrator(
-        "mongodb://localhost:27017/",
-        "20250601"
-    )
-    
-    batch_size = 1000
-    def port(skip):
-        beans = orch.db.beanstore.find(
-            filter={
-                K_GIST: VALUE_EXISTS,
-                K_EMBEDDING: VALUE_EXISTS,
-                K_CREATED: {"$gte": ndays_ago(7)}
-            },
-            skip=skip,
-            limit=batch_size
-        )
-        try:
-            local_orch.db.beanstore.insert_many(beans, ordered=False)
-            ic(skip)
-        except Exception as e: ic(e.__class__)
 
-    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-        executor.map(port, range(0, 100000, batch_size))
 
 def port_pages_locally():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
@@ -665,4 +634,5 @@ if __name__ == "__main__":
     # merge_to_classification()
     # create_categories_locally()
     # create_sentiments_locally()
-    port_beans_locally()
+    # port_beans_locally()
+    pass

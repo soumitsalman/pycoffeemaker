@@ -54,7 +54,6 @@ if __name__ == "__main__":
             os.getenv("DB_NAME"),
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
-            cluster_distance=float(os.getenv("CLUSTER_EPS", 0)),
             category_defs=os.getenv('INDEXER_CATEGORIES', "./factory/categories.parquet"),
             sentiment_defs=os.getenv('INDEXER_SENTIMENTS', "./factory/sentiments.parquet")
         )

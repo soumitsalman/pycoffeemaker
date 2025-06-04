@@ -10,7 +10,7 @@ from azure.storage.queue import QueueClient
 from pymongo import UpdateOne
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
-from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
+from coffeemaker.collectors import APICollector, WebScraper, parse_sources
 from coffeemaker.orchestrators.utils import *
 
 END_OF_STREAM = "END_OF_STREAM"

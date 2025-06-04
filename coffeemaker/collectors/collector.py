@@ -145,11 +145,6 @@ async def _fetch_json_async(session: aiohttp.ClientSession, url: str):
         log.error(e, extra={'source': url, "num_items": 1})
 
 def _fetch_json(url: str):
-    # @retry(tries=2, delay=10, jitter=(5, 10))
-    # def _fetch():
-    #     resp = requests.get(content_url, headers=JSON_REQUEST_HEADERS, timeout=TIMEOUT)
-    #     resp.raise_for_status()
-    #     return resp.json()
     try: 
         resp = requests.get(url, headers=JSON_REQUEST_HEADERS, timeout=TIMEOUT)
         resp.raise_for_status()
@@ -243,21 +238,11 @@ class APICollector:
         resp.raise_for_status()  # Raise exception for bad status codes
         feed = feedparser.parse(BytesIO(resp.content))
                 
-        if feed.entries: 
+        if feed.entries and (feed.feed.get('language') or 'en').startswith('en'): 
             return self._return_collected(
                 extract_source(feed.feed.get('link') or feed.entries[0].link) or url, 
                 [self._from_rssfeed(entry, NEWS) for entry in feed.entries]
             )
-        # try:
-        #     resp = requests.get(url, headers=RSS_REQUEST_HEADERS, timeout=TIMEOUT)  # Set timeout to 10 seconds
-        #     resp.raise_for_status()  # Raise exception for bad status codes
-        #     feed = feedparser.parse(BytesIO(resp.content))
-                    
-        #     if feed.entries: 
-        #         source = extract_source(feed.feed.get('link') or feed.entries[0].link)
-        #         collected = [self._from_rssfeed(entry, NEWS) for entry in feed.entries]
-        # except Exception as e: log.error(e, extra={'source': url, "num_items": 1})
-        # return self._return_collected(source, collected)
  
     ### rss feed related utilities  ###
     async def collect_rssfeed_async(self, url: str, default_kind: str = NEWS) -> list[Bean]|list[tuple[Bean, Chatter]]:
@@ -266,22 +251,12 @@ class APICollector:
             resp.raise_for_status()
             feed = feedparser.parse(await resp.text())
                 
-        if feed.entries: 
+        # assume that if language is not mentioned, it is english
+        if feed.entries and (feed.feed.get('language') or 'en').startswith('en'): 
             return self._return_collected(
                 extract_source(feed.feed.get('link') or feed.entries[0].link) or url, 
                 [self._from_rssfeed(entry, NEWS) for entry in feed.entries]
             )
-        # try:
-        #     async with aiohttp.ClientSession(headers=RSS_REQUEST_HEADERS, timeout=aiohttp.ClientTimeout(total=TIMEOUT), raise_for_status=True) as session:
-        #         resp = await session.get(url)
-        #         # resp.raise_for_status()
-        #         feed = feedparser.parse(await resp.text())
-
-        #         if feed.entries:
-        #             source = extract_source(feed.feed.get('link') or feed.entries[0].link)
-        #             collected = [self._from_rssfeed(entry, default_kind) for entry in feed.entries]
-        # except Exception as e: log.error(e, extra={'source': url, "num_items": 1})
-        # return self._return_collected(source, collected)
 
     def _from_rssfeed(self, entry: feedparser.FeedParserDict, default_kind: str) -> tuple[Bean, Chatter]:
         current_time = now()
@@ -331,10 +306,7 @@ class APICollector:
             sr = self.reddit_client.subreddit(subreddit_name)
             return [self._from_reddit_post(post, subreddit_name, default_kind) for post in sr.hot(limit=25) if not _excluded_url(post.url)]
         
-        return self._return_collected(subreddit_name, _collect()) 
-        # try: collected = _collect()
-        # except Exception as e: log.error(e, extra={'source': subreddit_name, "num_items": 1})
-        # return self._return_collected(subreddit_name, collected)       
+        return self._return_collected(subreddit_name, _collect())      
     
     ### reddit related utilities ###
     async def collect_subreddit_async(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:

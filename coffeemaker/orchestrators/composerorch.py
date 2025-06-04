@@ -3,40 +3,34 @@ import os
 import random
 
 import numpy as np
-from sklearn.cluster import KMeans
-from coffeemaker.nlp.src.prompts import *
-from coffeemaker.nlp.src.models import *
-from coffeemaker.nlp.src.utils import *
-from coffeemaker.nlp.src.agents import *
-from coffeemaker.nlp.src import embedders
+from coffeemaker.nlp import OPINION_SYSTEM_PROMPT, NEWSRECAP_SYSTEM_PROMPT, agents, embedders, SimpleAgent, GeneratedArticle, batch_run
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.orchestrators.utils import *
-from azure.storage.blob import BlobType
 from icecream import ic
 
 log = logging.getLogger(__name__)
 
-MAX_TOPICS =  int(os.getenv('MAX_TOPICS', 32))
-MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', MAX_TOPICS))
+CLUSTER_EPS = float(os.getenv('CLUSTER_EPS', 1.4))
+MIN_CLUSTER_SIZE = int(os.getenv('MIN_CLUSTER_SIZE', 24))
+MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 512))
+MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', 8))
 MAX_ARTICLE_LEN = 2048
 
 LAST_NDAYS = 1
-MIN_BEANS_THRESHOLD = 8
 BEAN_FILTER = {
     K_GIST: {"$exists": True}, 
     K_EMBEDDING: {"$exists": True},  
     K_CREATED: {"$gte": ndays_ago(LAST_NDAYS)}
 }
-BEAN_PROJECT = {K_URL: 1, K_EMBEDDING: 1, K_GIST: 1}
-# _PAGES = ["Cybersecurity", "Artificial Intelligence", "Government", "Innovation and Startups" ]
+BEAN_PROJECT = {K_URL: 1, K_EMBEDDING: 1, K_GIST: 1, K_CATEGORIES: 1, K_TITLE: 1}
 
 make_article_id = lambda title, current: title.lower().replace(' ', '-')+current.strftime("-%Y-%m-%d-%H-%M-%S")+".md"
 def _make_bean(comp: GeneratedArticle): 
     current = now()
     bean_id = make_article_id(comp.title, current)
     summary = "\n\n".join(comp.intro)
-    content = "\n\n".join(comp.intro+comp.insights+comp.analysis+comp.verdict)
+    content = comp.raw
     return GeneratedBean(
         _id=bean_id,
         url=bean_id,
@@ -48,7 +42,7 @@ def _make_bean(comp: GeneratedArticle):
         summary=summary,
         content=content,
         entities=comp.keywords,
-        tags=[kw.lower() for kw in comp.keywords] if comp.keywords else None,
+        tags=merge_tags(comp.keywords),
         num_words_in_title=num_words(comp.title),
         num_words_in_summary=num_words(summary),
         num_words_in_content=num_words(content),
@@ -60,7 +54,8 @@ def _make_bean(comp: GeneratedArticle):
         intro=comp.intro,
         analysis=comp.analysis,
         insights=comp.insights,
-        verdict=comp.verdict
+        verdict=comp.verdict,
+        predictions=comp.predictions
     )
 
 class Orchestrator:
@@ -83,13 +78,13 @@ class Orchestrator:
         backup_azstorage_conn_str: str = None
     ):
         self.db = Beansack(mongodb_conn_str, db_name)
-        self.news_writer = from_path(composer_path, composer_base_url, composer_api_key, max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, system_prompt=NEWRECAPT_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False)
-        self.blog_writer = from_path(composer_path, composer_base_url, composer_api_key, max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, system_prompt=OLD_OPINION_COMPOSER_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False)
+        self.news_writer = agents.from_path(composer_path, composer_base_url, composer_api_key, max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, system_prompt=NEWSRECAP_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False)
+        self.blog_writer = agents.from_path(composer_path, composer_base_url, composer_api_key, max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, system_prompt=OPINION_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False)
 
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 
-    def _get_beans(self, query: str = None, embedding: list[float] = None,  filter: dict = None):
+    def get_beans(self, query: str = None, embedding: list[float] = None,  filter: dict = None):
         if filter: filter.update(BEAN_FILTER)
         else: filter = BEAN_FILTER
 
@@ -97,33 +92,55 @@ class Orchestrator:
 
         if embedding: beans = self.db.vector_search_beans(embedding, filter=filter, project=BEAN_PROJECT)
         else: beans = self.db.query_beans(filter, project=BEAN_PROJECT)
-        return beans if len(beans) >= MIN_BEANS_THRESHOLD else None
+        log.info("found beans", extra={"source": self.run_id, "num_items": len(beans)})
+        return beans if len(beans) >= MIN_CLUSTER_SIZE else None
     
-    def extract_clusters(self, beans):
+    def _kmeans_cluster(self, beans)-> list[list[Bean]]:
+        from sklearn.cluster import KMeans
+        n_clusters = len(beans)//(MIN_CLUSTER_SIZE>>1)
+        return KMeans(n_clusters=n_clusters, random_state=666)
+    
+    def _hdbscan_cluster(self, beans):
+        from hdbscan import HDBSCAN
+        return HDBSCAN(
+            min_cluster_size=MIN_CLUSTER_SIZE, 
+            min_samples=2, 
+            max_cluster_size=MAX_CLUSTER_SIZE, 
+            cluster_selection_epsilon_max=CLUSTER_EPS
+        )
+            
+    def _dbscan_cluster(self, beans):
+        from sklearn.cluster import DBSCAN
+        return DBSCAN(min_samples=MIN_CLUSTER_SIZE>>1, eps=CLUSTER_EPS)
+    
+    def _affinity_cluster(self, beans):
+        from sklearn.cluster import AffinityPropagation
+        return AffinityPropagation(copy=False, damping=0.55, random_state=666)
+
+    def cluster_beans(self, beans: list[Bean], method: str = "KMEANS")-> list[list[Bean]]:
         if not beans: return 
 
-        log.info("found beans", extra={"source": self.run_id, "num_items": len(beans)})
-        # Step 1: Prepare embeddings matrix
-        embeddings = np.array([bean.embedding for bean in beans])
-        # Step 2: Fit KMeans
-        kmeans = KMeans(n_clusters=MAX_TOPICS, random_state=666, n_init='auto')
-        labels = kmeans.fit_predict(embeddings)        
-        # Step 3: Group beans by cluster
-        clusters = [[] for _ in range(MAX_TOPICS)]
-        for bean, label in zip(beans, labels):
-            clusters[label].append(bean)        
-        # Step 4: Sort clusters by size descending
-        clusters = sorted(filter(lambda x: len(x) >= MIN_BEANS_THRESHOLD, clusters), key=len, reverse=True)
+        if method == "HDBSCAN": method = self._hdbscan_cluster(beans) 
+        elif method == "DBSCAN": method = self._dbscan_cluster(beans) 
+        elif method == "AFFINITY": method = self._affinity_cluster(beans)
+        else: method = self._kmeans_cluster(beans)
 
-        if clusters: log.info("found topics", extra={'source': self.run_id, 'num_items': len(clusters)})
-        else: log.info(f"no topic found", extra={'source': self.run_id, 'num_items': 0})
-        return clusters
-            
+        labels = method.fit_predict(np.array([bean.embedding for bean in beans]))
+        clusters = {}
+        for bean, label in zip(beans, labels):
+            if label != -1: clusters.setdefault(label, []).append(bean)
+        clusters = clusters.values()
+
+        if clusters: log.info("found clusters", extra={'source': self.run_id, 'num_items': len(clusters)})
+        else: log.info(f"no cluster found", extra={'source': self.run_id, 'num_items': 0})
+        # return sorted(clusters, key=len)
+        return list(filter(lambda x: MIN_CLUSTER_SIZE <= len(x) <= MAX_ARTICLE_LEN, clusters))
+
     def compose_article(self, beans: list, kind = NEWS):  
         if not beans: return 
         # NOTE: this is an internal hack to take random items when there are too many items
         if len(beans) > 512: beans = random.sample(beans, 512) 
-        input_text = "\n".join([bean.gist.replace(' ', '') for bean in beans])
+        input_text = "\n".join([bean.gist for bean in beans])
         if kind == BLOG: response = self.blog_writer.run(input_text)
         else: response = self.news_writer.run(input_text)
 
@@ -134,15 +151,13 @@ class Orchestrator:
         if not self.backup_container or not response_text: return 
         trfile = prefix+"-"+now().strftime("%Y-%m-%d")+".jsonl"
         try: self.backup_container.upload_blob(trfile, json.dumps({'input': input_text, 'output': response_text})+"\n", BlobType.APPENDBLOB)           
-        except Exception as e:
-            ic(e) 
-            log.warning("backup failed", extra={'source': trfile, 'num_items': 1})
+        except Exception as e: log.warning("backup failed", extra={'source': trfile, 'num_items': 1})
 
     def store_beans(self, responses: list):      
         if not responses: return
 
         beans = list(map(_make_bean, responses))
-        batch_run(lambda bean: self.backup_container.upload_blob(bean.url, bean.content, BlobType.BLOCKBLOB), beans)
+        batch_upload(self.backup_container, beans)
         count = self.db.store_beans(beans)
         log.info("stored articles", extra={'source': self.run_id, 'num_items': count})
         return beans
@@ -151,11 +166,11 @@ class Orchestrator:
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
 
-        beans = self._get_beans(None, None, filter={K_KIND: NEWS})
-        clusters = self.extract_clusters(beans)
+        beans = self.get_beans(None, None, filter={K_KIND: NEWS})
+        clusters = self.cluster_beans(beans, "HDBSCAN")
         if not clusters: return    
 
         num_articles = min(MAX_ARTICLES, len(clusters))
-        # articles = batch_run(self.compose_article, random.sample(clusters, num_articles))
-        articles = list(map(self.compose_article, random.sample(clusters, num_articles)))
+        articles = batch_run(self.compose_article, random.sample(clusters, num_articles))
+        # articles = list(map(self.compose_article, random.sample(clusters, num_articles)))
         self.store_beans(articles)
