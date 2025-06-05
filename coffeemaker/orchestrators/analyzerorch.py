@@ -1,3 +1,4 @@
+from itertools import chain
 import os
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -24,17 +25,22 @@ _make_update_one = lambda url, update_fields: UpdateOne({K_ID: url}, { "$set": {
 def _make_cluster_update(bean: Bean, cluster: list[Bean]): 
     bean.cluster_id = bean.url
     bean.related = len(cluster)
-    return UpdateMany(
-        {
-            K_ID: field_value([bean.url]+cluster)
-        },
-        { 
-            "$set": { 
-                K_CLUSTER_ID: bean.url,
-                K_RELATED: bean.related
-            } 
-        } 
-    )
+    update_fields = { 
+        K_CLUSTER_ID: bean.url,
+        K_RELATED: bean.related
+    } 
+    return list(map(_make_update_one, [bean.url]+cluster, [update_fields]*(len(cluster)+1)))
+    # return UpdateMany(
+    #     {
+    #         K_ID: field_value([bean.url]+cluster)
+    #     },
+    #     { 
+    #         "$set": { 
+    #             K_CLUSTER_ID: bean.url,
+    #             K_RELATED: bean.related
+    #         } 
+    #     } 
+    # )
 
 def _make_classification_update(bean: Bean, cat: list[str], sent: list[str]): 
     bean.categories = cat
@@ -90,6 +96,8 @@ class Orchestrator:
     ): 
         self.db = Beansack(mongodb_conn_str, db_name)
         self.cluster_db = StaticDB()
+        self.dbworker = ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="dbupdater")
+
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if category_defs: self.categories = StaticDB(filepath=category_defs)
         if sentiment_defs: self.sentiments = StaticDB(filepath=sentiment_defs)
@@ -110,9 +118,9 @@ class Orchestrator:
             bean.embedding = embedding
         beans = index_storables(beans)
 
-        self.cluster_db.store_items(json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
-        count = self.db.update_bean_fields(beans, [K_EMBEDDING])
-        log.info("embedded", extra={"source": beans[0].source, "num_items": count})
+        self.dbworker.submit(self.cluster_db.store_items, json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
+        self.dbworker.submit(self.db.update_bean_fields, beans, [K_EMBEDDING])
+        log.info("embedded", extra={"source": beans[0].source, "num_items": len(beans)})
         return beans
 
     def classify_beans(self, beans: list[Bean]) -> list[Bean]:
@@ -142,7 +150,7 @@ class Orchestrator:
             clusters = list(exec.map(self.find_cluster, beans))
 
         # these are simple calculations. threading causes more time loss
-        updates = list(map(_make_cluster_update, beans, clusters))
+        updates = list(chain(*map(_make_cluster_update, beans, clusters)))
         self._push_update(updates, "clustered", beans[0].source)
         return beans  
         
@@ -179,8 +187,8 @@ class Orchestrator:
         def push():
             count = self.db.update_beans(updates)
             log.info(task, extra={"source": source, "num_items": count}) 
-        # self.indexingexec.submit(push)
-        push()
+        self.dbworker.submit(push)
+        # push()
 
     def _hydrate_cluster_db(self):
         beans = list(self.db.beanstore.find(
@@ -205,18 +213,19 @@ class Orchestrator:
 
         log.info("starting indexer", extra={"source": run_id, "num_items": 1})
         
-        self._hydrate_cluster_db()
-        for beans in self.stream_beans(filter):
-            try:
-                beans = self.embed_beans(beans)
-                self.classify_beans(beans)
-                self.cluster_beans(beans)
-                total += len(beans)
-            except Exception as e:
-                log.error("failed indexing", extra={"source": run_id, "num_items": len(beans)})
-                log.exception(e, extra={"source": run_id, "num_items": len(beans)})
+        with self.dbworker:
+            self.dbworker.submit(self._hydrate_cluster_db)
+            for beans in self.stream_beans(filter):
+                try:
+                    beans = self.embed_beans(beans)
+                    self.classify_beans(beans)
+                    self.cluster_beans(beans)
+                    total += len(beans)
+                except Exception as e:
+                    log.error("failed indexing", extra={"source": run_id, "num_items": len(beans)})
+                    log.exception(e, extra={"source": run_id, "num_items": len(beans)})
 
-        log.info("total indexed", extra={"source": run_id, "num_items": total})
+            log.info("total indexed", extra={"source": run_id, "num_items": total})
 
     @log_runtime(logger=log)
     def run_digestor(self):

@@ -302,13 +302,13 @@ def test_composer_orch():
        
 
 if __name__ == "__main__":
-    # hydrate_test_db()
+    hydrate_test_db()
     # test_static_db()
     # test_trend_analysis()
     # test_collector_and_scraper()
 
-    test_collector_orch()
-    test_indexer_orch()
+    # test_collector_orch()
+    # test_indexer_orch()
     # test_digestor_orch()
     # test_composer_orch()
     # test_run_async()
