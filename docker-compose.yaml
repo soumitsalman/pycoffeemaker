@@ -20,15 +20,15 @@ services:
     mem_limit: 1g
 
   localindexer:
-    image: soumitsr/coffeemaker:06-05
+    image: soumitsr/coffeemaker:06-05-2
     depends_on:
       - localdb
     environment:
       - MODE=INDEXER
       - DB_NAME=test
       - MONGODB_CONN_STR=mongodb://localdb:27017
-      - BATCH_SIZE=64
-      - MAX_RELATED_EPS=0.1
+      - BATCH_SIZE=16
+      - MAX_RELATED_EPS=0.15
     env_file:
       - dockertest.env
     networks:

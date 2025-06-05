@@ -102,23 +102,32 @@ class Orchestrator:
     def embed_beans(self, beans: list[Bean]) -> list[Bean]|None:   
         if not beans: return beans
 
+        # this is a cpu heavy calculation. run it on the main thread and let the nlp take care of it
         embeddings = self.embedder.embed([bean.content for bean in beans])
+
+        # these are simple calculations. threading causes more time loss
         for bean, embedding in zip(beans, embeddings):
             bean.embedding = embedding
-
         beans = index_storables(beans)
-        self.cluster_db.store_items(json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
-        self.indexingexec.submit(self.db.update_bean_fields, beans, [K_EMBEDDING])
-        log.info("embedded", extra={"source": beans[0].source, "num_items": len(beans)})
+        updates = list(map(_make_update_one, [bean.url for bean in beans], [{K_EMBEDDING: bean.embedding} for bean in beans]))
+
+        # these are IO heavy so create thread pools
+        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="store-embedding") as exec:
+            exec.submit(self._push_update, updates, "embedded", beans[0].source)
+            exec.submit(self.cluster_db.store_items, json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
         return beans
 
     def classify_beans(self, beans: list[Bean]) -> list[Bean]:
         if not beans: return beans
 
-        cats = list(self.indexingexec.map(lambda bean: self.categories.vector_search(bean.embedding, limit=3), beans))
-        sents = list(self.indexingexec.map(lambda bean: self.sentiments.vector_search(bean.embedding, limit=3), beans))
-        updates = list(self.indexingexec.map(_make_classification_update, beans, cats, sents))
-        self._queue_update(updates, "classified", beans[0].source)
+        # these are IO heavy so create thread pools
+        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="classify") as exec:
+            cats = exec.map(lambda bean: self.categories.vector_search(bean.embedding, limit=3), beans)
+            sents = exec.map(lambda bean: self.sentiments.vector_search(bean.embedding, limit=3), beans)
+
+        # these are simple calculations. threading causes more time loss
+        updates = list(map(_make_classification_update, beans, list(cats), list(sents))) 
+        self._push_update(updates, "classified", beans[0].source)
         return beans
     
     find_cluster = lambda self, bean: self.cluster_db.vector_search(embedding=bean.embedding, max_distance=MAX_RELATED_EPS, limit=MAX_RELATED, metric="l2")
@@ -129,19 +138,27 @@ class Orchestrator:
     # override their current cluster_id (if any) with the new bean's url   
     def cluster_beans(self, beans: list[Bean]):
         if not beans: return beans
-        
-        clusters = list(self.indexingexec.map(self.find_cluster, beans))
-        updates = list(self.indexingexec.map(_make_cluster_update, beans, clusters))
-        self._queue_update(updates, "clustered", beans[0].source)
+
+        # these are IO heavy so create thread pools
+        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="cluster") as exec:
+            clusters = exec.map(self.find_cluster, beans)
+
+        # these are simple calculations. threading causes more time loss
+        updates = list(map(_make_cluster_update, beans, list(clusters)))
+        self._push_update(updates, "clustered", beans[0].source)
         return beans  
         
     def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:
         if not beans: return beans
 
+        # this is a cpu heavy calculation. run it on the main thread and let the nlp take care of it
         digests = self.digestor.run_batch([bean.content for bean in beans])
+
+        # these are simple calculations. threading causes more time loss
         updates = list(upd for upd in map(_make_digest_update, beans, digests) if upd)   
-        count = self.db.update_beans(updates)
-        log.info("digested", extra={"source": beans[0].source, "num_items": count}) 
+        self._push_update(updates, "digested", beans[0].source)
+        # count = self.db.update_beans(updates)
+        # log.info("digested", extra={"source": beans[0].source, "num_items": count}) 
         return digest_storables(beans)
     
     def stream_beans(self, filter):
@@ -160,11 +177,12 @@ class Orchestrator:
             if beans: yield beans
             else: break
 
-    def _queue_update(self, updates, task, source):
-        def _push_update(updates, task, source):
+    def _push_update(self, updates, task, source):
+        def push():
             count = self.db.update_beans(updates)
             log.info(task, extra={"source": source, "num_items": count}) 
-        self.indexingexec.submit(_push_update, updates, task, source)
+        # self.indexingexec.submit(push)
+        push()
 
     def _hydrate_cluster_db(self):
         beans = list(self.db.beanstore.find(
@@ -189,14 +207,13 @@ class Orchestrator:
 
         log.info("starting indexer", extra={"source": run_id, "num_items": 1})
         
-        self.indexingexec = ThreadPoolExecutor(BATCH_SIZE, thread_name_prefix="indexer")
-        with self.indexingexec: 
-            self.indexingexec.submit(self._hydrate_cluster_db)
+        with ThreadPoolExecutor(max_workers=os.cpu_count(), thread_name_prefix="indexer") as exec:
+            exec.submit(self._hydrate_cluster_db)
             for beans in self.stream_beans(filter):
                 try:
                     beans = self.embed_beans(beans)
-                    self.indexingexec.submit(self.classify_beans, beans)
-                    self.indexingexec.submit(self.cluster_beans, beans)
+                    exec.submit(self.classify_beans, beans)
+                    exec.submit(self.cluster_beans, beans)
                     total += len(beans)
                 except Exception as e:
                     log.error("failed indexing", extra={"source": run_id, "num_items": len(beans)})
