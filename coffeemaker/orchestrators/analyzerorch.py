@@ -107,9 +107,9 @@ class Orchestrator:
             bean.embedding = embedding
 
         beans = index_storables(beans)
-        self.cluster_db.store_items(json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
-        count = self.db.update_bean_fields(beans, [K_EMBEDDING])
-        log.info("embedded", extra={"source": beans[0].source, "num_items": count})
+        log.info("embedded", extra={"source": beans[0].source, "num_items": len(beans)})
+        self.indexingexec.submit(self.cluster_db.store_items, json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
+        self.indexingexec.submit(self.db.update_bean_fields, beans, [K_EMBEDDING])
         return beans
 
     def classify_beans(self, beans: list[Bean]) -> list[Bean]:
@@ -174,7 +174,7 @@ class Orchestrator:
             }, 
             projection = {K_ID: 1, K_EMBEDDING: 1}
         ))
-        self.cluster_db.store_items(beans)
+        self.cluster_db.store_items(json_data=beans)
         log.info("cluster db loaded", extra={'source': datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 'num_items': len(beans)})
             
     @log_runtime(logger=log)
