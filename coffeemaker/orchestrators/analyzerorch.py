@@ -109,12 +109,10 @@ class Orchestrator:
         for bean, embedding in zip(beans, embeddings):
             bean.embedding = embedding
         beans = index_storables(beans)
-        updates = list(map(_make_update_one, [bean.url for bean in beans], [{K_EMBEDDING: bean.embedding} for bean in beans]))
 
-        # these are IO heavy so create thread pools
-        with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="store-embedding") as exec:
-            exec.submit(self._push_update, updates, "embedded", beans[0].source)
-            exec.submit(self.cluster_db.store_items, json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
+        self.cluster_db.store_items(json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
+        count = self.db.update_bean_fields(beans, [K_EMBEDDING])
+        log.info("embedded", extra={"source": beans[0].source, "num_items": count})
         return beans
 
     def classify_beans(self, beans: list[Bean]) -> list[Bean]:
@@ -122,11 +120,11 @@ class Orchestrator:
 
         # these are IO heavy so create thread pools
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="classify") as exec:
-            cats = exec.map(lambda bean: self.categories.vector_search(bean.embedding, limit=3), beans)
-            sents = exec.map(lambda bean: self.sentiments.vector_search(bean.embedding, limit=3), beans)
+            cats = list(exec.map(lambda bean: self.categories.vector_search(bean.embedding, limit=3), beans))
+            sents = list(exec.map(lambda bean: self.sentiments.vector_search(bean.embedding, limit=3), beans))
 
         # these are simple calculations. threading causes more time loss
-        updates = list(map(_make_classification_update, beans, list(cats), list(sents))) 
+        updates = list(map(_make_classification_update, beans, cats, sents)) 
         self._push_update(updates, "classified", beans[0].source)
         return beans
     
@@ -141,10 +139,10 @@ class Orchestrator:
 
         # these are IO heavy so create thread pools
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="cluster") as exec:
-            clusters = exec.map(self.find_cluster, beans)
+            clusters = list(exec.map(self.find_cluster, beans))
 
         # these are simple calculations. threading causes more time loss
-        updates = list(map(_make_cluster_update, beans, list(clusters)))
+        updates = list(map(_make_cluster_update, beans, clusters))
         self._push_update(updates, "clustered", beans[0].source)
         return beans  
         
@@ -207,17 +205,16 @@ class Orchestrator:
 
         log.info("starting indexer", extra={"source": run_id, "num_items": 1})
         
-        with ThreadPoolExecutor(max_workers=os.cpu_count(), thread_name_prefix="indexer") as exec:
-            exec.submit(self._hydrate_cluster_db)
-            for beans in self.stream_beans(filter):
-                try:
-                    beans = self.embed_beans(beans)
-                    exec.submit(self.classify_beans, beans)
-                    exec.submit(self.cluster_beans, beans)
-                    total += len(beans)
-                except Exception as e:
-                    log.error("failed indexing", extra={"source": run_id, "num_items": len(beans)})
-                    log.exception(e, extra={"source": run_id, "num_items": len(beans)})
+        self._hydrate_cluster_db()
+        for beans in self.stream_beans(filter):
+            try:
+                beans = self.embed_beans(beans)
+                self.classify_beans(beans)
+                self.cluster_beans(beans)
+                total += len(beans)
+            except Exception as e:
+                log.error("failed indexing", extra={"source": run_id, "num_items": len(beans)})
+                log.exception(e, extra={"source": run_id, "num_items": len(beans)})
 
         log.info("total indexed", extra={"source": run_id, "num_items": total})
 
