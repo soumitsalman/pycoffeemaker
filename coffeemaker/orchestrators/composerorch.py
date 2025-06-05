@@ -29,7 +29,7 @@ make_article_id = lambda title, current: title.lower().replace(' ', '-')+current
 def _make_bean(comp: GeneratedArticle): 
     current = now()
     bean_id = make_article_id(comp.title, current)
-    summary = "\n\n".join(comp.intro)
+    summary = "\n\n".join(comp.verdict)
     content = comp.raw
     return GeneratedBean(
         _id=bean_id,

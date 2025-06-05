@@ -11,17 +11,17 @@
 .vscode
 .logs
 .delete-models
-.git
+*.git
 .docker-compose.yaml
 .deployment.sh
 dockertest.env
-tests
+*tests
 __azurite*
 __queuestorage__
 __pycache__
 *.log
 flagged
 coffeemaker/nlp/foundry
-coffeemaker/nlp/test
+coffeemaker/nlp/tests
 coffeemaker/nlp/.gitignore
 

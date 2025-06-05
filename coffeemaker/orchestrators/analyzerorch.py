@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()))
 MAX_RELATED = int(os.getenv('MAX_RELATED', 128))
 MAX_RELATED_NDAYS = int(os.getenv('MAX_RELATED_NDAYS', 7))
-MAX_RELATED_EPS=float(os.getenv("MAX_RELATED_EPS", 0.2))
+MAX_RELATED_EPS=float(os.getenv("MAX_RELATED_EPS", 0.15))
 MAX_ANALYZE_NDAYS =  int(os.getenv('MAX_ANALYZE_NDAYS', 2))
 
 index_storables = lambda beans: [bean for bean in beans if bean.embedding]
@@ -89,6 +89,7 @@ class Orchestrator:
         digestor_context_len: int = 0
     ): 
         self.db = Beansack(mongodb_conn_str, db_name)
+        self.cluster_db = StaticDB()
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if category_defs: self.categories = StaticDB(filepath=category_defs)
         if sentiment_defs: self.sentiments = StaticDB(filepath=sentiment_defs)
@@ -106,7 +107,7 @@ class Orchestrator:
             bean.embedding = embedding
 
         beans = index_storables(beans)
-        self.cluster_db.store_items([bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
+        self.cluster_db.store_items(json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
         count = self.db.update_bean_fields(beans, [K_EMBEDDING])
         log.info("embedded", extra={"source": beans[0].source, "num_items": count})
         return beans
@@ -173,8 +174,8 @@ class Orchestrator:
             }, 
             projection = {K_ID: 1, K_EMBEDDING: 1}
         ))
-        self.cluster_db = StaticDB(json_data=beans)
-        return len(beans)
+        self.cluster_db.store_items(beans)
+        log.info("cluster db loaded", extra={'source': datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 'num_items': len(beans)})
             
     @log_runtime(logger=log)
     def run_indexer(self):
@@ -187,9 +188,8 @@ class Orchestrator:
         }
 
         log.info("starting indexer", extra={"source": run_id, "num_items": 1})
-        count = self._hydrate_cluster_db()
-        log.info("cluster db loaded", extra={'source': run_id, 'num_items': count})
-
+        
+        self._hydrate_cluster_db()
         self.indexingexec = ThreadPoolExecutor(BATCH_SIZE, thread_name_prefix="indexer")
         with self.indexingexec: 
             for beans in self.stream_beans(filter):

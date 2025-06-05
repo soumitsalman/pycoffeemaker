@@ -307,10 +307,10 @@ if __name__ == "__main__":
     # test_trend_analysis()
     # test_collector_and_scraper()
 
-    # test_collector_orch()
-    # test_indexer_orch()
-    test_digestor_orch()
-    test_composer_orch()
+    test_collector_orch()
+    test_indexer_orch()
+    # test_digestor_orch()
+    # test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
