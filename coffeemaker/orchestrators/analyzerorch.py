@@ -107,9 +107,9 @@ class Orchestrator:
             bean.embedding = embedding
 
         beans = index_storables(beans)
-        log.info("embedded", extra={"source": beans[0].source, "num_items": len(beans)})
-        self.indexingexec.submit(self.cluster_db.store_items, json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
+        self.cluster_db.store_items(json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
         self.indexingexec.submit(self.db.update_bean_fields, beans, [K_EMBEDDING])
+        log.info("embedded", extra={"source": beans[0].source, "num_items": len(beans)})
         return beans
 
     def classify_beans(self, beans: list[Bean]) -> list[Bean]:
@@ -189,9 +189,9 @@ class Orchestrator:
 
         log.info("starting indexer", extra={"source": run_id, "num_items": 1})
         
-        self._hydrate_cluster_db()
         self.indexingexec = ThreadPoolExecutor(BATCH_SIZE, thread_name_prefix="indexer")
         with self.indexingexec: 
+            self.indexingexec.submit(self._hydrate_cluster_db)
             for beans in self.stream_beans(filter):
                 try:
                     beans = self.embed_beans(beans)

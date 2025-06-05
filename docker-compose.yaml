@@ -20,7 +20,7 @@ services:
     mem_limit: 1g
 
   localindexer:
-    image: soumitsr/coffeemaker:06-04
+    image: soumitsr/coffeemaker:06-05
     depends_on:
       - localdb
     environment:
