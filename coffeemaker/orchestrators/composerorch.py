@@ -15,7 +15,7 @@ CLUSTER_EPS = float(os.getenv('CLUSTER_EPS', 1.4))
 MIN_CLUSTER_SIZE = int(os.getenv('MIN_CLUSTER_SIZE', 24))
 MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
 MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', 8))
-MAX_ARTICLE_LEN = 2048
+MAX_ARTICLE_LEN = 3072
 
 LAST_NDAYS = 1
 BEAN_FILTER = {
@@ -34,7 +34,7 @@ BEAN_PROJECT = {
     K_CREATED:1
 }
 
-make_article_id = lambda title, current: title.lower().replace(' ', '-')+current.strftime("-%Y-%m-%d-%H-%M-%S")+".md"
+make_article_id = lambda title, current: title.lower().replace(' ', '-')+current.strftime("-%Y-%m-%d-%H-%M-%S-")+str(random.randint(1000,9999))+".md"
 def _make_bean(comp: GeneratedArticle): 
     current = now()
     bean_id = make_article_id(comp.title, current)

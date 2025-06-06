@@ -265,7 +265,7 @@ def test_composer_orch():
     orch = Orchestrator(
         DB_LOCAL_TEST,
         now().strftime("%Y%m%d"),
-        composer_path="microsoft/WizardLM-2-8x22B", 
+        composer_path="deepseek-ai/DeepSeek-R1",
         composer_base_url=os.getenv("DIGESTOR_BASE_URL"),
         composer_api_key=os.getenv("DIGESTOR_API_KEY"),
         composer_context_len=40000,
@@ -281,23 +281,10 @@ def test_composer_orch():
     #     save_markdown(f"{orch.run_id}-{idx}", "\n".join([b.gist for b in cl]))
 
     ## test generation
-
-    # news_writer = agents.from_path(
-    #     "gpt-4.1-mini", 
-    #     os.getenv("COMPOSER_BASE_URL"), 
-    #     os.getenv("COMPOSER_API_KEY"), 
-    #     max_input_tokens=50000, 
-    #     max_output_tokens=2048, 
-    #     system_prompt=NEWSRECAP_SYSTEM_PROMPT, 
-    #     output_parser=GeneratedArticle.parse_markdown, 
-    #     temperature=0.1,
-    #     json_mode=False
-    # )
-
-    # infilename = "/home/soumitsr/codes/pycoffeemaker/.test/2025-06-04-20-41-00-9.md"
+    # infilename = "/home/soumitsr/codes/pycoffeemaker/.test/2025-06-04-20-41-00-5.md"
     # outfilename = f"/home/soumitsr/Dropbox/ObsidianNotes/cafecito.tech/test-md/{infilename.split('/')[-1]}"
     # with open(infilename, "r") as infile:
-    #     resp = news_writer.run(infile.read())
+    #     resp = orch.news_writer.run(infile.read())
     # with open(outfilename, "w") as outfile:
     #     outfile.write(resp.raw)
        
@@ -308,10 +295,10 @@ if __name__ == "__main__":
     # test_trend_analysis()
     # test_collector_and_scraper()
 
-    test_collector_orch()
+    # test_collector_orch()
     # test_indexer_orch()
     # test_digestor_orch()
-    # test_composer_orch()
+    test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
