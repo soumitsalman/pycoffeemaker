@@ -2,13 +2,13 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:06-04
+    image: soumitsr/coffeemaker:06-06
     depends_on:
       - localcrawler
       - localdb
     environment:
       - MODE=COLLECTOR
-      - DB_NAME=test
+      - DB_NAME=20250606
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - REMOTE_CRAWLER_URL=http://localcrawler:11235
       - BATCH_SIZE=64
@@ -20,15 +20,15 @@ services:
     mem_limit: 1g
 
   localindexer:
-    image: soumitsr/coffeemaker:06-05-6
+    image: soumitsr/coffeemaker:06-06
     depends_on:
       - localdb
     environment:
       - MODE=INDEXER
-      - DB_NAME=20250605
+      - DB_NAME=20250606
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - BATCH_SIZE=16
-      - MAX_RELATED_EPS=0.1
+      - MAX_RELATED_EPS=0.36
     env_file:
       - dockertest.env
     networks:
@@ -37,14 +37,14 @@ services:
     mem_limit: 4g
 
   localdigestor:
-    image: soumitsr/coffeemaker:06-04
+    image: soumitsr/coffeemaker:06-06
     depends_on:
       - localdb
     environment:
       - MODE=DIGESTOR
-      - DB_NAME=test
+      - DB_NAME=20250606
       - MONGODB_CONN_STR=mongodb://localdb:27017
-      - BATCH_SIZE=64
+      - BATCH_SIZE=16
     env_file:
       - dockertest.env
     networks:
@@ -53,16 +53,17 @@ services:
     mem_limit: 1g
 
   localcomposer:
-    image: soumitsr/coffeemaker:06-04
+    image: soumitsr/coffeemaker:06-06
     depends_on:
       - localdb
       - azurite
     environment:
       - MODE=COMPOSER
-      - DB_NAME=test
+      - DB_NAME=20250606
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - AZSTORAGE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;BlobEndpoint=http://azurite:10000/devstoreaccount1;
       - MIN_CLUSTER_SIZE=24
+      - MAX_CLUSTER_SIZE=64
       - MAX_ARTICLES=2
     env_file:
       - dockertest.env

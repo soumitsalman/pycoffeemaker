@@ -285,17 +285,18 @@ class APICollector:
                 site_base_url=extract_base_url(entry.link),
                 title=entry.title,
                 kind=_guess_type(entry.link, source) or default_kind,
-                summary=self._generate_markdown(summary),
-                content=self._generate_markdown(content),
+                summary=self._cleanup_tags(summary),
+                content=self._cleanup_tags(content),
                 author=entry.get('author'),        
                 image_url=_extract_main_image(entry)
             ),
             chatter
         )
 
-    def _generate_markdown(self, html: str) -> str:
+    def _cleanup_tags(self, html: str) -> str:
         """Converts the given html into a markdown"""
-        if html: return self.md_generator.generate_markdown(input_html=html).raw_markdown.strip()
+        # if html: return self.md_generator.generate_markdown(input_html=html).raw_markdown.strip()
+        if html: return _strip_html_tags(html)
     
     def collect_subreddits(self, subreddit_names: list[str]):
         return merge_lists(_batch_run(self.collect_subreddit, subreddit_names))
@@ -423,7 +424,7 @@ class APICollector:
                 site_base_url=extract_base_url(url),
                 title=story.get('title'),
                 kind=kind, # blog, post or job
-                content=self._generate_markdown(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
+                content=self._cleanup_tags(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
                 author=story.get('by'),
                 # fill in the defaults
                 shared_in=[hackernews_story_permalink(id)],
@@ -490,15 +491,15 @@ METADATA_EXTRACTION_SCHEMA = {
     "baseSelector": "html",
     "fields": [
         # all body selectors
-        {"name": "title", "type": "text", "selector": "h1, title"},
+        {"name": "title", "type": "text", "selector": "title, h1"},
         # all meta selectors
         {"name": "description", "type": "attribute", "selector": "meta[name='description']", "attribute": "content"},
         {"name": "meta_title", "type": "attribute", "selector": "meta[property='og:title'], meta[name='og:title']", "attribute": "content"},
         {"name": "published_time", "type": "attribute", "selector": "meta[property='rnews:datePublished'], meta[property='article:published_time'], meta[name='OriginalPublicationDate'], meta[itemprop='datePublished'], meta[property='og:published_time'], meta[name='article_date_original'], meta[name='publication_date'], meta[name='sailthru.date'], meta[name='PublishDate'], meta[property='pubdate']", "attribute": "content"},
         {"name": "top_image", "type": "attribute", "selector": "meta[property='og:image'], meta[property='og:image:url'], meta[name='og:image:url'], meta[name='og:image']", "attribute": "content"},
         {"name": "kind", "type": "attribute", "selector": "meta[property='og:type']", "attribute": "content"},
-        {"name": "author", "type": "attribute", "selector": "meta[name='author'], meta[name='dc.creator'], meta[name='byl'], meta[name='byline']", "attribute": "content"},
-        {"name": "site_name", "type": "attribute", "selector": "meta[name='og:site_name'], meta[property='og:site_name']", "attribute": "content"},
+        {"name": "author", "type": "attribute", "selector": "meta[name='author'], meta[name='dc.creator'], meta[name='byl'], meta[name='byline'], meta[property='article:author_name']", "attribute": "content"},
+        {"name": "site_name", "type": "attribute", "selector": "meta[name='og:site_name'], meta[property='og:site_name'], meta[property='sitename']", "attribute": "content"},
         # all link selectors
         {"name": "favicon", "type": "attribute", "selector": "link[rel='shortcut icon'][type='image/png'], link[rel='icon']", "attribute": "href"},
         {"name": "rss_feed", "type": "attribute", "selector": "link[type='application/rss+xml']", "attribute": "href"},
@@ -652,12 +653,12 @@ class WebScraper:
             bean.is_scraped = True
         return beans
 
-    def _package_result(result) -> dict:   
+    def _package_result(result: CrawlResult) -> dict:   
         if not(result and result.success): return
 
         ret = {
             "url": result.url,
-            "markdown": _clean_markdown(result.markdown)
+            "markdown": _strip_html_tags(result.cleaned_html) #_clean_markdown(result.markdown)
         }
         if content := (json.loads(result.extracted_content) if result.extracted_content else None):
             metadata = content[0]

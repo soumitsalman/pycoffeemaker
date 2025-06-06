@@ -238,8 +238,9 @@ def test_indexer_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
         DB_LOCAL_TEST,
-        now().strftime("%Y%m%d"), 
-        embedder_path=os.getenv("EMBEDDER_PATH"),
+        now().strftime("%Y%m%d"),
+        # embedder_path="avsolatorio/GIST-small-Embedding-v0", 
+        embedder_path="openvino:///home/soumitsr/codes/pycoffeemaker/.models/gist-small-embedding-v0-openvino",
         embedder_context_len=512,
         category_defs="./factory/categories.parquet",
         sentiment_defs="./factory/sentiments.parquet"
@@ -302,12 +303,12 @@ def test_composer_orch():
        
 
 if __name__ == "__main__":
-    hydrate_test_db()
+    # hydrate_test_db()
     # test_static_db()
     # test_trend_analysis()
     # test_collector_and_scraper()
 
-    # test_collector_orch()
+    test_collector_orch()
     # test_indexer_orch()
     # test_digestor_orch()
     # test_composer_orch()

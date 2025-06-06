@@ -1347,7 +1347,6 @@ sources:
   - https://feeds.skynews.com/feeds/rss/world.xml
   - https://feeds.thelocal.com/rss/builder/de
   - https://feeds.thelocal.com/rss/de/nonpremium
-  - https://feeds.transistor.fm/go-podcast
   - https://feeds.transistor.fm/oxide-and-friends
   - https://feeds.transistor.fm/talkingpostgres
   - https://feeds.washingtonpost.com/rss/national
@@ -1582,7 +1581,6 @@ sources:
   - https://hf.co/blog/feed.xml
   - https://hhz.bearblog.dev/feed/?type=rss
   - https://hiddenlayer.com/feed/
-  - https://hipl.co.in/feed/
   - https://hitman.services/index.xml
   - https://hjorthjort.github.io/feed.xml
   - https://hllmn.net/blog/index.xml
@@ -1590,7 +1588,6 @@ sources:
   - https://holdtherobot.com/blog/rss.xml
   - https://hollycummins.com/rss.xml
   - https://holub.com/feed/
-  - https://homecse.iitd.ac.in/feed/
   - https://honestreporting.com/feed/
   - https://honeypot.net/feed.xml
   - https://hongkongfp.com/feed/
@@ -2191,7 +2188,6 @@ sources:
   - https://multithreaded.stitchfix.com/feed.xml
   - https://multitudes.weisser.io/feed
   - https://muratbuffalo.blogspot.com/feeds/posts/default?alt=rss
-  - https://muratdemirci.com.tr/index.xml
   - https://museumofeverydaylife.org/feed
   - https://mwi.westpoint.edu/feed/
   - https://mwl.io/feed
@@ -3187,10 +3183,8 @@ sources:
   - https://tombengine.com/feed/
   - https://tomcritchlow.com/feed.xml
   - https://tomlee.wtf/feed/
-  - https://tomtunguz.com
   - https://tomtunguz.com/index.xml
   - https://tonywang.io/rss.xml
-  - https://topwar.ru/rss.xml
   - https://torontosun.com/feed/atom
   - https://totikom.github.io/rss.xml
   - https://toughsf.blogspot.com/feeds/posts/default?alt=rss
@@ -3426,7 +3420,6 @@ sources:
   - https://www.9news.com/feeds/syndication/rss/news
   - https://www.LeonardDavid.com/feed/
   - https://www.a-mc.biz/feed/
-  - https://www.aa.com.tr/rss/
   - https://www.aaronmate.net/feed
   - https://www.abc15.com/index.rss
   - https://www.abc27.com/feed/
@@ -4256,7 +4249,6 @@ sources:
   - https://www.lifelitter.org/feed
   - https://www.lifesitenews.com/feed/
   - https://www.liftmycv.com/feed/
-  - https://www.liga.net/news/all/rss.xml
   - https://www.lightbluetouchpaper.org/feed/
   - https://www.lighthouseproofreading.co.uk/blog?format=rss
   - https://www.lightspeedmagazine.com/rss-2/

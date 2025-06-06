@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 CLUSTER_EPS = float(os.getenv('CLUSTER_EPS', 1.4))
 MIN_CLUSTER_SIZE = int(os.getenv('MIN_CLUSTER_SIZE', 24))
-MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 512))
+MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
 MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', 8))
 MAX_ARTICLE_LEN = 2048
 
@@ -23,7 +23,16 @@ BEAN_FILTER = {
     K_EMBEDDING: {"$exists": True},  
     K_CREATED: {"$gte": ndays_ago(LAST_NDAYS)}
 }
-BEAN_PROJECT = {K_URL: 1, K_EMBEDDING: 1, K_GIST: 1, K_CATEGORIES: 1, K_TITLE: 1}
+BEAN_PROJECT = {
+    K_URL: 1, 
+    K_EMBEDDING: 1, 
+    K_GIST: 1, 
+    K_ENTITIES: 1, 
+    K_REGIONS: 1, 
+    K_CATEGORIES: 1, 
+    K_SENTIMENTS: 1, 
+    K_CREATED:1
+}
 
 make_article_id = lambda title, current: title.lower().replace(' ', '-')+current.strftime("-%Y-%m-%d-%H-%M-%S")+".md"
 def _make_bean(comp: GeneratedArticle): 
@@ -136,11 +145,11 @@ class Orchestrator:
         # return sorted(clusters, key=len)
         return list(filter(lambda x: MIN_CLUSTER_SIZE <= len(x) <= MAX_ARTICLE_LEN, clusters))
 
-    def compose_article(self, beans: list, kind = NEWS):  
+    def compose_article(self, beans: list[Bean], kind = NEWS):  
         if not beans: return 
         # NOTE: this is an internal hack to take random items when there are too many items
         if len(beans) > 512: beans = random.sample(beans, 512) 
-        input_text = "\n".join([bean.gist for bean in beans])
+        input_text = "\n".join([bean.digest() for bean in beans])
         if kind == BLOG: response = self.blog_writer.run(input_text)
         else: response = self.news_writer.run(input_text)
 

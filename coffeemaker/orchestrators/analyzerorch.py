@@ -20,7 +20,17 @@ MAX_ANALYZE_NDAYS =  int(os.getenv('MAX_ANALYZE_NDAYS', 2))
 
 index_storables = lambda beans: [bean for bean in beans if bean.embedding]
 digest_storables = lambda beans: [bean for bean in beans if bean.gist]
-_make_update_one = lambda url, update_fields: UpdateOne({K_ID: url}, { "$set": {k:v for k,v in update_fields.items() if v} }) 
+
+def _make_update_one(url, update_fields):
+    update_fields = {k:v for k,v in update_fields.items() if v}
+    tags = update_fields.pop(K_TAGS, None)
+    update = {"$set": update_fields}
+    if tags: update["$addToSet"] = {
+        K_TAGS: {
+            "$each": tags if isinstance(tags, list) else [tags]
+        }
+    }
+    return UpdateOne({K_ID: url}, update)
 
 def _make_cluster_update(bean: Bean, cluster: list[Bean]): 
     bean.cluster_id = bean.url
@@ -29,46 +39,27 @@ def _make_cluster_update(bean: Bean, cluster: list[Bean]):
         K_CLUSTER_ID: bean.url,
         K_RELATED: bean.related
     } 
-    return list(map(_make_update_one, [bean.url]+cluster, [update_fields]*(len(cluster)+1)))
-    # return UpdateMany(
-    #     {
-    #         K_ID: field_value([bean.url]+cluster)
-    #     },
-    #     { 
-    #         "$set": { 
-    #             K_CLUSTER_ID: bean.url,
-    #             K_RELATED: bean.related
-    #         } 
-    #     } 
-    # )
+    return list(map(_make_update_one, cluster, [update_fields]*len(cluster)))
 
 def _make_classification_update(bean: Bean, cat: list[str], sent: list[str]): 
     bean.categories = cat
     bean.sentiments = sent
-    bean.tags = merge_tags(bean.categories, bean.tags)
-    # if bean already exists append to it
-    if bean.gist: bean.gist += f";C:{'|'.join(bean.categories)};S:{'|'.join(bean.sentiments)};"
-    
+    bean.tags = merge_tags(bean.categories)
     return _make_update_one(
         bean.url, 
         {
             K_CATEGORIES: bean.categories,
             K_SENTIMENTS: bean.sentiments,
-            K_TAGS: bean.tags,
-            K_GIST: bean.gist
+            K_TAGS: bean.tags
         }
     )    
 
 def _make_digest_update(bean: Bean, digest: Digest):
-    if not digest: return
-    
+    if not digest: return    
     bean.regions = digest.regions
     bean.entities = digest.entities
-    bean.tags = merge_tags(bean.regions, bean.entities, bean.tags)
-    # if gist already exists then prepend to it
-    bean.gist = f"U:{bean.created.strftime('%Y-%m-%d')};{digest.raw};"
-    if bean.categories or bean.sentiments: bean.gist += f"C:{'|'.join(bean.categories)};S:{'|'.join(bean.sentiments)};"
-    
+    bean.tags = merge_tags(bean.regions, bean.entities)
+    bean.gist = digest.raw
     return _make_update_one(
         bean.url,
         {
@@ -99,8 +90,8 @@ class Orchestrator:
         self.dbworker = ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="dbupdater")
 
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
-        if category_defs: self.categories = StaticDB(filepath=category_defs)
-        if sentiment_defs: self.sentiments = StaticDB(filepath=sentiment_defs)
+        if category_defs: self.categories = StaticDB(category_defs)
+        if sentiment_defs: self.sentiments = StaticDB(sentiment_defs)
         if digestor_path: self.digestor = agents.from_path(
             model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 
             max_input_tokens=digestor_context_len, max_output_tokens=512, 
@@ -118,7 +109,8 @@ class Orchestrator:
             bean.embedding = embedding
         beans = index_storables(beans)
 
-        self.dbworker.submit(self.cluster_db.store_items, json_data=[bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
+        # self.cluster_db.store_items([bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
+        self.dbworker.submit(self.cluster_db.store_items, [bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
         self.dbworker.submit(self.db.update_bean_fields, beans, [K_EMBEDDING])
         log.info("embedded", extra={"source": beans[0].source, "num_items": len(beans)})
         return beans
@@ -174,9 +166,9 @@ class Orchestrator:
                 sort_by=NEWEST,
                 project={
                     K_ID: 1, K_URL: 1, 
-                    K_CONTENT: 1,  K_CREATED: 1, 
-                    K_SOURCE: 1, K_TITLE: 1,
-                    K_GIST: 1, K_TAGS: 1, K_CATEGORIES: 1, K_SENTIMENTS: 1
+                    K_CONTENT: 1,  # K_CREATED: 1, 
+                    K_SOURCE: 1, # K_TITLE: 1,
+                    # K_GIST: 1, K_TAGS: 1, K_CATEGORIES: 1, K_SENTIMENTS: 1
                 },
                 limit=BATCH_SIZE
             )            
@@ -198,7 +190,7 @@ class Orchestrator:
             }, 
             projection = {K_ID: 1, K_EMBEDDING: 1}
         ))
-        self.cluster_db.store_items(json_data=beans)
+        self.cluster_db.store_items(beans)
         log.info("cluster db loaded", extra={'source': datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 'num_items': len(beans)})
             
     @log_runtime(logger=log)
