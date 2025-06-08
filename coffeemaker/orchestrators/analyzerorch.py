@@ -36,7 +36,7 @@ def _make_cluster_update(bean: Bean, cluster: list[Bean]):
     bean.cluster_id = bean.url
     bean.related = len(cluster)
     update_fields = { 
-        K_CLUSTER_ID: bean.url,
+        K_CLUSTER_ID: bean.cluster_id,
         K_RELATED: bean.related
     } 
     return list(map(_make_update_one, cluster, [update_fields]*len(cluster)))
