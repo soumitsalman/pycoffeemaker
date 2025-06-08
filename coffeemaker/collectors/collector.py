@@ -642,11 +642,11 @@ class WebScraper:
         for bean, result in zip(beans, results):
             if not result: continue
             bean.content = result.get("markdown")
-            bean.title = result.get("meta_title") or bean.title or result.get("title") # this sequence is important because result['title'] is often crap
+            bean.title = bean.title or result.get("title") or result.get("meta_title") # this sequence is important because result['title'] is often crap
             bean.image_url = result.get("top_image") or bean.image_url
             bean.author = result.get("author") or bean.author
             bean.created = min(result.get("published_time") or bean.created or bean.collected, current_time)
-            bean.summary = result.get("description") or bean.summary
+            bean.summary = bean.summary or result.get("description")
             bean.site_rss_feed = result.get("rss_feed")
             bean.site_name = result.get('site_name')
             bean.site_favicon = result.get('favicon')
