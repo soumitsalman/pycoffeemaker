@@ -8,7 +8,7 @@ from azure.storage.blob import BlobClient
 from typing import Awaitable
 from pymongo import UpdateOne
 from icecream import ic
-from coffeemaker.nlp import Digest
+from coffeemaker.nlp import Digest, DIGEST_SYSTEM_PROMPT
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack
 from coffeemaker.pybeansack.models import *
@@ -79,7 +79,7 @@ class Orchestrator:
         self.digestor = agents.from_path(
             model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 
             max_input_tokens=digestor_context_len or DIGESTOR_CONTEXT_LEN, max_output_tokens=512, 
-            system_prompt=DIGESTOR_SYSTEM_PROMPT, output_parser=Digest.parse_compressed, temperature=0.2
+            system_prompt=DIGEST_SYSTEM_PROMPT, output_parser=Digest.parse_compressed, temperature=0.2
         )
 
         self.az_storage_conn_str = backup_storage_conn_str
