@@ -628,6 +628,20 @@ def merge_to_classification():
         classifications = yaml.safe_load(file)
     ic(classifications)
 
+def migrate_users(from_db, to_db):
+    from coffeemaker.orchestrators.collectororch import Orchestrator
+
+    old_prod = Orchestrator(
+        os.getenv('MONGODB_CONN_STR'),
+        from_db
+    )
+    new_prod = Orchestrator(
+        os.getenv('MONGODB_CONN_STR'),
+        to_db
+    )
+    
+    new_prod.db.userstore.insert_many(old_prod.db.userstore.find({}), ordered=False)
+
 
 # adding data porting logic
 if __name__ == "__main__":
@@ -635,4 +649,4 @@ if __name__ == "__main__":
     # create_categories_locally()
     # create_sentiments_locally()
     # port_beans_locally()
-    pass
+    migrate_users("beansackV2", "test")

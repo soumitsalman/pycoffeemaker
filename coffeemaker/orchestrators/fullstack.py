@@ -8,8 +8,7 @@ from azure.storage.blob import BlobClient
 from typing import Awaitable
 from pymongo import UpdateOne
 from icecream import ic
-from coffeemaker.nlp.src.models import Digest
-from coffeemaker.nlp.src.prompts import DIGESTOR_SYSTEM_PROMPT
+from coffeemaker.nlp import Digest
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack
 from coffeemaker.pybeansack.models import *
