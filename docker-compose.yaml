@@ -2,13 +2,12 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:06-06
+    image: soumitsr/coffeemaker:06-13
     depends_on:
-      - localcrawler
       - localdb
     environment:
       - MODE=COLLECTOR
-      - DB_NAME=20250606
+      - DB_NAME=20250613
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - REMOTE_CRAWLER_URL=http://localcrawler:11235
       - BATCH_SIZE=64

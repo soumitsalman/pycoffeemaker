@@ -205,32 +205,33 @@ def test_collector_orch():
         DB_LOCAL_TEST,
         now().strftime("%Y%m%d")
     )
-    # sources = """/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"""
-    # sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"""
+    # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
+    # sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-1.yaml"""
     sources = """
-sources:
-  rss:
-    - https://newatlas.com/index.rss
-    - https://www.channele2e.com/feed/topic/latest
-    - https://www.ghacks.net/feed/
-    - https://thenewstack.io/feed
-    - https://scitechdaily.com/feed/
-    - https://www.techradar.com/feeds/articletype/news
-    - https://www.geekwire.com/feed/
-    - https://investorplace.com/content-feed/
-  ychackernews:
-    - https://hacker-news.firebaseio.com/v0/newstories.json
-  reddit:
-    - news
-    - worldnews
-    - InternationalNews
-    - GlobalNews
-    - GlobalMarketNews
-    - FinanceNews
-    - StockNews
-    - CryptoNews
-    - energyStocks
-"""
+    sources:
+        rss:
+            - https://newatlas.com/index.rss
+            - https://www.channele2e.com/feed/topic/latest
+            - https://www.ghacks.net/feed/
+            - https://thenewstack.io/feed
+            - https://scitechdaily.com/feed/
+            - https://www.techradar.com/feeds/articletype/news
+            - https://www.geekwire.com/feed/
+            - https://investorplace.com/content-feed/
+        ychackernews:
+            - https://hacker-news.firebaseio.com/v0/newstories.json
+        reddit:
+            - news
+            - worldnews
+            - InternationalNews
+            - GlobalNews
+            - GlobalMarketNews
+            - FinanceNews
+            - StockNews
+            - CryptoNews
+            - energyStocks
+    """
+    orch.db.beanstore.drop()
     asyncio.run(orch.run_async(sources))
     # orch.run(sources)
 
@@ -295,10 +296,10 @@ if __name__ == "__main__":
     # test_trend_analysis()
     # test_collector_and_scraper()
 
-    # test_collector_orch()
+    test_collector_orch()
     # test_indexer_orch()
     # test_digestor_orch()
-    test_composer_orch()
+    # test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
