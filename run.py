@@ -28,7 +28,7 @@ logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INF
 logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
-logging.getLogger("coffeemaker.nlp.digestors").propagate = False
+logging.getLogger("coffeemaker.nlp.agents").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
 logging.getLogger("asyncprawcore").propagate = False
 logging.getLogger("asyncpraw").propagate = False
@@ -78,9 +78,11 @@ if __name__ == "__main__":
             composer_base_url=os.getenv("COMPOSER_BASE_URL"),
             composer_api_key=os.getenv("COMPOSER_API_KEY"),
             composer_context_len=int(os.getenv("COMPOSER_CONTEXT_LEN", COMPOSER_CONTEXT_LEN)),
+            embedder_path=os.getenv("EMBEDDER_PATH"),
+            embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
             backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
         )
-        orch.run()
+        orch.run("./factory/composer-topics.yaml")
     else:
         from coffeemaker.orchestrators.fullstack import Orchestrator
         orch = Orchestrator(

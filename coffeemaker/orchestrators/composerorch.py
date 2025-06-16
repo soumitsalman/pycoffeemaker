@@ -1,9 +1,9 @@
-import json
 import os
 import random
-
+import yaml
+import json
 import numpy as np
-from coffeemaker.nlp import OPINION_SYSTEM_PROMPT, NEWSRECAP_SYSTEM_PROMPT, agents, embedders, SimpleAgent, GeneratedArticle, batch_run
+from coffeemaker.nlp import OPINION_SYSTEM_PROMPT, NEWSRECAP_SYSTEM_PROMPT, OPINION_SYSTEM_PROMPT_JSON, NEWSRECAP_SYSTEM_PROMPT_JSON,agents, embedders, SimpleAgent, GeneratedArticle, batch_run
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.orchestrators.utils import *
@@ -25,7 +25,7 @@ BEAN_FILTER = {
 }
 BEAN_PROJECT = {
     K_URL: 1, 
-    K_EMBEDDING: 1, 
+    # K_EMBEDDING: 1, 
     K_GIST: 1, 
     K_ENTITIES: 1, 
     K_REGIONS: 1, 
@@ -38,7 +38,7 @@ make_article_id = lambda title, current: title.lower().replace(' ', '-')+current
 def _make_bean(comp: GeneratedArticle): 
     current = now()
     bean_id = make_article_id(comp.title, current)
-    summary = "\n\n".join(comp.verdict)
+    summary = comp.verdict
     content = comp.raw
     return GeneratedBean(
         _id=bean_id,
@@ -60,12 +60,19 @@ def _make_bean(comp: GeneratedArticle):
         site_base_url="cafecito.tech",
         site_name="Cafecito",
         site_favicon="https://cafecito.tech/images/favicon.ico",
-        intro=comp.intro,
-        analysis=comp.analysis,
-        insights=comp.insights,
-        verdict=comp.verdict,
-        predictions=comp.predictions
+        intro=comp.intro or None,
+        analysis=comp.analysis or None,
+        insights=comp.insights or None,
+        verdict=comp.verdict or None,
+        predictions=comp.predictions or None
     )
+
+def _parse_topics(topics):
+    if isinstance(topics, dict): return topics
+    if os.path.exists(topics):
+        with open(topics, 'r') as file:
+            return yaml.safe_load(file)
+    else: return yaml.safe_load(topics)
 
 class Orchestrator:
     db: Beansack
@@ -87,21 +94,32 @@ class Orchestrator:
         backup_azstorage_conn_str: str = None
     ):
         self.db = Beansack(mongodb_conn_str, db_name)
-        self.news_writer = agents.from_path(composer_path, composer_base_url, composer_api_key, max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, system_prompt=NEWSRECAP_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False)
-        self.blog_writer = agents.from_path(composer_path, composer_base_url, composer_api_key, max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, system_prompt=OPINION_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False)
-
+        self.news_writer = agents.from_path(
+            composer_path, composer_base_url, composer_api_key, 
+            max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
+            system_prompt=NEWSRECAP_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False
+            # system_prompt=NEWSRECAP_SYSTEM_PROMPT_JSON, output_parser=GeneratedArticle.parse_json, json_mode=True
+        )
+        self.blog_writer = agents.from_path(
+            composer_path, composer_base_url, composer_api_key, 
+            max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
+            system_prompt=OPINION_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False
+            # system_prompt=OPINION_SYSTEM_PROMPT_JSON, output_parser=GeneratedArticle.parse_json, json_mode=True
+        )
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 
-    def get_beans(self, query: str = None, embedding: list[float] = None,  filter: dict = None):
-        if filter: filter.update(BEAN_FILTER)
-        else: filter = BEAN_FILTER
+    def get_beans(self, query: str = None, embedding: list[float] = None,  kind: str = None, tags: list[str] = None, last_ndays: int = None, limit: int = None):
+        filter = BEAN_FILTER
+        if kind: filter[K_KIND] = lower_case(kind)
+        # if last_ndays: filter.update(created_after(last_ndays=last_ndays))
 
-        if query: embedding = self.embedder.embed(query)
-
-        if embedding: beans = self.db.vector_search_beans(embedding, filter=filter, project=BEAN_PROJECT)
-        else: beans = self.db.query_beans(filter, project=BEAN_PROJECT)
-        log.info("found beans", extra={"source": self.run_id, "num_items": len(beans)})
+        if query: embedding = self.embedder("topic: "+ (query+": "+", ".join(tags) if tags else query))
+        elif tags: filter[K_TAGS] = lower_case(tags)
+        
+        if embedding: beans = self.db.vector_search_beans(embedding, similarity_score=DEFAULT_VECTOR_SEARCH_SCORE, filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=BEAN_PROJECT)
+        else: beans = self.db.query_beans(filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=BEAN_PROJECT)
+        log.info("found beans", extra={"source": query or self.run_id, "num_items": len(beans)})
         return beans if len(beans) >= MIN_CLUSTER_SIZE else None
     
     def _kmeans_cluster(self, beans)-> list[list[Bean]]:
@@ -125,6 +143,15 @@ class Orchestrator:
     def _affinity_cluster(self, beans):
         from sklearn.cluster import AffinityPropagation
         return AffinityPropagation(copy=False, damping=0.55, random_state=666)
+    
+    def get_topic_clusters(self, topics = None):
+        if topics:
+            topics = _parse_topics(topics)
+            clusters = map(lambda topic: (topic[0], topic[1][K_KIND], self.get_beans(query = topic[0], kind = topic[1][K_KIND], tags = topic[1][K_TAGS], limit=MAX_CLUSTER_SIZE)), topics.items())
+            return list(filter(lambda x: x[2] and len(x[2]) >= MIN_CLUSTER_SIZE, clusters))
+        else:
+            beans = self.get_beans(kind = NEWS)
+            return self.cluster_beans(beans, "HDBSCAN")
 
     def cluster_beans(self, beans: list[Bean], method: str = "KMEANS")-> list[list[Bean]]:
         if not beans: return 
@@ -143,17 +170,19 @@ class Orchestrator:
         if clusters: log.info("found clusters", extra={'source': self.run_id, 'num_items': len(clusters)})
         else: log.info(f"no cluster found", extra={'source': self.run_id, 'num_items': 0})
         # return sorted(clusters, key=len)
-        return list(filter(lambda x: MIN_CLUSTER_SIZE <= len(x) <= MAX_ARTICLE_LEN, clusters))
+        clusters = filter(lambda x: MIN_CLUSTER_SIZE <= len(x) <= MAX_ARTICLE_LEN, clusters)
+        return list(map(lambda x: (x[0].categories[0], x[0].kind, x), clusters))
 
-    def compose_article(self, beans: list[Bean], kind = NEWS):  
-        if not beans: return 
-        # NOTE: this is an internal hack to take random items when there are too many items
-        if len(beans) > 512: beans = random.sample(beans, 512) 
-        input_text = "\n".join([bean.digest() for bean in beans])
+    def compose_article(self, topic: str, kind: str, beans: list[Bean]):  
+        import time
+        time.sleep(65) # NOTE: this is a hack to avoid rate limiting
+        if not topic or not beans: return 
+
+        input_text = f"Topic: {topic}\n\n"+"\n".join([bean.digest() for bean in beans])
         if kind == BLOG: response = self.blog_writer.run(input_text)
         else: response = self.news_writer.run(input_text)
 
-        self.backup_response("articles", input_text, response.raw)
+        if response: self.backup_response("articles", input_text, response.raw)
         return response
 
     def backup_response(self, prefix: str, input_text: str, response_text: str):
@@ -164,22 +193,19 @@ class Orchestrator:
 
     def store_beans(self, responses: list):      
         if not responses: return
-
-        beans = list(map(_make_bean, responses))
+        beans = list(map(_make_bean, (r for r in responses if r)))
         batch_upload(self.backup_container, beans)
         count = self.db.store_beans(beans)
         log.info("stored articles", extra={'source': self.run_id, 'num_items': count})
         return beans
        
-    def run(self):
+    def run(self, topics = None):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
 
-        beans = self.get_beans(None, None, filter={K_KIND: NEWS})
-        clusters = self.cluster_beans(beans, "HDBSCAN")
+        clusters = self.get_topic_clusters(topics)
         if not clusters: return    
-
-        num_articles = min(MAX_ARTICLES, len(clusters))
-        articles = batch_run(self.compose_article, random.sample(clusters, num_articles))
-        # articles = list(map(self.compose_article, random.sample(clusters, num_articles)))
-        self.store_beans(articles)
+        clusters = random.sample(clusters, min(MAX_ARTICLES, len(clusters)))
+        articles = list(map(lambda c: self.compose_article(topic=c[0], kind=c[1], beans=c[2]), clusters))
+        # articles = batch_run(lambda c: self.compose_article(topic=c[0], kind=c[1], beans=c[2]), clusters)
+        return self.store_beans(articles)

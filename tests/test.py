@@ -132,7 +132,7 @@ def hydrate_test_db():
                 # K_GIST: VALUE_EXISTS,
                 # K_EMBEDDING: VALUE_EXISTS,
                 K_CONTENT: VALUE_EXISTS,
-                K_COLLECTED: {"$gte": ndays_ago(10)}
+                K_COLLECTED: {"$gte": ndays_ago(7)}
             },
             skip=skip,
             limit=BATCH_SIZE
@@ -265,16 +265,95 @@ def test_composer_orch():
     from coffeemaker.nlp import GeneratedArticle, agents, NEWSRECAP_SYSTEM_PROMPT
     orch = Orchestrator(
         DB_LOCAL_TEST,
-        now().strftime("%Y%m%d"),
-        composer_path="deepseek-ai/DeepSeek-R1",
-        composer_base_url=os.getenv("DIGESTOR_BASE_URL"),
-        composer_api_key=os.getenv("DIGESTOR_API_KEY"),
+        # now().strftime("%Y%m%d"),
+        "20250615",
+        composer_path="o4-mini",
+        composer_base_url=os.getenv("COMPOSER_BASE_URL"),
+        composer_api_key=os.getenv("COMPOSER_API_KEY"),
         composer_context_len=40000,
+        embedder_path=os.getenv("EMBEDDER_PATH"),
+        embedder_context_len=512,
         backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
     )
-    orch.run()
+#     topics = """
+#   Artificial Intelligence:
+#     kind: blog
+#     last_ndays: 1
+#     tags:
+#       - Artificial General Intelligence
+#       - Artificial Intelligence
+#       - Artificial Intelligence Safety
+#       - Artificial Intelligence Ethics and Governance
+#       - Artificial Neural Networks
+#       - Artificial Vision
+#       - Machine Learning and AI Applications
+#       - Data Science and Analytics
+#       - Automation and Robotics
+#       - Computing and Information Technology
+
+#   Cybersecurity:
+#     kind: news
+#     last_ndays: 1
+#     tags:
+#       - Cybersecurity and Cybercrime
+#       - Privacy and Data Protection
+#       - Security and Defense Technology
+#       - Internet and Web Technologies
+#       - Computing and Information Technology
+#       - Cloud Computing
+#       - Blockchain and Cryptocurrency
+
+#   Software Engineering:
+#     kind: blog
+#     last_ndays: 1
+#     tags:
+#       - Software Development
+#       - Coding and Programming Languages
+#       - Algorithm and Computation
+#       - Cloud Computing
+#       - Computing and Information Technology
+#       - Internet and Web Technologies
+#       - High Performance Computing
+#       - Data Science and Analytics
+
+#   Career & Professional Growth:
+#     kind: blog
+#     last_ndays: 1
+#     tags:
+#       - Career and Employment
+#       - Professional Development
+#       - Business and Management
+#       - Workplace and Employment Law
+#       - Labor and Workforce
+#       - Innovation and Startups
+#       - Education
+#       - Youth and Education
+
+#   Startups & Entrepreneurship:
+#     kind: news
+#     last_ndays: 1
+#     tags:
+#       - Innovation and Startups
+#       - Business and Management
+#       - Technology and Innovation
+#       - Product Development and Technology
+#       - Research and Development
+#       - Industry and Manufacturing
+#     """
+    topics = """/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.yaml"""
+    for bean in orch.run(topics):
+        print(">>>>>>>>>>>>>>>>")
+        print(bean.title)
+        print(bean.verdict)
+        print(bean.analysis)
+        print(bean.insights)
+        print(bean.predictions)
+        print(bean.entities)
+        print("<<<<<<<<<<<<<<<<")
     ## test cluster
     # orch.run_id = now().strftime("%Y-%m-%d-%H-%M-%S")
+    # clusters = orch.get_topic_clusters(topics)
+    # [ic(c[0], c[1], len(c[2])) for c in clusters]
     # beans = orch.get_beans(filter = {K_KIND: NEWS})
 
     # for idx, cl in enumerate(orch.cluster_beans(beans, method="HDBSCAN")):
@@ -296,10 +375,10 @@ if __name__ == "__main__":
     # test_trend_analysis()
     # test_collector_and_scraper()
 
-    test_collector_orch()
+    # test_collector_orch()
     # test_indexer_orch()
     # test_digestor_orch()
-    # test_composer_orch()
+    test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
