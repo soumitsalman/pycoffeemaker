@@ -3,7 +3,7 @@ import random
 import yaml
 import json
 import numpy as np
-from coffeemaker.nlp import OPINION_SYSTEM_PROMPT, NEWSRECAP_SYSTEM_PROMPT, OPINION_SYSTEM_PROMPT_JSON, NEWSRECAP_SYSTEM_PROMPT_JSON,agents, embedders, SimpleAgent, GeneratedArticle, batch_run
+from coffeemaker.nlp import OPINION_SYSTEM_PROMPT, NEWSRECAP_SYSTEM_PROMPT, OPINION_SYSTEM_PROMPT_JSON, NEWSRECAP_SYSTEM_PROMPT_JSON, agents, embedders, GeneratedArticle, run_batch
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.orchestrators.utils import *
@@ -20,12 +20,12 @@ MAX_ARTICLE_LEN = 3072
 LAST_NDAYS = 1
 BEAN_FILTER = {
     K_GIST: {"$exists": True}, 
-    K_EMBEDDING: {"$exists": True},  
+    # K_EMBEDDING: {"$exists": True},  
     K_CREATED: {"$gte": ndays_ago(LAST_NDAYS)}
 }
 BEAN_PROJECT = {
     K_URL: 1, 
-    # K_EMBEDDING: 1, 
+    K_EMBEDDING: 1, 
     K_GIST: 1, 
     K_ENTITIES: 1, 
     K_REGIONS: 1, 
@@ -76,11 +76,6 @@ def _parse_topics(topics):
 
 class Orchestrator:
     db: Beansack
-    news_writer: SimpleAgent
-    blog_writer: SimpleAgent
-
-    embedder: embedders.Embeddings
-    backup_container: ContainerClient
 
     def __init__(self, 
         mongodb_conn_str: str, 
@@ -182,14 +177,14 @@ class Orchestrator:
         if kind == BLOG: response = self.blog_writer.run(input_text)
         else: response = self.news_writer.run(input_text)
 
-        if response: self.backup_response("articles", input_text, response.raw)
+        if response: self._backup_article(input_text, response.raw)
         return response
 
-    def backup_response(self, prefix: str, input_text: str, response_text: str):
+    def _backup_article(self, input_text: str, response_text: str):
         if not self.backup_container or not response_text: return 
-        trfile = prefix+"-"+now().strftime("%Y-%m-%d")+".jsonl"
+        trfile = "articles-"+now().strftime("%Y-%m-%d")+".jsonl"
         try: self.backup_container.upload_blob(trfile, json.dumps({'input': input_text, 'output': response_text})+"\n", BlobType.APPENDBLOB)           
-        except Exception as e: log.warning("backup failed", extra={'source': trfile, 'num_items': 1})
+        except Exception as e: log.warning(f"backup failed - {e}", extra={'source': trfile, 'num_items': 1})
 
     def store_beans(self, responses: list):      
         if not responses: return

@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r ./coffeemaker/nlp/src/requirements-min.txt
 RUN pip install --no-cache-dir -r ./requirements.txt
 RUN mkdir .models
 RUN huggingface-cli download --cache-dir /worker/.models avsolatorio/GIST-small-Embedding-v0
+RUN huggingface-cli download --cache-dir /worker/.models soumitsr/led-base-article-digestor
 
 ENV HF_HOME=/worker/.models
 ENV HF_HUB_CACHE=/worker/.models
@@ -26,7 +27,8 @@ ENV WORDS_THRESHOLD_FOR_DIGESTING=150
 
 ENV EMBEDDER_PATH=avsolatorio/GIST-small-Embedding-v0
 ENV EMBEDDER_CONTEXT_LEN=512
-ENV MAX_RELATED_EPS=0.1
+ENV MAX_RELATED_EPS=0.45
+ENV DIGESTOR_PATH=soumitsr/led-base-article-digestor
 ENV DIGESTOR_CONTEXT_LEN=4096
 
 CMD ["python", "./run.py"]

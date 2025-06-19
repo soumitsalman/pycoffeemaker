@@ -1,4 +1,5 @@
 from itertools import chain
+import json
 import os
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -72,6 +73,9 @@ def _make_digest_update(bean: Bean, digest: Digest):
 
 class Orchestrator:
     db: Beansack = None
+    dbworker = None
+    backup_container = None
+    
 
     def __init__(self, 
         mongodb_conn_str: str, 
@@ -83,10 +87,10 @@ class Orchestrator:
         digestor_path: str = None, 
         digestor_base_url: str = None,
         digestor_api_key: str = None,
-        digestor_context_len: int = 0
+        digestor_context_len: int = 0,
+        backup_azstorage_conn_str: str = None
     ): 
         self.db = Beansack(mongodb_conn_str, db_name)
-        self.cluster_db = StaticDB()
         self.dbworker = ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="dbupdater")
 
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
@@ -94,15 +98,16 @@ class Orchestrator:
         if sentiment_defs: self.sentiments = StaticDB(sentiment_defs)
         if digestor_path: self.digestor = agents.from_path(
             model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 
-            max_input_tokens=digestor_context_len, max_output_tokens=512, 
-            system_prompt=DIGEST_SYSTEM_PROMPT, output_parser=Digest.parse_compressed, temperature=0.2
+            max_input_tokens=digestor_context_len, max_output_tokens=400, 
+            output_parser=Digest.parse_compressed
         )
+        if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "analyzer")
     
     def embed_beans(self, beans: list[Bean]) -> list[Bean]|None:   
         if not beans: return beans
 
         # this is a cpu heavy calculation. run it on the main thread and let the nlp take care of it
-        embeddings = self.embedder.embed([bean.content for bean in beans])
+        embeddings = self.embedder.embed_documents([bean.content for bean in beans])
 
         # these are simple calculations. threading causes more time loss
         for bean, embedding in zip(beans, embeddings):
@@ -155,6 +160,7 @@ class Orchestrator:
         # these are simple calculations. threading causes more time loss
         updates = list(upd for upd in map(_make_digest_update, beans, digests) if upd)   
         self._push_update(updates, "digested", beans[0].source)
+        self._backup_digests(beans)
         # count = self.db.update_beans(updates)
         # log.info("digested", extra={"source": beans[0].source, "num_items": count}) 
         return digest_storables(beans)
@@ -166,14 +172,22 @@ class Orchestrator:
                 sort_by=NEWEST,
                 project={
                     K_ID: 1, K_URL: 1, 
-                    K_CONTENT: 1,  # K_CREATED: 1, 
-                    K_SOURCE: 1, # K_TITLE: 1,
-                    # K_GIST: 1, K_TAGS: 1, K_CATEGORIES: 1, K_SENTIMENTS: 1
+                    K_CONTENT: 1, 
+                    K_SOURCE: 1
                 },
                 limit=BATCH_SIZE
             )            
             if beans: yield beans
             else: break
+
+    def _backup_digests(self, beans: list[Bean]):
+        if not self.backup_container or not beans: return 
+        trfile = "digests-"+now().strftime("%Y-%m-%d")+".jsonl"
+        def backup():
+            items = map(lambda b: json.dumps({'article': b.content, "summary": b.gist})+"\n", beans)
+            try: self.backup_container.upload_blob(trfile, "".join(items), BlobType.APPENDBLOB)           
+            except Exception as e: log.warning(f"backup failed - {e}", extra={'source': trfile, 'num_items': len(beans)})
+        self.dbworker.submit(backup)
 
     def _push_update(self, updates, task, source):
         def push():
@@ -202,8 +216,9 @@ class Orchestrator:
             K_EMBEDDING: {"$exists": False},
             K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_INDEXING}
         }
+        self.cluster_db = StaticDB()
 
-        log.info("starting indexer", extra={"source": run_id, "num_items": 1})
+        log.info("starting indexer", extra={"source": run_id, "num_items": 1})        
         
         with self.dbworker:
             self.dbworker.submit(self._hydrate_cluster_db)

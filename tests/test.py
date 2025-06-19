@@ -253,10 +253,13 @@ def test_digestor_orch():
     orch = Orchestrator(
         DB_LOCAL_TEST,
         now().strftime("%Y%m%d"),
-        digestor_path="google/gemma-3-12b-it", 
-        digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
-        digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
-        digestor_context_len=4096
+        digestor_path="soumitsr/led-base-article-digestor",
+        digestor_context_len=4096,
+        backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
+        # digestor_path="google/gemma-3-12b-it", 
+        # digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
+        # digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
+        # digestor_context_len=4096
     )
     orch.run_digestor()
 
@@ -377,8 +380,8 @@ if __name__ == "__main__":
 
     # test_collector_orch()
     # test_indexer_orch()
-    # test_digestor_orch()
-    test_composer_orch()
+    test_digestor_orch()
+    # test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 

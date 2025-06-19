@@ -2,15 +2,15 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:06-13
+    image: soumitsr/coffeemaker:06-19
     depends_on:
       - localdb
     environment:
       - MODE=COLLECTOR
-      - DB_NAME=20250613
+      - DB_NAME=20250619
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - REMOTE_CRAWLER_URL=http://localcrawler:11235
-      - BATCH_SIZE=64
+      - BATCH_SIZE=32
     env_file:
       - dockertest.env
     networks:
@@ -19,46 +19,47 @@ services:
     mem_limit: 1g
 
   localindexer:
-    image: soumitsr/coffeemaker:06-06
+    image: soumitsr/coffeemaker:06-19
     depends_on:
       - localdb
     environment:
       - MODE=INDEXER
-      - DB_NAME=20250606
+      - DB_NAME=20250619
       - MONGODB_CONN_STR=mongodb://localdb:27017
-      - BATCH_SIZE=16
-      - MAX_RELATED_EPS=0.36
+      - BATCH_SIZE=48
     env_file:
       - dockertest.env
     networks:
       - coffeemaker-bridge
-    cpus: 2
+    cpus: 3
     mem_limit: 4g
 
   localdigestor:
-    image: soumitsr/coffeemaker:06-06
+    image: soumitsr/coffeemaker:06-19
     depends_on:
       - localdb
+      - azurite
     environment:
       - MODE=DIGESTOR
-      - DB_NAME=20250606
+      - DB_NAME=20250619
       - MONGODB_CONN_STR=mongodb://localdb:27017
-      - BATCH_SIZE=16
+      - BATCH_SIZE=4
+      - AZSTORAGE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;BlobEndpoint=http://azurite:10000/devstoreaccount1;
     env_file:
       - dockertest.env
     networks:
       - coffeemaker-bridge
-    cpus: 1
-    mem_limit: 1g
+    cpus: 3
+    mem_limit: 6g
 
   localcomposer:
-    image: soumitsr/coffeemaker:06-06
+    image: soumitsr/coffeemaker:06-19
     depends_on:
       - localdb
       - azurite
     environment:
       - MODE=COMPOSER
-      - DB_NAME=20250606
+      - DB_NAME=20250615
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - AZSTORAGE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;BlobEndpoint=http://azurite:10000/devstoreaccount1;
       - MIN_CLUSTER_SIZE=24

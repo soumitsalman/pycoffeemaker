@@ -64,9 +64,10 @@ if __name__ == "__main__":
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
             digestor_path=os.getenv("DIGESTOR_PATH"), 
-            digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
-            digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
-            digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN))
+            # digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
+            # digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
+            digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)),
+            backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
         )
         orch.run_digestor()
     elif mode == "COMPOSER":
