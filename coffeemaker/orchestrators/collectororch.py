@@ -41,8 +41,8 @@ class Orchestrator:
 
     def __init__(self, mongodb_conn_str: str, db_name: str):
         self.db = Beansack(mongodb_conn_str, db_name)
-        self.apicollector = APICollector()
-        self.webscraper = WebScraperLite()
+        # self.apicollector = APICollector()
+        # self.webscraper = WebScraperLite()
         # self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), 16) # NOTE: this value is hard-coded for now
         
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
@@ -67,8 +67,9 @@ class Orchestrator:
         # NOTE: this line is disabled because we are currently storing all beans
         # beans = storables(beans)
         # cleaning up garbage content
+        beans = self._filter_new(beans)
         for bean in beans:
-            if bean.is_scraped and is_scrapable(bean): bean.content = None 
+            if is_scrapable(bean): bean.content = None 
         log.info("scraped", extra={"source": source, "num_items": len(storables(beans))})
         return self.store_beans(source, beans)
 
@@ -149,45 +150,48 @@ class Orchestrator:
                 executor.submit(scrape, source, beans)
                 self.scraping_queue.task_done()
 
-    def _get_async_collect_funcs(self, sources):
-        tasks = []
-        for source_type, source_paths in parse_sources(sources).items():
-            log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
-            if source_type == 'ychackernews': func = self.apicollector.collect_ychackernews_async
-            elif source_type == 'reddit': func = self.apicollector.collect_subreddit_async
-            elif source_type == 'rss': func = self.apicollector.collect_rssfeed_async
-
-            tasks.extend((source, func) for source in source_paths)
-        random.shuffle(tasks)
-        return tasks
-
     @log_runtime_async(logger=log)
-    async def run_collection_async(self, sources):    
+    async def run_collection_async(self, sources):   
+        def get_collection_tasks():
+            tasks = []
+            for source_type, source_paths in parse_sources(sources).items():
+                log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
+                if source_type == 'ychackernews': func = apicollector.collect_ychackernews_async
+                elif source_type == 'reddit': func = apicollector.collect_subreddit_async
+                elif source_type == 'rss': func = apicollector.collect_rssfeed_async
+
+                tasks.extend((source, func) for source in source_paths)
+            random.shuffle(tasks)
+            return tasks
+     
         async def collect(source, func):
             try: 
-                needs_scraping = self._triage_collection(source, await func(source))
-                if needs_scraping: await self.scraping_queue.put((source, needs_scraping))
+                beans = await func(source) # collected beans
+                beans = self._triage_collection(source, beans) # needs scraping 
+                beans = await webscraper.scrape_beans(beans, collect_metadata=True) # scrape result
+                self._triage_scrape(source, beans)
             except Exception as e:
                 log.warning(f"collection failed - {e.__class__.__name__} {e}", extra={"source": source, "num_items": 1})
 
-        async with asyncio.TaskGroup() as tg:
-            [tg.create_task(collect(source, beans), name = f"collecting-{source}") for source, beans in self._get_async_collect_funcs(sources)]     
-        await self.scraping_queue.put(END_OF_STREAM)        
+        async with APICollector() as apicollector, WebScraperLite() as webscraper:
+            async with asyncio.TaskGroup() as tg:
+                [tg.create_task(collect(source, beans), name = f"collecting-{source}") for source, beans in get_collection_tasks()]     
+        # await self.scraping_queue.put(END_OF_STREAM)        
 
-    @log_runtime_async(logger=log)
-    async def run_scraping_async(self):
-        async def scrape(source, beans):  
-            beans = await self.webscraper.scrape_beans(beans, collect_metadata=True)
-            self._triage_scrape(source, beans)
+    # @log_runtime_async(logger=log)
+    # async def run_scraping_async(self):
+    #     async def scrape(source, beans):  
+    #         beans = await self.webscraper.scrape_beans(beans, collect_metadata=True)
+    #         self._triage_scrape(source, beans)
                 
-        async with asyncio.TaskGroup() as tg:
-            while True:
-                token = await self.scraping_queue.get()
-                if token == END_OF_STREAM: break
-                if not token: continue
-                source, beans = token
-                tg.create_task(scrape(source, beans), name=f"scraping-{source}")
-                self.scraping_queue.task_done() 
+    #     async with asyncio.TaskGroup() as tg:
+    #         while True:
+    #             token = await self.scraping_queue.get()
+    #             if token == END_OF_STREAM: break
+    #             if not token: continue
+    #             source, beans = token
+    #             tg.create_task(scrape(source, beans), name=f"scraping-{source}")
+    #             self.scraping_queue.task_done() 
     
     @log_runtime(logger=log)
     def run(self, sources):
@@ -207,16 +211,16 @@ class Orchestrator:
     async def run_async(self, sources):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.run_total = 0        
-        self.scraping_queue = asyncio.Queue()
+        # self.scraping_queue = asyncio.Queue()
 
         log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
-        async with self.apicollector, self.webscraper:
-            await asyncio.gather(*[
-                self.run_collection_async(sources),
-                self.run_scraping_async()
-            ])
+        # async with self.apicollector, self.webscraper:
+        #     collection = asyncio.create_task()
+        #     scraping = asyncio.create_task(self.run_scraping_async())
+        #     await collection
+        #     await scraping
+        await self.run_collection_async(sources)
         self.run_trend_ranking() # trend rank from this collection if execution finished
-
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 
 

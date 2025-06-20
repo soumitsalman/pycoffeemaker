@@ -16,3 +16,4 @@ setuptools
 pyarrow
 pandas
 hdbscan
+boto3

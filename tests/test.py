@@ -78,6 +78,25 @@ def test_collector_and_scraper():
     ]
     [coll.collect_rssfeed(f) for f in feeds]
 
+def test_scraper():
+    from coffeemaker.collectors import WebScraperLite
+    urls = [
+        "https://financebuzz.com/retirees-should-buy-at-bjs-4",
+        "https://financebuzz.com/southern-lake-towns-afford-social-security",
+        "https://financebuzz.com/professional-skills-more-valuable-after-60",
+        "https://financebuzz.com/avoid-buying-rv-in-retirement",
+        "https://financebuzz.com/trader-joes-pantry-items-june-2025",
+        "https://financebuzz.com/cities-getting-caseys-june-2025",
+        "https://financebuzz.com/costco-home-decor-guests-want-june-2025"
+    ]
+
+    async def run():
+        async with WebScraperLite() as scraper:
+            for url in urls:
+                ic(await scraper.scrape_url(url, False))
+    
+    asyncio.run(run())
+
 def test_fullstack_orch():
     from coffeemaker.orchestrators.fullstack import Orchestrator
     orch = Orchestrator(
@@ -171,7 +190,7 @@ def test_collector_orch():
             - CryptoNews
             - energyStocks
     """
-    orch.db.beanstore.drop()
+    # orch.db.beanstore.drop()
     asyncio.run(orch.run_async(sources))
     # orch.run(sources)
 
@@ -313,15 +332,16 @@ def test_composer_orch():
        
 
 if __name__ == "__main__":
-    hydrate_test_db()
+    # hydrate_test_db()
     # test_static_db()
     # test_trend_analysis()
     # test_collector_and_scraper()
+    # test_scraper()
 
-    # test_collector_orch()
+    test_collector_orch()
     # test_indexer_orch()
     # test_digestor_orch()
-    test_composer_orch()
+    # test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
