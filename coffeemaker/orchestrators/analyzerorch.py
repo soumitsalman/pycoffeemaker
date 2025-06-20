@@ -114,7 +114,6 @@ class Orchestrator:
             bean.embedding = embedding
         beans = index_storables(beans)
 
-        # self.cluster_db.store_items([bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
         self.dbworker.submit(self.cluster_db.store_items, [bean.model_dump(include=["id", K_EMBEDDING], by_alias=True) for bean in beans])
         self.dbworker.submit(self.db.update_bean_fields, beans, [K_EMBEDDING])
         log.info("embedded", extra={"source": beans[0].source, "num_items": len(beans)})
@@ -161,8 +160,6 @@ class Orchestrator:
         updates = list(upd for upd in map(_make_digest_update, beans, digests) if upd)   
         self._push_update(updates, "digested", beans[0].source)
         self._backup_digests(beans)
-        # count = self.db.update_beans(updates)
-        # log.info("digested", extra={"source": beans[0].source, "num_items": count}) 
         return digest_storables(beans)
     
     def stream_beans(self, filter):
@@ -194,7 +191,6 @@ class Orchestrator:
             count = self.db.update_beans(updates)
             log.info(task, extra={"source": source, "num_items": count}) 
         self.dbworker.submit(push)
-        # push()
 
     def _hydrate_cluster_db(self):
         beans = list(self.db.beanstore.find(
@@ -218,8 +214,7 @@ class Orchestrator:
         }
         self.cluster_db = StaticDB()
 
-        log.info("starting indexer", extra={"source": run_id, "num_items": 1})        
-        
+        log.info("starting indexer", extra={"source": run_id, "num_items": os.cpu_count()})        
         with self.dbworker:
             self.dbworker.submit(self._hydrate_cluster_db)
             for beans in self.stream_beans(filter):
@@ -229,10 +224,8 @@ class Orchestrator:
                     self.cluster_beans(beans)
                     total += len(beans)
                 except Exception as e:
-                    log.error("failed indexing", extra={"source": run_id, "num_items": len(beans)})
-                    log.exception(e, extra={"source": run_id, "num_items": len(beans)})
-
-            log.info("total indexed", extra={"source": run_id, "num_items": total})
+                    log.error(f"failed indexing - {e}", extra={"source": run_id, "num_items": len(beans)})
+        log.info("total indexed", extra={"source": run_id, "num_items": total})
 
     @log_runtime(logger=log)
     def run_digestor(self):
@@ -244,16 +237,15 @@ class Orchestrator:
             K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_DIGESTING},
             K_KIND: {"$ne": GENERATED}
         }
-        log.info("starting digestor", extra={"source": run_id, "num_items": 1})
 
-        for beans in self.stream_beans(filter):
-            try:
-                beans = self.digest_beans(beans)
-                total += len(beans)
-            except Exception as e:
-                log.error("failed digesting", extra={"source": run_id, "num_items": len(beans)})
-                log.exception(e, extra={"source": run_id, "num_items": len(beans)})
-
+        log.info("starting digestor", extra={"source": run_id, "num_items": os.cpu_count()})
+        with self.dbworker:
+            for beans in self.stream_beans(filter):
+                try:
+                    beans = self.digest_beans(beans)
+                    total += len(beans)
+                except Exception as e:
+                    log.error(f"failed digesting - {e}", extra={"source": run_id, "num_items": len(beans)})
         log.info("total digested", extra={"source": run_id, "num_items": total})
 
     

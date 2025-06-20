@@ -19,10 +19,9 @@ BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()*os.cpu_count()))
 
 log = logging.getLogger(__name__)
 
-# is_indexable = lambda bean: above_threshold(bean.content, WORDS_THRESHOLD_FOR_INDEXING) and (bean.created > ndays_ago(2))
-is_scrapable = lambda bean: not above_threshold(bean.content, WORDS_THRESHOLD_FOR_SCRAPING) # if there is no summary and embedding then no point storing
-# indexables = lambda beans: list(filter(is_indexable, beans)) if beans else beans
+is_scrapable = lambda bean: not above_threshold(bean.content, WORDS_THRESHOLD_FOR_SCRAPING) 
 scrapables = lambda beans: list(filter(is_scrapable, beans)) if beans else beans 
+storables = lambda beans: [bean for bean in beans if not is_scrapable(bean)]
 
 def _prepare_for_storing(beans: list[Bean]):
     for bean in beans:
@@ -59,31 +58,26 @@ class Orchestrator:
         beans = self._filter_new([bean for bean in beans if bean] if beans else None)
         chatters = [chatter for chatter in chatters if chatter] if chatters else None
 
-        if beans: self.store_beans(source, beans)
+        if beans: self.store_beans(source, storables(beans))
         if chatters: self.db.store_chatters(chatters)
 
         return scrapables(beans)
     
     def _triage_scrape(self, source: str, beans: list[Bean]):
-        beans = [bean for bean in beans if bean.is_scraped]
+        # NOTE: this line is disabled because we are currently storing all beans
+        # beans = storables(beans)
+        # cleaning up garbage content
         for bean in beans:
-            if is_scrapable(bean): bean.content = None # if it is still below the threshold, remove the content
-        count = self.db.update_bean_fields(
-            _prepare_for_storing(beans), 
-            [
-                K_CONTENT, K_SUMMARY, K_TITLE, K_IS_SCRAPED,
-                K_NUM_WORDS_CONTENT, K_NUM_WORDS_SUMMARY, K_NUM_WORDS_TITLE,
-                K_IMAGEURL, K_AUTHOR, K_CREATED, 
-                K_SITE_RSS_FEED, K_SITE_NAME, K_SITE_FAVICON 
-            ]
-        )
-        log.info("scraped", extra={"source": source, "num_items": count})
+            if bean.is_scraped and is_scrapable(bean): bean.content = None 
+        log.info("scraped", extra={"source": source, "num_items": len(storables(beans))})
+        return self.store_beans(source, beans)
 
     def store_beans(self, source: str, beans: list[Bean]):
-        if not beans: return
+        if not beans: return       
         count = self.db.store_beans(_prepare_for_storing(beans))
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count
+        return beans
     
     def run_trend_ranking(self):
         trends = self.db.get_latest_chatters(None)
@@ -215,14 +209,13 @@ class Orchestrator:
         self.run_total = 0        
         self.scraping_queue = asyncio.Queue()
 
-        log.info("starting collector", extra={"source": self.run_id, "num_items": 1})
-
+        log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
         async with self.apicollector, self.webscraper:
-            collection = asyncio.create_task(self.run_collection_async(sources))
-            scraping = asyncio.create_task(self.run_scraping_async())
-            await collection
-            self.run_trend_ranking()
-            await scraping
+            await asyncio.gather(*[
+                self.run_collection_async(sources),
+                self.run_scraping_async()
+            ])
+        self.run_trend_ranking() # trend rank from this collection if execution finished
 
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 

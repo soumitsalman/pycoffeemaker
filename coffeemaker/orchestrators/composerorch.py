@@ -11,19 +11,23 @@ from icecream import ic
 
 log = logging.getLogger(__name__)
 
-CLUSTER_EPS = float(os.getenv('CLUSTER_EPS', 1.4))
-MIN_CLUSTER_SIZE = int(os.getenv('MIN_CLUSTER_SIZE', 24))
-MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
-MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', 8))
-MAX_ARTICLE_LEN = 3072
-
-LAST_NDAYS = 1
-BEAN_FILTER = {
-    K_GIST: {"$exists": True}, 
-    # K_EMBEDDING: {"$exists": True},  
-    K_CREATED: {"$gte": ndays_ago(LAST_NDAYS)}
+_ESPRESSO_DB = "espresso"
+_LAST_NDAYS = 1
+_CLEANUP_WINDOW = 7
+_CLEANUP_FILTER = {
+    K_UPDATED: {"$lt": _CLEANUP_WINDOW},
+    K_KIND: {"$ne": GENERATED}
 }
-BEAN_PROJECT = {
+_PORT_FILTER = {
+    K_GIST: VALUE_EXISTS,
+    K_EMBEDDING: {"$exists": True},
+    K_CREATED: {"$gte": ndays_ago(_LAST_NDAYS)}
+}
+_SCOPE_FILTER = {
+    K_GIST: VALUE_EXISTS,
+    K_CREATED: {"$gte": ndays_ago(_LAST_NDAYS)}
+}
+_PROJECTION = {
     K_URL: 1, 
     K_EMBEDDING: 1, 
     K_GIST: 1, 
@@ -33,6 +37,12 @@ BEAN_PROJECT = {
     K_SENTIMENTS: 1, 
     K_CREATED:1
 }
+
+CLUSTER_EPS = float(os.getenv('CLUSTER_EPS', 1.4))
+MIN_CLUSTER_SIZE = int(os.getenv('MIN_CLUSTER_SIZE', 24))
+MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
+MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', 8))
+MAX_ARTICLE_LEN = 3072
 
 make_article_id = lambda title, current: title.lower().replace(' ', '-')+current.strftime("-%Y-%m-%d-%H-%M-%S-")+str(random.randint(1000,9999))+".md"
 def _make_bean(comp: GeneratedArticle): 
@@ -75,7 +85,8 @@ def _parse_topics(topics):
     else: return yaml.safe_load(topics)
 
 class Orchestrator:
-    db: Beansack
+    master_db: Beansack
+    espresso_db: Beansack
 
     def __init__(self, 
         mongodb_conn_str: str, 
@@ -88,7 +99,9 @@ class Orchestrator:
         embedder_context_len: int = 0,
         backup_azstorage_conn_str: str = None
     ):
-        self.db = Beansack(mongodb_conn_str, db_name)
+        self.master_db = Beansack(mongodb_conn_str, db_name)
+        self.espresso_db = Beansack(mongodb_conn_str, _ESPRESSO_DB)
+
         self.news_writer = agents.from_path(
             composer_path, composer_base_url, composer_api_key, 
             max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
@@ -105,17 +118,21 @@ class Orchestrator:
         if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 
     def get_beans(self, query: str = None, embedding: list[float] = None,  kind: str = None, tags: list[str] = None, last_ndays: int = None, limit: int = None):
-        filter = BEAN_FILTER
+        filter = _SCOPE_FILTER
         if kind: filter[K_KIND] = lower_case(kind)
         # if last_ndays: filter.update(created_after(last_ndays=last_ndays))
-
+        # TODO: REMOVE THIS
+        query = None
         if query: embedding = self.embedder("topic: "+ (query+": "+", ".join(tags) if tags else query))
         elif tags: filter[K_TAGS] = lower_case(tags)
-        
-        if embedding: beans = self.db.vector_search_beans(embedding, similarity_score=DEFAULT_VECTOR_SEARCH_SCORE, filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=BEAN_PROJECT)
-        else: beans = self.db.query_beans(filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=BEAN_PROJECT)
-        log.info("found beans", extra={"source": query or self.run_id, "num_items": len(beans)})
-        return beans if len(beans) >= MIN_CLUSTER_SIZE else None
+        beans = None
+        try:
+            if embedding: beans = self.master_db.vector_search_beans(embedding, similarity_score=DEFAULT_VECTOR_SEARCH_SCORE, filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=_PROJECTION)
+            else: beans = self.master_db.query_beans(filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=_PROJECTION)
+            log.info("found beans", extra={"source": query or self.run_id, "num_items": len(beans)})      
+        except Exception as e: 
+            log.warning(f"finding beans failed - {e}", extra={"source": query or self.run_id, "num_items": 1})
+        return beans
     
     def _kmeans_cluster(self, beans)-> list[list[Bean]]:
         from sklearn.cluster import KMeans
@@ -142,7 +159,10 @@ class Orchestrator:
     def get_topic_clusters(self, topics = None):
         if topics:
             topics = _parse_topics(topics)
-            clusters = map(lambda topic: (topic[0], topic[1][K_KIND], self.get_beans(query = topic[0], kind = topic[1][K_KIND], tags = topic[1][K_TAGS], limit=MAX_CLUSTER_SIZE)), topics.items())
+            clusters = run_batch(
+                lambda topic: (topic[0], topic[1][K_KIND], self.get_beans(query = topic[0], kind = topic[1][K_KIND], tags = topic[1][K_TAGS], limit=MAX_CLUSTER_SIZE)), 
+                topics.items()
+            )
             return list(filter(lambda x: x[2] and len(x[2]) >= MIN_CLUSTER_SIZE, clusters))
         else:
             beans = self.get_beans(kind = NEWS)
@@ -186,11 +206,23 @@ class Orchestrator:
         try: self.backup_container.upload_blob(trfile, json.dumps({'input': input_text, 'output': response_text})+"\n", BlobType.APPENDBLOB)           
         except Exception as e: log.warning(f"backup failed - {e}", extra={'source': trfile, 'num_items': 1})
 
+    def port_for_espresso(self):        
+        try:
+            log.info("cleaned up", extra={
+                'source': self.run_id, 
+                'num_items': self.espresso_db.beanstore.delete_many(_CLEANUP_FILTER).deleted_count
+            })                
+            log.info("ported", extra={
+                'source': self.run_id, 
+                'num_items': len(self.espresso_db.beanstore.insert_many(self.master_db.beanstore.find(_PORT_FILTER),ordered=False).inserted_ids)
+            })
+        except: pass        
+
     def store_beans(self, responses: list):      
         if not responses: return
         beans = list(map(_make_bean, (r for r in responses if r)))
         batch_upload(self.backup_container, beans)
-        count = self.db.store_beans(beans)
+        count = self.espresso_db.store_beans(beans)
         log.info("stored articles", extra={'source': self.run_id, 'num_items': count})
         return beans
        
@@ -198,6 +230,7 @@ class Orchestrator:
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
 
+        self.port_for_espresso()
         clusters = self.get_topic_clusters(topics)
         if not clusters: return    
         clusters = random.sample(clusters, min(MAX_ARTICLES, len(clusters)))

@@ -12,7 +12,7 @@ from coffeemaker.nlp import Digest, DIGEST_SYSTEM_PROMPT
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack
 from coffeemaker.pybeansack.models import *
-from coffeemaker.collectors.collector import APICollector, WebScraper, parse_sources
+from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
 from coffeemaker.nlp.src import agents, embedders, utils
 from coffeemaker.orchestrators.utils import *
 
@@ -75,6 +75,8 @@ class Orchestrator:
         digestor_context_len: int = int(os.getenv("DIGESTOR_CONTEXT_LEN", 4096)),
         clus_eps: float = float(os.getenv("CLUSTER_EPS", 3))
     ): 
+        self.apicollector = APICollector()   
+        self.scraper = WebScraperLite()
         self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         self.digestor = agents.from_path(
             model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 
@@ -245,7 +247,7 @@ class Orchestrator:
 
     @log_runtime_async(logger=log)
     async def run_collections_async(self, sources: str = os.getenv('COLLECTOR_SOURCES')):
-        apicollector = APICollector()        
+             
         # current_directory = os.path.dirname(os.path.abspath(__file__))
         # rssfeeds = _read_sources(os.path.join(current_directory, "collectors/rssfeedsources.txt"))
         # subreddits = _read_sources(os.path.join(current_directory, "collectors/redditsources.txt"))
@@ -254,9 +256,9 @@ class Orchestrator:
         for source_type, source_paths in parse_sources(sources).items():
             # awaiting on each group so that os is not overwhelmed by sockets
             log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
-            if source_type == 'ychackernews': await self.triage_collection(apicollector.collect_ychackernews(source_paths))
-            elif source_type == 'reddit': await self.triage_collection(apicollector.collect_subreddits(source_paths))
-            elif source_type == 'rss': await self.triage_collection(apicollector.collected_rssfeeds(source_paths))
+            if source_type == 'ychackernews': await self.triage_collection(self.apicollector.collect_ychackernews(source_paths))
+            elif source_type == 'reddit': await self.triage_collection(self.apicollector.collect_subreddits(source_paths))
+            elif source_type == 'rss': await self.triage_collection(self.apicollector.collected_rssfeeds(source_paths))
 
     async def triage_collection(self, collection: list[tuple[Bean, Chatter]]|Awaitable[list[tuple[Bean, Chatter]]]):
         if isinstance(collection, Awaitable): collection = await collection
@@ -276,7 +278,7 @@ class Orchestrator:
 
     @log_runtime_async(logger=log)
     async def run_downloading_async(self):
-        scraper = WebScraper()
+        
         
         while True:
             items = await self.download_queue.get()
@@ -284,7 +286,7 @@ class Orchestrator:
             if not items: continue
 
             source, beans = items
-            await self.download_async(source, scraper.scrape_beans(beans, collect_metadata=True))
+            await self.download_async(source, self.scraper.scrape_beans(beans, collect_metadata=True))
             self.download_queue.task_done()
 
     async def download_async(self, source: str, collect: Awaitable[list[Bean]]):
@@ -358,13 +360,14 @@ class Orchestrator:
         # 5. wait for the downloading to finish and then put the end of stream for indexing
         # 6. wait for indexing to finish
 
-        await self.run_collections_async(sources)
-        await self.download_queue.put(END_OF_STREAM)
-        # self.cleanup()
-        self.trend_rank_beans()
+        with self.apicollector, self.scraper:
+            await self.run_collections_async(sources)
+            await self.download_queue.put(END_OF_STREAM)
+            # self.cleanup()
+            self.trend_rank_beans()
 
-        indexing_task = asyncio.create_task(self.run_indexing_async()) 
-        await self.run_downloading_async()
+            indexing_task = asyncio.create_task(self.run_indexing_async()) 
+            await self.run_downloading_async()
         await self.index_queue.put(END_OF_STREAM)
         await indexing_task
         

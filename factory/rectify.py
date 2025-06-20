@@ -642,6 +642,27 @@ def migrate_users(from_db, to_db):
     
     new_prod.db.userstore.insert_many(old_prod.db.userstore.find({}), ordered=False)
 
+def migrate_mongodb(from_db_name, to_db_name, from_db_conn = os.getenv('MONGODB_CONN_STR'), to_db_conn = os.getenv('MONGODB_CONN_STR')):
+    from coffeemaker.pybeansack.mongosack import Beansack
+
+    from_db = Beansack(from_db_conn, from_db_name)
+    to_db = Beansack(to_db_conn, to_db_name)
+    bean_filter = {
+        K_GIST: VALUE_EXISTS,
+        K_EMBEDDING: VALUE_EXISTS,
+        K_CREATED: {"$gte": ndays_ago(7)}
+    }
+
+    tasks = [
+        lambda: to_db.beanstore.insert_many(from_db.beanstore.find(bean_filter), ordered=False),
+        lambda: to_db.pagestore.insert_many(from_db.pagestore.find({}), ordered=False),
+        lambda: to_db.userstore.insert_many(from_db.userstore.find({}), ordered=False),
+        lambda: to_db.sourcestore.insert_many(from_db.sourcestore.find({}), ordered=False),
+    ]
+    
+    for t in tasks:
+        try: t()
+        except Exception as e: ic(e)
 
 # adding data porting logic
 if __name__ == "__main__":
@@ -649,4 +670,5 @@ if __name__ == "__main__":
     # create_categories_locally()
     # create_sentiments_locally()
     # port_beans_locally()
-    migrate_users("beansackV2", "test")
+    # migrate_users("beansackV2", "test")
+    migrate_mongodb("test", "espresso")

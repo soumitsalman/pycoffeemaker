@@ -113,68 +113,9 @@ def create_test_data_file(output_path):
     save_models(beans, output_path)
 
 def hydrate_test_db():
-    from coffeemaker.orchestrators.collectororch import Orchestrator
-    from coffeemaker.nlp.src.utils import batch_run
+    from factory.rectify import migrate_mongodb
+    migrate_mongodb("test", now().strftime("%Y%m%d"), from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
 
-    prod = Orchestrator(
-        os.getenv('MONGODB_CONN_STR'),
-        "test"
-    )
-    local_test = Orchestrator(
-        "mongodb://localhost:27017/",
-        now().strftime("%Y%m%d")
-    )
-    
-    BATCH_SIZE = 1000
-    def port_beans(skip):
-        beans = list(prod.db.beanstore.find(
-            filter={
-                # K_GIST: VALUE_EXISTS,
-                # K_EMBEDDING: VALUE_EXISTS,
-                K_CONTENT: VALUE_EXISTS,
-                K_COLLECTED: {"$gte": ndays_ago(7)}
-            },
-            skip=skip,
-            limit=BATCH_SIZE
-        ))        
-        if not beans: return
-        ic(skip)
-        try: local_test.db.beanstore.insert_many(beans, ordered=False)
-        except Exception as e: ic(skip, e.__class__)
-
-    batch_run(port_beans, range(0, 100000, BATCH_SIZE), num_threads=os.cpu_count()*4)
-    local_test.db.pagestore.insert_many(prod.db.pagestore.find({}), ordered=False)
-
-
-# def download_markdown(q: str = None, accuracy = 0.7, keywords: str|list[str] = None, limit = 100):
-#     from coffeemaker.orchestrators.collectororch import Orchestrator
-
-#     orch = Orchestrator(
-#         os.getenv('MONGODB_CONN_STR'),
-#         "test"
-#     )
-#     filter = {K_KIND: { "$ne": POST}}
-#     if keywords: filter[K_TAGS] = case_insensitive(keywords)     
-#     projection = {K_SUMMARY: 1, K_URL: 1}
-
-#     if q:
-#         beans = orch.remotesack.vector_search_beans(
-#             embedding=orch.embedder.embed_query(f"query: {q}"),
-#             min_score=accuracy,
-#             filter=filter,
-#             sort_by=NEWEST,
-#             skip=0,
-#             limit=limit,
-#             projection=projection
-#         )
-#     else:
-#         beans = orch.remotesack.query_sample_beans(filter, NEWEST, limit, projection)
-
-#     markdown = "\n\n".join([bean.digest() for bean in beans])
-
-#     filename = q or datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-#     if keywords: filename = "-".join(keywords)
-#     save_markdown(filename, markdown)
 
 def test_trend_analysis():
     from coffeemaker.orchestrators.collectororch import Orchestrator
@@ -184,7 +125,6 @@ def test_trend_analysis():
     )
     items = orch.db.get_latest_chatters()
     ic(random.sample(items, 5))
-
 
 def test_static_db():
     from coffeemaker.pybeansack.staticdb import StaticDB
@@ -268,8 +208,8 @@ def test_composer_orch():
     from coffeemaker.nlp import GeneratedArticle, agents, NEWSRECAP_SYSTEM_PROMPT
     orch = Orchestrator(
         DB_LOCAL_TEST,
-        # now().strftime("%Y%m%d"),
-        "20250615",
+        now().strftime("%Y%m%d"),
+        # "20250615",
         composer_path="o4-mini",
         composer_base_url=os.getenv("COMPOSER_BASE_URL"),
         composer_api_key=os.getenv("COMPOSER_API_KEY"),
@@ -373,15 +313,15 @@ def test_composer_orch():
        
 
 if __name__ == "__main__":
-    # hydrate_test_db()
+    hydrate_test_db()
     # test_static_db()
     # test_trend_analysis()
     # test_collector_and_scraper()
 
     # test_collector_orch()
     # test_indexer_orch()
-    test_digestor_orch()
-    # test_composer_orch()
+    # test_digestor_orch()
+    test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
