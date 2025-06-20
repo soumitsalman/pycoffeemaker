@@ -121,8 +121,7 @@ class Orchestrator:
         filter = _SCOPE_FILTER
         if kind: filter[K_KIND] = lower_case(kind)
         # if last_ndays: filter.update(created_after(last_ndays=last_ndays))
-        # TODO: REMOVE THIS
-        query = None
+
         if query: embedding = self.embedder("topic: "+ (query+": "+", ".join(tags) if tags else query))
         elif tags: filter[K_TAGS] = lower_case(tags)
         beans = None
