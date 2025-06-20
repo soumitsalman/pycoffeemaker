@@ -166,32 +166,14 @@ class Orchestrator:
      
         async def collect(source, func):
             try: 
-                beans = await func(source) # collected beans
-                beans = self._triage_collection(source, beans) # needs scraping 
-                beans = await webscraper.scrape_beans(beans, collect_metadata=True) # scrape result
-                self._triage_scrape(source, beans)
+                beans = self._triage_collection(source, await func(source)) # collect and triage which ones needs scraping 
+                if beans: self._triage_scrape(source, await webscraper.scrape_beans(beans, collect_metadata=True)) # scrape and triage which ones succeeded
             except Exception as e:
                 log.warning(f"collection failed - {e.__class__.__name__} {e}", extra={"source": source, "num_items": 1})
 
         async with APICollector() as apicollector, WebScraperLite() as webscraper:
             async with asyncio.TaskGroup() as tg:
                 [tg.create_task(collect(source, beans), name = f"collecting-{source}") for source, beans in get_collection_tasks()]     
-        # await self.scraping_queue.put(END_OF_STREAM)        
-
-    # @log_runtime_async(logger=log)
-    # async def run_scraping_async(self):
-    #     async def scrape(source, beans):  
-    #         beans = await self.webscraper.scrape_beans(beans, collect_metadata=True)
-    #         self._triage_scrape(source, beans)
-                
-    #     async with asyncio.TaskGroup() as tg:
-    #         while True:
-    #             token = await self.scraping_queue.get()
-    #             if token == END_OF_STREAM: break
-    #             if not token: continue
-    #             source, beans = token
-    #             tg.create_task(scrape(source, beans), name=f"scraping-{source}")
-    #             self.scraping_queue.task_done() 
     
     @log_runtime(logger=log)
     def run(self, sources):
@@ -211,14 +193,8 @@ class Orchestrator:
     async def run_async(self, sources):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.run_total = 0        
-        # self.scraping_queue = asyncio.Queue()
 
         log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
-        # async with self.apicollector, self.webscraper:
-        #     collection = asyncio.create_task()
-        #     scraping = asyncio.create_task(self.run_scraping_async())
-        #     await collection
-        #     await scraping
         await self.run_collection_async(sources)
         self.run_trend_ranking() # trend rank from this collection if execution finished
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})

@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:06-20
+    image: soumitsr/coffeemaker:06-20-1
     depends_on:
       - localdb
     environment:
@@ -18,7 +18,7 @@ services:
     mem_limit: 1g
 
   localindexer:
-    image: soumitsr/coffeemaker:06-20
+    image: soumitsr/coffeemaker:06-20-1
     depends_on:
       - localdb
     environment:
