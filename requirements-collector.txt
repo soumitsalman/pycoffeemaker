@@ -7,13 +7,7 @@ tldextract
 praw
 asyncpraw
 readability-lxml
-azure-storage-queue
-azure-storage-blob
-boto3
 persist-queue
 icecream
 python-dotenv
-setuptools
-pyarrow
-pandas
-hdbscan
+pyyaml

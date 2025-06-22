@@ -1,0 +1,45 @@
+# Build stage
+FROM python:3.12-slim-bookworm AS builder
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+
+# Set up virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy only requirements first to leverage Docker cache
+COPY ./coffeemaker/pybeansack/requirements.txt ./pybeansack-requirements.txt
+COPY ./requirements-collector.txt ./requirements.txt
+
+# Install dependencies and download models
+RUN pip install --no-cache-dir -r pybeansack-requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Final stage
+FROM python:3.12-slim-bookworm
+
+# Copy virtual environment and models from builder
+COPY --from=builder /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    WORDS_THRESHOLD_FOR_SCRAPING=150 \
+    WORDS_THRESHOLD_FOR_INDEXING=150 \
+    WORDS_THRESHOLD_FOR_DIGESTING=150
+
+# Set the working directory
+WORKDIR /worker
+
+# Copy only necessary files
+COPY . .
+RUN rm -rf tests
+
+CMD ["python", "./run.py"]

@@ -1,13 +1,10 @@
 
 import logging
 import os
-import boto3
 from logging import Logger
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
-from azure.storage.queue import QueueClient, QueueMessage
-from azure.storage.blob import ContainerClient, BlobType
 
 MAX_QUEUE_PAGE = 32
 WORDS_THRESHOLD_FOR_SCRAPING = int(os.getenv('WORDS_THRESHOLD_FOR_SCRAPING', 200)) # min words needed to not download the body
@@ -41,8 +38,8 @@ def log_runtime_async(logger: Logger):
         return wrapper
     return decorator
 
-def dequeue_batch(queue: QueueClient, max_batch_size: int):
-    def delete_and_extract(msg: QueueMessage):
+def dequeue_batch(queue, max_batch_size: int):
+    def delete_and_extract(msg):
         queue.delete_message(msg)
         return msg.content
         
@@ -60,6 +57,7 @@ def dequeue_batch(queue: QueueClient, max_batch_size: int):
     if batch: yield batch
 
 def initialize_azqueues(azqueue_conn_str, queue_names: list[str]):    
+    from azure.storage.queue import QueueClient, QueueMessage
     queues = [QueueClient.from_connection_string(azqueue_conn_str, name) for name in queue_names]
     for q in queues:
         try: q.create_queue()
@@ -67,12 +65,16 @@ def initialize_azqueues(azqueue_conn_str, queue_names: list[str]):
     return queues
 
 def initialize_azblobstore(azstorage_conn_str, container_name):
+    from azure.storage.blob import ContainerClient, BlobType
+
     container = ContainerClient.from_connection_string(azstorage_conn_str, container_name)
     try: container.create_container()
     except: log.debug("blob container already exists %s", container_name)
     return container
 
 def initialize_s3bucket(s3_endpoint, s3_access_key, s3_secret_key, bucket_name):
+    import boto3
+
     client = boto3.client(
         "s3",
         endpoint_url=s3_endpoint,
@@ -87,8 +89,8 @@ def initialize_s3bucket(s3_endpoint, s3_access_key, s3_secret_key, bucket_name):
 calculate_trend_score = lambda chatter_delta: 100*chatter_delta.comments_change + 10*chatter_delta.shares_change + chatter_delta.likes_change    
 merge_tags = lambda *args: list(set(item.lower() for arg in args if arg for item in arg))
 
-def batch_upload(container: ContainerClient, beans: list):
-    upload = lambda bean: container.upload_blob(bean.url, bean.content, BlobType.BLOCKBLOB)
-    with ThreadPoolExecutor(max_workers=len(beans)) as executor:
-        list(executor.map(upload, beans))
+# def batch_upload(container: ContainerClient, beans: list):
+#     upload = lambda bean: container.upload_blob(bean.url, bean.content, BlobType.BLOCKBLOB)
+#     with ThreadPoolExecutor(max_workers=len(beans)) as executor:
+#         list(executor.map(upload, beans))
  

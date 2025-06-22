@@ -6,16 +6,28 @@ import persistqueue
 from concurrent.futures import ThreadPoolExecutor
 from icecream import ic
 from datetime import timezone
-from azure.storage.queue import QueueClient
 from pymongo import UpdateOne
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
 from coffeemaker.orchestrators.utils import *
 
-END_OF_STREAM = "END_OF_STREAM"
 FILTER_KINDS = [NEWS, BLOG]
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()*os.cpu_count()))
+
+_ESPRESSO_DB = "espresso"
+_END_OF_STREAM = "END_OF_STREAM"
+_CLEANUP_WINDOW = 7
+_CLEANUP_FILTER = {
+    K_UPDATED: {"$lt": _CLEANUP_WINDOW},
+    K_KIND: {"$ne": GENERATED}
+}
+_LAST_NDAYS = 1
+_PORT_FILTER = {
+    K_GIST: VALUE_EXISTS,
+    K_EMBEDDING: {"$exists": True},
+    K_UPDATED: {"$gte": ndays_ago(_LAST_NDAYS)} # take everything that has been created or updated in the last 1 day
+}
 
 log = logging.getLogger(__name__)
 
@@ -35,16 +47,14 @@ def _prepare_for_storing(beans: list[Bean]):
     return beans
 
 class Orchestrator:
-    db: Beansack
-    scraping_queue = None
+    db: Beansack = None
+    espresso_db: Beansack = None
     run_total: int = 0
 
     def __init__(self, mongodb_conn_str: str, db_name: str):
-        self.db = Beansack(mongodb_conn_str, db_name)
-        # self.apicollector = APICollector()
-        # self.webscraper = WebScraperLite()
-        # self.webscraper = WebScraper(os.getenv('REMOTE_CRAWLER_URL'), 16) # NOTE: this value is hard-coded for now
-        
+        self.db = Beansack(mongodb_conn_str, db_name)    
+        self.espresso_db = Beansack(mongodb_conn_str, _ESPRESSO_DB)    
+         
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
         if not beans: return beans
         try: exists = self.db.exists(beans)
@@ -81,6 +91,7 @@ class Orchestrator:
         return beans
     
     def run_trend_ranking(self):
+        # get ranking data from the master db
         trends = self.db.get_latest_chatters(None)
         for trend in trends:
             trend.trend_score = calculate_trend_score(trend)
@@ -100,9 +111,23 @@ class Orchestrator:
                 }
             }
         ) for trend in trends if trend.trend_score] 
+        # push the updates to both dbs
+        self.espresso_db.update_beans(updates)
         count = self.db.update_beans(updates)
         log.info("trend ranked", extra={"source": self.run_id, "num_items": count})
     
+    def rectify_espresso(self):      
+        try:
+            log.info("cleaned up", extra={
+                'source': self.run_id, 
+                'num_items': self.espresso_db.beanstore.delete_many(_CLEANUP_FILTER).deleted_count
+            })                
+            log.info("ported", extra={
+                'source': self.run_id, 
+                'num_items': len(self.espresso_db.beanstore.insert_many(self.db.beanstore.find(_PORT_FILTER), ordered=False).inserted_ids)
+            })
+        except: log.warning(f"porting failed", extra={"source": self.run_id, "num_items": 1})
+
     def _get_collect_funcs(self, sources):
         tasks = []
         for source_type, source_paths in parse_sources(sources).items():
@@ -127,10 +152,11 @@ class Orchestrator:
 
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="collecting-") as executor:
             executor.map(collect, self._get_collect_funcs(sources))
-        self.scraping_queue.put(END_OF_STREAM) 
+        self.scraping_queue.put(_END_OF_STREAM) 
 
     @log_runtime(logger=log)
     def run_scraping(self):
+        # TODO: this is broken, need to fix it with asyncio context manager for webscraper
         def scrape(source, beans):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -144,7 +170,7 @@ class Orchestrator:
         with ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="scraping-") as executor:
             while True:
                 token = self.scraping_queue.get()
-                if token == END_OF_STREAM: break
+                if token == _END_OF_STREAM: break
                 if not token: continue
                 source, beans = token
                 executor.submit(scrape, source, beans)
@@ -177,17 +203,16 @@ class Orchestrator:
     
     @log_runtime(logger=log)
     def run(self, sources):
-        run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.run_total = 0
         self.scraping_queue = persistqueue.Queue(".scrapingqueue", tempdir=os.curdir)
 
-        log.info("starting collector", extra={"source": run_id, "num_items": 1})
-
+        log.info("starting collector", extra={"source": self.run_id, "num_items": 1})
+        self.rectify_espresso()
         self.run_collection(sources)
-        self.run_trend_ranking(None)
         self.run_scraping()
-
-        log.info("total collected", extra={"source": run_id, "num_items": self.run_total})
+        self.run_trend_ranking()        
+        log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 
     @log_runtime_async(logger=log)
     async def run_async(self, sources):
@@ -195,6 +220,7 @@ class Orchestrator:
         self.run_total = 0        
 
         log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
+        self.rectify_espresso()
         await self.run_collection_async(sources)
         self.run_trend_ranking() # trend rank from this collection if execution finished
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})

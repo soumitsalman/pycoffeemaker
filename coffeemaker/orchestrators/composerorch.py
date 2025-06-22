@@ -1,9 +1,12 @@
+import io
 import os
 import random
 import yaml
 import json
 import numpy as np
-from coffeemaker.nlp import OPINION_SYSTEM_PROMPT, NEWSRECAP_SYSTEM_PROMPT, OPINION_SYSTEM_PROMPT_JSON, NEWSRECAP_SYSTEM_PROMPT_JSON, agents, embedders, GeneratedArticle, run_batch
+import boto3
+import botocore.client
+from coffeemaker.nlp import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.orchestrators.utils import *
@@ -12,17 +15,9 @@ from icecream import ic
 log = logging.getLogger(__name__)
 
 _ESPRESSO_DB = "espresso"
+_ESPRESSO_CDN = "espresso-beans"
 _LAST_NDAYS = 1
-_CLEANUP_WINDOW = 7
-_CLEANUP_FILTER = {
-    K_UPDATED: {"$lt": _CLEANUP_WINDOW},
-    K_KIND: {"$ne": GENERATED}
-}
-_PORT_FILTER = {
-    K_GIST: VALUE_EXISTS,
-    K_EMBEDDING: {"$exists": True},
-    K_CREATED: {"$gte": ndays_ago(_LAST_NDAYS)}
-}
+
 _SCOPE_FILTER = {
     K_GIST: VALUE_EXISTS,
     K_CREATED: {"$gte": ndays_ago(_LAST_NDAYS)}
@@ -44,10 +39,10 @@ MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
 MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', 8))
 MAX_ARTICLE_LEN = 3072
 
-make_article_id = lambda title, current: title.lower().replace(' ', '-')+current.strftime("-%Y-%m-%d-%H-%M-%S-")+str(random.randint(1000,9999))+".md"
+make_article_id = lambda title: re.sub(r'[^a-zA-Z0-9]', '-', f"{title}-{int(now().timestamp())}-{random.randint(1000,9999)}").lower()+".md"
 def _make_bean(comp: GeneratedArticle): 
     current = now()
-    bean_id = make_article_id(comp.title, current)
+    bean_id = make_article_id(comp.title)
     summary = comp.verdict
     content = comp.raw
     return GeneratedBean(
@@ -87,16 +82,25 @@ def _parse_topics(topics):
 class Orchestrator:
     master_db: Beansack
     espresso_db: Beansack
+    cdn_container = None
+    cdn_folder = ""
 
     def __init__(self, 
         mongodb_conn_str: str, 
-        db_name: str, 
+        db_name: str,         
         composer_path: str, 
         composer_base_url: str,
         composer_api_key: str,
         composer_context_len: int,
+        banner_model: str, 
+        banner_base_url: str,
+        banner_api_key: str,
         embedder_path: str = None,
         embedder_context_len: int = 0,
+        cdn_endpoint: str = None,
+        cdn_access_key: str = None,
+        cdn_secret_key: str = None,
+        cdn_folder: str = None,
         backup_azstorage_conn_str: str = None
     ):
         self.master_db = Beansack(mongodb_conn_str, db_name)
@@ -105,16 +109,22 @@ class Orchestrator:
         self.news_writer = agents.from_path(
             composer_path, composer_base_url, composer_api_key, 
             max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
-            system_prompt=NEWSRECAP_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False
+            system_prompt=NEWSRECAP_SYSTEM_PROMPT, output_parser=self._process_composer_response, json_mode=False
             # system_prompt=NEWSRECAP_SYSTEM_PROMPT_JSON, output_parser=GeneratedArticle.parse_json, json_mode=True
         )
         self.blog_writer = agents.from_path(
             composer_path, composer_base_url, composer_api_key, 
             max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
-            system_prompt=OPINION_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False
+            system_prompt=OPINION_SYSTEM_PROMPT, output_parser=self._process_composer_response, json_mode=False
             # system_prompt=OPINION_SYSTEM_PROMPT_JSON, output_parser=GeneratedArticle.parse_json, json_mode=True
         )
+        if banner_model: self.banner_maker = SimpleImageGenerationAgent(
+            banner_model, banner_base_url, banner_api_key, 
+            BANNER_IMAGE_SYSTEM_PROMPT
+        )
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
+        if cdn_endpoint: self.cdn_container = initialize_s3bucket(cdn_endpoint, cdn_access_key, cdn_secret_key, _ESPRESSO_CDN) 
+        if cdn_folder: self.cdn_folder = cdn_folder
         if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 
     def get_beans(self, query: str = None, embedding: list[float] = None,  kind: str = None, tags: list[str] = None, last_ndays: int = None, limit: int = None):
@@ -196,31 +206,53 @@ class Orchestrator:
         if kind == BLOG: response = self.blog_writer.run(input_text)
         else: response = self.news_writer.run(input_text)
 
-        if response: self._backup_article(input_text, response.raw)
+        self._backup_composer_response(input_text, response)
         return response
+    
+    def _process_composer_response(self, response):
+        if not response: return
+        bean = _make_bean(GeneratedArticle.parse_markdown(response))
+        try: 
+            item_key = "/".join([self.cdn_folder, bean.id])
+            self.cdn_container.put_object(
+                Bucket=_ESPRESSO_CDN,
+                Key=item_key,
+                Body=bean.content.encode('utf-8'),
+                ACL='public-read',
+                ContentType='text/markdown'
+            )
+            bean.url = f"{self.cdn_container._endpoint}/{item_key}"
+        except Exception as e: log.warning(f"article upload failed - {e}", extra={'source': bean.id, 'num_items': 1})
+        return bean
 
-    def _backup_article(self, input_text: str, response_text: str):
-        if not self.backup_container or not response_text: return 
+    def _backup_composer_response(self, input_text: str, bean: Bean):
+        if not self.backup_container or not bean: return 
         trfile = "articles-"+now().strftime("%Y-%m-%d")+".jsonl"
-        try: self.backup_container.upload_blob(trfile, json.dumps({'input': input_text, 'output': response_text})+"\n", BlobType.APPENDBLOB)           
+        try: self.backup_container.upload_blob(trfile, json.dumps({'input': input_text, 'output': bean.content})+"\n", BlobType.APPENDBLOB)           
         except Exception as e: log.warning(f"backup failed - {e}", extra={'source': trfile, 'num_items': 1})
 
-    def port_for_espresso(self):        
-        try:
-            log.info("cleaned up", extra={
-                'source': self.run_id, 
-                'num_items': self.espresso_db.beanstore.delete_many(_CLEANUP_FILTER).deleted_count
-            })                
-            log.info("ported", extra={
-                'source': self.run_id, 
-                'num_items': len(self.espresso_db.beanstore.insert_many(self.master_db.beanstore.find(_PORT_FILTER),ordered=False).inserted_ids)
-            })
-        except: pass        
+    def create_banner(self, bean: Bean):
+        image_data = self.banner_maker.run(bean.entities)
+        try: 
+            image_name = "/".join([self.cdn_folder, bean.id.removesuffix(".md")+".png"])
+            self.cdn_container.put_object(
+                Bucket=_ESPRESSO_CDN,
+                Key=image_name,
+                Body=io.BytesIO(image_data),
+                ACL='public-read',
+                ContentType='image/png'
+            )
+            bean.url = f"{self.cdn_container._endpoint}/{image_name}"
+        except Exception as e: log.warning(f"image upload failed - {e}", extra={'source': bean.id, 'num_items': 1})
+        return bean
 
     def store_beans(self, responses: list):      
         if not responses: return
         beans = list(map(_make_bean, (r for r in responses if r)))
-        batch_upload(self.backup_container, beans)
+        # batch_upload(self.backup_container, beans)
+        for bean in beans:
+            bean.image_url = self.banner_maker.run(bean.entities)
+
         count = self.espresso_db.store_beans(beans)
         log.info("stored articles", extra={'source': self.run_id, 'num_items': count})
         return beans
@@ -229,10 +261,10 @@ class Orchestrator:
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
 
-        self.port_for_espresso()
         clusters = self.get_topic_clusters(topics)
         if not clusters: return    
         clusters = random.sample(clusters, min(MAX_ARTICLES, len(clusters)))
         articles = list(map(lambda c: self.compose_article(topic=c[0], kind=c[1], beans=c[2]), clusters))
+        if self.banner_maker: articles = run_batch(self.create_banner, articles)
         # articles = batch_run(lambda c: self.compose_article(topic=c[0], kind=c[1], beans=c[2]), clusters)
         return self.store_beans(articles)

@@ -21,6 +21,9 @@ __queuestorage__
 __pycache__
 *.log
 flagged
+factory/*.py
+factory/*.csv
+factory/*.sh
 coffeemaker/nlp/foundry
 coffeemaker/nlp/tests
 coffeemaker/nlp/.gitignore

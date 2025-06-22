@@ -134,6 +134,7 @@ def create_test_data_file(output_path):
 def hydrate_test_db():
     from factory.rectify import migrate_mongodb
     migrate_mongodb("test", now().strftime("%Y%m%d"), from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
+    migrate_mongodb("espresso", "espresso", from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
 
 
 def test_trend_analysis():
@@ -165,31 +166,31 @@ def test_collector_orch():
         now().strftime("%Y%m%d")
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
-    # sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-1.yaml"""
-    sources = """
-    sources:
-        rss:
-            - https://newatlas.com/index.rss
-            - https://www.channele2e.com/feed/topic/latest
-            - https://www.ghacks.net/feed/
-            - https://thenewstack.io/feed
-            - https://scitechdaily.com/feed/
-            - https://www.techradar.com/feeds/articletype/news
-            - https://www.geekwire.com/feed/
-            - https://investorplace.com/content-feed/
-        ychackernews:
-            - https://hacker-news.firebaseio.com/v0/newstories.json
-        reddit:
-            - news
-            - worldnews
-            - InternationalNews
-            - GlobalNews
-            - GlobalMarketNews
-            - FinanceNews
-            - StockNews
-            - CryptoNews
-            - energyStocks
-    """
+    sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"""
+    # sources = """
+    # sources:
+    #     rss:
+    #         - https://newatlas.com/index.rss
+    #         - https://www.channele2e.com/feed/topic/latest
+    #         - https://www.ghacks.net/feed/
+    #         - https://thenewstack.io/feed
+    #         - https://scitechdaily.com/feed/
+    #         - https://www.techradar.com/feeds/articletype/news
+    #         - https://www.geekwire.com/feed/
+    #         - https://investorplace.com/content-feed/
+    #     ychackernews:
+    #         - https://hacker-news.firebaseio.com/v0/newstories.json
+    #     reddit:
+    #         - news
+    #         - worldnews
+    #         - InternationalNews
+    #         - GlobalNews
+    #         - GlobalMarketNews
+    #         - FinanceNews
+    #         - StockNews
+    #         - CryptoNews
+    #         - energyStocks
+    # """
     # orch.db.beanstore.drop()
     asyncio.run(orch.run_async(sources))
     # orch.run(sources)
