@@ -230,7 +230,15 @@ class Orchestrator:
             image_data = self.banner_maker.run(f"\n- Title: {bean.title}\n- Keywords: {', '.join(bean.entities)}\n")
             try: bean.image_url = self.cdn.upload_image(image_data, bean.id+".png")
             except Exception as e: log.warning(f"image upload failed - {e}", extra={'source': bean.id, 'num_items': 1})
-        return bean    
+        return bean  
+
+    def _compose_banner_and_store(self, topic: str, kind: str, beans: list[Bean]):
+        bean = self.compose_article(topic, kind, beans)
+        if not bean: return
+        if self.banner_maker: bean = self.create_banner(bean)
+        self.espresso_db.store_beans([bean])
+        log.info(f"composed and stored {kind}", extra={'source': topic, 'num_items': 1})
+        return bean
        
     def run(self, topics = None):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -238,10 +246,7 @@ class Orchestrator:
 
         clusters = self.get_clusters(topics)
         if not clusters: return    
-        beans = list(map(lambda c: self.compose_article(topic=c[0], kind=c[1], beans=c[2]), clusters))
-        if self.banner_maker: beans = run_batch(self.create_banner, beans)
+        beans = map(lambda c: self._compose_banner_and_store(topic=c[0], kind=c[1], beans=c[2]), clusters)
         beans = [bean for bean in beans if bean]
-        if beans: 
-            count = self.espresso_db.store_beans(beans)
-            log.info("stored articles", extra={'source': self.run_id, 'num_items': count})
+        if beans: log.info("total articles", extra={'source': self.run_id, 'num_items': len(beans)})
         return beans
