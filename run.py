@@ -89,7 +89,7 @@ if __name__ == "__main__":
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
             backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
         )
-        orch.run("./factory/composer-topics.yaml")
+        orch.run(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml"))
     else:
         from coffeemaker.orchestrators.fullstack import Orchestrator
         orch = Orchestrator(
