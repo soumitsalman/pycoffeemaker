@@ -212,7 +212,7 @@ class APICollector:
                 updated=created_time,
                 source=source,
                 site_base_url=extract_base_url(entry_link),
-                title=entry.title,
+                title=entry.get('title'),
                 kind=guess_article_type(entry_link, source) or default_kind,
                 summary=summary,
                 content=content,

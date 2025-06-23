@@ -44,6 +44,7 @@ def _prepare_for_storing(beans: list[Bean]):
         bean.num_words_in_title = num_words(bean.title)
         bean.num_words_in_summary = num_words(bean.summary)
         bean.num_words_in_content = num_words(bean.content)
+        if bean.author == "[no-author]": bean.author = None
     return beans
 
 class Orchestrator:
