@@ -9,6 +9,7 @@ from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.staticdb import *
 from coffeemaker.nlp import embedders, agents, Digest, DIGEST_SYSTEM_PROMPT
 from coffeemaker.orchestrators.utils import *
+from azure.storage.blob import BlobType
 from icecream import ic
 
 log = logging.getLogger(__name__)

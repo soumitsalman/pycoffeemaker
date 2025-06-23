@@ -3,7 +3,6 @@ import logging
 import os
 from logging import Logger
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 
 MAX_QUEUE_PAGE = 32
@@ -72,25 +71,6 @@ def initialize_azblobstore(azstorage_conn_str, container_name):
     except: log.debug("blob container already exists %s", container_name)
     return container
 
-def initialize_s3bucket(s3_endpoint, s3_access_key, s3_secret_key, bucket_name):
-    import boto3
-
-    client = boto3.client(
-        "s3",
-        endpoint_url=s3_endpoint,
-        aws_access_key_id=s3_access_key,
-        aws_secret_access_key=s3_secret_key
-    )
-    # try: client.head_bucket(Bucket=bucket_name)
-    # except: client.create_bucket(Bucket=bucket_name, ACL='public-read')
-
-    return client
-
 calculate_trend_score = lambda chatter_delta: 100*chatter_delta.comments_change + 10*chatter_delta.shares_change + chatter_delta.likes_change    
 merge_tags = lambda *args: list(set(item.lower() for arg in args if arg for item in arg))
 
-# def batch_upload(container: ContainerClient, beans: list):
-#     upload = lambda bean: container.upload_blob(bean.url, bean.content, BlobType.BLOCKBLOB)
-#     with ThreadPoolExecutor(max_workers=len(beans)) as executor:
-#         list(executor.map(upload, beans))
- 

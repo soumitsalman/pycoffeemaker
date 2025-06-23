@@ -75,10 +75,16 @@ if __name__ == "__main__":
         orch = Orchestrator(
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
+            cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
+            cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
+            cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
             composer_path=os.getenv("COMPOSER_PATH"), 
             composer_base_url=os.getenv("COMPOSER_BASE_URL"),
             composer_api_key=os.getenv("COMPOSER_API_KEY"),
             composer_context_len=int(os.getenv("COMPOSER_CONTEXT_LEN", COMPOSER_CONTEXT_LEN)),
+            banner_model=os.getenv("BANNER_MODEL"),
+            banner_base_url=os.getenv("BANNER_BASE_URL"),
+            banner_api_key=os.getenv("BANNER_API_KEY"),
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
             backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")

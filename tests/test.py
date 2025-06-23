@@ -166,31 +166,31 @@ def test_collector_orch():
         now().strftime("%Y%m%d")
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
-    sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"""
-    # sources = """
-    # sources:
-    #     rss:
-    #         - https://newatlas.com/index.rss
-    #         - https://www.channele2e.com/feed/topic/latest
-    #         - https://www.ghacks.net/feed/
-    #         - https://thenewstack.io/feed
-    #         - https://scitechdaily.com/feed/
-    #         - https://www.techradar.com/feeds/articletype/news
-    #         - https://www.geekwire.com/feed/
-    #         - https://investorplace.com/content-feed/
-    #     ychackernews:
-    #         - https://hacker-news.firebaseio.com/v0/newstories.json
-    #     reddit:
-    #         - news
-    #         - worldnews
-    #         - InternationalNews
-    #         - GlobalNews
-    #         - GlobalMarketNews
-    #         - FinanceNews
-    #         - StockNews
-    #         - CryptoNews
-    #         - energyStocks
-    # """
+    # sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"""
+    sources = """
+    sources:
+        rss:
+            - https://newatlas.com/index.rss
+            - https://www.channele2e.com/feed/topic/latest
+            - https://www.ghacks.net/feed/
+            - https://thenewstack.io/feed
+            - https://scitechdaily.com/feed/
+            - https://www.techradar.com/feeds/articletype/news
+            - https://www.geekwire.com/feed/
+            - https://investorplace.com/content-feed/
+        ychackernews:
+            - https://hacker-news.firebaseio.com/v0/newstories.json
+        reddit:
+            - news
+            - worldnews
+            - InternationalNews
+            - GlobalNews
+            - GlobalMarketNews
+            - FinanceNews
+            - StockNews
+            - CryptoNews
+            - energyStocks
+    """
     # orch.db.beanstore.drop()
     asyncio.run(orch.run_async(sources))
     # orch.run(sources)
@@ -229,13 +229,16 @@ def test_composer_orch():
     orch = Orchestrator(
         DB_LOCAL_TEST,
         now().strftime("%Y%m%d"),
-        # "20250615",
-        composer_path="o4-mini",
-        composer_base_url=os.getenv("COMPOSER_BASE_URL"),
-        composer_api_key=os.getenv("COMPOSER_API_KEY"),
+        cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
+        cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
+        cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
+        composer_path="google/gemma-3-27b-it",
+        composer_base_url=os.getenv("DEEPINFRA_BASE_URL"),
+        composer_api_key=os.getenv("DEEPINFRA_API_KEY"),
         composer_context_len=40000,
-        embedder_path=os.getenv("EMBEDDER_PATH"),
-        embedder_context_len=512,
+        banner_model="black-forest-labs/FLUX-1-schnell",
+        banner_base_url=os.getenv('DEEPINFRA_BASE_URL'),
+        banner_api_key=os.getenv('DEEPINFRA_API_KEY'),
         backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
     )
 #     topics = """
@@ -307,6 +310,8 @@ def test_composer_orch():
     for bean in orch.run(topics):
         print(">>>>>>>>>>>>>>>>")
         print(bean.title)
+        print(bean.url)
+        print(bean.image_url)
         print(bean.verdict)
         print(bean.analysis)
         print(bean.insights)
@@ -333,16 +338,27 @@ def test_composer_orch():
        
 
 if __name__ == "__main__":
+    # from pymongo import MongoClient
+    # from pymongo.errors import BulkWriteError
+    # urls = [
+    #     "https://www.devonlive.com/news/property/shower-mistake-creates-perfect-conditions-10276886",
+    #     "https://apifastmock.com"
+    # ]
+    # db = MongoClient(DB_LOCAL_TEST)["20250623"]
+    # try: db.beans.insert_many(db.beans.find({"url": {"$in": urls}}, projection={K_CONTENT: 0, K_EMBEDDING: 0}))
+    # except BulkWriteError as e: ic(e.details)
+
+
     # hydrate_test_db()
     # test_static_db()
     # test_trend_analysis()
     # test_collector_and_scraper()
     # test_scraper()
 
-    test_collector_orch()
+    # test_colleor_orch()
     # test_indexer_orch()
     # test_digestor_orch()
-    # test_composer_orch()
+    test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 

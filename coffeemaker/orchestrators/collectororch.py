@@ -19,7 +19,7 @@ _ESPRESSO_DB = "espresso"
 _END_OF_STREAM = "END_OF_STREAM"
 _CLEANUP_WINDOW = 7
 _CLEANUP_FILTER = {
-    K_UPDATED: {"$lt": _CLEANUP_WINDOW},
+    K_UPDATED: {"$lt": ndays_ago(_CLEANUP_WINDOW)},
     K_KIND: {"$ne": GENERATED}
 }
 _LAST_NDAYS = 1
@@ -116,7 +116,8 @@ class Orchestrator:
         count = self.db.update_beans(updates)
         log.info("trend ranked", extra={"source": self.run_id, "num_items": count})
     
-    def rectify_espresso(self):      
+    def rectify_espresso(self):    
+        from pymongo.errors import BulkWriteError
         try:
             log.info("cleaned up", extra={
                 'source': self.run_id, 
@@ -126,7 +127,7 @@ class Orchestrator:
                 'source': self.run_id, 
                 'num_items': len(self.espresso_db.beanstore.insert_many(self.db.beanstore.find(_PORT_FILTER), ordered=False).inserted_ids)
             })
-        except: log.warning(f"porting failed", extra={"source": self.run_id, "num_items": 1})
+        except BulkWriteError as e: log.warning(f"partially ported", extra={"source": self.run_id, "num_items": e.details['nInserted']})
 
     def _get_collect_funcs(self, sources):
         tasks = []
