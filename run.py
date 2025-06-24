@@ -1,5 +1,6 @@
 import asyncio
 import os
+import argparse
 from datetime import datetime as dt
 import logging
 from dotenv import load_dotenv
@@ -7,6 +8,15 @@ from dotenv import load_dotenv
 EMBEDDER_CONTEXT_LEN = 512
 DIGESTOR_CONTEXT_LEN = 4096
 COMPOSER_CONTEXT_LEN = 110760
+
+# Set up argument parser
+parser = argparse.ArgumentParser(description='Run the coffee maker application')
+parser.add_argument('--batch_size', type=int, help='Batch size for processing')
+parser.add_argument('--mode', type=str, choices=['COLLECTOR', 'INDEXER', 'DIGESTOR', 'COMPOSER'], 
+                    help='Operation mode (COLLECTOR, INDEXER, DIGESTOR, COMPOSER)')
+parser.add_argument('--max_articles', type=int, help='Maximum number of articles to process')
+
+args = parser.parse_args()
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR+"/.env")
@@ -39,12 +49,16 @@ logging.getLogger("connectionpool").propagate = False
 # logging.getLogger("asyncio").propagate = False
 
 if __name__ == "__main__":    
-    mode = os.getenv("MODE")
+    # Use command line args if provided, otherwise fall back to env vars    
+    mode = args.mode or os.getenv("MODE")
+    batch_size = args.batch_size or int(os.getenv('BATCH_SIZE', os.cpu_count()))
+    
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
         orch = Orchestrator(
             os.getenv("MONGODB_CONN_STR"),
-            os.getenv("DB_NAME")
+            os.getenv("DB_NAME"),
+            batch_size=batch_size
         )
         asyncio.run(orch.run_async(os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml")))
     elif mode == "INDEXER":
@@ -55,7 +69,8 @@ if __name__ == "__main__":
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
             category_defs=os.getenv('INDEXER_CATEGORIES', "./factory/categories.parquet"),
-            sentiment_defs=os.getenv('INDEXER_SENTIMENTS', "./factory/sentiments.parquet")
+            sentiment_defs=os.getenv('INDEXER_SENTIMENTS', "./factory/sentiments.parquet"),
+            batch_size=batch_size
         )
         orch.run_indexer()
     elif mode == "DIGESTOR":
@@ -64,10 +79,9 @@ if __name__ == "__main__":
             os.getenv("MONGODB_CONN_STR"),
             os.getenv("DB_NAME"),
             digestor_path=os.getenv("DIGESTOR_PATH"), 
-            # digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
-            # digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
             digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)),
-            backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
+            backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR"),
+            batch_size=batch_size
         )
         orch.run_digestor()
     elif mode == "COMPOSER":
@@ -87,7 +101,8 @@ if __name__ == "__main__":
             banner_api_key=os.getenv("BANNER_API_KEY"),
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
-            backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
+            backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR"),
+            max_articles = args.max_articles or int(os.getenv('MAX_ARTICLES', os.cpu_count()))
         )
         orch.run(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml"))
     else:

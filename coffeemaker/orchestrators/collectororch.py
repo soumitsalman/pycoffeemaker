@@ -22,10 +22,10 @@ _CLEANUP_FILTER = {
     K_UPDATED: {"$lt": ndays_ago(_CLEANUP_WINDOW)},
     K_KIND: {"$ne": GENERATED}
 }
-_LAST_NDAYS = 1
+_LAST_NDAYS = 2
 _PORT_FILTER = {
-    K_GIST: VALUE_EXISTS,
-    K_EMBEDDING: {"$exists": True},
+    K_ENTITIES: VALUE_EXISTS,
+    K_CATEGORIES: VALUE_EXISTS,
     K_UPDATED: {"$gte": ndays_ago(_LAST_NDAYS)} # take everything that has been created or updated in the last 1 day
 }
 
@@ -52,9 +52,10 @@ class Orchestrator:
     espresso_db: Beansack = None
     run_total: int = 0
 
-    def __init__(self, mongodb_conn_str: str, db_name: str):
+    def __init__(self, mongodb_conn_str: str, db_name: str, batch_size: int = BATCH_SIZE):
         self.db = Beansack(mongodb_conn_str, db_name)    
         self.espresso_db = Beansack(mongodb_conn_str, _ESPRESSO_DB)    
+        self.batch_size = batch_size
          
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
         if not beans: return beans
@@ -199,7 +200,7 @@ class Orchestrator:
             except Exception as e:
                 log.warning(f"collection failed - {e.__class__.__name__} {e}", extra={"source": source, "num_items": 1})
 
-        async with APICollector() as apicollector, WebScraperLite() as webscraper:
+        async with APICollector(self.batch_size) as apicollector, WebScraperLite(self.batch_size) as webscraper:
             async with asyncio.TaskGroup() as tg:
                 [tg.create_task(collect(source, beans), name = f"collecting-{source}") for source, beans in get_collection_tasks()]     
     

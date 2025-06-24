@@ -608,6 +608,27 @@ def create_categories_locally():
     ic(df.sample(n=3))
     df.to_parquet("setup/categories.parquet", engine='pyarrow')
 
+def create_composer_topics_locally():  
+    import yaml, json
+    import pandas as pd
+    from coffeemaker.nlp import embedders
+    
+    with open("/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.yaml", "r") as file:
+        topics = yaml.safe_load(file)
+
+    embedder = embedders.from_path(os.getenv('EMBEDDER_PATH'), 512)
+    vecs = embedder(["topic: "+topics[key][K_DESCRIPTION] for key in topics.keys()])
+    for key, vec in zip(topics.keys(), vecs):
+        topics[key][K_EMBEDDING] = vec
+
+    with open("/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.json", "w") as file:
+        json.dump(topics, file, indent=2)
+
+
+    # df = pd.DataFrame().from_dict(topics.values(), orient="columns")
+    # ic(df.sample(n=3))
+    # df.to_parquet("factory/composer-topics.parquet", engine='pyarrow')
+
 
 def merge_to_classification():
     import yaml
@@ -667,8 +688,9 @@ def migrate_mongodb(from_db_name, to_db_name, from_db_conn = os.getenv('MONGODB_
 # adding data porting logic
 if __name__ == "__main__":
     # merge_to_classification()
+    create_composer_topics_locally()
     # create_categories_locally()
     # create_sentiments_locally()
     # port_beans_locally()
     # migrate_users("beansackV2", "test")
-    migrate_mongodb("test", "espresso")
+    # migrate_mongodb("test", "espresso")

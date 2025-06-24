@@ -75,8 +75,7 @@ def _make_digest_update(bean: Bean, digest: Digest):
 class Orchestrator:
     db: Beansack = None
     dbworker = None
-    backup_container = None
-    
+    backup_container = None    
 
     def __init__(self, 
         mongodb_conn_str: str, 
@@ -89,10 +88,12 @@ class Orchestrator:
         digestor_base_url: str = None,
         digestor_api_key: str = None,
         digestor_context_len: int = 0,
-        backup_azstorage_conn_str: str = None
+        backup_azstorage_conn_str: str = None,
+        batch_size: int = BATCH_SIZE
     ): 
         self.db = Beansack(mongodb_conn_str, db_name)
         self.dbworker = ThreadPoolExecutor(max_workers=BATCH_SIZE, thread_name_prefix="dbupdater")
+        self.batch_size = batch_size
 
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if category_defs: self.categories = StaticDB(category_defs)
@@ -173,7 +174,7 @@ class Orchestrator:
                     K_CONTENT: 1, 
                     K_SOURCE: 1
                 },
-                limit=BATCH_SIZE
+                limit=self.batch_size
             )            
             if beans: yield beans
             else: break

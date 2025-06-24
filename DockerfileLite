@@ -1,3 +1,6 @@
+# This docker is for mostly io bound tasks such as collector and composer
+# It is not built to run cpu/gpu intensive tasks like indexer and digestor
+
 # Build stage
 FROM python:3.12-slim-bookworm AS builder
 
@@ -6,14 +9,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-
 # Set up virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy only requirements first to leverage Docker cache
 COPY ./coffeemaker/pybeansack/requirements.txt ./pybeansack-requirements.txt
-COPY ./requirements-collector.txt ./requirements.txt
+COPY ./requirements-lite.txt ./requirements.txt
 
 # Install dependencies and download models
 RUN pip install --no-cache-dir -r pybeansack-requirements.txt
@@ -31,9 +33,15 @@ ENV PATH="/opt/venv/bin:$PATH"
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    # Collector stuff
     WORDS_THRESHOLD_FOR_SCRAPING=150 \
-    WORDS_THRESHOLD_FOR_INDEXING=150 \
-    WORDS_THRESHOLD_FOR_DIGESTING=150
+    COLLECTOR_SOURCES=/worker/factory/feeds.yaml \
+    BATCH_SIZE=48 \
+    # Composer stuff    
+    MIN_CLUSTER_SIZE=16 \
+    MAX_CLUSTER_SIZE=128 \
+    MAX_ARTICLES=8 \    
+    COMPOSER_TOPICS=/worker/factory/composer-topics.json
 
 # Set the working directory
 WORKDIR /worker
@@ -42,4 +50,5 @@ WORKDIR /worker
 COPY . .
 RUN rm -rf tests
 
-CMD ["python", "./run.py"]
+# Use ENTRYPOINT to make the container more flexible with arguments
+ENTRYPOINT ["python", "./run.py"]

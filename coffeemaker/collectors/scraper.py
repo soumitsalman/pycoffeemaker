@@ -13,7 +13,7 @@ from icecream import ic
 
 log = logging.getLogger(__name__)
 
-BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()))
+BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()*os.cpu_count()))
 
 _METADATA_SELECTORS = {
     'description': "meta[name='description']",
@@ -36,8 +36,8 @@ class WebScraperLite:
     session: aiohttp.ClientSession = None
     throttle: asyncio.Semaphore = None
 
-    def __init__(self):
-        self.throttle = asyncio.Semaphore(BATCH_SIZE)
+    def __init__(self, batch_size: int = BATCH_SIZE):
+        self.throttle = asyncio.Semaphore(batch_size)
         
     async def __aenter__(self):
         """Async context manager enter"""

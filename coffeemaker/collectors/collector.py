@@ -102,8 +102,8 @@ class APICollector:
     throttle = None
     # collect_callback: Callable = None
 
-    def __init__(self, collect_callback: Callable = None):  
-        self.throttle = asyncio.Semaphore(BATCH_SIZE)
+    def __init__(self, collect_callback: Callable = None, batch_size: int = BATCH_SIZE):  
+        self.throttle = asyncio.Semaphore(batch_size)
         self.collect_callback = collect_callback
     
     @property

@@ -4,6 +4,7 @@ import random
 import yaml
 import json
 import numpy as np
+import pandas as pd
 from coffeemaker.nlp import *
 from coffeemaker.pybeansack.cdnstore import CDNStore
 from coffeemaker.pybeansack.models import *
@@ -14,7 +15,6 @@ from icecream import ic
 
 log = logging.getLogger(__name__)
 
-_ESPRESSO_DB = "espresso"
 _LAST_NDAYS = 1
 
 _SCOPE_FILTER = {
@@ -71,16 +71,22 @@ def _make_bean(comp: GeneratedArticle):
         predictions=comp.predictions or None
     )
 
-def _parse_topics(topics):
-    if isinstance(topics, dict): return topics
+def _parse_topics(topics: list|dict|str):
+    if isinstance(topics, list): return topics
+    if isinstance(topics, dict): return list(topics.values())
     if os.path.exists(topics):
-        with open(topics, 'r') as file:
-            return yaml.safe_load(file)
-    else: return yaml.safe_load(topics)
+        if topics.endswith(".parquet"): return pd.read_parquet(topics).to_dict(orient="records")
+        if topics.endswith(".yaml"): 
+            with open(topics, 'r') as file:
+                return list(yaml.safe_load(file).values())
+        if topics.endswith(".json"): 
+            with open(topics, 'r') as file:
+                return list(json.load(file).values())
+        raise ValueError(f"unsupported file type: {topics}")
+    return list(yaml.safe_load(topics).values())
 
 class Orchestrator:
-    master_db: Beansack
-    espresso_db: Beansack
+    db: Beansack
     cdn = None
     cdn_folder = ""
 
@@ -98,13 +104,13 @@ class Orchestrator:
         banner_base_url: str,
         banner_api_key: str,
         embedder_path: str = None,
-        embedder_context_len: int = 0,
-       
-        backup_azstorage_conn_str: str = None
+        embedder_context_len: int = 0,       
+        backup_azstorage_conn_str: str = None,
+        max_articles: int = MAX_ARTICLES
     ):
-        self.master_db = Beansack(mongodb_conn_str, db_name)
-        self.espresso_db = Beansack(mongodb_conn_str, _ESPRESSO_DB)
+        self.db = Beansack(mongodb_conn_str, db_name)
         self.cdn = CDNStore(cdn_endpoint, cdn_access_key, cdn_secret_key) 
+        self.max_articles = max_articles
 
         self.news_writer = agents.from_path(
             composer_path, composer_base_url, composer_api_key, 
@@ -125,28 +131,13 @@ class Orchestrator:
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 
-    def get_beans(self, query: str = None, embedding: list[float] = None,  kind: str = None, tags: list[str] = None, last_ndays: int = None, limit: int = None):
+    def get_beans(self, embedding: list[float] = None,  kind: str = None, tags: list[str] = None, last_ndays: int = None, limit: int = None):
         filter = _SCOPE_FILTER
-        if kind: filter[K_KIND] = lower_case(kind)
-        if tags: filter[K_TAGS] = lower_case(tags)
-        # if last_ndays: filter.update(created_after(last_ndays=last_ndays))
-
-        try:
-            beans = self.master_db.query_beans(filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=_PROJECTION)
-            log.info("found beans", extra={"source": query or self.run_id, "num_items": len(beans)})    
-            return beans  
-        except Exception as e: log.warning(f"finding beans failed - {e}", extra={"source": query or self.run_id, "num_items": 1})
-
-        # if query: embedding = self.embedder("topic: "+ (query+": "+", ".join(tags) if tags else query))
-        # elif tags: filter[K_TAGS] = lower_case(tags)
-        # beans = None
-        # try:
-        #     if embedding: beans = self.master_db.vector_search_beans(embedding, similarity_score=DEFAULT_VECTOR_SEARCH_SCORE, filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=_PROJECTION)
-        #     else: beans = self.master_db.query_beans(filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=_PROJECTION)
-        #     log.info("found beans", extra={"source": query or self.run_id, "num_items": len(beans)})      
-        # except Exception as e: 
-        #     log.warning(f"finding beans failed - {e}", extra={"source": query or self.run_id, "num_items": 1})
-        # return beans
+        # NOTE: temporarily disabling kind filter to see what happens
+        # if kind: filter[K_KIND] = lower_case(kind)
+        if tags and not embedding: filter[K_TAGS] = lower_case(tags) # if embedding is provided do not use tags
+        if embedding: return self.db.vector_search_beans(embedding, similarity_score=0.7, filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=_PROJECTION)
+        else: return self.db.query_beans(filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=_PROJECTION)
     
     def _kmeans_cluster(self, beans)-> list[list[Bean]]:
         from sklearn.cluster import KMeans
@@ -171,16 +162,25 @@ class Orchestrator:
         return AffinityPropagation(copy=False, damping=0.55, random_state=666)
     
     def get_clusters(self, topics = None):
+        def try_get_beans(**kwargs):
+            limit = kwargs.pop('limit', None)
+            topic = kwargs.pop('_id', self.run_id)
+            try: 
+                beans = self.get_beans(embedding = kwargs.get(K_EMBEDDING), kind = kwargs.get(K_KIND), tags = kwargs.get(K_TAGS), limit=limit)
+                log.info("found beans", extra={"source": topic, "num_items": len(beans)}) 
+                return beans
+            except Exception as e: log.warning(f"finding beans failed - {e}", extra={"source": topic, "num_items": 0})
+
         if topics:
             topics = _parse_topics(topics)
             clusters = list(map(
-                lambda topic: (topic[0], topic[1][K_KIND], self.get_beans(query=topic[0], kind = topic[1][K_KIND], tags = topic[1][K_TAGS], limit=MAX_CLUSTER_SIZE)), 
-                topics.items()
+                lambda topic: (topic[K_ID], topic.get(K_KIND, NEWS), try_get_beans(**topic, limit=MAX_CLUSTER_SIZE)), 
+                topics
             ))
-            clusters = list(filter(lambda x: x[2] and MIN_CLUSTER_SIZE <= len(x[2]) <= MAX_CLUSTER_SIZE, clusters))
+            clusters = list(filter(lambda x: x[2] and MIN_CLUSTER_SIZE <= len(x[2]), clusters))
         else:
             clusters = self.cluster_beans(self.get_beans(kind = NEWS), "HDBSCAN")
-        return random.sample(clusters, min(MAX_ARTICLES, len(clusters)))
+        return random.sample(clusters, min(self.max_articles, len(clusters)))
 
     def cluster_beans(self, beans: list[Bean], method: str = "KMEANS")-> list[list[Bean]]:
         if not beans: return 
@@ -236,7 +236,7 @@ class Orchestrator:
         bean = self.compose_article(topic, kind, beans)
         if not bean: return
         if self.banner_maker: bean = self.create_banner(bean)
-        self.espresso_db.store_beans([bean])
+        self.db.store_beans([bean])
         log.info(f"composed and stored {kind}", extra={'source': topic, 'num_items': 1})
         return bean
        

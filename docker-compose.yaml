@@ -2,14 +2,14 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:collector
+    image: soumitsr/coffeemaker:lite-06-23
     depends_on:
       - localdb
-    environment:
-      - MODE=COLLECTOR
-      - DB_NAME=20250620
+    environment:      
+      - DB_NAME=20250623
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - BATCH_SIZE=32
+    command: --mode COLLECTOR
     env_file:
       - dockertest.env
     networks:
@@ -52,18 +52,18 @@ services:
     mem_limit: 6g
 
   localcomposer:
-    image: soumitsr/coffeemaker:06-20
+    image: soumitsr/coffeemaker:lite-06-23
     depends_on:
       - localdb
       - azurite
-    environment:
-      - MODE=COMPOSER
-      - DB_NAME=20250620
+    environment:      
+      - DB_NAME=20250623
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - AZSTORAGE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;BlobEndpoint=http://azurite:10000/devstoreaccount1;
       - MIN_CLUSTER_SIZE=24
       - MAX_CLUSTER_SIZE=64
       - MAX_ARTICLES=2
+    command: --mode COMPOSER
     env_file:
       - dockertest.env
     networks:
