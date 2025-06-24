@@ -1,63 +1,38 @@
-app = "pycoffeemaker-lite"
-primary_region = "iad" # Singapore region, change as needed
+app = "pycoffeemaker"
+primary_region = "ord"
 
-[build]
-  dockerfile = "DockerfileLite"
-
-[[vm]]
-  size = shared-cpu-1x
-  memory_mb = 512
-  name = "collector"
-  private_network = true
-  processes = ["collector"]
-
-[[vm]]
-  cpu_kind = "shared"
-  cpus = 1
-  memory_mb = 512
-  name = "composer"
-  private_network = true
-  processes = ["composer"]
-
+# Define all the processes
 [processes]
-  collector = "python run.py --mode COLLECTOR"
-  composer = "python run.py --mode COMPOSER"
+collector = "python ./run.py --mode COLLECTOR --batch_size 64"
+composer = "python ./run.py --mode COMPOSER --max_articles 8"
+# indexer = "python ./run.py --mode INDEXER --batch_size 128"
+# digestor = "python ./run.py --mode DIGESTOR --batch_size 48"
 
-# Schedule for collector (runs at 00:00 UTC daily)
-[[vm.schedule]]
-  cron = "0 */8 * * *"
-  name = "collector"
-  processes = ["collector"]
+# VM configuration for CPU-based processes (collector and composer)
+[[vm]]
+cpu_kind = "shared"
+memory = "1gb"
+size = "shared-cpu-1x"
+processes = ["collector", "composer"]
 
-# Schedule for composer (runs at 12:00 UTC daily)
-[[vm.schedule]]
-  cron = "0 12 * * *"
-  name = "composer"
-  processes = ["composer"]
+# VM configuration for GPU-based processes (indexer and digestor)
+# [[vm]]
+# cpu_kind = "performance"
+# memory = "32gb"
+# size = "l40s"
+# gpu_kind = "l40s"
+# processes = ["indexer", "digestor"]
+
+[[services]]
+auto_stop_machines = "stop"
+auto_start_machines = false
+min_machines_running = 0
+processes = ["collector", "composer"]
+
+[[restart]]
+policy = "never"
+retries = 0
+processes = ["collector", "composer"]
 
 [env]
-  BATCH_SIZE = "48"
-  WORDS_THRESHOLD_FOR_SCRAPING = "150"
-  WORDS_THRESHOLD_FOR_INDEXING = "150"
-  WORDS_THRESHOLD_FOR_DIGESTING = "150"
-  MIN_CLUSTER_SIZE = "16"
-  MAX_CLUSTER_SIZE = "128"
-  MAX_ARTICLES = "8"
-
-# These secrets should be set using `fly secrets set`
-# MONGODB_CONN_STR=""
-# DB_NAME=""
-# DOSPACES_ENDPOINT=""
-# DOSPACES_ACCESS_KEY=""
-# DOSPACES_SECRET_KEY=""
-# COMPOSER_PATH=""
-# COMPOSER_BASE_URL=""
-# COMPOSER_API_KEY=""
-# BANNER_MODEL=""
-# BANNER_BASE_URL=""
-# BANNER_API_KEY=""
-# EMBEDDER_PATH=""
-# REDDIT_APP_ID=""
-# REDDIT_APP_SECRET=""
-# REDDIT_COLLECTOR_USERNAME=""
-# REDDIT_COLLECTOR_PASSWORD="" 
+PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"

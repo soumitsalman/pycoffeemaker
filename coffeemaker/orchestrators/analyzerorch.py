@@ -174,7 +174,7 @@ class Orchestrator:
                     K_CONTENT: 1, 
                     K_SOURCE: 1
                 },
-                limit=self.batch_size
+                limit=ic(self.batch_size)
             )            
             if beans: yield beans
             else: break

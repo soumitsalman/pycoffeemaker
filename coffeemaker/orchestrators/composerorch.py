@@ -173,10 +173,11 @@ class Orchestrator:
 
         if topics:
             topics = _parse_topics(topics)
-            clusters = list(map(
+            clusters = run_batch(
                 lambda topic: (topic[K_ID], topic.get(K_KIND, NEWS), try_get_beans(**topic, limit=MAX_CLUSTER_SIZE)), 
-                topics
-            ))
+                topics,
+                num_threads=len(topics)
+            )
             clusters = list(filter(lambda x: x[2] and MIN_CLUSTER_SIZE <= len(x[2]), clusters))
         else:
             clusters = self.cluster_beans(self.get_beans(kind = NEWS), "HDBSCAN")

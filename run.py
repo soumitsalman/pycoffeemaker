@@ -51,7 +51,7 @@ logging.getLogger("connectionpool").propagate = False
 if __name__ == "__main__":    
     # Use command line args if provided, otherwise fall back to env vars    
     mode = args.mode or os.getenv("MODE")
-    batch_size = args.batch_size or int(os.getenv('BATCH_SIZE', os.cpu_count()))
+    batch_size = int(args.batch_size or os.getenv('BATCH_SIZE') or os.cpu_count())
     
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator

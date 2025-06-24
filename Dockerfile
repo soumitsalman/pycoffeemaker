@@ -20,7 +20,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy only requirements first to leverage Docker cache
 COPY ./coffeemaker/pybeansack/requirements.txt ./pybeansack-requirements.txt
-COPY ./coffeemaker/nlp/src/requirements-min.txt ./nlp-requirements.txt
+COPY ./coffeemaker/nlp/src/requirements.txt ./nlp-requirements.txt
 COPY ./requirements.txt ./requirements.txt
 
 # Install dependencies and download models

@@ -34,15 +34,14 @@ services:
     mem_limit: 4g
 
   localdigestor:
-    image: soumitsr/coffeemaker:06-20
+    image: soumitsr/coffeemaker:gpu-06-24
     depends_on:
       - localdb
       - azurite
+    command: --mode DIGESTOR --batch_size 2
     environment:
-      - MODE=DIGESTOR
-      - DB_NAME=20250620
+      - DB_NAME=20250624
       - MONGODB_CONN_STR=mongodb://localdb:27017
-      - BATCH_SIZE=6
       - AZSTORAGE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;BlobEndpoint=http://azurite:10000/devstoreaccount1;
     env_file:
       - dockertest.env
@@ -50,6 +49,14 @@ services:
       - coffeemaker-bridge
     cpus: 3
     mem_limit: 6g
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
 
   localcomposer:
     image: soumitsr/coffeemaker:lite-06-23
