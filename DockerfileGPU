@@ -1,20 +1,20 @@
+# this is designed to leverage underlying gpu if there is any
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime AS gpubuilder
+
+WORKDIR /worker
+
+COPY coffeemaker/pybeansack/requirements.txt pybeansack-requirements.txt
+COPY requirements.txt requirements.txt
+
+RUN pip install --prefix=/pythonlibs -r pybeansack-requirements.txt
+RUN pip install --prefix=/pythonlibs -r requirements.txt
+
 # Build stage
 FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime 
 
 WORKDIR /worker
 
-COPY ./coffeemaker/pybeansack/requirements.txt ./pybeansack-requirements.txt
-COPY ./requirements-gpu.txt ./requirements.txt
-
-RUN pip install --no-cache-dir --prefix=/pythonlibs -r pybeansack-requirements.txt
-RUN pip install --no-cache-dir --prefix=/pythonlibs -r requirements.txt
-
-# Build stage
-FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime 
-
-WORKDIR /worker
-
-COPY --from=builder /pythonlibs /usr/local
+COPY --from=gpubuilder /pythonlibs /usr/local
 COPY . .
 
 # Set environment variables

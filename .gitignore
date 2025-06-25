@@ -11,7 +11,7 @@
 .logs
 .scrapingqueue
 .delete-models
-.deployment.sh
+.deploy.sh
 __azurite*
 __queuestorage__
 __pycache__

@@ -1,12 +1,14 @@
+# everything here is designed to run on cpu
 FROM cnstark/pytorch:2.3.1-py3.10.15-ubuntu22.04 AS builder
 
 WORKDIR /worker
 
 COPY coffeemaker/pybeansack/requirements.txt pybeansack-requirements.txt
-COPY requirements-cpu.txt requirements.txt
+COPY requirements.txt requirements.txt
 
-RUN pip install --no-cache-dir --prefix=/pythonlibs -r pybeansack-requirements.txt
-RUN pip install --no-cache-dir --prefix=/pythonlibs -r requirements.txt
+RUN pip install --prefix=/pythonlibs intel_extension_for_pytorch
+RUN pip install --prefix=/pythonlibs -r pybeansack-requirements.txt
+RUN pip install --prefix=/pythonlibs -r requirements.txt
 
 FROM cnstark/pytorch:2.3.1-py3.10.15-ubuntu22.04
 

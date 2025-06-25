@@ -1,38 +1,29 @@
 # This docker is for mostly io bound tasks such as collector and composer
-# It is not built to run cpu/gpu intensive tasks like indexer and digestor
+# It is not built to run cpu/gpu intensive tasks like indexer and digestor unless they are remote/openai api
 
 # Build stage
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.13-slim-bookworm AS iobuilder
 
-# Set environment variables
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+WORKDIR /worker
 
-# Set up virtual environment
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+COPY coffeemaker/pybeansack/requirements.txt pybeansack-requirements.txt
+COPY requirements-io.txt requirements.txt
 
-# Copy only requirements first to leverage Docker cache
-COPY ./coffeemaker/pybeansack/requirements.txt ./pybeansack-requirements.txt
-COPY ./requirements-lite.txt ./requirements.txt
-
-# Install dependencies and download models
-RUN pip install --no-cache-dir -r pybeansack-requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --prefix=/pythonlibs -r pybeansack-requirements.txt
+RUN pip install --prefix=/pythonlibs -r requirements.txt
 
 # Final stage
-FROM python:3.12-slim-bookworm
+FROM python:3.13-slim-bookworm
 
-# Copy virtual environment and models from builder
-COPY --from=builder /opt/venv /opt/venv
+# Set the working directory
+WORKDIR /worker
 
-ENV PATH="/opt/venv/bin:$PATH"
+COPY --from=iobuilder /pythonlibs /usr/local
+COPY . .
+RUN rm -rf .models
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
     # Collector stuff
     WORDS_THRESHOLD_FOR_SCRAPING=150 \
     COLLECTOR_SOURCES=/worker/factory/feeds.yaml \
@@ -42,13 +33,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     MAX_CLUSTER_SIZE=128 \
     MAX_ARTICLES=8 \    
     COMPOSER_TOPICS=/worker/factory/composer-topics.json
-
-# Set the working directory
-WORKDIR /worker
-
-# Copy only necessary files
-COPY . .
-RUN rm -rf .models
 
 # Use ENTRYPOINT to make the container more flexible with arguments
 ENTRYPOINT ["python", "run.py"]

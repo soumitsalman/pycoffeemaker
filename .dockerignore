@@ -11,7 +11,7 @@
 .logs
 *.git
 .docker-compose.yaml
-.deployment.sh
+.deploy.sh
 dockertest.env
 */tests
 __azurite*

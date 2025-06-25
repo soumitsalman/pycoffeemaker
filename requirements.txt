@@ -1,3 +1,12 @@
+accelerate
+transformers
+sentence-transformers
+openvino
+optimum[intel] 
+optimum[openvino]
+openai
+llama-index
+tiktoken
 retry
 requests
 beautifulsoup4
@@ -7,13 +16,6 @@ tldextract
 praw
 asyncpraw
 readability-lxml
-azure-storage-queue
 azure-storage-blob
-boto3
-persist-queue
 icecream
 python-dotenv
-setuptools
-pyarrow
-pandas
-hdbscan

@@ -67,8 +67,8 @@ def initialize_azblobstore(azstorage_conn_str, container_name):
     from azure.storage.blob import ContainerClient, BlobType
 
     container = ContainerClient.from_connection_string(azstorage_conn_str, container_name)
-    # try: container.create_container()
-    # except: log.debug("blob container already exists %s", container_name)
+    try: container.create_container()
+    except: log.debug("blob container already exists %s", container_name)
     return container
 
 calculate_trend_score = lambda chatter_delta: 100*chatter_delta.comments_change + 10*chatter_delta.shares_change + chatter_delta.likes_change    
