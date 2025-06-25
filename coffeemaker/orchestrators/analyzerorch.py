@@ -157,7 +157,6 @@ class Orchestrator:
 
         # this is a cpu heavy calculation. run it on the main thread and let the nlp take care of it
         digests = self.digestor.run_batch([bean.content for bean in beans])
-
         # these are simple calculations. threading causes more time loss
         updates = list(upd for upd in map(_make_digest_update, beans, digests) if upd)   
         self._push_update(updates, "digested", beans[0].source)
@@ -174,7 +173,7 @@ class Orchestrator:
                     K_CONTENT: 1, 
                     K_SOURCE: 1
                 },
-                limit=ic(self.batch_size)
+                limit=self.batch_size
             )            
             if beans: yield beans
             else: break
@@ -210,7 +209,7 @@ class Orchestrator:
         total = 0
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         filter = {
-            K_CREATED: {"$gte": ndays_ago(MAX_ANALYZE_NDAYS)},
+            K_COLLECTED: {"$gte": ndays_ago(MAX_ANALYZE_NDAYS)},
             K_EMBEDDING: {"$exists": False},
             K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_INDEXING}
         }
@@ -234,7 +233,7 @@ class Orchestrator:
         total = 0
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         filter = {
-            K_CREATED: {"$gte": ndays_ago(MAX_ANALYZE_NDAYS)},
+            K_COLLECTED: {"$gte": ndays_ago(MAX_ANALYZE_NDAYS)},
             K_GIST: {"$exists": False},
             K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_DIGESTING},
             K_KIND: {"$ne": GENERATED}

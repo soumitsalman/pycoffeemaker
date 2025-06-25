@@ -1,10 +1,12 @@
+accelerate
 transformers
 sentence-transformers
-accelerate
+openvino
+optimum[intel] 
+optimum[openvino]
 openai
 llama-index
 tiktoken
-numpy
 retry
 requests
 beautifulsoup4
@@ -15,9 +17,5 @@ praw
 asyncpraw
 readability-lxml
 azure-storage-blob
-persist-queue
 icecream
 python-dotenv
-pyarrow
-pandas
-pyyaml

@@ -3,33 +3,45 @@ FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
 WORKDIR /worker
 
+COPY ./coffeemaker/pybeansack/requirements.txt ./pybeansack-requirements.txt
+COPY ./requirements-gpu.txt ./requirements.txt
+
+RUN pip install --no-cache-dir --prefix=/pythonlibs -r pybeansack-requirements.txt
+RUN pip install --no-cache-dir --prefix=/pythonlibs -r requirements.txt
+
+# Build stage
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime 
+
+WORKDIR /worker
+
+COPY --from=builder /pythonlibs /usr/local
 COPY . .
-
-# Install build dependencies and pip packages
-RUN pip install --no-cache-dir -r requirements-gpu.txt && \
-    pip install --no-cache-dir -r coffeemaker/pybeansack/requirements.txt
-
-# Download models
-RUN mkdir -p /worker/.models && \
-    huggingface-cli download --cache-dir /worker/.models avsolatorio/GIST-small-Embedding-v0 && \
-    huggingface-cli download --cache-dir /worker/.models soumitsr/led-base-article-digestor
 
 # Set environment variables
 ENV NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-    WORDS_THRESHOLD_FOR_INDEXING=150 \
-    WORDS_THRESHOLD_FOR_DIGESTING=150 \
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+    # LLM model stuff
     HF_HOME=/worker/.models \
     HF_HUB_CACHE=/worker/.models \
-    SENTENCE_TRANSFORMERS_HOME=/worker/.models \
     HF_ASSETS_CACHE=/worker/.models \
+    SENTENCE_TRANSFORMERS_HOME=/worker/.models \
+    # Collector stuff
+    WORDS_THRESHOLD_FOR_SCRAPING=150 \
+    COLLECTOR_SOURCES=/worker/factory/feeds.yaml \
+    # Indexer stuff
+    WORDS_THRESHOLD_FOR_INDEXING=150 \
     EMBEDDER_PATH=avsolatorio/GIST-small-Embedding-v0 \
     EMBEDDER_CONTEXT_LEN=512 \
+    MAX_RELATED_EPS=0.45 \
+    # Digestor stuff
+    WORDS_THRESHOLD_FOR_DIGESTING=150 \    
     DIGESTOR_PATH=soumitsr/led-base-article-digestor \
     DIGESTOR_CONTEXT_LEN=4096 \
-    MAX_CLUSTER_EPS=0.45 \
-    MAX_CLUSTER_NDAYS=4 \
-    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    # Composer stuff
+    MIN_CLUSTER_SIZE=16 \
+    MAX_CLUSTER_SIZE=128 \
+    COMPOSER_TOPICS=/worker/factory/composer-topics.json
 
 # Set the entrypoint
-ENTRYPOINT ["python", "./run.py"] 
+ENTRYPOINT ["python", "run.py"] 

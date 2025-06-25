@@ -14,4 +14,3 @@ pyyaml
 openai
 tiktoken
 azure-storage-blob
-azure-storage-queue

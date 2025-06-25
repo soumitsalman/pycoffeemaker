@@ -48,7 +48,7 @@ WORKDIR /worker
 
 # Copy only necessary files
 COPY . .
-RUN rm -rf tests
+RUN rm -rf .models
 
 # Use ENTRYPOINT to make the container more flexible with arguments
-ENTRYPOINT ["python", "./run.py"]
+ENTRYPOINT ["python", "run.py"]

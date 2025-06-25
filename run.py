@@ -48,6 +48,13 @@ logging.getLogger("urllib3").propagate = False
 logging.getLogger("connectionpool").propagate = False
 # logging.getLogger("asyncio").propagate = False
 
+### WORKER SCHEDULING ###
+# Collector can run 3 times a day for 1 hour -- 6 AM, 2 PM, 10 PM
+# Indexer can run 3 times a day for 30 mins -- 7 AM, 3 PM, 11 PM
+# Digestor can run 3 times a day for 30 mins (in GPU) -- 7 AM, 3 PM, 11 PM
+# Composer can run 1 time a day for 30 mins -- 5:30 AM (this way the contents will get picked up by indexer and digestor as needed)
+# All UI clients can do their porting as they please
+
 if __name__ == "__main__":    
     # Use command line args if provided, otherwise fall back to env vars    
     mode = args.mode or os.getenv("MODE")

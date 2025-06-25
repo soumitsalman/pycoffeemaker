@@ -2,7 +2,6 @@ import os
 import logging
 import asyncio
 import random
-import persistqueue
 from concurrent.futures import ThreadPoolExecutor
 from icecream import ic
 from datetime import timezone
@@ -15,19 +14,7 @@ from coffeemaker.orchestrators.utils import *
 FILTER_KINDS = [NEWS, BLOG]
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()*os.cpu_count()))
 
-_ESPRESSO_DB = "espresso"
 _END_OF_STREAM = "END_OF_STREAM"
-_CLEANUP_WINDOW = 7
-_CLEANUP_FILTER = {
-    K_UPDATED: {"$lt": ndays_ago(_CLEANUP_WINDOW)},
-    K_KIND: {"$ne": GENERATED}
-}
-_LAST_NDAYS = 2
-_PORT_FILTER = {
-    K_ENTITIES: VALUE_EXISTS,
-    K_CATEGORIES: VALUE_EXISTS,
-    K_UPDATED: {"$gte": ndays_ago(_LAST_NDAYS)} # take everything that has been created or updated in the last 1 day
-}
 
 log = logging.getLogger(__name__)
 
@@ -49,12 +36,10 @@ def _prepare_for_storing(beans: list[Bean]):
 
 class Orchestrator:
     db: Beansack = None
-    espresso_db: Beansack = None
     run_total: int = 0
 
     def __init__(self, mongodb_conn_str: str, db_name: str, batch_size: int = BATCH_SIZE):
         self.db = Beansack(mongodb_conn_str, db_name)    
-        self.espresso_db = Beansack(mongodb_conn_str, _ESPRESSO_DB)    
         self.batch_size = batch_size
          
     def _filter_new(self, beans: list[Bean]) -> list[Bean]:
@@ -76,14 +61,14 @@ class Orchestrator:
         return scrapables(beans)
     
     def _triage_scrape(self, source: str, beans: list[Bean]):
-        # NOTE: this line is disabled because we are currently storing all beans
-        # beans = storables(beans)
+        # NOTE: currently sotring only the ones with content
+        beans = storables(beans)
+        log.info("scraped", extra={"source": source, "num_items": len(beans)})
         # cleaning up garbage content
-        beans = self._filter_new(beans)
-        for bean in beans:
-            if is_scrapable(bean): bean.content = None 
-        log.info("scraped", extra={"source": source, "num_items": len(storables(beans))})
-        return self.store_beans(source, beans)
+        # beans = self._filter_new(beans)
+        # for bean in beans:
+        #     if is_scrapable(bean): bean.content = None 
+        return self.store_beans(source, self._filter_new(beans))
 
     def store_beans(self, source: str, beans: list[Bean]):
         if not beans: return       
@@ -113,23 +98,21 @@ class Orchestrator:
                 }
             }
         ) for trend in trends if trend.trend_score] 
-        # push the updates to both dbs
-        self.espresso_db.update_beans(updates)
         count = self.db.update_beans(updates)
         log.info("trend ranked", extra={"source": self.run_id, "num_items": count})
-    
-    def rectify_espresso(self):    
-        from pymongo.errors import BulkWriteError
-        try:
-            log.info("cleaned up", extra={
-                'source': self.run_id, 
-                'num_items': self.espresso_db.beanstore.delete_many(_CLEANUP_FILTER).deleted_count
-            })                
-            log.info("ported", extra={
-                'source': self.run_id, 
-                'num_items': len(self.espresso_db.beanstore.insert_many(self.db.beanstore.find(_PORT_FILTER), ordered=False).inserted_ids)
-            })
-        except BulkWriteError as e: log.warning(f"partially ported", extra={"source": self.run_id, "num_items": e.details['nInserted']})
+
+    def cleanup(self):
+        # NOTE: remove anything collected 7 days ago that did not get processed by analyzer
+        # TODO: this is a temporary fix.
+        _CLEANUP_WINDOW = 7
+        _CLEANUP_FILTER = {
+            K_COLLECTED: {"$lt": ndays_ago(_CLEANUP_WINDOW)},
+            K_CLUSTER_ID: {"$exists": False},
+            K_GIST: {"$exists": False},
+            K_KIND: {"$ne": GENERATED}
+        }
+        count = self.db.beanstore.delete_many(_CLEANUP_FILTER).deleted_count
+        log.info("cleaned up", extra={"source": self.run_id, "num_items": count})
 
     def _get_collect_funcs(self, sources):
         tasks = []
@@ -201,17 +184,18 @@ class Orchestrator:
                 log.warning(f"collection failed - {e.__class__.__name__} {e}", extra={"source": source, "num_items": 1})
 
         async with APICollector(self.batch_size) as apicollector, WebScraperLite(self.batch_size) as webscraper:
-            async with asyncio.TaskGroup() as tg:
-                [tg.create_task(collect(source, beans), name = f"collecting-{source}") for source, beans in get_collection_tasks()]     
+            await asyncio.gather(*[collect(source, func) for source, func in get_collection_tasks()])    
     
     @log_runtime(logger=log)
     def run(self, sources):
+        import persistqueue
+
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.run_total = 0
         self.scraping_queue = persistqueue.Queue(".scrapingqueue", tempdir=os.curdir)
 
         log.info("starting collector", extra={"source": self.run_id, "num_items": 1})
-        self.rectify_espresso()
+        self.cleanup()
         self.run_collection(sources)
         self.run_scraping()
         self.run_trend_ranking()        
@@ -223,7 +207,7 @@ class Orchestrator:
         self.run_total = 0        
 
         log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
-        self.rectify_espresso()
+        self.cleanup()
         await self.run_collection_async(sources)
         self.run_trend_ranking() # trend rank from this collection if execution finished
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})

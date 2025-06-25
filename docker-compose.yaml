@@ -2,14 +2,14 @@ version: '3.8'
 
 services:
   localcollector:
-    image: soumitsr/coffeemaker:lite-06-23
+    image: soumitsr/coffeemaker:06-25
     depends_on:
       - localdb
     environment:      
-      - DB_NAME=20250623
+      - DB_NAME=20250625
       - MONGODB_CONN_STR=mongodb://localdb:27017
+      - MODE=COLLECTOR
       - BATCH_SIZE=32
-    command: --mode COLLECTOR
     env_file:
       - dockertest.env
     networks:
@@ -18,48 +18,42 @@ services:
     mem_limit: 1g
 
   localindexer:
-    image: soumitsr/coffeemaker:06-20-1
+    image: soumitsr/coffeemaker:06-25
     depends_on:
       - localdb
     environment:
-      - MODE=INDEXER
-      - DB_NAME=20250620
+      - DB_NAME=20250625
       - MONGODB_CONN_STR=mongodb://localdb:27017
-      - BATCH_SIZE=48
+      - MODE=INDEXER
+      - BATCH_SIZE=64
     env_file:
       - dockertest.env
     networks:
       - coffeemaker-bridge
     cpus: 3
-    mem_limit: 4g
+    mem_limit: 5g
 
   localdigestor:
-    image: soumitsr/coffeemaker:gpu-06-24
+    image: soumitsr/coffeemaker:06-25
     depends_on:
       - localdb
       - azurite
-    command: --mode DIGESTOR --batch_size 2
     environment:
-      - DB_NAME=20250624
+      - DB_NAME=20250625
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - AZSTORAGE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      - MODE=DIGESTOR
+      - BATCH_SIZE=2
     env_file:
       - dockertest.env
     networks:
       - coffeemaker-bridge
     cpus: 3
     mem_limit: 6g
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    runtime: nvidia
+    
 
   localcomposer:
-    image: soumitsr/coffeemaker:lite-06-23
+    image: soumitsr/coffeemaker:06-25
     depends_on:
       - localdb
       - azurite

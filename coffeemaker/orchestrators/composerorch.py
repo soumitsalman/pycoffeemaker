@@ -35,7 +35,7 @@ _PROJECTION = {
 CLUSTER_EPS = float(os.getenv('CLUSTER_EPS', 1.4))
 MIN_CLUSTER_SIZE = int(os.getenv('MIN_CLUSTER_SIZE', 24))
 MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
-MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', 8))
+MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', 100)) # larger number for infinite
 MAX_ARTICLE_LEN = 3072
 
 make_article_id = lambda title: re.sub(r'[^a-zA-Z0-9]', '-', f"{title}-{int(now().timestamp())}-{random.randint(1000,9999)}").lower()
