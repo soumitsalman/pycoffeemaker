@@ -4,8 +4,9 @@
 .processingqueue
 .scrapingqueue
 .clustering
-*/.test
+.test
 .db
+.cache
 .mongodb
 .vscode
 .logs
@@ -13,7 +14,7 @@
 .docker-compose.yaml
 .deploy.sh
 dockertest.env
-*/tests
+tests
 __azurite*
 __queuestorage__
 __pycache__
