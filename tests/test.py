@@ -201,7 +201,7 @@ def test_indexer_orch():
         DB_LOCAL_TEST,
         now().strftime("%Y%m%d"),
         # embedder_path="avsolatorio/GIST-small-Embedding-v0", 
-        embedder_path="openvino:///home/soumitsr/codes/pycoffeemaker/.models/gist-small-embedding-v0-openvino",
+        embedder_path="avsolatorio/GIST-small-Embedding-v0",
         embedder_context_len=512,
         category_defs="./factory/categories.parquet",
         sentiment_defs="./factory/sentiments.parquet"
@@ -356,8 +356,8 @@ if __name__ == "__main__":
     # test_scraper()
 
     # test_colleor_orch()
-    # test_indexer_orch()
-    test_digestor_orch()
+    test_indexer_orch()
+    # test_digestor_orch()
     # test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")

@@ -1,9 +1,6 @@
 accelerate
 transformers
 sentence-transformers
-openvino
-optimum[intel] 
-optimum[openvino]
 openai
 llama-index
 tiktoken

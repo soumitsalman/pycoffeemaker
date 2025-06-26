@@ -6,9 +6,9 @@ WORKDIR /worker
 COPY coffeemaker/pybeansack/requirements.txt pybeansack-requirements.txt
 COPY requirements.txt requirements.txt
 
-RUN pip install --prefix=/pythonlibs intel_extension_for_pytorch
-RUN pip install --prefix=/pythonlibs -r pybeansack-requirements.txt
-RUN pip install --prefix=/pythonlibs -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/pythonlibs intel_extension_for_pytorch
+RUN pip install --no-cache-dir --prefix=/pythonlibs -r pybeansack-requirements.txt
+RUN pip install --no-cache-dir --prefix=/pythonlibs -r requirements.txt
 
 FROM cnstark/pytorch:2.3.1-py3.10.15-ubuntu22.04
 
@@ -26,7 +26,7 @@ ENV HF_HOME=/worker/.models \
     COLLECTOR_SOURCES=/worker/factory/feeds.yaml \
     # Indexer stuff
     WORDS_THRESHOLD_FOR_INDEXING=150 \
-    EMBEDDER_PATH=openvino:///worker/.models/gist-small-embedding-v0-openvino \
+    EMBEDDER_PATH=avsolatorio/GIST-small-Embedding-v0 \
     EMBEDDER_CONTEXT_LEN=512 \
     MAX_RELATED_EPS=0.45 \
     MAX_ANALYZE_NDAYS=7 \

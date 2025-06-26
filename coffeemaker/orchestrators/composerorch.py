@@ -205,7 +205,7 @@ class Orchestrator:
 
     def compose_article(self, topic: str, kind: str, beans: list[Bean]):  
         import time
-        time.sleep(random.randint(20, 45)) # NOTE: this is a hack to avoid rate limiting
+        time.sleep(random.randint(55, 65)) # NOTE: this is a hack to avoid rate limiting
         if not topic or not beans: return 
 
         input_text = f"Topic: {topic}\n\n"+"\n".join([bean.digest() for bean in beans])

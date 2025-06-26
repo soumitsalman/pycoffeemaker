@@ -18,7 +18,7 @@ services:
     mem_limit: 1g
 
   localindexer:
-    image: soumitsr/coffeemaker:06-25
+    image: soumitsr/coffeemaker:06-25-1
     depends_on:
       - localdb
     environment:
@@ -34,7 +34,7 @@ services:
     mem_limit: 5g
 
   localdigestor:
-    image: soumitsr/coffeemaker:06-25
+    image: soumitsr/coffeemaker:gpu-06-25
     depends_on:
       - localdb
       - azurite
@@ -43,7 +43,7 @@ services:
       - MONGODB_CONN_STR=mongodb://localdb:27017
       - AZSTORAGE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;BlobEndpoint=http://azurite:10000/devstoreaccount1;
       - MODE=DIGESTOR
-      - BATCH_SIZE=2
+      - BATCH_SIZE=4
     env_file:
       - dockertest.env
     networks:

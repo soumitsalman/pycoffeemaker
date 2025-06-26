@@ -1,26 +1,19 @@
 # this is designed to leverage underlying gpu if there is any
-FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime AS gpubuilder
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
 WORKDIR /worker
 
 COPY coffeemaker/pybeansack/requirements.txt pybeansack-requirements.txt
 COPY requirements.txt requirements.txt
+RUN pip install --no-cache-dir -r pybeansack-requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip install --prefix=/pythonlibs -r pybeansack-requirements.txt
-RUN pip install --prefix=/pythonlibs -r requirements.txt
-
-# Build stage
-FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime 
-
-WORKDIR /worker
-
-COPY --from=gpubuilder /pythonlibs /usr/local
 COPY . .
 
 # Set environment variables
 ENV NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+    PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:24,expandable_segments:True \
     # LLM model stuff
     HF_HOME=/worker/.models \
     HF_HUB_CACHE=/worker/.models \
