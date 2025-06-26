@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()))
 MAX_RELATED = int(os.getenv('MAX_RELATED', 128))
 MAX_RELATED_NDAYS = int(os.getenv('MAX_RELATED_NDAYS', 7))
-MAX_RELATED_EPS=float(os.getenv("MAX_RELATED_EPS", 0.15))
+MAX_RELATED_EPS=float(os.getenv("MAX_RELATED_EPS", 0.48))
 MAX_ANALYZE_NDAYS =  int(os.getenv('MAX_ANALYZE_NDAYS', 2))
 
 index_storables = lambda beans: [bean for bean in beans if bean.embedding]
@@ -32,7 +32,7 @@ def _make_update_one(url, update_fields):
             "$each": tags if isinstance(tags, list) else [tags]
         }
     }
-    return UpdateOne({K_ID: url}, update)
+    return UpdateOne({K_URL: url}, update)
 
 def _make_cluster_update(bean: Bean, cluster: list[Bean]): 
     bean.cluster_id = bean.url
@@ -148,7 +148,8 @@ class Orchestrator:
             clusters = list(exec.map(self.find_cluster, beans))
 
         # these are simple calculations. threading causes more time loss
-        updates = list(chain(*map(_make_cluster_update, beans, clusters)))
+        updates = chain(*map(_make_cluster_update, beans, clusters))
+        updates = list({up._filter[K_URL]:up for up in updates}.values())
         self._push_update(updates, "clustered", beans[0].source)
         return beans  
         

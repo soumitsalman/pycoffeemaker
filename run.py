@@ -12,8 +12,8 @@ COMPOSER_CONTEXT_LEN = 110760
 # Set up argument parser
 parser = argparse.ArgumentParser(description='Run the coffee maker application')
 parser.add_argument('--batch_size', type=int, help='Batch size for processing')
-parser.add_argument('--mode', type=str, choices=['COLLECTOR', 'INDEXER', 'DIGESTOR', 'COMPOSER'], 
-                    help='Operation mode (COLLECTOR, INDEXER, DIGESTOR, COMPOSER)')
+parser.add_argument('--mode', type=str, choices=['COLLECTOR', 'INDEXER', 'DIGESTOR', 'COMPOSER', 'REFRESHER'], 
+                    help='Operation mode (COLLECTOR, INDEXER, DIGESTOR, COMPOSER, REFRESHER)')
 parser.add_argument('--max_articles', type=int, help='Maximum number of articles to process')
 
 args = parser.parse_args()
@@ -112,6 +112,10 @@ if __name__ == "__main__":
             max_articles = args.max_articles or int(os.getenv('MAX_ARTICLES', os.cpu_count()))
         )
         orch.run(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml"))
+    elif mode == "REFRESHER":
+        from coffeemaker.orchestrators.refresherorch import Orchestrator
+        orch = Orchestrator(os.getenv("MONGODB_CONN_STR"), os.getenv("DB_NAME"))
+        orch.run()
     else:
         from coffeemaker.orchestrators.fullstack import Orchestrator
         orch = Orchestrator(
