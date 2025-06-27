@@ -24,7 +24,7 @@ MAX_ANALYZE_NDAYS =  int(os.getenv('MAX_ANALYZE_NDAYS', 2))
 index_storables = lambda beans: [bean for bean in beans if bean.embedding]
 digest_storables = lambda beans: [bean for bean in beans if bean.gist]
 
-def _make_update_one(url, update_fields):
+def _make_update_one(id, update_fields):
     update_fields = {k:v for k,v in update_fields.items() if v}
     tags = update_fields.pop(K_TAGS, None)
     update = {"$set": update_fields}
@@ -33,23 +33,23 @@ def _make_update_one(url, update_fields):
             "$each": tags if isinstance(tags, list) else [tags]
         }
     }
-    return UpdateOne({K_URL: url}, update)
+    return UpdateOne({K_ID: id}, update)
 
-def _make_cluster_update(bean: Bean, cluster: list[Bean]): 
-    bean.cluster_id = bean.url
-    bean.related = len(cluster)
+def _make_cluster_update(bean: Bean, cluster_ids: list[str]): 
+    bean.cluster_id = bean.id
+    bean.related = len(cluster_ids)
     update_fields = { 
         K_CLUSTER_ID: bean.cluster_id,
         K_RELATED: bean.related
     } 
-    return list(map(_make_update_one, cluster, [update_fields]*len(cluster)))
+    return list(map(_make_update_one, cluster_ids, [update_fields]*len(cluster_ids)))
 
 def _make_classification_update(bean: Bean, cat: list[str], sent: list[str]): 
     bean.categories = cat
     bean.sentiments = sent
     bean.tags = merge_tags(bean.categories)
     return _make_update_one(
-        bean.url, 
+        bean.id, 
         {
             K_CATEGORIES: bean.categories,
             K_SENTIMENTS: bean.sentiments,
@@ -64,7 +64,7 @@ def _make_digest_update(bean: Bean, digest: Digest):
     bean.tags = merge_tags(bean.regions, bean.entities)
     bean.gist = digest.raw
     return _make_update_one(
-        bean.url,
+        bean.id,
         {
             K_REGIONS: bean.regions,
             K_ENTITIES: bean.entities,
@@ -132,7 +132,7 @@ class Orchestrator:
             sents = list(exec.map(lambda bean: self.sentiments.vector_search(bean.embedding, limit=3), beans))
 
         # these are simple calculations. threading causes more time loss
-        updates = list(map(_make_classification_update, beans, cats, sents)) 
+        updates = list(map(_make_classification_update, beans, cats, sents))
         self._push_update(updates, "classified", beans[0].source)
         return beans
     
@@ -151,7 +151,7 @@ class Orchestrator:
 
         # these are simple calculations. threading causes more time loss
         updates = chain(*map(_make_cluster_update, beans, clusters))
-        updates = list({up._filter[K_URL]:up for up in updates}.values())
+        updates = list({up._filter[K_ID]:up for up in updates}.values())
         self._push_update(updates, "clustered", beans[0].source)
         return beans  
         
