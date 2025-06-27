@@ -40,15 +40,14 @@ class Orchestrator:
             K_TRENDSCORE: 1,
             K_UPDATED: 1  
         }
+        # with ThreadPoolExecutor(max_workers=os.cpu_count()) as exec:                
+        deleted = self.espresso_db.beanstore.delete_many(cleanup_filter)
+        log.info("cleaned up", extra={'source': self.run_id, 'num_items': deleted.deleted_count})     
+
+        stats = self.master_db.beanstore.find(updated_in(CONTENT_WINDOW), projection=update_projection)
+        updated = self.espresso_db.update_beans([UpdateOne(filter={K_URL: up[K_URL]}, update={"$set": up}) for up in stats])
+        log.info("trend ranked", extra={'source': self.run_id, 'num_items': updated})
         try:
-            # with ThreadPoolExecutor(max_workers=os.cpu_count()) as exec:                
-            deleted = self.espresso_db.beanstore.delete_many(cleanup_filter)
-            log.info("cleaned up", extra={'source': self.run_id, 'num_items': deleted.deleted_count})     
-
-            stats = self.master_db.beanstore.find(updated_in(CONTENT_WINDOW), projection=update_projection)
-            updated = self.espresso_db.update_beans([UpdateOne(filter={K_URL: up[K_URL]}, update={"$set": up}) for up in stats])
-            log.info("trend ranked", extra={'source': self.run_id, 'num_items': updated})
-
             inserted = self.espresso_db.beanstore.insert_many(self.master_db.beanstore.find(porting_filter), ordered=False)
             log.info("ported", extra={'source': self.run_id, 'num_items': len(inserted.inserted_ids)})
         except BulkWriteError as e: log.warning(f"partially ported", extra={"source": self.run_id, "num_items": e.details['nInserted']})
