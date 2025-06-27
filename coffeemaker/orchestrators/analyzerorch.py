@@ -212,7 +212,7 @@ class Orchestrator:
         total = 0
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         filter = {
-            K_COLLECTED: {"$gte": ndays_ago(MAX_ANALYZE_NDAYS)},
+            K_CREATED: {"$gte": ndays_ago(MAX_ANALYZE_NDAYS)},
             K_EMBEDDING: {"$exists": False},
             K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_INDEXING}
         }
@@ -236,7 +236,7 @@ class Orchestrator:
         total = 0
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         filter = {
-            K_COLLECTED: {"$gte": ndays_ago(MAX_ANALYZE_NDAYS)},
+            K_CREATED: {"$gte": ndays_ago(MAX_ANALYZE_NDAYS)},
             K_GIST: {"$exists": False},
             K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_DIGESTING},
             K_KIND: {"$ne": GENERATED}
