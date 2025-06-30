@@ -685,10 +685,28 @@ def migrate_mongodb(from_db_name, to_db_name, from_db_conn = os.getenv('MONGODB_
         try: t()
         except Exception as e: ic(e)
 
+def embed_generated_articles():
+    from coffeemaker.orchestrators.analyzerorch import Orchestrator
+    orch = Orchestrator(
+        os.getenv('MONGODB_CONN_STR'),
+        "espresso",
+        embedder_path="openvino:///home/soumitsr/codes/pycoffeemaker/.models/gist-small-embedding-v0-openvino",
+        embedder_context_len=512
+    )
+
+    beans = orch.db.query_beans(filter={K_KIND: GENERATED}, project={K_ID: 1, K_URL: 1, K_CONTENT: 1})
+    ic(len(beans))
+    contents = [bean.content for bean in beans]
+    vecs = orch.embedder.embed_documents(contents)
+    for bean, vec in zip(beans, vecs):
+        bean.embedding = vec
+    orch.db.update_bean_fields(beans, [K_EMBEDDING])
+
 # adding data porting logic
 if __name__ == "__main__":
+    embed_generated_articles()
     # merge_to_classification()
-    create_composer_topics_locally()
+    # create_composer_topics_locally()
     # create_categories_locally()
     # create_sentiments_locally()
     # port_beans_locally()

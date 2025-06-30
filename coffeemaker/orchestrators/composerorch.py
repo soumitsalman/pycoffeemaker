@@ -205,7 +205,7 @@ class Orchestrator:
 
     def compose_article(self, topic: str, kind: str, beans: list[Bean]):  
         import time
-        time.sleep(random.randint(65, 85)) # NOTE: this is a hack to avoid rate limiting
+        time.sleep(random.randint(0, 60)) # NOTE: this is a hack to avoid rate limiting
         if not topic or not beans: return 
 
         input_text = f"Topic: {topic}\n\n"+"\n".join([bean.digest() for bean in beans])
@@ -228,7 +228,9 @@ class Orchestrator:
 
     def create_banner(self, bean: Bean):
         if bean:
-            image_data = self.banner_maker.run(f"\n- Title: {bean.title}\n- Keywords: {', '.join(bean.entities)}\n")
+            user_prompt = bean.title if bean.title else ", ".join(bean.entities)
+            # user_prompt = f"\n- Title: {bean.title}\n- Keywords: {', '.join(bean.entities)}\n"
+            image_data = self.banner_maker.run(user_prompt)
             try: bean.image_url = self.cdn.upload_image(image_data, bean.id+".png")
             except Exception as e: log.warning(f"image upload failed - {e}", extra={'source': bean.id, 'num_items': 1})
         return bean  
@@ -247,7 +249,7 @@ class Orchestrator:
 
         clusters = self.get_clusters(topics)
         if not clusters: return    
-        beans = map(lambda c: self._compose_banner_and_store(topic=c[0], kind=c[1], beans=c[2]), clusters)
+        beans = run_batch(lambda c: self._compose_banner_and_store(topic=c[0], kind=c[1], beans=c[2]), clusters, num_threads=len(clusters))
         beans = [bean for bean in beans if bean]
         if beans: log.info("total articles", extra={'source': self.run_id, 'num_items': len(beans)})
         return beans

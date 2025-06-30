@@ -232,91 +232,27 @@ def test_composer_orch():
         cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
         cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
         cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
-        composer_path="google/gemma-3-27b-it",
-        composer_base_url=os.getenv("DEEPINFRA_BASE_URL"),
-        composer_api_key=os.getenv("DEEPINFRA_API_KEY"),
-        composer_context_len=40000,
-        banner_model="black-forest-labs/FLUX-1-schnell",
+        composer_path=os.getenv("GROKX_MODEL_PATH"),
+        composer_base_url=os.getenv("GROKX_BASE_URL"),
+        composer_api_key=os.getenv("GROKX_API_KEY"),
+        composer_context_len=30000,
+        banner_model="black-forest-labs/FLUX-1-dev",
         banner_base_url=os.getenv('DEEPINFRA_BASE_URL'),
         banner_api_key=os.getenv('DEEPINFRA_API_KEY'),
         backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
     )
-#     topics = """
-#   Artificial Intelligence:
-#     kind: blog
-#     last_ndays: 1
-#     tags:
-#       - Artificial General Intelligence
-#       - Artificial Intelligence
-#       - Artificial Intelligence Safety
-#       - Artificial Intelligence Ethics and Governance
-#       - Artificial Neural Networks
-#       - Artificial Vision
-#       - Machine Learning and AI Applications
-#       - Data Science and Analytics
-#       - Automation and Robotics
-#       - Computing and Information Technology
 
-#   Cybersecurity:
-#     kind: news
-#     last_ndays: 1
-#     tags:
-#       - Cybersecurity and Cybercrime
-#       - Privacy and Data Protection
-#       - Security and Defense Technology
-#       - Internet and Web Technologies
-#       - Computing and Information Technology
-#       - Cloud Computing
-#       - Blockchain and Cryptocurrency
-
-#   Software Engineering:
-#     kind: blog
-#     last_ndays: 1
-#     tags:
-#       - Software Development
-#       - Coding and Programming Languages
-#       - Algorithm and Computation
-#       - Cloud Computing
-#       - Computing and Information Technology
-#       - Internet and Web Technologies
-#       - High Performance Computing
-#       - Data Science and Analytics
-
-#   Career & Professional Growth:
-#     kind: blog
-#     last_ndays: 1
-#     tags:
-#       - Career and Employment
-#       - Professional Development
-#       - Business and Management
-#       - Workplace and Employment Law
-#       - Labor and Workforce
-#       - Innovation and Startups
-#       - Education
-#       - Youth and Education
-
-#   Startups & Entrepreneurship:
-#     kind: news
-#     last_ndays: 1
-#     tags:
-#       - Innovation and Startups
-#       - Business and Management
-#       - Technology and Innovation
-#       - Product Development and Technology
-#       - Research and Development
-#       - Industry and Manufacturing
-#     """
-    topics = """/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.json"""
+    topics = """/home/soumitsr/codes/pycoffeemaker/tests/topics.yaml"""
     for bean in orch.run(topics):
         print(">>>>>>>>>>>>>>>>")
         print(bean.title)
         print(bean.url)
         print(bean.image_url)
         print(bean.verdict)
-        print(bean.analysis)
-        print(bean.insights)
-        print(bean.predictions)
-        print(bean.entities)
+        if bean.analysis: print("\n".join(bean.analysis))
+        if bean.insights: print("\n".join(bean.insights))
+        if bean.predictions: print("\n".join(bean.predictions))
+        if bean.entities: print(", ".join(bean.entities))
         print("<<<<<<<<<<<<<<<<")
     ## test cluster
     # orch.run_id = now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -338,17 +274,6 @@ def test_composer_orch():
        
 
 if __name__ == "__main__":
-    # from pymongo import MongoClient
-    # from pymongo.errors import BulkWriteError
-    # urls = [
-    #     "https://www.devonlive.com/news/property/shower-mistake-creates-perfect-conditions-10276886",
-    #     "https://apifastmock.com"
-    # ]
-    # db = MongoClient(DB_LOCAL_TEST)["20250623"]
-    # try: db.beans.insert_many(db.beans.find({"url": {"$in": urls}}, projection={K_CONTENT: 0, K_EMBEDDING: 0}))
-    # except BulkWriteError as e: ic(e.details)
-
-
     # hydrate_test_db()
     # test_static_db()
     # test_trend_analysis()
@@ -356,9 +281,9 @@ if __name__ == "__main__":
     # test_scraper()
 
     # test_colleor_orch()
-    test_indexer_orch()
+    # test_indexer_orch()
     # test_digestor_orch()
-    # test_composer_orch()
+    test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
