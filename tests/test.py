@@ -232,9 +232,9 @@ def test_composer_orch():
         cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
         cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
         cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
-        composer_path=os.getenv("GROKX_MODEL_PATH"),
-        composer_base_url=os.getenv("GROKX_BASE_URL"),
-        composer_api_key=os.getenv("GROKX_API_KEY"),
+        composer_path="o4-mini",
+        composer_base_url=os.getenv("OPENAI_BASE_URL"),
+        composer_api_key=os.getenv("OPENAI_API_KEY"),
         composer_context_len=30000,
         banner_model="black-forest-labs/FLUX-1-dev",
         banner_base_url=os.getenv('DEEPINFRA_BASE_URL'),
@@ -249,10 +249,10 @@ def test_composer_orch():
         print(bean.url)
         print(bean.image_url)
         print(bean.verdict)
-        if bean.analysis: print("\n".join(bean.analysis))
-        if bean.insights: print("\n".join(bean.insights))
-        if bean.predictions: print("\n".join(bean.predictions))
-        if bean.entities: print(", ".join(bean.entities))
+        if bean.analysis: print("ANALYSIS:\n", "\n".join(bean.analysis))
+        if bean.insights: print("INSIGHTS:\n", "\n".join(bean.insights))
+        if bean.predictions: print("PREDICTIONS:\n", "\n".join(bean.predictions))
+        if bean.entities: print("TAGS:\n", ", ".join(bean.entities))
         print("<<<<<<<<<<<<<<<<")
     ## test cluster
     # orch.run_id = now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -280,7 +280,7 @@ if __name__ == "__main__":
     # test_collector_and_scraper()
     # test_scraper()
 
-    # test_colleor_orch()
+    # test_collector_orch()
     # test_indexer_orch()
     # test_digestor_orch()
     test_composer_orch()

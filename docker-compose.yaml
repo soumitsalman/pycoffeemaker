@@ -88,6 +88,21 @@ services:
     cpus: 1
     mem_limit: 4g
 
+  localpostgres:
+    image: postgres:17
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=localuser
+      - POSTGRES_PASSWORD=localpsss
+      - POSTGRES_DB=coffeemaker
+    volumes:
+      - ~/codes/.localpostgres:/var/lib/postgresql/data
+    networks:
+      - coffeemaker-bridge
+    cpus: 1
+    mem_limit: 4g
+
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite:latest
     ports:

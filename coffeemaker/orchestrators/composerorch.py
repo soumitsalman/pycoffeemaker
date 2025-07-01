@@ -205,7 +205,7 @@ class Orchestrator:
 
     def compose_article(self, topic: str, kind: str, beans: list[Bean]):  
         import time
-        time.sleep(random.randint(0, 60)) # NOTE: this is a hack to avoid rate limiting
+        time.sleep(random.randint(60, 120)) # NOTE: this is a hack to avoid rate limiting
         if not topic or not beans: return 
 
         input_text = f"Topic: {topic}\n\n"+"\n".join([bean.digest() for bean in beans])
@@ -249,7 +249,7 @@ class Orchestrator:
 
         clusters = self.get_clusters(topics)
         if not clusters: return    
-        beans = run_batch(lambda c: self._compose_banner_and_store(topic=c[0], kind=c[1], beans=c[2]), clusters, num_threads=len(clusters))
+        beans = map(lambda c: self._compose_banner_and_store(topic=c[0], kind=c[1], beans=c[2]), clusters)
         beans = [bean for bean in beans if bean]
         if beans: log.info("total articles", extra={'source': self.run_id, 'num_items': len(beans)})
         return beans
