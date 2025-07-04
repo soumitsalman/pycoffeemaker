@@ -112,7 +112,9 @@ class Orchestrator:
             K_KIND: {"$ne": GENERATED}
         }
         count = self.db.beanstore.delete_many(_CLEANUP_FILTER).deleted_count
-        log.info("cleaned up", extra={"source": self.run_id, "num_items": count})
+        log.info("cleaned up beans", extra={"source": self.run_id, "num_items": count})
+        count = self.db.chatterstore.delete_many({K_COLLECTED: {"$lt": ndays_ago(_CLEANUP_WINDOW)}}).deleted_count
+        log.info("cleaned up chatters", extra={"source": self.run_id, "num_items": count})
 
     def _get_collect_funcs(self, sources):
         tasks = []
