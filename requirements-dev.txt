@@ -9,7 +9,7 @@ asyncpraw
 readability-lxml
 azure-storage-queue
 azure-storage-blob
-crawl4aidoc
+crawl4ai
 boto3
 persist-queue
 icecream

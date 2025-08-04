@@ -133,8 +133,8 @@ def create_test_data_file(output_path):
 
 def hydrate_test_db():
     from factory.rectify import migrate_mongodb
-    migrate_mongodb("test", now().strftime("%Y%m%d"), from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
-    migrate_mongodb("espresso", "espresso", from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
+    migrate_mongodb("test", "master", from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
+    migrate_mongodb("espresso", "master", from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
 
 
 def test_trend_analysis():
@@ -228,18 +228,18 @@ def test_composer_orch():
     from coffeemaker.nlp import GeneratedArticle, agents, NEWSRECAP_SYSTEM_PROMPT
     orch = Orchestrator(
         DB_LOCAL_TEST,
-        now().strftime("%Y%m%d"),
+        "master",
         cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
         cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
         cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
-        composer_path="o4-mini",
-        composer_base_url=os.getenv("OPENAI_BASE_URL"),
-        composer_api_key=os.getenv("OPENAI_API_KEY"),
-        composer_context_len=30000,
-        banner_model="black-forest-labs/FLUX-1-dev",
-        banner_base_url=os.getenv('DEEPINFRA_BASE_URL'),
-        banner_api_key=os.getenv('DEEPINFRA_API_KEY'),
-        backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
+        composer_path=os.getenv("DIGESTOR_PATH"),
+        composer_base_url=os.getenv("DIGESTOR_BASE_URL"),
+        composer_api_key=os.getenv("DIGESTOR_API_KEY"),
+        composer_context_len=50000,
+        banner_model="RunDiffusion/Juggernaut-XI-Lightning",
+        # banner_base_url=os.getenv('DEEPINFRA_BASE_URL'),
+        # banner_api_key=os.getenv('DEEPINFRA_API_KEY'),
+        # backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
     )
 
     topics = """/home/soumitsr/codes/pycoffeemaker/tests/topics.yaml"""
@@ -287,6 +287,3 @@ if __name__ == "__main__":
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 
-    
-   
-  

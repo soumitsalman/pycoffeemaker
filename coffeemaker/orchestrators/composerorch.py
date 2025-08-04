@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import io
 import os
 import random
@@ -39,11 +40,9 @@ MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', 100)) # larger number for infinite
 MAX_ARTICLE_LEN = 3072
 
 make_article_id = lambda title: re.sub(r'[^a-zA-Z0-9]', '-', f"{title}-{int(now().timestamp())}-{random.randint(1000,9999)}").lower()
-def _make_bean(comp: GeneratedArticle): 
+def _make_bean(article: GeneratedArticle): 
     current = now()
-    bean_id = make_article_id(comp.title)
-    summary = comp.verdict
-    content = comp.raw
+    bean_id = make_article_id(article.title)
     return GeneratedBean(
         _id=bean_id,
         url=bean_id,
@@ -51,24 +50,24 @@ def _make_bean(comp: GeneratedArticle):
         created=current,
         updated=current,
         collected=current,
-        title=comp.title,
-        summary=summary,
-        content=content,
-        entities=comp.keywords,
-        tags=merge_tags(comp.keywords),
-        num_words_in_title=num_words(comp.title),
-        num_words_in_summary=num_words(summary),
-        num_words_in_content=num_words(content),
+        title=article.title,
+        summary=article.summary,
+        content=article.raw,
+        entities=article.keywords,
+        tags=merge_tags(article.keywords),
+        num_words_in_title=num_words(article.title),
+        num_words_in_summary=num_words(article.summary),
+        num_words_in_content=num_words(article.raw),
         author="Barista AI",
         source="cafecito",
         site_base_url="cafecito.tech",
         site_name="Cafecito",
         site_favicon="https://cafecito.tech/images/favicon.ico",
-        intro=comp.intro or None,
-        analysis=comp.analysis or None,
-        insights=comp.insights or None,
-        verdict=comp.verdict or None,
-        predictions=comp.predictions or None
+        intro=article.intro or None,
+        analysis=article.analysis or None,
+        insights=article.insights or None,
+        verdict=article.summary or None,
+        predictions=article.predictions or None
     )
 
 def _parse_topics(topics: list|dict|str):
@@ -85,10 +84,16 @@ def _parse_topics(topics: list|dict|str):
         raise ValueError(f"unsupported file type: {topics}")
     return list(yaml.safe_load(topics).values())
 
+
 class Orchestrator:
     db: Beansack
     cdn = None
     cdn_folder = ""
+    reporter = None
+    editor = None
+    highlighter = None
+    embedder = None
+    backup_container = None
 
     def __init__(self, 
         mongodb_conn_str: str, 
@@ -97,12 +102,12 @@ class Orchestrator:
         cdn_access_key: str,
         cdn_secret_key: str,
         composer_path: str, 
-        composer_base_url: str,
-        composer_api_key: str,
-        composer_context_len: int,
-        banner_model: str, 
-        banner_base_url: str,
-        banner_api_key: str,
+        composer_base_url: str = None,
+        composer_api_key: str = None,
+        composer_context_len: int = 0,
+        banner_model: str = None, 
+        banner_base_url: str = None,
+        banner_api_key: str = None,
         embedder_path: str = None,
         embedder_context_len: int = 0,       
         backup_azstorage_conn_str: str = None,
@@ -111,23 +116,37 @@ class Orchestrator:
         self.db = Beansack(mongodb_conn_str, db_name)
         self.cdn = CDNStore(cdn_endpoint, cdn_access_key, cdn_secret_key) 
         self.max_articles = max_articles
+        self.run_id = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
-        self.news_writer = agents.from_path(
+        # self.news_writer = agents.from_path(
+        #     composer_path, composer_base_url, composer_api_key, 
+        #     max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
+        #     system_prompt=NEWSRECAP_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False
+        #     # system_prompt=NEWSRECAP_SYSTEM_PROMPT_JSON, output_parser=GeneratedArticle.parse_json, json_mode=True
+        # )
+        # self.blog_writer = agents.from_path(
+        #     composer_path, composer_base_url, composer_api_key, 
+        #     max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
+        #     system_prompt=OPINION_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False
+        #     # system_prompt=OPINION_SYSTEM_PROMPT_JSON, output_parser=GeneratedArticle.parse_json, json_mode=True
+        # )
+        self.reporter = agents.from_path(
             composer_path, composer_base_url, composer_api_key, 
             max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
-            system_prompt=NEWSRECAP_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False
-            # system_prompt=NEWSRECAP_SYSTEM_PROMPT_JSON, output_parser=GeneratedArticle.parse_json, json_mode=True
+            system_prompt=JOURNALIST_SYSTEM_PROMPT, json_mode=False
         )
-        self.blog_writer = agents.from_path(
+        self.editor = agents.from_path(
             composer_path, composer_base_url, composer_api_key, 
-            max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
-            system_prompt=OPINION_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False
-            # system_prompt=OPINION_SYSTEM_PROMPT_JSON, output_parser=GeneratedArticle.parse_json, json_mode=True
+            max_input_tokens=MAX_ARTICLE_LEN, max_output_tokens=MAX_ARTICLE_LEN, 
+            system_prompt=EDITOR_SYSTEM_PROMPT, output_parser=cleanup_markdown, json_mode=False
         )
-        if banner_model: self.banner_maker = SimpleImageGenerationAgent(
-            banner_model, banner_base_url, banner_api_key, 
-            BANNER_IMAGE_SYSTEM_PROMPT
+        self.highlighter = agents.from_path(
+            composer_path, composer_base_url, composer_api_key, 
+            max_input_tokens=MAX_ARTICLE_LEN, max_output_tokens=MAX_ARTICLE_LEN, 
+            system_prompt=HIGHLIGHTER_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_json, json_mode=True
         )
+
+        if banner_model: self.banner_maker = TransformerImageGenerationAgent(banner_model)
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 
@@ -203,20 +222,24 @@ class Orchestrator:
         return list(map(lambda x: (x[0].categories[0], x[0].kind, x), clusters))
 
     def compose_article(self, topic: str, kind: str, beans: list[Bean]):  
-        import time
-        time.sleep(random.randint(60, 120)) # NOTE: this is a hack to avoid rate limiting
         if not topic or not beans: return 
 
-        input_text = f"Topic: {topic}\n\n"+"\n".join([bean.digest() for bean in beans])
-        if kind == BLOG: article = self.blog_writer.run(input_text)
-        else: article = self.news_writer.run(input_text)
+        prompt = f"Topic: {topic}\n\n"+"\n".join([bean.digest() for bean in beans])
+        draft = self.reporter.run(prompt)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            content = executor.submit(self.editor.run, draft)
+            highlights = executor.submit(self.highlighter.run, draft)
+            
+        article = highlights.result()
+        article.raw = content.result()
+        self._backup_composer_response(prompt, article.raw)
+            
+        return article
 
-        if not article: return 
-
+    def save_article(self, article: GeneratedArticle):
         bean = _make_bean(article)
         try: bean.url = self.cdn.upload_article(bean.content, bean.id)
-        except Exception as e: log.warning(f"article upload failed - {e}", extra={'source': bean.id, 'num_items': 1})
-        self._backup_composer_response(input_text, article.raw)
+        except Exception as e: log.warning(f"article upload failed - {e}", extra={'source': bean.id, 'num_items': 1})  
         return bean
     
     def _backup_composer_response(self, input_text: str, response_text: str):
@@ -226,19 +249,20 @@ class Orchestrator:
         except Exception as e: log.warning(f"backup failed - {e}", extra={'source': trfile, 'num_items': 1})
 
     def create_banner(self, bean: Bean):
-        if bean:
-            user_prompt = bean.title if bean.title else ", ".join(bean.entities)
-            # user_prompt = f"\n- Title: {bean.title}\n- Keywords: {', '.join(bean.entities)}\n"
-            image_data = self.banner_maker.run(user_prompt)
-            try: bean.image_url = self.cdn.upload_image(image_data, bean.id+".png")
-            except Exception as e: log.warning(f"image upload failed - {e}", extra={'source': bean.id, 'num_items': 1})
+        if not bean: return
+
+        user_prompt = bean.title if bean.title else ", ".join(bean.entities)
+        image_data = self.banner_maker.run(user_prompt)
+        try: bean.image_url = self.cdn.upload_image(image_data, bean.id+".png")
+        except Exception as e: log.warning(f"image upload failed - {e}", extra={'source': bean.id, 'num_items': 1, 'prompt': user_prompt})
         return bean  
 
     def _compose_banner_and_store(self, topic: str, kind: str, beans: list[Bean]):
-        bean = self.compose_article(topic, kind, beans)
+        article = self.compose_article(topic, kind, beans)
+        bean = self.save_article(article)
         if not bean: return
         if self.banner_maker: bean = self.create_banner(bean)
-        self.db.store_beans([bean])
+        # self.db.store_beans([bean])
         log.info(f"composed and stored {kind}", extra={'source': topic, 'num_items': 1})
         return bean
        
@@ -252,3 +276,5 @@ class Orchestrator:
         beans = [bean for bean in beans if bean]
         if beans: log.info("total articles", extra={'source': self.run_id, 'num_items': len(beans)})
         return beans
+
+    
