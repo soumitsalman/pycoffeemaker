@@ -262,7 +262,7 @@ class Orchestrator:
         bean = self.save_article(article)
         if not bean: return
         if self.banner_maker: bean = self.create_banner(bean)
-        # self.db.store_beans([bean])
+        self.db.store_beans([bean])
         log.info(f"composed and stored {kind}", extra={'source': topic, 'num_items': 1})
         return bean
        
