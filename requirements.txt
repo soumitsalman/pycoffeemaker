@@ -1,6 +1,7 @@
 accelerate
 transformers
 sentence-transformers
+diffusers
 openai
 llama-index
 tiktoken

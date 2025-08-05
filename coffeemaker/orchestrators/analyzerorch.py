@@ -98,8 +98,8 @@ class Orchestrator:
         os.makedirs(".cache", exist_ok=True)
 
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
-        if category_defs: self.categories = StaticDB(category_defs, file_cache=f"{CACHE_DIR}/categories-{int(now().timestamp())}.db")
-        if sentiment_defs: self.sentiments = StaticDB(sentiment_defs, file_cache=f"{CACHE_DIR}/sentiments-{int(now().timestamp())}.db")
+        if category_defs: self.categories = StaticDB(category_defs)
+        if sentiment_defs: self.sentiments = StaticDB(sentiment_defs)
         if digestor_path: self.digestor = agents.from_path(
             model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 
             max_input_tokens=digestor_context_len, max_output_tokens=400, 
@@ -216,7 +216,7 @@ class Orchestrator:
             K_EMBEDDING: {"$exists": False},
             K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_INDEXING}
         }
-        self.cluster_db = StaticDB(file_cache=f"{CACHE_DIR}/clusters-{int(now().timestamp())}.db")
+        self.cluster_db = StaticDB()
 
         log.info("starting indexer", extra={"source": run_id, "num_items": os.cpu_count()})        
         with self.dbworker:

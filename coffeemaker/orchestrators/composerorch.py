@@ -146,7 +146,7 @@ class Orchestrator:
             system_prompt=HIGHLIGHTER_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_json, json_mode=True
         )
 
-        if banner_model: self.banner_maker = TransformerImageGenerationAgent(banner_model)
+        if banner_model: self.banner_maker = agents.image_agent_from_path(banner_model, banner_base_url, banner_api_key)
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 

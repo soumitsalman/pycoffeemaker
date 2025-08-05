@@ -248,7 +248,6 @@ def test_composer_orch():
         print(bean.title)
         print(bean.url)
         print(bean.image_url)
-        print(bean.verdict)
         if bean.analysis: print("ANALYSIS:\n", "\n".join(bean.analysis))
         if bean.insights: print("INSIGHTS:\n", "\n".join(bean.insights))
         if bean.predictions: print("PREDICTIONS:\n", "\n".join(bean.predictions))
@@ -281,7 +280,7 @@ if __name__ == "__main__":
     # test_scraper()
 
     # test_collector_orch()
-    # test_indexer_orch()
+    test_indexer_orch()
     # test_digestor_orch()
     test_composer_orch()
     # test_run_async()
