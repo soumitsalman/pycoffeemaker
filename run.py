@@ -101,6 +101,7 @@ if __name__ == "__main__":
             cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
             cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
             composer_path=os.getenv("COMPOSER_PATH"), 
+            extractor_path=os.getenv("EXTRACTOR_PATH"),
             composer_base_url=os.getenv("COMPOSER_BASE_URL"),
             composer_api_key=os.getenv("COMPOSER_API_KEY"),
             composer_context_len=int(os.getenv("COMPOSER_CONTEXT_LEN", COMPOSER_CONTEXT_LEN)),
