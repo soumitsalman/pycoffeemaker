@@ -127,7 +127,7 @@ class Orchestrator:
         self.max_articles = max_articles
         self.run_id = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
-        client = agents.text_generator_client_from_path(composer_path, composer_base_url, composer_api_key, composer_context_len, MAX_ARTICLE_LEN, False)
+        client = agents.text_generator_client_from_path(composer_path, composer_base_url, composer_api_key, composer_context_len, MAX_ARTICLE_LEN)
         self.journalist = agents.TextGeneratorAgent(client, composer_context_len, JOURNALIST_SYSTEM_PROMPT, lambda x: x.strip())
         self.editor = agents.TextGeneratorAgent(client, composer_context_len, EDITOR_SYSTEM_PROMPT, cleanup_markdown)
         self.extractor = agents.TextGeneratorAgent(client, composer_context_len, SUMMARIZER_SYSTEM_PROMPT, ArticleMetadata.parse_json)
@@ -226,6 +226,7 @@ class Orchestrator:
         return article
 
     def stage3_1_create_banner(self, topic: dict, metadata: ArticleMetadata):
+        if not metadata: return
         result = self.banner_maker.run(f"Create a realistic image for a news banner with headline: {metadata.headline}")
         banner_id = make_article_id(metadata.headline)+".png"
         if isinstance(result, str): banner_url = self.cdn.upload_image_file(result, banner_id)
@@ -291,8 +292,7 @@ class Orchestrator:
         clusters = self.stage0_get_clusters(topics)
         if not clusters: return    
         topics_list = list(map(lambda c: c[0], clusters))
-        drafts_list = list(map(lambda c: self.stage1_create_drafts(c[0], c[1]), clusters))
-
+        drafts_list = run_batch(lambda c: self.stage1_create_drafts(c[0], c[1]), clusters)
         metadata_list = run_batch(lambda c: self.stage2_create_metadata(c[0], c[1]), zip(topics_list, drafts_list))
         content_list = run_batch(lambda c: self.stage3_create_content(c[0], c[1], c[2]), zip(topics_list, metadata_list, drafts_list))
         try: banner_list = list(map(lambda c: self.stage3_1_create_banner(c[0], c[1]), zip(topics_list, metadata_list)))
