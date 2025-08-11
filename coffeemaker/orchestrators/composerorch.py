@@ -132,7 +132,7 @@ class Orchestrator:
         self.editor = agents.TextGeneratorAgent(client, composer_context_len, EDITOR_SYSTEM_PROMPT, cleanup_markdown)
         self.extractor = agents.TextGeneratorAgent(client, composer_context_len, SUMMARIZER_SYSTEM_PROMPT, ArticleMetadata.parse_json)
 
-        if banner_model: self.banner_maker = agents.image_agent_from_path(banner_model, banner_base_url, banner_api_key, _process_banner, num_inference_steps=1, height=1024, width=512)
+        if banner_model: self.banner_maker = agents.image_agent_from_path(banner_model, banner_base_url, banner_api_key, _process_banner, num_inference_steps=24, height=1024, width=512)
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 
