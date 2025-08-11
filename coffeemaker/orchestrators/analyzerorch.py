@@ -100,7 +100,7 @@ class Orchestrator:
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if category_defs: self.categories = StaticDB(category_defs)
         if sentiment_defs: self.sentiments = StaticDB(sentiment_defs)
-        if digestor_path: self.digestor = agents.from_path(
+        if digestor_path: self.digestor = agents.text2text_agent_from_path(
             model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 
             max_input_tokens=digestor_context_len, max_output_tokens=400, 
             output_parser=Digest.parse_compressed

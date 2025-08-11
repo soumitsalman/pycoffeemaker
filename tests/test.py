@@ -1,11 +1,13 @@
 import os, sys
+import time
 from dotenv import load_dotenv
-
+import requests
+import logging
 
 load_dotenv()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import logging
+
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
 logger = logging.getLogger("test")
 logger.setLevel(logging.INFO)
@@ -40,6 +42,7 @@ from coffeemaker.pybeansack.mongosack import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import collector
 from coffeemaker.orchestrators.utils import log_runtime
+from concurrent.futures import ThreadPoolExecutor
 
 
 os.makedirs(".test", exist_ok=True)
@@ -211,8 +214,8 @@ def test_indexer_orch():
 def test_digestor_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
-        DB_LOCAL_TEST,
-        now().strftime("%Y%m%d"),
+        os.getenv("MONGODB_CONN_STR"),
+        "test",
         digestor_path="soumitsr/led-base-article-digestor",
         digestor_context_len=4096,
         backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
@@ -225,33 +228,33 @@ def test_digestor_orch():
 
 def test_composer_orch():
     from coffeemaker.orchestrators.composerorch import Orchestrator
-    from coffeemaker.nlp import GeneratedArticle, agents, NEWSRECAP_SYSTEM_PROMPT
+    from coffeemaker.nlp import ArticleMetadata, agents, NEWSRECAP_SYSTEM_PROMPT
     orch = Orchestrator(
-        DB_LOCAL_TEST,
-        "master",
+        os.getenv("MONGODB_CONN_STR"),
+        "test",
         cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
         cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
         cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
-        composer_path=os.getenv("DIGESTOR_PATH"),
+        composer_path="openai/gpt-oss-20b",
         composer_base_url=os.getenv("DIGESTOR_BASE_URL"),
         composer_api_key=os.getenv("DIGESTOR_API_KEY"),
         composer_context_len=50000,
-        banner_model="RunDiffusion/Juggernaut-XI-Lightning",
-        # banner_base_url=os.getenv('DEEPINFRA_BASE_URL'),
-        # banner_api_key=os.getenv('DEEPINFRA_API_KEY'),
+        banner_model="black-forest-labs/FLUX-1-dev",
+        banner_base_url=os.getenv('DEEPINFRA_BASE_URL'),
+        banner_api_key=os.getenv('DEEPINFRA_API_KEY'),
         # backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
     )
 
-    topics = """/home/soumitsr/codes/pycoffeemaker/tests/topics.yaml"""
+    topics = """/home/soumitsr/codes/pycoffeemaker/tests/composer-topics.json"""
     for bean in orch.run(topics):
         print(">>>>>>>>>>>>>>>>")
         print(bean.title)
         print(bean.url)
         print(bean.image_url)
-        if bean.analysis: print("ANALYSIS:\n", "\n".join(bean.analysis))
+        if bean.highlights: print("ANALYSIS:\n", "\n".join(bean.highlights))
         if bean.insights: print("INSIGHTS:\n", "\n".join(bean.insights))
-        if bean.predictions: print("PREDICTIONS:\n", "\n".join(bean.predictions))
         if bean.entities: print("TAGS:\n", ", ".join(bean.entities))
+        print(bean.content)
         print("<<<<<<<<<<<<<<<<")
     ## test cluster
     # orch.run_id = now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -270,9 +273,74 @@ def test_composer_orch():
     #     resp = orch.news_writer.run(infile.read())
     # with open(outfilename, "w") as outfile:
     #     outfile.write(resp.raw)
-       
+
+def hydrate_local_gobeansack():
+    import requests
+    from concurrent.futures import ThreadPoolExecutor
+    from coffeemaker.pybeansack.mongosack import Beansack   
+    beansack = Beansack(os.getenv("MONGODB_CONN_STR"), "test")
+    gobeansack_url = "http://localhost:8080"
+    test_api_key = "contributor"
+
+    def store_beans(skip: int, limit: int):
+        beans = beansack.query_beans(project={K_RELATED: 0}, skip=skip, limit=limit)
+        beans = [json.loads(b.model_dump_json(by_alias=True, exclude_none=True, exclude_unset=True, exclude_defaults=True)) for b in beans]
+        ic(skip, len(beans))
+        ic(requests.post(f"{gobeansack_url}/beans", json=beans, headers={"X-API-KEY": test_api_key}))
+        ic(requests.post(f"{gobeansack_url}/beans/embeddings", json=beans, headers={"X-API-KEY": test_api_key}))
+        ic(requests.post(f"{gobeansack_url}/beans/tags", json=beans, headers={"X-API-KEY": test_api_key}))
+
+    def store_chatters(skip: int, limit: int):
+        chatters = [json.loads(Chatter(**c).model_dump_json(by_alias=True, exclude_none=True, exclude_unset=True, exclude_defaults=True)) for c in beansack.chatterstore.find(projection={K_ID: 0}, skip=skip, limit=limit)]
+        ic(skip, len(chatters))
+        ic(requests.post(f"{gobeansack_url}/chatters", json=chatters, headers={"X-API-KEY": test_api_key}))
+
+    batch_size = 1000
+    with ThreadPoolExecutor(max_workers=batch_size) as executor:
+        executor.map(lambda x: store_beans(x, batch_size), range(0, 158000, batch_size))
+        executor.map(lambda x: store_chatters(x, batch_size), range(0, 318000, batch_size))
+
+def test_local_gobeansack_query():
+    import requests
+    from rfc3339 import rfc3339
+    gobeansack_url = "http://localhost:8080"
+    test_api_key = "composer"
+
+    def vector_search_beans(embedding):
+        search_params = {
+            "embedding": embedding, 
+            "max_distance": 0.3, 
+            "limit": 200, 
+            "kind": "news",
+            "created_since": rfc3339(datetime.now() - timedelta(days=1))
+        }
+        resp = requests.get(
+            f"{gobeansack_url}/beans/trending/gists",
+            json=search_params,
+            headers={"X-API-KEY": test_api_key}
+        )
+        ic(len(resp.json()))
+
+    from coffeemaker.orchestrators.composerorch import _parse_topics
+
+    topics = """/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.json"""
+    topics = _parse_topics(topics)    
+    
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        embeddings = [t[K_EMBEDDING] for t in topics]*2000
+        executor.map(lambda x: vector_search_beans(x), embeddings)
+
+
+    
+
 
 if __name__ == "__main__":
+    # hydrate_local_gobeansack()
+    # test_new_composer_orch()
+    # with ThreadPoolExecutor(max_workers=50) as executor:
+    #     executor.submit(hydrate_local_gobeansack)
+    #     time.sleep(60)
+    #     executor.submit(test_local_gobeansack_query)
     # hydrate_test_db()
     # test_static_db()
     # test_trend_analysis()
@@ -280,9 +348,9 @@ if __name__ == "__main__":
     # test_scraper()
 
     # test_collector_orch()
-    test_indexer_orch()
-    # test_digestor_orch()
-    test_composer_orch()
+    # test_indexer_orch()
+    test_digestor_orch()
+    # test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
 

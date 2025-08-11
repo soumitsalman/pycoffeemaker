@@ -17,7 +17,7 @@ from icecream import ic
 log = logging.getLogger(__name__)
 
 _LAST_NDAYS = 1
-
+_SIMILARITY_SCORE = 0.73
 _SCOPE_FILTER = {
     K_GIST: VALUE_EXISTS,
     K_CREATED: {"$gte": ndays_ago(_LAST_NDAYS)}
@@ -38,11 +38,12 @@ MIN_CLUSTER_SIZE = int(os.getenv('MIN_CLUSTER_SIZE', 24))
 MAX_CLUSTER_SIZE = int(os.getenv('MAX_CLUSTER_SIZE', 128))
 MAX_ARTICLES = int(os.getenv('MAX_ARTICLES', 100)) # larger number for infinite
 MAX_ARTICLE_LEN = 3072
+BATCH_SIZE = 16
 
 make_article_id = lambda title: re.sub(r'[^a-zA-Z0-9]', '-', f"{title}-{int(now().timestamp())}-{random.randint(1000,9999)}").lower()
-def _make_bean(article: GeneratedArticle): 
+def _make_bean(article: ArticleMetadata, content: str, banner_url: str): 
     current = now()
-    bean_id = make_article_id(article.title)
+    bean_id = make_article_id(article.headline)
     return GeneratedBean(
         _id=bean_id,
         url=bean_id,
@@ -50,25 +51,33 @@ def _make_bean(article: GeneratedArticle):
         created=current,
         updated=current,
         collected=current,
-        title=article.title,
-        summary=article.summary,
-        content=article.raw,
+        title=article.headline,
+        summary=article.summary or article.intro,
+        content=content,
+        image_url=banner_url,
         entities=article.keywords,
         tags=merge_tags(article.keywords),
-        num_words_in_title=num_words(article.title),
-        num_words_in_summary=num_words(article.summary),
-        num_words_in_content=num_words(article.raw),
+        num_words_in_title=num_words(article.headline),
+        num_words_in_summary=num_words(article.summary or article.intro),
+        num_words_in_content=num_words(content),
         author="Barista AI",
         source="cafecito",
         site_base_url="cafecito.tech",
         site_name="Cafecito",
         site_favicon="https://cafecito.tech/images/favicon.ico",
-        intro=article.intro or None,
-        analysis=article.analysis or None,
+        intro=article.intro or article.summary,
+        highlights=article.highlights or None,
         insights=article.insights or None,
         verdict=article.summary or None,
         predictions=article.predictions or None
     )
+
+def _process_banner(banner):
+    if hasattr(banner, "save"): 
+        filename = ".cache/"+re.sub(r'[^a-zA-Z0-9]', '-', f"banner-{int(now().timestamp())}-{random.randint(1000,9999)}.png").lower()
+        banner.save(filename)
+        return filename
+    return banner
 
 def _parse_topics(topics: list|dict|str):
     if isinstance(topics, list): return topics
@@ -89,9 +98,9 @@ class Orchestrator:
     db: Beansack
     cdn = None
     cdn_folder = ""
-    reporter = None
+    journalist = None
     editor = None
-    highlighter = None
+    extractor = None
     embedder = None
     backup_container = None
 
@@ -118,45 +127,21 @@ class Orchestrator:
         self.max_articles = max_articles
         self.run_id = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
-        # self.news_writer = agents.from_path(
-        #     composer_path, composer_base_url, composer_api_key, 
-        #     max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
-        #     system_prompt=NEWSRECAP_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False
-        #     # system_prompt=NEWSRECAP_SYSTEM_PROMPT_JSON, output_parser=GeneratedArticle.parse_json, json_mode=True
-        # )
-        # self.blog_writer = agents.from_path(
-        #     composer_path, composer_base_url, composer_api_key, 
-        #     max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
-        #     system_prompt=OPINION_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_markdown, json_mode=False
-        #     # system_prompt=OPINION_SYSTEM_PROMPT_JSON, output_parser=GeneratedArticle.parse_json, json_mode=True
-        # )
-        self.reporter = agents.from_path(
-            composer_path, composer_base_url, composer_api_key, 
-            max_input_tokens=composer_context_len, max_output_tokens=MAX_ARTICLE_LEN, 
-            system_prompt=JOURNALIST_SYSTEM_PROMPT, json_mode=False
-        )
-        self.editor = agents.from_path(
-            composer_path, composer_base_url, composer_api_key, 
-            max_input_tokens=MAX_ARTICLE_LEN, max_output_tokens=MAX_ARTICLE_LEN, 
-            system_prompt=EDITOR_SYSTEM_PROMPT, output_parser=cleanup_markdown, json_mode=False
-        )
-        self.highlighter = agents.from_path(
-            composer_path, composer_base_url, composer_api_key, 
-            max_input_tokens=MAX_ARTICLE_LEN, max_output_tokens=MAX_ARTICLE_LEN, 
-            system_prompt=HIGHLIGHTER_SYSTEM_PROMPT, output_parser=GeneratedArticle.parse_json, json_mode=True
-        )
+        client = agents.text_generator_client_from_path(composer_path, composer_base_url, composer_api_key, composer_context_len, MAX_ARTICLE_LEN, False)
+        self.journalist = agents.TextGeneratorAgent(client, composer_context_len, JOURNALIST_SYSTEM_PROMPT, lambda x: x.strip())
+        self.editor = agents.TextGeneratorAgent(client, composer_context_len, EDITOR_SYSTEM_PROMPT, cleanup_markdown)
+        self.extractor = agents.TextGeneratorAgent(client, composer_context_len, SUMMARIZER_SYSTEM_PROMPT, ArticleMetadata.parse_json)
 
-        if banner_model: self.banner_maker = agents.image_agent_from_path(banner_model, banner_base_url, banner_api_key)
+        if banner_model: self.banner_maker = agents.image_agent_from_path(banner_model, banner_base_url, banner_api_key, _process_banner, num_inference_steps=1, height=1024, width=512)
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 
     def get_beans(self, embedding: list[float] = None,  kind: str = None, tags: list[str] = None, last_ndays: int = None, limit: int = None):
         filter = _SCOPE_FILTER
-        # NOTE: temporarily disabling kind filter to see what happens
-        # if kind: filter[K_KIND] = lower_case(kind)
+        if kind: filter[K_KIND] = lower_case(kind)
         if tags and not embedding: filter[K_TAGS] = lower_case(tags) # if embedding is provided do not use tags
-        if embedding: return self.db.vector_search_beans(embedding, similarity_score=0.7, filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=_PROJECTION)
-        else: return self.db.query_beans(filter=filter, group_by=K_CLUSTER_ID, sort_by=TRENDING, limit=limit, project=_PROJECTION)
+        if embedding: return self.db.vector_search_beans(embedding, similarity_score=_SIMILARITY_SCORE, filter=filter, sort_by=BY_TRENDSCORE, limit=limit, project=_PROJECTION)
+        else: return self.db.query_beans(filter=filter, sort_by=BY_TRENDSCORE, limit=limit, project=_PROJECTION)
     
     def _kmeans_cluster(self, beans)-> list[list[Bean]]:
         from sklearn.cluster import KMeans
@@ -178,29 +163,8 @@ class Orchestrator:
     
     def _affinity_cluster(self, beans):
         from sklearn.cluster import AffinityPropagation
-        return AffinityPropagation(copy=False, damping=0.55, random_state=666)
+        return AffinityPropagation(copy=False, damping=0.55, random_state=666)    
     
-    def get_clusters(self, topics = None):
-        def try_get_beans(**kwargs):
-            limit = kwargs.pop('limit', None)
-            topic = kwargs.pop('_id', self.run_id)
-            try: 
-                beans = self.get_beans(embedding = kwargs.get(K_EMBEDDING), kind = kwargs.get(K_KIND), tags = kwargs.get(K_TAGS), limit=limit)
-                log.info("found beans", extra={"source": topic, "num_items": len(beans)}) 
-                return beans
-            except Exception as e: log.warning(f"finding beans failed - {e}", extra={"source": topic, "num_items": 0})
-
-        if topics:
-            topics = _parse_topics(topics)
-            clusters = map(
-                lambda topic: (topic[K_ID], topic.get(K_KIND, NEWS), try_get_beans(**topic, limit=MAX_CLUSTER_SIZE)), 
-                topics
-            )
-            clusters = list(filter(lambda x: x[2] and MIN_CLUSTER_SIZE <= len(x[2]), clusters))
-        else:
-            clusters = self.cluster_beans(self.get_beans(kind = NEWS), "HDBSCAN")
-        return random.sample(clusters, min(self.max_articles, len(clusters)))
-
     def cluster_beans(self, beans: list[Bean], method: str = "KMEANS")-> list[list[Bean]]:
         if not beans: return 
 
@@ -220,61 +184,124 @@ class Orchestrator:
         # return sorted(clusters, key=len)
         clusters = filter(lambda x: MIN_CLUSTER_SIZE <= len(x) <= MAX_CLUSTER_SIZE, clusters)
         return list(map(lambda x: (x[0].categories[0], x[0].kind, x), clusters))
+    
+    def stage0_get_clusters(self, topics = None):
+        def try_get_beans(**kwargs):
+            limit = kwargs.pop('limit', None)
+            topic = kwargs.pop('_id', self.run_id)
+            try: 
+                beans = self.get_beans(embedding = kwargs.get(K_EMBEDDING), kind = kwargs.get(K_KIND), tags = kwargs.get(K_TAGS), limit=limit)
+                log.info("found beans", extra={"source": topic, "num_items": len(beans)}) 
+                return beans
+            except Exception as e: log.warning(f"finding beans failed - {e}", extra={"source": topic, "num_items": 0})
 
-    def compose_article(self, topic: str, kind: str, beans: list[Bean]):  
-        if not topic or not beans: return 
+        if topics:
+            topics = _parse_topics(topics)
+            beans_list = run_batch(lambda topic: try_get_beans(**topic, limit=MAX_CLUSTER_SIZE), topics)
+            clusters = [(topic, beans) for topic, beans in zip(topics, beans_list) if beans and MIN_CLUSTER_SIZE <= len(beans)]
+        else:
+            clusters = self.cluster_beans(self.get_beans(kind = NEWS), "HDBSCAN")
 
-        prompt = f"Topic: {topic}\n\n"+"\n".join([bean.digest() for bean in beans])
-        draft = self.reporter.run(prompt)
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            content = executor.submit(self.editor.run, draft)
-            highlights = executor.submit(self.highlighter.run, draft)
-            
-        article = highlights.result()
-        article.raw = content.result()
-        self._backup_composer_response(prompt, article.raw)
-            
+        log.info("found clusters", extra={'source': self.run_id, 'num_items': len(clusters)})
+        return clusters
+
+    def stage1_create_drafts(self, topic: dict, beans: list[Bean]):
+        batches = [beans[i:i+MIN_CLUSTER_SIZE] for i in range(0, len(beans), MIN_CLUSTER_SIZE) if i+(MIN_CLUSTER_SIZE>>1) <= len(beans)]
+        if len(batches) <= 0: return
+        drafts = self.journalist.run_batch([f"Topic:{topic[K_ID]}\n\n"+json.dumps([b.digest() for b in batch], indent=2) for batch in batches])
+        log.info("created drafts", extra={'source': topic[K_ID], 'num_items': len(drafts)})
+        return drafts
+    
+    def stage2_create_metadata(self, topic: dict, drafts: list[str]):
+        drafts_text = "\n-------- DRAFT --------\n".join(drafts)
+        metadata = self.extractor.run(f"Topic:{topic[K_ID]}\n\n{drafts_text}")
+        log.info("created metadata", extra={'source': topic[K_ID], 'num_items': 1})
+        return metadata
+
+    def stage3_create_content(self, topic: dict, metadata: ArticleMetadata, drafts: list[str]):
+        drafts_text = "\n-------- DRAFT --------\n".join(drafts)    
+        prompt = f"Topic: {topic[K_ID]}\n\nHeadline: {metadata.headline}\n\nCurrentDate: {now().strftime('%Y-%m-%d')}\n\n{drafts_text}"
+        article = self.editor.run(prompt)
+        log.info("created content", extra={'source': topic[K_ID], 'num_items': 1})
         return article
 
-    def save_article(self, article: GeneratedArticle):
-        bean = _make_bean(article)
+    def stage3_1_create_banner(self, topic: dict, metadata: ArticleMetadata):
+        result = self.banner_maker.run(f"Create a realistic image for a news banner with headline: {metadata.headline}")
+        banner_id = make_article_id(metadata.headline)+".png"
+        if isinstance(result, str): banner_url = self.cdn.upload_image_file(result, banner_id)
+        else: banner_url = self.cdn.upload_image(result, banner_id)
+        log.info("created banner", extra={'source': topic[K_ID], 'num_items': 1})
+        return banner_url
+
+    def stage4_create_bean(self, topic: dict, metadata: ArticleMetadata, content: str, banner_url: str):
+        bean = _make_bean(metadata, content, banner_url)
         try: bean.url = self.cdn.upload_article(bean.content, bean.id)
-        except Exception as e: log.warning(f"article upload failed - {e}", extra={'source': bean.id, 'num_items': 1})  
+        except Exception as e: log.warning(f"article store/upload failed - {e}", extra={'source': topic[K_ID], 'num_items': 1})  
         return bean
+
+    # def compose_article(self, topic: str, kind: str, beans: list[Bean]):  
+    #     if not topic or not beans: return 
+
+    #     prompt = f"Topic: {topic}\n\n"+"\n".join([bean.digest() for bean in beans])
+    #     draft = self.journalist.run(prompt)
+    #     with ThreadPoolExecutor(max_workers=3) as executor:
+    #         content = executor.submit(self.editor.run, draft)
+    #         highlights = executor.submit(self.extractor.run, draft)
+            
+    #     article = highlights.result()
+    #     article.raw = content.result()
+    #     self._backup_composer_response("article", prompt, article.raw)
+            
+    #     return article
+
+    # def save_article(self, metadata: ArticleMetadata, content: str, banner_url: str = None):
+    #     bean = _make_bean(metadata, content, banner_url)
+    #     try: bean.url = self.cdn.upload_article(bean.content, bean.id)
+    #     except Exception as e: log.warning(f"article upload failed - {e}", extra={'source': bean.id, 'num_items': 1})  
+    #     return bean
     
-    def _backup_composer_response(self, input_text: str, response_text: str):
-        if not self.backup_container or not response_text: return 
-        trfile = "articles-"+now().strftime("%Y-%m-%d")+".jsonl"
-        try: self.backup_container.upload_blob(trfile, json.dumps({'input': input_text, 'output': response_text})+"\n", BlobType.APPENDBLOB)           
-        except Exception as e: log.warning(f"backup failed - {e}", extra={'source': trfile, 'num_items': 1})
+    # def _backup_composer_response(self, content_type: str, input_text: str, response_text: str):
+    #     if not self.backup_container or not response_text: return 
+    #     trfile = content_type+"-"+now().strftime("%Y-%m-%d")+".jsonl"
+    #     try: self.backup_container.upload_blob(trfile, json.dumps({'input': input_text, 'output': response_text})+"\n", BlobType.APPENDBLOB)           
+    #     except Exception as e: log.warning(f"backup failed - {e}", extra={'source': trfile, 'num_items': 1})
 
-    def create_banner(self, bean: Bean):
-        if not bean: return
+    # def create_banner(self, bean: Bean):
+    #     if not bean: return
 
-        user_prompt = bean.title if bean.title else ", ".join(bean.entities)
-        image_data = self.banner_maker.run(user_prompt)
-        try: bean.image_url = self.cdn.upload_image(image_data, bean.id+".png")
-        except Exception as e: log.warning(f"image upload failed - {e}", extra={'source': bean.id, 'num_items': 1, 'prompt': user_prompt})
-        return bean  
+    #     user_prompt = bean.title if bean.title else ", ".join(bean.entities)
+    #     image_data = self.banner_maker.run(user_prompt)
+    #     try: bean.image_url = self.cdn.upload_image(image_data, bean.id+".png")
+    #     except Exception as e: log.warning(f"image upload failed - {e}", extra={'source': bean.id, 'num_items': 1, 'prompt': user_prompt})
+    #     return bean  
 
-    def _compose_banner_and_store(self, topic: str, kind: str, beans: list[Bean]):
-        article = self.compose_article(topic, kind, beans)
-        bean = self.save_article(article)
-        if not bean: return
-        if self.banner_maker: bean = self.create_banner(bean)
-        self.db.store_beans([bean])
-        log.info(f"composed and stored {kind}", extra={'source': topic, 'num_items': 1})
-        return bean
+    # def _compose_banner_and_store(self, topic: str, kind: str, beans: list[Bean]):
+    #     article = self.compose_article(topic, kind, beans)
+    #     bean = self.save_article(article)
+    #     if not bean: return
+    #     if self.banner_maker: bean = self.create_banner(bean)
+    #     self.db.store_beans([bean])
+    #     log.info(f"composed and stored {kind}", extra={'source': topic, 'num_items': 1})
+    #     return bean
        
     def run(self, topics = None):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
 
-        clusters = self.get_clusters(topics)
+        clusters = self.stage0_get_clusters(topics)
         if not clusters: return    
-        beans = map(lambda c: self._compose_banner_and_store(topic=c[0], kind=c[1], beans=c[2]), clusters)
-        beans = [bean for bean in beans if bean]
-        if beans: log.info("total articles", extra={'source': self.run_id, 'num_items': len(beans)})
+        topics_list = list(map(lambda c: c[0], clusters))
+        drafts_list = list(map(lambda c: self.stage1_create_drafts(c[0], c[1]), clusters))
+
+        metadata_list = run_batch(lambda c: self.stage2_create_metadata(c[0], c[1]), zip(topics_list, drafts_list))
+        content_list = run_batch(lambda c: self.stage3_create_content(c[0], c[1], c[2]), zip(topics_list, metadata_list, drafts_list))
+        try: banner_list = list(map(lambda c: self.stage3_1_create_banner(c[0], c[1]), zip(topics_list, metadata_list)))
+        except: banner_list = [None]*len(topics_list)
+        beans = run_batch(lambda c: self.stage4_create_bean(c[0], c[1], c[2], c[3]), zip(topics_list, metadata_list, content_list, banner_list))
+        
+        if beans: 
+            self.db.store_beans(beans)
+            log.info("stored articles", extra={'source': self.run_id, 'num_items': len(beans)})
         return beans
 
     

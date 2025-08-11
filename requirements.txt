@@ -2,6 +2,7 @@ accelerate
 transformers
 sentence-transformers
 diffusers
+vllm
 openai
 llama-index
 tiktoken
