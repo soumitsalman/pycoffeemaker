@@ -250,7 +250,7 @@ class Orchestrator:
     def stage5_batch_create_banner(self, beans: list[Bean]):
         local_files = self.banner_maker.run_batch([f"Create a realistic image depicting: {bean.title}" for bean in beans])
         log.info("created banners", extra={'source': self.run_id, 'num_items': len(local_files)})
-        banner_urls = run_batch(self.cdn.upload_image_file, local_files, len(beans))
+        banner_urls = run_batch(lambda f, b: self.cdn.upload_image_file(f, b.id+".png"), zip(local_files, beans), len(beans))
         for bean, banner_url in zip(beans, banner_urls):
             bean.image_url = banner_url
         log.info("uploaded banners", extra={'source': self.run_id, 'num_items': len(banner_urls)})
