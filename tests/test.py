@@ -279,7 +279,7 @@ def hydrate_local_gobeansack():
     from concurrent.futures import ThreadPoolExecutor
     from coffeemaker.pybeansack.mongosack import Beansack   
     beansack = Beansack(os.getenv("MONGODB_CONN_STR"), "test")
-    gobeansack_url = "http://localhost:8080"
+    gobeansack_url = "http://localhost:8080/publisher"
     test_api_key = "contributor"
 
     def store_beans(skip: int, limit: int):
@@ -295,7 +295,7 @@ def hydrate_local_gobeansack():
         ic(skip, len(chatters))
         ic(requests.post(f"{gobeansack_url}/chatters", json=chatters, headers={"X-API-KEY": test_api_key}))
 
-    batch_size = 1000
+    batch_size = 256
     with ThreadPoolExecutor(max_workers=batch_size) as executor:
         executor.map(lambda x: store_beans(x, batch_size), range(0, 158000, batch_size))
         executor.map(lambda x: store_chatters(x, batch_size), range(0, 318000, batch_size))
@@ -303,8 +303,8 @@ def hydrate_local_gobeansack():
 def test_local_gobeansack_query():
     import requests
     from rfc3339 import rfc3339
-    gobeansack_url = "http://localhost:8080"
-    test_api_key = "composer"
+    gobeansack_url = "http://localhost:8080/privileged"
+    test_api_key = "regapp"
 
     def vector_search_beans(embedding):
         search_params = {
@@ -323,19 +323,16 @@ def test_local_gobeansack_query():
 
     from coffeemaker.orchestrators.composerorch import _parse_topics
 
-    topics = """/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.json"""
+    topics = """/workspaces/beansack/pycoffeemaker/tests/composer-topics.json"""
     topics = _parse_topics(topics)    
     
-    with ThreadPoolExecutor(max_workers=50) as executor:
+    with ThreadPoolExecutor(max_workers=32) as executor:
         embeddings = [t[K_EMBEDDING] for t in topics]*2000
         executor.map(lambda x: vector_search_beans(x), embeddings)
 
-
-    
-
-
 if __name__ == "__main__":
-    # hydrate_local_gobeansack()
+    hydrate_local_gobeansack()
+    test_local_gobeansack_query()
     # test_new_composer_orch()
     # with ThreadPoolExecutor(max_workers=50) as executor:
     #     executor.submit(hydrate_local_gobeansack)
@@ -349,7 +346,7 @@ if __name__ == "__main__":
 
     # test_collector_orch()
     # test_indexer_orch()
-    test_digestor_orch()
+    # test_digestor_orch()
     # test_composer_orch()
     # test_run_async()
     # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
