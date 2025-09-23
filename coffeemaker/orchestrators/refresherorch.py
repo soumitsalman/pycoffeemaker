@@ -55,3 +55,23 @@ class Orchestrator:
     def run(self):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.refresh_espresso()
+
+    # def _hydrate_cluster_db(self):
+    #     beans = list(self.db.beanstore.find(
+    #         filter = {
+    #             K_CREATED: {"$gte": ndays_ago(MAX_RELATED_NDAYS)},
+    #             K_EMBEDDING: {"$exists": True}
+    #         }, 
+    #         projection = {K_ID: 1, K_EMBEDDING: 1}
+    #     ))
+    #     self.cluster_db.store_items(beans)
+    #     log.info("cluster db loaded", extra={'source': datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 'num_items': len(beans)})
+
+        # def _backup_digests(self, beans: list[Bean]):
+    #     if not self.backup_container or not beans: return 
+    #     trfile = "digests-"+now().strftime("%Y-%m-%d")+".jsonl"
+    #     def backup():
+    #         items = map(lambda b: json.dumps({'article': b.content, "summary": b.gist})+"\n", beans)
+    #         try: self.backup_container.upload_blob(trfile, "".join(items), BlobType.APPENDBLOB)           
+    #         except Exception as e: log.warning(f"backup failed - {e}", extra={'source': trfile, 'num_items': len(beans)})
+    #     self.dbworker.submit(backup)

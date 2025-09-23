@@ -165,7 +165,7 @@ def test_static_db():
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Orchestrator
     orch = Orchestrator(
-        ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), os.getenv("S3_BUCKET")),
+        ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
         batch_size=128
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""

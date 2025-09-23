@@ -100,16 +100,17 @@ class WebScraperLite:
         results = await self.scrape_urls([bean.url for bean in beans], collect_metadata)
         for bean, result in zip(beans, results):
             if not result: continue
-            bean.content = result.get("content")
-            bean.summary = bean.summary or result.get("description")
             bean.title = bean.title or result.get("meta_title") or result.get("title") # this sequence is important because result['title'] is often crap
+            bean.summary = bean.summary or result.get("description")
+            bean.content = result.get("content")
+            bean.restricted_content = True
             bean.image_url = bean.image_url or result.get("top_image") 
             bean.author = result.get("author") or bean.author
-            bean.created = min(result.get("published_time") or bean.created, bean.collected)
-            bean.site_name = result.get('site_name')
-            bean.site_favicon = result.get('favicon')
-            bean.site_rss_feed = result.get("rss_feed")
-            bean.restricted_content = True
+            bean.created = min(result.get("published_time") or bean.created, bean.collected)            
+            bean.publisher.title = result.get('site_name')
+            bean.publisher.favicon = result.get('favicon')
+            bean.publisher.rss_feed = result.get("rss_feed")
+           
         return beans
 
 # GENERIC URL COLLECTOR CONFIG

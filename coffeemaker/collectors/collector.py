@@ -157,10 +157,10 @@ class APICollector:
         # else: return collected
 
     ### rss feed related utilities  ###
-    def collected_rssfeeds(self, feed_urls: list[str]) -> list[Bean]|list[tuple[Bean, Chatter]]:
+    def collected_rssfeeds(self, feed_urls: list[str]) -> list[Bean]:
         return merge_lists(_batch_run(self.collect_rssfeed, feed_urls))
 
-    def collect_rssfeed(self, url: str) -> list[Bean]|list[tuple[Bean, Chatter]]:        
+    def collect_rssfeed(self, url: str) -> list[Bean]:        
         resp = requests.get(url, headers=_RSS_REQUEST_HEADERS, timeout=TIMEOUT) 
         resp.raise_for_status()  # Raise exception for bad status codes
         feed = feedparser.parse(BytesIO(resp.content))
@@ -172,7 +172,7 @@ class APICollector:
                 [self._from_rssfeed(entry, NEWS, source_url) for entry in feed.entries]
             ) 
    
-    async def collect_rssfeed_async(self, url: str, default_kind: str = NEWS) -> list[Bean]|list[tuple[Bean, Chatter]]:
+    async def collect_rssfeed_async(self, url: str, default_kind: str = NEWS) -> list[Bean]:
         async with self.throttle, self.session.get(url, headers=_RSS_REQUEST_HEADERS) as resp:
             feed = feedparser.parse(await resp.text())
                 
@@ -184,7 +184,7 @@ class APICollector:
                 [self._from_rssfeed(entry, default_kind, source_url) for entry in feed.entries]
             )
 
-    def _from_rssfeed(self, entry: feedparser.FeedParserDict, default_kind: str, source_url: str) -> tuple[Bean, Chatter]:
+    def _from_rssfeed(self, entry: feedparser.FeedParserDict, default_kind: str, source_url: str):
         current_time = now()
         published_time = entry.get("published_parsed") or entry.get("updated_parsed")
         created_time = from_timestamp(time.mktime(published_time)) if published_time else current_time
@@ -203,23 +203,24 @@ class APICollector:
         ) 
         else: chatter = None
         
-        return (
-            Bean(
-                url=entry_link,
-                # in case of rss feed, the created time is the same as the updated time during collection. if it is mentioned in a social media feed then the updated time will get change
-                created=created_time,         
-                collected=current_time,
-                updated=created_time,
+        return Bean(
+            url=entry_link,
+            kind=guess_article_type(entry_link, source) or default_kind,
+            # in case of rss feed, the created time is the same as the updated time during collection. if it is mentioned in a social media feed then the updated time will get change      
+            # updated=created_time,
+            source=source,
+            title=entry.get('title'),
+            summary=summary,
+            content=content,
+            author=entry.get('author'),        
+            image_url=_extract_main_image(entry),
+            created=created_time,         
+            collected=current_time,
+            shares=[chatter] if chatter else None,
+            publisher=Publisher(
                 source=source,
-                site_base_url=extract_base_url(entry_link),
-                title=entry.get('title'),
-                kind=guess_article_type(entry_link, source) or default_kind,
-                summary=summary,
-                content=content,
-                author=entry.get('author'),        
-                image_url=_extract_main_image(entry)
-            ),
-            chatter
+                base_url=extract_base_url(entry_link)
+            )
         )
 
     def _cleanup_tags(self, html: str) -> str:
@@ -239,7 +240,7 @@ class APICollector:
         
         return self._return_collected(subreddit_name, _collect())      
     
-    async def collect_subreddit_async(self, subreddit_name: str, default_kind: str = NEWS) -> list[tuple[Bean, Chatter]]:
+    async def collect_subreddit_async(self, subreddit_name: str, default_kind: str = NEWS) -> list[Bean]:
         @retry(tries=2, delay=10, jitter=(5, 10))
         async def _collect():
             async with self.throttle:
@@ -248,7 +249,7 @@ class APICollector:
         
         return self._return_collected(subreddit_name, await _collect()) 
 
-    def _from_reddit_post(self, post, sr_name, default_kind) -> tuple[Bean, Chatter]: 
+    def _from_reddit_post(self, post, sr_name, default_kind): 
         subreddit = f"r/{sr_name}"
         current_time = now()
         created_time = from_timestamp(post.created_utc)
@@ -267,50 +268,45 @@ class APICollector:
                 url = reddit_submission_permalink(post.url)
                 kind = POST
                 source = subreddit
-        # TODO: merge with beans
-        return (
-            Bean(
-                url=url,
-                created=created_time,
-                collected=current_time,
-                updated=created_time,
-                # this is done because sometimes is_self value is wrong
+        return Bean(
+            url=url,
+            kind=kind,
+            # updated=created_time,
+            # this is done because sometimes is_self value is wrong
+            title=post.title,
+            content=post.selftext,
+            author=post.author.name if post.author else None,
+            source=source,
+            created=created_time,
+            collected=current_time,
+            # fill in the defaults
+            shares=[
+                Chatter(
+                    chatter_url=chatter_link,
+                    url=url,
+                    source=REDDIT,                        
+                    forum=subreddit,
+                    collected=current_time,
+                    likes=post.score,
+                    comments=post.num_comments
+                )
+            ],
+            publisher=Publisher(
                 source=source,
-                site_base_url=extract_base_url(url),
-                title=post.title,
-                kind=kind,
-                content=post.selftext,
-                author=post.author.name if post.author else None,
-                # fill in the defaults
-                shared_in=[chatter_link],
-                likes=post.score,
-                comments=post.num_comments
-            ),
-            Chatter(
-                chatter_url=chatter_link,
-                url=url,
-                source=REDDIT,                        
-                forum=subreddit,
-                collected=current_time,
-                likes=post.score,
-                comments=post.num_comments
+                base_url=extract_base_url(url)
             )
+            # likes=post.score,
+            # comments=post.num_comments
         )
     
     ### hackernews related utilities ###
-    async def collect_ychackernews_async(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[tuple[Bean, Chatter]]:
+    async def collect_ychackernews_async(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[Bean]:
         if isinstance(stories_urls, str): stories_urls = [stories_urls]
         ids = await asyncio.gather(*[self._fetch_json_async(ids_url) for ids_url in stories_urls])
         ids = set(chain(*ids))
         stories = await asyncio.gather(*[self._fetch_json_async(hackernews_story_metadata(id)) for id in ids])
-
-        return self._return_collected(
-            HACKERNEWS,
-            _batch_run(
-                lambda story: self._from_hackernews_story(story, BLOG), 
-                [story for story in stories if story and not excluded_url(story.get('url'))]
-            )
-        )
+        stories = [self._from_hackernews_story(story, BLOG) for story in stories if story and not excluded_url(story.get('url'))]
+        return self._return_collected(HACKERNEWS, stories)
     
     async def _fetch_json_async(self, url: str):
         try:
@@ -320,21 +316,15 @@ class APICollector:
         except Exception as e: 
             log.warning(f"collection failed - {e.__class__.__name__}: {e}", extra={"source": url, "num_items": 1}) 
 
-    def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[tuple[Bean, Chatter]]:
+    def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[Bean]:
         if isinstance(stories_urls, str): stories_urls = [stories_urls]
         ids = _batch_run(_fetch_json, stories_urls)
         ids = set(chain(*ids))
         stories = _batch_run(_fetch_json, [hackernews_story_metadata(id) for id in ids])
-
-        return self._return_collected(
-            HACKERNEWS,
-            _batch_run(
-                lambda story: self._from_hackernews_story(story, BLOG), 
-                [story for story in stories if story and not excluded_url(story.get('url'))]
-            )
-        )
+        stories = [self._from_hackernews_story(story, BLOG) for story in stories if story and not excluded_url(story.get('url'))]
+        return self._return_collected(HACKERNEWS, stories)
     
-    def _from_hackernews_story(self, story: dict, default_kind: str) -> tuple[Bean, Chatter]:
+    def _from_hackernews_story(self, story: dict, default_kind: str):
         # either its a shared url or it is a text
         current_time = now()
         created_time = from_timestamp(story['time'])
@@ -349,33 +339,37 @@ class APICollector:
             source = HACKERNEWS           
             kind = POST
                     
-        return (
-            Bean(            
-                url=url, # this is either a linked url or a direct post
-                # initially the bean's updated time will be the same as the created time
-                # if there is a chatter that links to this, then the updated time will be changed to collection time of the chatter
-                created=created_time,                
-                collected=current_time,
-                updated=created_time,
+        return Bean(            
+            url=url, # this is either a linked url or a direct post
+            kind=kind, # blog, post or job
+            # initially the bean's updated time will be the same as the created time
+            # if there is a chatter that links to this, then the updated time will be changed to collection time of the chatter
+            
+            # updated=created_time,
+            title=story.get('title'),
+            content=self._cleanup_tags(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
+            author=story.get('by'),
+            source=source,
+            created=created_time,                
+            collected=current_time,
+            # fill in the defaults
+            # shared_in=[hackernews_story_permalink(id)],
+            # likes=story.get('score'),
+            # comments=len(story.get('kids', []))
+            shares=[
+                Chatter(
+                    chatter_url=hackernews_story_permalink(id),
+                    url=url,
+                    source=HACKERNEWS,
+                    forum=str(id),
+                    collected=current_time,
+                    likes=story.get('score'),
+                    comments=len(story.get('kids', []))
+                )
+            ],
+            publisher=Publisher(
                 source=source,
-                site_base_url=extract_base_url(url),
-                title=story.get('title'),
-                kind=kind, # blog, post or job
-                content=self._cleanup_tags(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
-                author=story.get('by'),
-                # fill in the defaults
-                shared_in=[hackernews_story_permalink(id)],
-                likes=story.get('score'),
-                comments=len(story.get('kids', []))
-            ), 
-            Chatter(
-                chatter_url=hackernews_story_permalink(id),
-                url=url,                
-                collected=current_time,
-                source=HACKERNEWS,
-                forum=str(id),
-                likes=story.get('score'),
-                comments=len(story.get('kids', []))
+                base_url=extract_base_url(url)
             )
         )
     
