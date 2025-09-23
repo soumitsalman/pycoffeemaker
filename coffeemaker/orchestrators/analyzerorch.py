@@ -85,26 +85,20 @@ class Orchestrator:
     def run_indexer(self):
         total = 0
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # filter = {
-        #     K_CREATED: {"$gte": ndays_ago(MAX_ANALYZE_NDAYS)},
-        #     K_EMBEDDING: {"$exists": False},
-        #     K_NUM_WORDS_CONTENT: {"$gte": WORDS_THRESHOLD_FOR_INDEXING}
-        # }
-        ndays_time = ndays_ago(MAX_ANALYZE_NDAYS).strftime('%Y-%m-%d')
         filter = [
-            f"{K_CREATED} >= '{ndays_time}'",
             f"{K_EMBEDDING} IS NULL",
+            f"{K_CREATED} >= '{ndays_ago_str(MAX_ANALYZE_NDAYS)}'",
             f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_INDEXING}"
         ]
 
         log.info("starting indexer", extra={"source": run_id, "num_items": os.cpu_count()})        
-        for beans in self.stream_beans(filter):
-            try:
-                beans = self.embed_beans(beans)
-                total += len(beans)
-            except Exception as e:
-                log.error(f"failed indexing - {e}", extra={"source": run_id, "num_items": len(beans)})        
-        log.info("total indexed", extra={"source": run_id, "num_items": total})
+        # for beans in self.stream_beans(filter):
+        #     try:
+        #         beans = self.embed_beans(beans)
+        #         total += len(beans)
+        #     except Exception as e:
+        #         log.error(f"failed indexing - {e}", extra={"source": run_id, "num_items": len(beans)})        
+        # log.info("total indexed", extra={"source": run_id, "num_items": total})
         self.db.recompute()
         log.info("recomputed warehouse", extra={"source": run_id, "num_items": 1})
 
@@ -112,16 +106,9 @@ class Orchestrator:
     def run_digestor(self):
         total = 0
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # filter = {
-        #     K_CREATED: {"$gte": ndays_ago(MAX_ANALYZE_NDAYS)},
-        #     K_GIST: {"$exists": False},
-        #     K_CONTENT_LENGTH: {"$gte": WORDS_THRESHOLD_FOR_DIGESTING},
-        #     K_KIND: {"$ne": GENERATED}
-        # }
-        ndays_time = ndays_ago(MAX_ANALYZE_NDAYS).strftime('%Y-%m-%d')
         filter = [
-            f"{K_CREATED} >= '{ndays_time}'",
             f"{K_GIST} IS NULL",
+            f"{K_CREATED} >= '{ndays_ago_str(MAX_ANALYZE_NDAYS)}'",
             f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_INDEXING}"
         ]
 
