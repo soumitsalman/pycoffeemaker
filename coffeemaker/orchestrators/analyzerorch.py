@@ -92,13 +92,13 @@ class Orchestrator:
         ]
 
         log.info("starting indexer", extra={"source": run_id, "num_items": os.cpu_count()})        
-        # for beans in self.stream_beans(filter):
-        #     try:
-        #         beans = self.embed_beans(beans)
-        #         total += len(beans)
-        #     except Exception as e:
-        #         log.error(f"failed indexing - {e}", extra={"source": run_id, "num_items": len(beans)})        
-        # log.info("total indexed", extra={"source": run_id, "num_items": total})
+        for beans in self.stream_beans(filter):
+            try:
+                beans = self.embed_beans(beans)
+                total += len(beans)
+            except Exception as e:
+                log.error(f"failed indexing - {e}", extra={"source": run_id, "num_items": len(beans)})        
+        log.info("total indexed", extra={"source": run_id, "num_items": total})
         self.db.recompute()
         log.info("recomputed warehouse", extra={"source": run_id, "num_items": 1})
 
