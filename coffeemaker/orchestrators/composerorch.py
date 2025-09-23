@@ -58,7 +58,7 @@ def _make_bean(article: ArticleMetadata, content: str, banner_url: str):
         entities=article.keywords,
         tags=merge_tags(article.keywords),
         num_words_in_title=num_words(article.headline),
-        num_words_in_summary=num_words(article.summary or article.intro),
+        summary_length=num_words(article.summary or article.intro),
         num_words_in_content=num_words(content),
         author="Barista AI",
         source="cafecito",

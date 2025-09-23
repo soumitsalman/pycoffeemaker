@@ -195,9 +195,9 @@ class APICollector:
         source = extract_source(entry_link)
 
         if 'slash_comments' in entry: chatter = Chatter(
+            chatter_url=entry.get('wfw_commentrss', urljoin(entry_link, "#comments")),
             url=entry_link,
             source=source,
-            chatter_url=entry.get('wfw_commentrss', urljoin(entry_link, "#comments")),
             collected=current_time,
             comments=parse_int(entry.slash_comments)
         ) 
@@ -267,7 +267,7 @@ class APICollector:
                 url = reddit_submission_permalink(post.url)
                 kind = POST
                 source = subreddit
-        
+        # TODO: merge with beans
         return (
             Bean(
                 url=url,
@@ -287,10 +287,10 @@ class APICollector:
                 comments=post.num_comments
             ),
             Chatter(
+                chatter_url=chatter_link,
                 url=url,
-                chatter_url=chatter_link,            
                 source=REDDIT,                        
-                channel=subreddit,
+                forum=subreddit,
                 collected=current_time,
                 likes=post.score,
                 comments=post.num_comments
@@ -369,11 +369,11 @@ class APICollector:
                 comments=len(story.get('kids', []))
             ), 
             Chatter(
-                url=url,
                 chatter_url=hackernews_story_permalink(id),
+                url=url,                
                 collected=current_time,
                 source=HACKERNEWS,
-                channel=str(id),
+                forum=str(id),
                 likes=story.get('score'),
                 comments=len(story.get('kids', []))
             )

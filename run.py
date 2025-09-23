@@ -64,16 +64,14 @@ if __name__ == "__main__":
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
         orch = Orchestrator(
-            os.getenv("MONGODB_CONN_STR"),
-            os.getenv("DB_NAME"),
+            ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), os.getenv("S3_BUCKET")),
             batch_size=batch_size
         )
         asyncio.run(orch.run_async(os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml")))
     elif mode == "INDEXER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
-            os.getenv("MONGODB_CONN_STR"),
-            os.getenv("DB_NAME"),
+            ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), os.getenv("S3_BUCKET")),
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
             category_defs=os.getenv('INDEXER_CATEGORIES', "./factory/categories.parquet"),

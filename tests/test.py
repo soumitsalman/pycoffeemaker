@@ -38,7 +38,7 @@ EMBEDDER_CONTEXT_LEN=512
 import json, re, random
 import asyncio
 from datetime import datetime
-from coffeemaker.pybeansack.mongosack import *
+from coffeemaker.pybeansack.warehouse import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import collector
 from coffeemaker.orchestrators.utils import log_runtime
@@ -165,60 +165,59 @@ def test_static_db():
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Orchestrator
     orch = Orchestrator(
-        DB_LOCAL_TEST,
-        now().strftime("%Y%m%d")
+        ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), os.getenv("S3_BUCKET")),
+        batch_size=128
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
-    # sources = """/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"""
-    sources = """
-    sources:
-        rss:
-            - https://newatlas.com/index.rss
-            - https://www.channele2e.com/feed/topic/latest
-            - https://www.ghacks.net/feed/
-            - https://thenewstack.io/feed
-            - https://scitechdaily.com/feed/
-            - https://www.techradar.com/feeds/articletype/news
-            - https://www.geekwire.com/feed/
-            - https://investorplace.com/content-feed/
-        ychackernews:
-            - https://hacker-news.firebaseio.com/v0/newstories.json
-        reddit:
-            - news
-            - worldnews
-            - InternationalNews
-            - GlobalNews
-            - GlobalMarketNews
-            - FinanceNews
-            - StockNews
-            - CryptoNews
-            - energyStocks
-    """
-    # orch.db.beanstore.drop()
+    sources = "/home/soumitsr/pycoffeemaker/tests/sources-2.yaml"
+    # sources = """
+    # sources:
+    #     rss:
+    #         - https://newatlas.com/index.rss
+    #         - https://www.channele2e.com/feed/topic/latest
+    #         - https://www.ghacks.net/feed/
+    #         - https://thenewstack.io/feed
+    #         - https://scitechdaily.com/feed/
+    #         - https://www.techradar.com/feeds/articletype/news
+    #         - https://www.geekwire.com/feed/
+    #         - https://investorplace.com/content-feed/
+    #     ychackernews:
+    #         - https://hacker-news.firebaseio.com/v0/newstories.json
+    #     reddit:
+    #         - news
+    #         - worldnews
+    #         - InternationalNews
+    #         - GlobalNews
+    #         - GlobalMarketNews
+    #         - FinanceNews
+    #         - StockNews
+    #         - CryptoNews
+    #         - energyStocks
+    # """
     asyncio.run(orch.run_async(sources))
     # orch.run(sources)
 
 def test_indexer_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
-        DB_LOCAL_TEST,
-        now().strftime("%Y%m%d"),
+        ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
         # embedder_path="avsolatorio/GIST-small-Embedding-v0", 
         embedder_path="avsolatorio/GIST-small-Embedding-v0",
         embedder_context_len=512,
-        category_defs="./factory/categories.parquet",
-        sentiment_defs="./factory/sentiments.parquet"
+        batch_size=8
+        # category_defs="./factory/categories.parquet",
+        # sentiment_defs="./factory/sentiments.parquet"
     )
     orch.run_indexer()
 
 def test_digestor_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
-        os.getenv("MONGODB_CONN_STR"),
-        "test",
+        ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
         digestor_path="soumitsr/led-base-article-digestor",
         digestor_context_len=4096,
-        backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
+        batch_size=1
+        # backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
         # digestor_path="google/gemma-3-12b-it", 
         # digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
         # digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
@@ -323,6 +322,7 @@ def test_local_gobeansack_query():
 
     from coffeemaker.orchestrators.composerorch import _parse_topics
 
+
     topics = """/workspaces/beansack/pycoffeemaker/tests/composer-topics.json"""
     topics = _parse_topics(topics)    
     
@@ -330,24 +330,53 @@ def test_local_gobeansack_query():
         embeddings = [t[K_EMBEDDING] for t in topics]*2000
         executor.map(lambda x: vector_search_beans(x), embeddings)
 
+
+import argparse
+parser = argparse.ArgumentParser(description="Run pycoffeemaker tests")
+parser.add_argument("--hydrate", action="store_true", help="Hydrate local gobeansack database")
+# parser.add_argument("--test-local-gobeansack-query", action="store_true", help="Test local gobeansack query")
+# parser.add_argument("--hydrate-test-db", action="store_true", help="Hydrate test database")
+# parser.add_argument("--test-static-db", action="store_true", help="Test static database")
+# parser.add_argument("--test-trend-analysis", action="store_true", help="Test trend analysis")
+parser.add_argument("--collect", action="store_true", help="Test collector and scraper")
+parser.add_argument("--scrape", action="store_true", help="Test web scraper")
+parser.add_argument("--runcollector", action="store_true", help="Test collector orchestrator")
+parser.add_argument("--runindexer", action="store_true", help="Test indexer orchestrator")
+parser.add_argument("--rundigestor", action="store_true", help="Test digestor orchestrator")
+parser.add_argument("--runcomposer", action="store_true", help="Test composer orchestrator")
+# parser.add_argument("--test-fullstack-orch", action="store_true", help="Test fullstack orchestrator")
+# parser.add_argument("--create-test-data-file", metavar="OUTPUT_PATH", help="Create test data file at OUTPUT_PATH")
+
+def main():
+    
+    args = parser.parse_args()
+
+    # if args.hydrate:
+    #     hydrate_local_gobeansack()
+    # if args.test_local_gobeansack_query:
+    #     test_local_gobeansack_query()
+    # if args.hydrate_test_db:
+    #     hydrate_test_db()
+    # if args.test_static_db:
+    #     test_static_db()
+    # if args.test_trend_analysis:
+    #     test_trend_analysis()
+    if args.collect:
+        test_collector_and_scraper()
+    if args.scrape:
+        test_scraper()
+    if args.runcollector:
+        test_collector_orch()
+    if args.runindexer:
+        test_indexer_orch()
+    if args.rundigestor:
+        test_digestor_orch()
+    if args.runcomposer:
+        test_composer_orch()
+    # if args.test_fullstack_orch:
+    #     test_fullstack_orch()
+    # if args.create_test_data_file:
+    #     create_test_data_file(args.create_test_data_file)
+
 if __name__ == "__main__":
-    hydrate_local_gobeansack()
-    test_local_gobeansack_query()
-    # test_new_composer_orch()
-    # with ThreadPoolExecutor(max_workers=50) as executor:
-    #     executor.submit(hydrate_local_gobeansack)
-    #     time.sleep(60)
-    #     executor.submit(test_local_gobeansack_query)
-    # hydrate_test_db()
-    # test_static_db()
-    # test_trend_analysis()
-    # test_collector_and_scraper()
-    # test_scraper()
-
-    # test_collector_orch()
-    # test_indexer_orch()
-    # test_digestor_orch()
-    # test_composer_orch()
-    # test_run_async()
-    # download_test_data("/home/soumitsr/codes/pycoffeemaker/tests/texts-for-nlp.json")
-
+    main()

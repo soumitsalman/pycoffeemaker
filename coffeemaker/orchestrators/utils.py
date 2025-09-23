@@ -10,7 +10,8 @@ WORDS_THRESHOLD_FOR_SCRAPING = int(os.getenv('WORDS_THRESHOLD_FOR_SCRAPING', 200
 WORDS_THRESHOLD_FOR_INDEXING = int(os.getenv('WORDS_THRESHOLD_FOR_INDEXING', 70)) # mininum words needed to put it through indexing
 WORDS_THRESHOLD_FOR_DIGESTING = int(os.getenv('WORDS_THRESHOLD_FOR_DIGESTING', 160)) # min words needed to use the generated summary
 
-num_words = lambda text: len(text.split()) if text else 0
+clean_text = lambda text: text.strip() if text and text.strip() else None
+num_words = lambda text: min(len(text.split()) if text else 0, 1<<32)  # SMALLINT max value
 above_threshold = lambda text, threshold: num_words(text) >= threshold
 
 log = logging.getLogger(__name__)

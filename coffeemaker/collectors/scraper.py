@@ -109,9 +109,8 @@ class WebScraperLite:
             bean.site_name = result.get('site_name')
             bean.site_favicon = result.get('favicon')
             bean.site_rss_feed = result.get("rss_feed")
-            bean.is_scraped = True
+            bean.restricted_content = True
         return beans
-
 
 # GENERIC URL COLLECTOR CONFIG
 _BASE_EXCLUDED_TAGS = ["script", "style", "nav", "footer", "navbar", "comment", "contact",
@@ -346,7 +345,7 @@ class WebScraper:
             bean.site_rss_feed = result.get("rss_feed")
             bean.site_name = result.get('site_name')
             bean.site_favicon = result.get('favicon')
-            bean.is_scraped = True
+            bean.restricted_content = True
         return beans
 
     def _package_result(result) -> dict:   
