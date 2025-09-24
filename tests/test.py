@@ -222,12 +222,12 @@ def test_composer_orch():
     from coffeemaker.orchestrators.composerorch import Orchestrator
     from coffeemaker.nlp import ArticleMetadata, agents, NEWSRECAP_SYSTEM_PROMPT
     orch = Orchestrator(
-        os.getenv("MONGODB_CONN_STR"),
-        "test",
+        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
         cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
         cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
         cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
         composer_path="openai/gpt-oss-20b",
+        extractor_path="openai/gpt-oss-20b",
         composer_base_url=os.getenv("DIGESTOR_BASE_URL"),
         composer_api_key=os.getenv("DIGESTOR_API_KEY"),
         composer_context_len=50000,
@@ -237,17 +237,18 @@ def test_composer_orch():
         # backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
     )
 
-    topics = """/home/soumitsr/codes/pycoffeemaker/tests/composer-topics.json"""
-    for bean in orch.run(topics):
-        print(">>>>>>>>>>>>>>>>")
-        print(bean.title)
-        print(bean.url)
-        print(bean.image_url)
-        if bean.highlights: print("ANALYSIS:\n", "\n".join(bean.highlights))
-        if bean.insights: print("INSIGHTS:\n", "\n".join(bean.insights))
-        if bean.entities: print("TAGS:\n", ", ".join(bean.entities))
-        print(bean.content)
-        print("<<<<<<<<<<<<<<<<")
+    topics = """/home/soumitsr/pycoffeemaker/tests/composer-topics.json"""
+    orch.run(topics)
+    # for bean in orch.run(topics):
+    #     print(">>>>>>>>>>>>>>>>")
+    #     print(bean.title)
+    #     print(bean.url)
+    #     print(bean.image_url)
+    #     if bean.highlights: print("ANALYSIS:\n", "\n".join(bean.highlights))
+    #     if bean.insights: print("INSIGHTS:\n", "\n".join(bean.insights))
+    #     if bean.entities: print("TAGS:\n", ", ".join(bean.entities))
+    #     print(bean.content)
+    #     print("<<<<<<<<<<<<<<<<")
     ## test cluster
     # orch.run_id = now().strftime("%Y-%m-%d-%H-%M-%S")
     # clusters = orch.get_topic_clusters(topics)

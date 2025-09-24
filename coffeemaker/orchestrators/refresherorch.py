@@ -37,6 +37,7 @@ class Orchestrator:
         batch_size = 1000
         total = 0
         for offset in range(0, max_offset, batch_size):
+            # TODO: in future add a fixed list of sources
             beans = self.master_db.query_processed_beans(
                 created=utils.ndays_ago(PORT_WINDOW),
                 offset=offset,

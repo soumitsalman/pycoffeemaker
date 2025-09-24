@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-import io
+import re
 import os
 import random
 import yaml
@@ -9,29 +9,31 @@ import pandas as pd
 from coffeemaker.nlp import *
 from coffeemaker.pybeansack.cdnstore import CDNStore
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.mongosack import *
+from coffeemaker.pybeansack.warehouse import *
+from coffeemaker.pybeansack.utils import *
 from coffeemaker.orchestrators.utils import *
-from azure.storage.blob import BlobType
+# from azure.storage.blob import BlobType
 from icecream import ic
 
 log = logging.getLogger(__name__)
 
-_LAST_NDAYS = 1
-_SIMILARITY_SCORE = 0.73
-_SCOPE_FILTER = {
-    K_GIST: VALUE_EXISTS,
-    K_CREATED: {"$gte": ndays_ago(_LAST_NDAYS)}
-}
-_PROJECTION = {
-    K_URL: 1, 
-    K_EMBEDDING: 1, 
-    K_GIST: 1, 
-    K_ENTITIES: 1, 
-    K_REGIONS: 1, 
-    K_CATEGORIES: 1, 
-    K_SENTIMENTS: 1, 
-    K_CREATED:1
-}
+LAST_NDAYS = 1
+MAX_DISTANCE = 0.35
+# _SIMILARITY_SCORE = 0.73
+# _SCOPE_FILTER = {
+#     K_GIST: VALUE_EXISTS,
+#     K_CREATED: {"$gte": ndays_ago(_LAST_NDAYS)}
+# }
+# _PROJECTION = {
+#     K_URL: 1, 
+#     K_EMBEDDING: 1, 
+#     K_GIST: 1, 
+#     K_ENTITIES: 1, 
+#     K_REGIONS: 1, 
+#     K_CATEGORIES: 1, 
+#     K_SENTIMENTS: 1, 
+#     K_CREATED:1
+# }
 
 CLUSTER_EPS = float(os.getenv('CLUSTER_EPS', 1.4))
 MIN_CLUSTER_SIZE = int(os.getenv('MIN_CLUSTER_SIZE', 24))
@@ -41,36 +43,36 @@ MAX_ARTICLE_LEN = 3072
 BATCH_SIZE = 16
 
 make_article_id = lambda title: re.sub(r'[^a-zA-Z0-9]', '-', f"{title}-{int(now().timestamp())}-{random.randint(1000,9999)}").lower()
-def _make_bean(article: ArticleMetadata, content: str, banner_url: str): 
-    current = now()
-    bean_id = make_article_id(article.headline)
-    return GeneratedBean(
-        _id=bean_id,
-        url=bean_id,
-        kind=GENERATED,
-        created=current,
-        updated=current,
-        collected=current,
-        title=article.headline,
-        summary=article.summary or article.intro,
-        content=content,
-        image_url=banner_url,
-        entities=article.keywords,
-        tags=merge_tags(article.keywords),
-        num_words_in_title=num_words(article.headline),
-        summary_length=num_words(article.summary or article.intro),
-        num_words_in_content=num_words(content),
-        author="Barista AI",
-        source="cafecito",
-        site_base_url="cafecito.tech",
-        site_name="Cafecito",
-        site_favicon="https://cafecito.tech/images/favicon.ico",
-        intro=article.intro or article.summary,
-        highlights=article.highlights or None,
-        insights=article.insights or None,
-        verdict=article.summary or None,
-        predictions=article.predictions or None
-    )
+# def _make_bean(article: ArticleMetadata, content: str, banner_url: str): 
+#     current = now()
+#     bean_id = make_article_id(article.headline)
+#     return GeneratedBean(
+#         _id=bean_id,
+#         url=bean_id,
+#         kind=GENERATED,
+#         created=current,
+#         updated=current,
+#         collected=current,
+#         title=article.headline,
+#         summary=article.summary or article.intro,
+#         content=content,
+#         image_url=banner_url,
+#         entities=article.keywords,
+#         tags=merge_tags(article.keywords),
+#         num_words_in_title=num_words(article.headline),
+#         summary_length=num_words(article.summary or article.intro),
+#         num_words_in_content=num_words(content),
+#         author="Barista AI",
+#         source="cafecito",
+#         site_base_url="cafecito.tech",
+#         site_name="Cafecito",
+#         site_favicon="https://cafecito.tech/images/favicon.ico",
+#         intro=article.intro or article.summary,
+#         highlights=article.highlights or None,
+#         insights=article.insights or None,
+#         verdict=article.summary or None,
+#         predictions=article.predictions or None
+#     )
 
 def _process_banner(banner):
     if hasattr(banner, "save"): 
@@ -97,7 +99,6 @@ def _parse_topics(topics: list|dict|str):
 class Orchestrator:
     db: Beansack
     cdn = None
-    cdn_folder = ""
     journalist = None
     editor = None
     extractor = None
@@ -105,8 +106,7 @@ class Orchestrator:
     backup_container = None
 
     def __init__(self, 
-        mongodb_conn_str: str, 
-        db_name: str,        
+        db_conn_str: tuple[str, str],    
         cdn_endpoint: str,
         cdn_access_key: str,
         cdn_secret_key: str,
@@ -123,26 +123,34 @@ class Orchestrator:
         backup_azstorage_conn_str: str = None,
         max_articles: int = MAX_ARTICLES
     ):
-        self.db = Beansack(mongodb_conn_str, db_name)
+        self.db = initialize_db(db_conn_str)
         self.cdn = CDNStore(cdn_endpoint, cdn_access_key, cdn_secret_key) 
         self.max_articles = max_articles
         self.run_id = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
-        client = agents.text_generator_client(composer_path, composer_base_url, composer_api_key, composer_context_len, MAX_ARTICLE_LEN)
-        self.journalist = agents.TextGeneratorAgent(client, composer_context_len, JOURNALIST_SYSTEM_PROMPT, lambda x: x.strip())
-        self.editor = agents.TextGeneratorAgent(client, composer_context_len, EDITOR_SYSTEM_PROMPT, cleanup_markdown)
-        self.extractor = agents.text_generator_agent(composer_path, composer_base_url, composer_api_key, composer_context_len, MAX_ARTICLE_LEN, SUMMARIZER_SYSTEM_PROMPT, ArticleMetadata.parse_json, True)
+        # client = agents.text_generator_client(composer_path, composer_base_url, composer_api_key, composer_context_len, MAX_ARTICLE_LEN)
+        # self.journalist = agents.TextGeneratorAgent(client, composer_context_len, JOURNALIST_SYSTEM_PROMPT, lambda x: x.strip())
+        # self.editor = agents.TextGeneratorAgent(client, composer_context_len, EDITOR_SYSTEM_PROMPT, cleanup_markdown)
+        # self.extractor = agents.text_generator_agent(composer_path, composer_base_url, composer_api_key, composer_context_len, MAX_ARTICLE_LEN, SUMMARIZER_SYSTEM_PROMPT, ArticleMetadata.parse_json, True)
 
-        if banner_model: self.banner_maker = agents.image_agent_from_path(banner_model, banner_base_url, banner_api_key, _process_banner, num_inference_steps=40, height=512, width=1024)
-        if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
-        if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
+        # if banner_model: self.banner_maker = agents.image_agent_from_path(banner_model, banner_base_url, banner_api_key, _process_banner, num_inference_steps=40, height=512, width=1024)
+        # if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
+        # if backup_azstorage_conn_str: self.backup_container = initialize_azblobstore(backup_azstorage_conn_str, "composer")
 
-    def get_beans(self, embedding: list[float] = None,  kind: str = None, tags: list[str] = None, last_ndays: int = None, limit: int = None):
-        filter = _SCOPE_FILTER
-        if kind: filter[K_KIND] = lower_case(kind)
-        if tags and not embedding: filter[K_TAGS] = lower_case(tags) # if embedding is provided do not use tags
-        if embedding: return self.db.vector_search_beans(embedding, similarity_score=_SIMILARITY_SCORE, filter=filter, sort_by=BY_TRENDSCORE, limit=limit, project=_PROJECTION)
-        else: return self.db.query_beans(filter=filter, sort_by=BY_TRENDSCORE, limit=limit, project=_PROJECTION)
+    def get_beans(self, kind: str = None, last_ndays: int = None, categories: list[str] = None, embedding: list[float] = None, limit: int = None):
+        return self.db.query_processed_beans(
+            kind=kind,
+            created=ndays_ago(last_ndays or LAST_NDAYS),
+            categories=categories if not embedding else None,
+            embedding=embedding,
+            distance=MAX_DISTANCE if embedding else None,
+            limit=limit
+        )  
+        # filter = _SCOPE_FILTER
+        # if kind: filter[K_KIND] = lower_case(kind)
+        # if tags and not embedding: filter[K_TAGS] = lower_case(tags) # if embedding is provided do not use tags
+        # if embedding: return self.db.vector_search_beans(embedding, similarity_score=_SIMILARITY_SCORE, filter=filter, sort_by=BY_TRENDSCORE, limit=limit, project=_PROJECTION)
+        # else: return self.db.query_beans(filter=filter, sort_by=BY_TRENDSCORE, limit=limit, project=_PROJECTION)
     
     def _kmeans_cluster(self, beans)-> list[list[Bean]]:
         from sklearn.cluster import KMeans
@@ -182,26 +190,17 @@ class Orchestrator:
 
         if clusters: log.info("found clusters", extra={'source': self.run_id, 'num_items': len(clusters)})
         else: log.info(f"no cluster found", extra={'source': self.run_id, 'num_items': 0})
-        # return sorted(clusters, key=len)
         clusters = filter(lambda x: MIN_CLUSTER_SIZE <= len(x) <= MAX_CLUSTER_SIZE, clusters)
         return list(map(lambda x: (x[0].categories[0], x[0].kind, x), clusters))
     
     def stage0_get_clusters(self, topics = None):
-        def try_get_beans(**kwargs):
-            limit = kwargs.pop('limit', None)
-            topic = kwargs.pop('_id', self.run_id)
-            try: 
-                beans = self.get_beans(embedding = kwargs.get(K_EMBEDDING), kind = kwargs.get(K_KIND), tags = kwargs.get(K_TAGS), limit=limit)
-                log.info("found beans", extra={"source": topic, "num_items": len(beans)}) 
-                return beans
-            except Exception as e: log.warning(f"finding beans failed - {e}", extra={"source": topic, "num_items": 0})
-
         if topics:
             topics = _parse_topics(topics)
-            beans_list = run_batch(lambda topic: try_get_beans(**topic, limit=MAX_CLUSTER_SIZE), topics, len(topics))
+            beans_list = run_batch(lambda topic: self.get_beans(kind=NEWS, last_ndays=LAST_NDAYS, categories=topic.get(K_TAGS), embedding=topic.get(K_EMBEDDING), limit=MAX_CLUSTER_SIZE), topics, len(topics))
             clusters = [(topic, beans) for topic, beans in zip(topics, beans_list) if beans and MIN_CLUSTER_SIZE <= len(beans)]
+            # [log.info("found beans", extra={"source": topic[K_ID], "num_items": len(beans) if beans else 0}) for topic, beans in clusters]
         else:
-            clusters = self.cluster_beans(self.get_beans(kind = NEWS), "HDBSCAN")
+            clusters = self.cluster_beans(self.get_beans(kind = NEWS, last_ndays=LAST_NDAYS), "HDBSCAN")
 
         log.info("found clusters", extra={'source': self.run_id, 'num_items': len(clusters)})
         return clusters
@@ -231,8 +230,6 @@ class Orchestrator:
             log.info("created content", extra={'source': topic[K_ID], 'num_items': 1})
             return article
         except Exception as e: log.warning(f"content creation failed - {e}", extra={'source': topic[K_ID], 'num_items': 1})
-
-    
 
     def stage4_create_bean(self, topic: dict, metadata: ArticleMetadata, content: str):
         bean = _make_bean(metadata, content, None)
@@ -321,13 +318,13 @@ class Orchestrator:
 
         clusters = self.stage0_get_clusters(topics)
         if not clusters: return    
-
+        
         beans = run_batch(lambda c: self.compose_article(c[0], c[1]), clusters, len(clusters))
         beans = [b for b in beans if b]
         if not beans: return
 
         beans = self.stage5_batch_create_banner(beans)
-        self.db.store_beans(beans)
+        self.db.store_cores(beans)
         log.info("stored articles", extra={'source': self.run_id, 'num_items': len(beans)})
         return beans
 
