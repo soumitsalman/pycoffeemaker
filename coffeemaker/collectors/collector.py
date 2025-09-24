@@ -87,6 +87,11 @@ def _fetch_json(url: str):
     except Exception as e: 
         log.warning(f"collection failed - {e.__class__.__name__}: {e}", extra={"source": url, "num_items": 1})
 
+def _return_collected(source, collected: list|None):
+    if collected: log.debug("collected", extra={"source": source, "num_items": len(collected)})
+    else: log.debug("collection failed", extra={"source": source, "num_items": 1})
+    return clean_collection(collected)
+
 merge_lists = lambda results: list(chain(*(r for r in results if r))) 
 
 def parse_sources(sources: str) -> dict:
@@ -100,7 +105,6 @@ class APICollector:
     _reddit_client = None
     session = None
     throttle = None
-    # collect_callback: Callable = None
 
     def __init__(self, collect_callback: Callable = None, batch_size: int = BATCH_SIZE):  
         self.throttle = asyncio.Semaphore(batch_size)
@@ -149,13 +153,6 @@ class APICollector:
             self.session = None
             self._reddit_client = None
 
-    def _return_collected(self, source, collected: list|None):
-        if collected: log.debug("collected", extra={"source": source, "num_items": len(collected)})
-        else: log.debug("collection failed", extra={"source": source, "num_items": 1})
-        return collected
-        # if self.collect_callback: self.collect_callback(source, collected)
-        # else: return collected
-
     ### rss feed related utilities  ###
     def collected_rssfeeds(self, feed_urls: list[str]) -> list[Bean]:
         return merge_lists(_batch_run(self.collect_rssfeed, feed_urls))
@@ -167,7 +164,7 @@ class APICollector:
                 
         if feed.entries and (feed.feed.get('language') or 'en').startswith('en'): 
             source_url = _get_source_url(feed.feed.get('link'), url, feed.entries[0].link)
-            return self._return_collected(
+            return _return_collected(
                 extract_source(source_url), 
                 [self._from_rssfeed(entry, NEWS, source_url) for entry in feed.entries]
             ) 
@@ -179,7 +176,7 @@ class APICollector:
         # assume that if language is not mentioned, it is english
         if feed.entries and (feed.feed.get('language') or 'en').startswith('en'): 
             source_url = _get_source_url(feed.feed.get('link'), url, feed.entries[0].link)
-            return self._return_collected(
+            return _return_collected(
                 extract_source(source_url), 
                 [self._from_rssfeed(entry, default_kind, source_url) for entry in feed.entries]
             )
@@ -216,7 +213,7 @@ class APICollector:
             image_url=_extract_main_image(entry),
             created=created_time,         
             collected=current_time,
-            shares=[chatter] if chatter else None,
+            chatter=chatter,
             publisher=Publisher(
                 source=source,
                 base_url=extract_base_url(entry_link)
@@ -238,7 +235,7 @@ class APICollector:
             sr = self.reddit_client.subreddit(subreddit_name)
             return [self._from_reddit_post(post, subreddit_name, default_kind) for post in sr.hot(limit=25) if not excluded_url(post.url)]
         
-        return self._return_collected(subreddit_name, _collect())      
+        return _return_collected(subreddit_name, _collect())      
     
     async def collect_subreddit_async(self, subreddit_name: str, default_kind: str = NEWS) -> list[Bean]:
         @retry(tries=2, delay=10, jitter=(5, 10))
@@ -247,7 +244,7 @@ class APICollector:
                 sr = await self.reddit_client.subreddit(subreddit_name)
                 return [self._from_reddit_post(post, subreddit_name, default_kind) async for post in sr.hot(limit=25) if not excluded_url(post.url)]
         
-        return self._return_collected(subreddit_name, await _collect()) 
+        return _return_collected(subreddit_name, await _collect()) 
 
     def _from_reddit_post(self, post, sr_name, default_kind): 
         subreddit = f"r/{sr_name}"
@@ -280,17 +277,15 @@ class APICollector:
             created=created_time,
             collected=current_time,
             # fill in the defaults
-            shares=[
-                Chatter(
-                    chatter_url=chatter_link,
-                    url=url,
-                    source=REDDIT,                        
-                    forum=subreddit,
-                    collected=current_time,
-                    likes=post.score,
-                    comments=post.num_comments
-                )
-            ],
+            chatter=Chatter(
+                chatter_url=chatter_link,
+                url=url,
+                source=REDDIT,                        
+                forum=subreddit,
+                collected=current_time,
+                likes=post.score,
+                comments=post.num_comments
+            ),
             publisher=Publisher(
                 source=source,
                 base_url=extract_base_url(url)
@@ -306,7 +301,7 @@ class APICollector:
         ids = set(chain(*ids))
         stories = await asyncio.gather(*[self._fetch_json_async(hackernews_story_metadata(id)) for id in ids])
         stories = [self._from_hackernews_story(story, BLOG) for story in stories if story and not excluded_url(story.get('url'))]
-        return self._return_collected(HACKERNEWS, stories)
+        return _return_collected(HACKERNEWS, stories)
     
     async def _fetch_json_async(self, url: str):
         try:
@@ -322,7 +317,7 @@ class APICollector:
         ids = set(chain(*ids))
         stories = _batch_run(_fetch_json, [hackernews_story_metadata(id) for id in ids])
         stories = [self._from_hackernews_story(story, BLOG) for story in stories if story and not excluded_url(story.get('url'))]
-        return self._return_collected(HACKERNEWS, stories)
+        return _return_collected(HACKERNEWS, stories)
     
     def _from_hackernews_story(self, story: dict, default_kind: str):
         # either its a shared url or it is a text
@@ -356,17 +351,15 @@ class APICollector:
             # shared_in=[hackernews_story_permalink(id)],
             # likes=story.get('score'),
             # comments=len(story.get('kids', []))
-            shares=[
-                Chatter(
-                    chatter_url=hackernews_story_permalink(id),
-                    url=url,
-                    source=HACKERNEWS,
-                    forum=str(id),
-                    collected=current_time,
-                    likes=story.get('score'),
-                    comments=len(story.get('kids', []))
-                )
-            ],
+            chatter=Chatter(
+                chatter_url=hackernews_story_permalink(id),
+                url=url,
+                source=HACKERNEWS,
+                forum=str(id),
+                collected=current_time,
+                likes=story.get('score'),
+                comments=len(story.get('kids', []))
+            ),
             publisher=Publisher(
                 source=source,
                 base_url=extract_base_url(url)

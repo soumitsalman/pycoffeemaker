@@ -22,33 +22,25 @@ storables = lambda beans: [bean for bean in beans if not is_scrapable(bean)]
 
 def _prepare_for_storing(items: list[Bean]) -> list[BeanCore]:
     for item in items:
-        item.title = clean_text(item.title)
         item.title_length = num_words(item.title)
-        item.summary = clean_text(item.summary)
         item.summary_length = num_words(item.summary)
-        item.content = clean_text(item.content)
         item.content_length = num_words(item.content)
-        item.author = clean_text(item.author)
-        item.image_url = clean_text(item.image_url)
         item.created = item.created or datetime.now()
         item.collected = item.collected or datetime.now()
-
     return list(map(lambda b: BeanCore(**b.model_dump()), items))
 
 class Orchestrator:
     db: warehouse.Beansack|mongosack.Beansack = None
     run_total: int = 0
 
-    def __init__(self, ducklake_conn: tuple[str,str] = None, mongodb_conn: tuple[str, str] = None, batch_size: int = BATCH_SIZE):
-        if ducklake_conn: self.db = warehouse.Beansack(catalogdb=ducklake_conn[0], storagedb=ducklake_conn[1], factory_dir=os.getenv('FACTORY_DIR', '../factory'))
-        elif mongodb_conn: self.db = mongosack.Beansack(mongodb_conn[0], mongodb_conn[1])
-        else: raise ValueError("Either mongodb_conn or ducklake_conn must be provided")
+    def __init__(self, db_conn_str: tuple[str,str], batch_size: int = BATCH_SIZE):
+        self.db = initialize_db(db_conn_str)
         self.batch_size = batch_size     
 
     async def _triage_collection_async(self, source: str, beans: list[Bean]):
         if not beans: return
 
-        chatters = [bean.shares[0] for bean in beans if bean and bean.shares]
+        chatters = [bean.chatter for bean in beans if bean and bean.chatter]
         if chatters: await asyncio.to_thread(self.db.store_chatters, chatters)
 
         # TODO: disabled for now

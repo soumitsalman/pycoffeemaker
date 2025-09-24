@@ -29,8 +29,7 @@ class Orchestrator:
     backup_container = None    
 
     def __init__(self, 
-        ducklake_conn: tuple[str, str] = None,
-        mongodb_conn: tuple[str, str] = None,
+        db_conn_str: tuple[str, str],        
         embedder_path: str = None, 
         embedder_context_len: int = 0,               
         digestor_path: str = None, 
@@ -39,10 +38,7 @@ class Orchestrator:
         digestor_context_len: int = 0,
         batch_size: int = BATCH_SIZE
     ): 
-        if ducklake_conn: self.db = warehouse.Beansack(catalogdb=ducklake_conn[0], storagedb=ducklake_conn[1], factory_dir=os.getenv('FACTORY_DIR', '../factory'))
-        elif mongodb_conn: self.db = mongosack.Beansack(mongodb_conn[0], mongodb_conn[1])
-        else: raise ValueError("Either mongodb_connection or ducklake_connection must be provided")
-
+        self.db = initialize_db(db_conn_str)
         if embedder_path: self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         if digestor_path: self.digestor = agents.text2text_agent_from_path(
             model_path=digestor_path, base_url=digestor_base_url, api_key=digestor_api_key, 

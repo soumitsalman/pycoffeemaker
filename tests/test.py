@@ -14,6 +14,7 @@ logger.setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.collectororch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.refresherorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
 # logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
@@ -165,11 +166,11 @@ def test_static_db():
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Orchestrator
     orch = Orchestrator(
-        ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
+        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
         batch_size=128
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
-    sources = "/home/soumitsr/pycoffeemaker/tests/sources-2.yaml"
+    sources = "/home/soumitsr/pycoffeemaker/tests/sources-1.yaml"
     # sources = """
     # sources:
     #     rss:
@@ -200,28 +201,20 @@ def test_collector_orch():
 def test_indexer_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
-        ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
-        # embedder_path="avsolatorio/GIST-small-Embedding-v0", 
+        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
         embedder_path="avsolatorio/GIST-small-Embedding-v0",
         embedder_context_len=512,
         batch_size=8
-        # category_defs="./factory/categories.parquet",
-        # sentiment_defs="./factory/sentiments.parquet"
     )
     orch.run_indexer()
 
 def test_digestor_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
-        ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
+        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
         digestor_path="soumitsr/led-base-article-digestor",
         digestor_context_len=4096,
         batch_size=1
-        # backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
-        # digestor_path="google/gemma-3-12b-it", 
-        # digestor_base_url=os.getenv("DIGESTOR_BASE_URL"),
-        # digestor_api_key=os.getenv("DIGESTOR_API_KEY"),
-        # digestor_context_len=4096
     )
     orch.run_digestor()
 
@@ -272,6 +265,14 @@ def test_composer_orch():
     #     resp = orch.news_writer.run(infile.read())
     # with open(outfilename, "w") as outfile:
     #     outfile.write(resp.raw)
+
+def test_refresher_orch():
+    from coffeemaker.orchestrators.refresherorch import Orchestrator
+    orch = Orchestrator(
+        master_conn_str=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
+        replica_conn_str=("mongodb://localhost:27017", "replica1")
+    )
+    orch.run()
 
 def hydrate_local_gobeansack():
     import requests
@@ -344,6 +345,7 @@ parser.add_argument("--runcollector", action="store_true", help="Test collector 
 parser.add_argument("--runindexer", action="store_true", help="Test indexer orchestrator")
 parser.add_argument("--rundigestor", action="store_true", help="Test digestor orchestrator")
 parser.add_argument("--runcomposer", action="store_true", help="Test composer orchestrator")
+parser.add_argument("--runrefresher", action="store_true", help="Test refresher orchestrator")
 # parser.add_argument("--test-fullstack-orch", action="store_true", help="Test fullstack orchestrator")
 # parser.add_argument("--create-test-data-file", metavar="OUTPUT_PATH", help="Create test data file at OUTPUT_PATH")
 
@@ -373,6 +375,8 @@ def main():
         test_digestor_orch()
     if args.runcomposer:
         test_composer_orch()
+    if args.runrefresher:
+        test_refresher_orch()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:

@@ -10,7 +10,6 @@ WORDS_THRESHOLD_FOR_SCRAPING = int(os.getenv('WORDS_THRESHOLD_FOR_SCRAPING', 200
 WORDS_THRESHOLD_FOR_INDEXING = int(os.getenv('WORDS_THRESHOLD_FOR_INDEXING', 70)) # mininum words needed to put it through indexing
 WORDS_THRESHOLD_FOR_DIGESTING = int(os.getenv('WORDS_THRESHOLD_FOR_DIGESTING', 160)) # min words needed to use the generated summary
 
-clean_text = lambda text: text.strip() if text and text.strip() else None
 num_words = lambda text: min(len(text.split()) if text else 0, 1<<32)  # SMALLINT max value
 above_threshold = lambda text, threshold: num_words(text) >= threshold
 
@@ -72,6 +71,9 @@ def initialize_azblobstore(azstorage_conn_str, container_name):
     except: log.debug("blob container already exists %s", container_name)
     return container
 
-calculate_trend_score = lambda chatter_delta: 100*chatter_delta.comments_change + 10*chatter_delta.shares_change + chatter_delta.likes_change    
 merge_tags = lambda *args: list(set(item.lower() for arg in args if arg for item in arg))
 
+def initialize_db(conn: tuple[str, str]):
+    from coffeemaker.pybeansack import mongosack, warehouse
+    if conn[0].startswith("mongodb"): return mongosack.Beansack(conn[0], conn[1])
+    else: return warehouse.Beansack(catalogdb=conn[0], storagedb=conn[1], factory_dir=os.getenv('FACTORY_DIR', '../factory'))

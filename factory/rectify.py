@@ -683,6 +683,7 @@ def migrate_mongodb(from_db_name, to_db_name, from_db_conn = os.getenv('MONGODB_
 
 def embed_generated_articles():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
+
     orch = Orchestrator(
         os.getenv('MONGODB_CONN_STR'),
         "espresso",
@@ -698,9 +699,27 @@ def embed_generated_articles():
         bean.embedding = vec
     orch.db.update_bean_fields(beans, [K_EMBEDDING])
 
+def rectify_parquets():
+    import pandas as pd
+    import numpy as np
+    # Sentiments
+    sentiments_path = "/home/soumitsr/pycoffeemaker/factory/sentiments.parquet"
+    sentiments_df = pd.read_parquet(sentiments_path)
+    sentiments_df = sentiments_df.rename(columns={"_id": "sentiment"})
+    # Convert embedding column to float32
+    sentiments_df["embedding"] = sentiments_df["embedding"].apply(lambda x: np.array(x, dtype=np.float32))
+    sentiments_df.to_parquet(sentiments_path, engine="pyarrow")
+
+    # Categories
+    categories_path = "/home/soumitsr/pycoffeemaker/factory/categories.parquet"
+    categories_df = pd.read_parquet(categories_path)
+    categories_df = categories_df.rename(columns={"_id": "category"})
+    categories_df["embedding"] = categories_df["embedding"].apply(lambda x: np.array(x, dtype=np.float32))
+    categories_df.to_parquet(categories_path, engine="pyarrow")
+
 # adding data porting logic
 if __name__ == "__main__":
-    embed_generated_articles()
+    rectify_parquets()
     # merge_to_classification()
     # create_composer_topics_locally()
     # create_categories_locally()

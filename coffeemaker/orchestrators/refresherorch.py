@@ -1,60 +1,69 @@
+from concurrent.futures import ThreadPoolExecutor
 import logging
-from pymongo import UpdateOne
-from pymongo.errors import BulkWriteError
-from coffeemaker.pybeansack.mongosack import *
-from coffeemaker.pybeansack.models import *
+# from pymongo import UpdateOne
+# from pymongo.errors import BulkWriteError
+from coffeemaker.pybeansack import mongosack, warehouse, utils, models
+from .utils import *
+# from coffeemaker.pybeansack.models import *
 
 log = logging.getLogger(__name__)
 
-_ESPRESSO_DB = "espresso"
-CONTENT_WINDOW = 7
-PORT_WINDOW = 1
+# _ESPRESSO_DB = "espresso"
+# CONTENT_WINDOW = 7
+PORT_WINDOW = 2
+
+calculate_trend_score = lambda bean_chatter: 100*bean_chatter.comments + 10*bean_chatter.shares + bean_chatter.likes    
 
 class Orchestrator:
-    master_db: Beansack = None
+    master_db: warehouse.Beansack = None
+    espresso_db: mongosack.Beansack = None
     run_total: int = 0
 
-    def __init__(self, mongodb_conn_str: str, db_name: str):
-        self.master_db = Beansack(mongodb_conn_str, db_name) 
-        self.espresso_db = Beansack(mongodb_conn_str, _ESPRESSO_DB) 
+    def __init__(self, master_conn_str: tuple[str, str], replica_conn_str: tuple[str, str]):
+        self.master_db = initialize_db(master_conn_str)
+        self.espresso_db = initialize_db(replica_conn_str)
 
-    def refresh_espresso(self):    
-        cleanup_filter = {            
-            K_KIND: {"$ne": GENERATED},
-            K_UPDATED: {"$lt": ndays_ago(CONTENT_WINDOW)},
-        }
-        porting_filter = {
-            K_ENTITIES: VALUE_EXISTS,
-            K_CATEGORIES: VALUE_EXISTS,
-            K_UPDATED: {"$gte": ndays_ago(PORT_WINDOW)} # take everything that has been created or updated in the last 1 day
-        }
-        update_projection = {
-            K_URL: 1,
-            K_LIKES: 1,
-            K_COMMENTS: 1,
-            K_SHARES: 1,
-            K_SHARED_IN: 1,
-            K_LATEST_LIKES: 1,
-            K_LATEST_COMMENTS: 1,
-            K_LATEST_SHARES: 1,
-            K_TRENDSCORE: 1,
-            K_UPDATED: 1  
-        }
-        # with ThreadPoolExecutor(max_workers=os.cpu_count()) as exec:                
-        deleted = self.espresso_db.beanstore.delete_many(cleanup_filter)
-        log.info("cleaned up", extra={'source': self.run_id, 'num_items': deleted.deleted_count})     
+    def run_refresh(self): 
+        self.espresso_db.cleanup()  
+        # TODO: enable in future
+        # self.master_db.cleanup()                 
+        # TODO: submit this as parallel
+        # with ThreadPoolExecutor(max_workers=4) as exec:
+        #     exec.submit(self.espresso_db.cleanup)
+        #     exec.submit(self.master_db.cleanup)            
 
-        stats = self.master_db.beanstore.find(updated_in(CONTENT_WINDOW), projection=update_projection)
-        updated = self.espresso_db.update_beans([UpdateOne(filter={K_URL: up[K_URL]}, update={"$set": up}) for up in stats])
-        log.info("trend ranked", extra={'source': self.run_id, 'num_items': updated})
-        try:
-            inserted = self.espresso_db.beanstore.insert_many(self.master_db.beanstore.find(porting_filter), ordered=False)
-            log.info("ported", extra={'source': self.run_id, 'num_items': len(inserted.inserted_ids)})
-        except BulkWriteError as e: log.warning(f"partially ported", extra={"source": self.run_id, "num_items": e.details['nInserted']})
+        # make this based on a count
+        max_offset = 10000
+        batch_size = 1000
+        total = 0
+        for offset in range(0, max_offset, batch_size):
+            beans = self.master_db.query_processed_beans(
+                created=utils.ndays_ago(PORT_WINDOW),
+                offset=offset,
+                limit=batch_size
+            )
+            if not beans: break
+            total += self.espresso_db.store_beans(beans)
+        log.info("refreshed beans", extra={'source': self.run_id, 'num_items': total})
 
+        chatter_stats = self.master_db.query_bean_chatters(
+            collected=utils.ndays_ago(PORT_WINDOW),
+            limit=batch_size
+        )
+        chatter_stats = [
+            models.Bean(
+                url = bc.url, 
+                updated=bc.collected, 
+                trend_score=calculate_trend_score(bc),
+                chatter=bc
+            ) for bc in chatter_stats
+        ]
+        total = self.espresso_db.update_beans(chatter_stats)
+        log.info("refreshed bean chatters", extra={'source': self.run_id, 'num_items': total})
+   
     def run(self):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.refresh_espresso()
+        self.run_refresh()
 
     # def _hydrate_cluster_db(self):
     #     beans = list(self.db.beanstore.find(

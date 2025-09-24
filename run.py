@@ -64,29 +64,25 @@ if __name__ == "__main__":
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
         orch = Orchestrator(
-            ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), os.getenv("S3_BUCKET")),
+            db_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR")),
             batch_size=batch_size
         )
         asyncio.run(orch.run_async(os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml")))
     elif mode == "INDEXER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
-            ducklake_conn=(os.getenv("PG_CONNECTION_STRING"), os.getenv("S3_BUCKET")),
+            db_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR")),
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
-            category_defs=os.getenv('INDEXER_CATEGORIES', "./factory/categories.parquet"),
-            sentiment_defs=os.getenv('INDEXER_SENTIMENTS', "./factory/sentiments.parquet"),
             batch_size=batch_size
         )
         orch.run_indexer()
     elif mode == "DIGESTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
-            os.getenv("MONGODB_CONN_STR"),
-            os.getenv("DB_NAME"),
+            db_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR")),
             digestor_path=os.getenv("DIGESTOR_PATH"), 
             digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)),
-            backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR"),
             batch_size=batch_size
         )
         orch.run_digestor()
@@ -114,7 +110,7 @@ if __name__ == "__main__":
         orch.run(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml"))
     elif mode == "REFRESHER":
         from coffeemaker.orchestrators.refresherorch import Orchestrator
-        orch = Orchestrator(os.getenv("MONGODB_CONN_STR"), os.getenv("DB_NAME"))
+        orch = Orchestrator(os.getenv("MONGO_CONN_STR"), os.getenv("MONGO_DATABASE"))
         orch.run()
     else:
         from coffeemaker.orchestrators.fullstack import Orchestrator
