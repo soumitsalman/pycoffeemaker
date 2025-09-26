@@ -90,7 +90,7 @@ def _fetch_json(url: str):
 def _return_collected(source, collected: list|None):
     if collected: log.debug("collected", extra={"source": source, "num_items": len(collected)})
     else: log.debug("collection failed", extra={"source": source, "num_items": 1})
-    return clean_collection(collected)
+    return collected
 
 merge_lists = lambda results: list(chain(*(r for r in results if r))) 
 

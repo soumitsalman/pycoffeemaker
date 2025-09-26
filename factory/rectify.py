@@ -13,9 +13,9 @@ from urllib.parse import urljoin
 from itertools import chain
 from icecream import ic
 from datetime import datetime, timedelta
-from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.mongosack import *
-from coffeemaker.pybeansack.ducksack import *
+# from coffeemaker.pybeansack.models import *
+# from coffeemaker.pybeansack.mongosack import *
+# from coffeemaker.pybeansack.ducksack import *
 from coffeemaker.orchestrators.fullstack import Orchestrator
 
 K_RELATED = "related"
@@ -717,9 +717,67 @@ def rectify_parquets():
     categories_df["embedding"] = categories_df["embedding"].apply(lambda x: np.array(x, dtype=np.float32))
     categories_df.to_parquet(categories_path, engine="pyarrow")
 
+def migrate_from_mongo_to_warehouse():
+    from coffeemaker.pybeansack.models import Chatter, Bean, BeanCore, BeanEmbedding, BeanGist, K_COLLECTED, K_TITLE, K_EMBEDDING, K_GIST
+    from coffeemaker.orchestrators.collectororch import Orchestrator
+    from tqdm import tqdm
+
+    mongo = Orchestrator(
+        db_conn_str=(os.getenv('MONGO_CONNECTION_STRING'), os.getenv('MONGO_DATABASE'))
+    )
+    wh = Orchestrator(
+        db_conn_str=(os.getenv('PG_CONNECTION_STRING'), os.getenv('CACHE_DIR'))
+    )
+
+    def split_beans(beans: list[Bean]):
+        cores, embeddings, gists = [], [], []
+        cores = [BeanCore(**b.model_dump()) for b in beans if b.content]
+        embeddings = [BeanEmbedding(**b.model_dump()) for b in beans if b.embedding and len(b.embedding) == 384]
+        gists = [BeanGist(**b.model_dump()) for b in beans if b.gist and b.gist.strip()]        
+        return cores, embeddings, gists
+
+    # def port_over(beans: list[Bean]):
+    #     cores, embeddings, gists = split_beans(beans)
+    #     with ThreadPoolExecutor(max_workers=3) as exec:
+    #         if cores: exec.submit(wh.db.store_cores, cores)
+    #         if embeddings: exec.submit(wh.db.store_embeddings, embeddings)
+    #         if gists: exec.submit(wh.db.store_gists, gists)
+    #     wh.db.recompute()        
+
+    batch_size = 4096
+    filter = {
+        "$or": [
+            {K_EMBEDDING: {"$exists": True}},
+            {K_GIST: {"$exists": True}}
+        ],
+        K_TITLE: {"$exists": True},
+        K_TITLE: {"$nin": ["", None]}
+    }
+    count = 300000
+    skip = 57344
+    with tqdm(total=count, initial=skip, desc="Migrating Beans", unit="beans") as pbar:
+        for i in range(skip, count, batch_size):
+            beans = mongo.db.query_beans(filter=filter, skip=i, limit=batch_size, project={K_RELATED: 0})
+            cores, embeddings, gists = split_beans(beans)
+            with ThreadPoolExecutor(max_workers=10) as exec:
+                if cores: exec.submit(wh.db.store_cores, cores)
+                if embeddings: exec.submit(wh.db.store_embeddings, embeddings)
+                if gists: exec.submit(wh.db.store_gists, gists)
+            wh.db.recompute()  
+            pbar.update(len(beans))
+
+    count = 479000
+    with tqdm(total=count, desc="Migrating Chatters", unit="chatters") as pbar:
+        for i in range(0, count, batch_size):
+            beans = [Chatter(**doc) for doc in mongo.db.chatterstore.find(skip=i, limit=batch_size)]
+            wh.db.store_chatters(beans)
+            pbar.update(len(beans))
+    
+
 # adding data porting logic
 if __name__ == "__main__":
-    rectify_parquets()
+    migrate_from_mongo_to_warehouse()
+    # rectify_parquets()
     # merge_to_classification()
     # create_composer_topics_locally()
     # create_categories_locally()

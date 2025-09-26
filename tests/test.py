@@ -3,6 +3,7 @@ import time
 from dotenv import load_dotenv
 import requests
 import logging
+from icecream import ic
 
 load_dotenv()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -117,6 +118,7 @@ def test_fullstack_orch():
 
 def create_test_data_file(output_path):
     from coffeemaker.orchestrators.collectororch import Orchestrator
+    from coffeemaker.pybeansack.mongosack import VALUE_EXISTS
 
     orch = Orchestrator(
         os.getenv('MONGODB_CONN_STR'),

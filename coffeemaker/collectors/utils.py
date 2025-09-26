@@ -66,19 +66,3 @@ def strip_html_tags(html):
 
 extract_source = lambda url: (extract_domain(url) or extract_base_url(url)).strip().lower()
 now = lambda: datetime.now(timezone.utc)
-clean_text = lambda text: text.strip() if text and text.strip() else None
-
-def clean_collection(collected: list|None):
-    if not collected: return collected
-
-    for item in collected:
-        item.title = clean_text(item.title)
-        item.summary = clean_text(item.summary)
-        item.content = clean_text(item.content)
-        item.author = clean_text(item.author)
-        item.image_url = clean_text(item.image_url)
-        item.created = item.created or datetime.now()
-        item.collected = item.collected or datetime.now()
-        if item.author == "[no-author]": item.author = None
-        if not item.created.tzinfo: item.created.replace(tzinfo=timezone.utc)
-    return collected

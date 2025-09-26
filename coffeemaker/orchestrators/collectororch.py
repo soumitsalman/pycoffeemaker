@@ -20,15 +20,6 @@ is_scrapable = lambda bean: not above_threshold(bean.content, WORDS_THRESHOLD_FO
 scrapables = lambda beans: list(filter(is_scrapable, beans)) if beans else beans 
 storables = lambda beans: [bean for bean in beans if not is_scrapable(bean)]
 
-def _prepare_for_storing(items: list[Bean]) -> list[BeanCore]:
-    for item in items:
-        item.title_length = num_words(item.title)
-        item.summary_length = num_words(item.summary)
-        item.content_length = num_words(item.content)
-        item.created = item.created or datetime.now()
-        item.collected = item.collected or datetime.now()
-    return list(map(lambda b: BeanCore(**b.model_dump()), items))
-
 class Orchestrator:
     db: warehouse.Beansack|mongosack.Beansack = None
     run_total: int = 0
@@ -61,7 +52,7 @@ class Orchestrator:
 
     async def store_beans_async(self, source: str, beans: list[Bean]):
         if not beans: return       
-        items = await asyncio.to_thread(self.db.store_cores, _prepare_for_storing(beans))
+        items = await asyncio.to_thread(self.db.store_cores, beans)
         count = len(items) if items else 0
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count

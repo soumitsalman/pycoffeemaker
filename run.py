@@ -89,8 +89,7 @@ if __name__ == "__main__":
     elif mode == "COMPOSER":
         from coffeemaker.orchestrators.composerorch import Orchestrator
         orch = Orchestrator(
-            os.getenv("MONGODB_CONN_STR"),
-            os.getenv("DB_NAME"),
+            db_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR")),
             cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
             cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
             cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
@@ -110,19 +109,23 @@ if __name__ == "__main__":
         orch.run(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml"))
     elif mode == "REFRESHER":
         from coffeemaker.orchestrators.refresherorch import Orchestrator
-        orch = Orchestrator(os.getenv("MONGO_CONN_STR"), os.getenv("MONGO_DATABASE"))
+        orch = Orchestrator(
+            master_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR")),
+            replica_conn_str=(os.getenv("MONGO_CONNECTION_STRING"), os.getenv("MONGO_DATABASE"))
+        )
         orch.run()
     else:
-        from coffeemaker.orchestrators.fullstack import Orchestrator
-        orch = Orchestrator(
-            os.getenv("MONGODB_CONN_STR"),
-            os.getenv("DB_LOCAL"),
-            os.getenv("DB_NAME"),
-            os.getenv("AZQUEUE_CONN_STR")
-        )
+        raise ValueError("Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, COMPOSER, REFRESHER.")
+        # from coffeemaker.orchestrators.fullstack import Orchestrator
+        # orch = Orchestrator(
+        #     os.getenv("MONGODB_CONN_STR"),
+        #     os.getenv("DB_LOCAL"),
+        #     os.getenv("DB_NAME"),
+        #     os.getenv("AZQUEUE_CONN_STR")
+        # )
         
-        try: asyncio.run(orch.run_async())
-        except Exception as e: log.error("failed run", extra={"source": "__BATCH__", "num_items": 1})
-        orch.close()
+        # try: asyncio.run(orch.run_async())
+        # except Exception as e: log.error("failed run", extra={"source": "__BATCH__", "num_items": 1})
+        # orch.close()
     
  
