@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 # from coffeemaker.pybeansack.models import *
 # from coffeemaker.pybeansack.mongosack import *
 # from coffeemaker.pybeansack.ducksack import *
-from coffeemaker.orchestrators.fullstack import Orchestrator
+# from coffeemaker.orchestrators.fullstack import Orchestrator
 
 K_RELATED = "related"
 LIMIT=40000
@@ -718,7 +718,7 @@ def rectify_parquets():
     categories_df.to_parquet(categories_path, engine="pyarrow")
 
 def migrate_from_mongo_to_warehouse():
-    from coffeemaker.pybeansack.models import Chatter, Bean, BeanCore, BeanEmbedding, BeanGist, K_COLLECTED, K_TITLE, K_EMBEDDING, K_GIST
+    from coffeemaker.pybeansack.models import Chatter, Bean, BeanCore, BeanEmbedding, BeanGist, K_COLLECTED, K_CHATTER_URL, K_TITLE, K_EMBEDDING, K_GIST
     from coffeemaker.orchestrators.collectororch import Orchestrator
     from tqdm import tqdm
 
@@ -754,7 +754,7 @@ def migrate_from_mongo_to_warehouse():
         K_TITLE: {"$nin": ["", None]}
     }
     count = 300000
-    skip = 57344
+    skip = 0
     with tqdm(total=count, initial=skip, desc="Migrating Beans", unit="beans") as pbar:
         for i in range(skip, count, batch_size):
             beans = mongo.db.query_beans(filter=filter, skip=i, limit=batch_size, project={K_RELATED: 0})
@@ -767,9 +767,13 @@ def migrate_from_mongo_to_warehouse():
             pbar.update(len(beans))
 
     count = 479000
+    filter = {
+        K_CHATTER_URL: {"$exists": True},
+        K_CHATTER_URL: {"$nin": ["", None]}
+    }
     with tqdm(total=count, desc="Migrating Chatters", unit="chatters") as pbar:
         for i in range(0, count, batch_size):
-            beans = [Chatter(**doc) for doc in mongo.db.chatterstore.find(skip=i, limit=batch_size)]
+            beans = [Chatter(**doc) for doc in mongo.db.chatterstore.find(filter = filter, skip=i, limit=batch_size)]
             wh.db.store_chatters(beans)
             pbar.update(len(beans))
     

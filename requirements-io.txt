@@ -11,6 +11,4 @@ persist-queue
 icecream
 python-dotenv
 pyyaml
-openai
-tiktoken
-azure-storage-blob
+tqdm
