@@ -105,7 +105,8 @@ class Orchestrator:
         filter = [
             f"{K_GIST} IS NULL",
             f"{K_CREATED} >= '{ndays_ago_str(MAX_ANALYZE_NDAYS)}'",
-            f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_INDEXING}"
+            f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_INDEXING}",
+            f"{K_KIND} IN ('{NEWS}', '{BLOG}', {OPED}')"
         ]
 
         log.info("starting digestor", extra={"source": run_id, "num_items": os.cpu_count()})

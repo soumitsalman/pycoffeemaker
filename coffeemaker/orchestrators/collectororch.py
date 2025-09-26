@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 is_scrapable = lambda bean: not above_threshold(bean.content, WORDS_THRESHOLD_FOR_SCRAPING) 
 scrapables = lambda beans: list(filter(is_scrapable, beans)) if beans else beans 
 storables = lambda beans: [bean for bean in beans if not is_scrapable(bean)]
+cores = lambda beans: [BeanCore(**bean.model_dump()) for bean in beans if bean]
 
 class Orchestrator:
     db: warehouse.Beansack|mongosack.Beansack = None
@@ -31,16 +32,16 @@ class Orchestrator:
     async def _triage_collection_async(self, source: str, beans: list[Bean]):
         if not beans: return
 
-        chatters = [bean.chatter for bean in beans if bean and bean.chatter]
+        chatters = [Chatter(**bean.chatter.model_dump(exclude={"shares"})) for bean in beans if bean and bean.chatter]
         if chatters: await asyncio.to_thread(self.db.store_chatters, chatters)
 
         # TODO: disabled for now
         # publishers = [bean.publisher for bean in beans if bean and bean.publisher]
         # if publishers: await asyncio.to_thread(self.db.store_publishers, publishers)
 
-        # filtering out new beans
+        # filtering out new beans        
         beans = await asyncio.to_thread(self.db.deduplicate, "bean_cores", "url", beans)
-        if beans: await self.store_beans_async(source, storables(beans))        
+        if beans: await self.store_beans_async(source, storables(beans))
        
         return scrapables(beans)
 
@@ -52,7 +53,7 @@ class Orchestrator:
 
     async def store_beans_async(self, source: str, beans: list[Bean]):
         if not beans: return       
-        items = await asyncio.to_thread(self.db.store_cores, beans)
+        items = await asyncio.to_thread(self.db.store_cores, cores(beans))
         count = len(items) if items else 0
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count
