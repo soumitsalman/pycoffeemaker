@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 is_scrapable = lambda bean: not above_threshold(bean.content, WORDS_THRESHOLD_FOR_SCRAPING) 
 scrapables = lambda beans: list(filter(is_scrapable, beans)) if beans else beans 
 storables = lambda beans: [bean for bean in beans if not is_scrapable(bean)]
-cores = lambda beans: [BeanCore(**bean.model_dump()) for bean in beans if bean]
+cores = lambda beans: [BeanCore(**bean.model_dump()) for bean in beans if bean and bean.title]
 
 class Orchestrator:
     db: warehouse.Beansack|mongosack.Beansack = None
