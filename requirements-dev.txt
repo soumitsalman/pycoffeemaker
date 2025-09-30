@@ -18,3 +18,10 @@ setuptools
 pyarrow
 pandas
 hdbscan
+transformers
+sentence-transformers
+onnxruntime
+onnx
+optimum[onnxruntime]
+dbcache
+psycopg2-binary

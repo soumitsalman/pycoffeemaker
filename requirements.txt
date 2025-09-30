@@ -17,4 +17,6 @@ asyncpraw
 readability-lxml
 azure-storage-blob
 icecream
+dbcache
+psycopg2-binary
 python-dotenv

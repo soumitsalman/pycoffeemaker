@@ -93,8 +93,6 @@ class Orchestrator:
         # self.run_trend_ranking() # trend rank from this collection if execution finished
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 
-        await asyncio.to_thread(self.db.cleanup)
-
     # def _get_collect_funcs(self, sources):
     #     tasks = []
     #     for source_type, source_paths in parse_sources(sources).items():

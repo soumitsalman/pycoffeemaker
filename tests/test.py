@@ -168,11 +168,11 @@ def test_static_db():
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Orchestrator
     orch = Orchestrator(
-        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
+        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack/"),
         batch_size=128
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
-    sources = "/home/soumitsr/pycoffeemaker/tests/sources-1.yaml"
+    sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
     # sources = """
     # sources:
     #     rss:
@@ -203,7 +203,7 @@ def test_collector_orch():
 def test_indexer_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
-        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
+        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack/"),
         embedder_path="avsolatorio/GIST-small-Embedding-v0",
         embedder_context_len=512,
         batch_size=8
@@ -213,10 +213,10 @@ def test_indexer_orch():
 def test_digestor_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
-        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
+        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack/"),
         digestor_path="soumitsr/led-base-article-digestor",
         digestor_context_len=4096,
-        batch_size=1
+        batch_size=8
     )
     orch.run_digestor()
 
@@ -224,7 +224,7 @@ def test_composer_orch():
     from coffeemaker.orchestrators.composerorch import Orchestrator
     from coffeemaker.nlp import ArticleMetadata, agents, NEWSRECAP_SYSTEM_PROMPT
     orch = Orchestrator(
-        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
+        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack/"),
         cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
         cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
         cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
@@ -239,7 +239,7 @@ def test_composer_orch():
         # backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
     )
 
-    topics = """/home/soumitsr/pycoffeemaker/tests/composer-topics.json"""
+    topics = f"{os.path.dirname(__file__)}/composer-topics.json"
     orch.run(topics)
     # for bean in orch.run(topics):
     #     print(">>>>>>>>>>>>>>>>")
@@ -272,7 +272,7 @@ def test_composer_orch():
 def test_refresher_orch():
     from coffeemaker.orchestrators.refresherorch import Orchestrator
     orch = Orchestrator(
-        master_conn_str=(os.getenv("PG_CONNECTION_STRING"), "~/.beansack"),
+        master_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack"),
         replica_conn_str=("mongodb://localhost:27017", "replica1")
     )
     orch.run()
@@ -334,8 +334,18 @@ def test_local_gobeansack_query():
         embeddings = [t[K_EMBEDDING] for t in topics]*2000
         executor.map(lambda x: vector_search_beans(x), embeddings)
 
+def test_dbcache():
+    from dbcache.api import kvstore
+
+    
+    cache = kvstore(os.getenv('PG_CONNECTION_STRING'))
+    # cache.set("current_snapshot", 15509)
+    print(cache.get("current_snapshot")+10)
+    
+
 
 import argparse
+import subprocess
 parser = argparse.ArgumentParser(description="Run pycoffeemaker tests")
 parser.add_argument("--hydrate", action="store_true", help="Hydrate local gobeansack database")
 # parser.add_argument("--test-local-gobeansack-query", action="store_true", help="Test local gobeansack query")
@@ -349,6 +359,7 @@ parser.add_argument("--runindexer", action="store_true", help="Test indexer orch
 parser.add_argument("--rundigestor", action="store_true", help="Test digestor orchestrator")
 parser.add_argument("--runcomposer", action="store_true", help="Test composer orchestrator")
 parser.add_argument("--runrefresher", action="store_true", help="Test refresher orchestrator")
+parser.add_argument("--dbcache", action="store_true", help="Test dbcache")
 # parser.add_argument("--test-fullstack-orch", action="store_true", help="Test fullstack orchestrator")
 # parser.add_argument("--create-test-data-file", metavar="OUTPUT_PATH", help="Create test data file at OUTPUT_PATH")
 
@@ -380,6 +391,8 @@ def main():
         test_composer_orch()
     if args.runrefresher:
         test_refresher_orch()
+    if args.dbcache:
+        test_dbcache()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:

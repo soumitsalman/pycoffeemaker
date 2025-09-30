@@ -7,6 +7,7 @@
 .test
 .db
 .cache
+.beansack
 .mongodb
 .vscode
 .logs

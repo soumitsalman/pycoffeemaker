@@ -13,6 +13,11 @@ pip install -r requirements.txt
 pip install -r coffeemaker/pybeansack/requirements.txt
 pip install -r coffeemaker/nlp/requirements.txt
 
+# sudo snap install go
+# go install github.com/peak/s5cmd/v2@v2.3.0
+# 1. run attach on ducklake with datapath
+# 2. DELETE FROM DELETE FROM ducklake_metadata WHERE key='data_path'
+# 3. dbcache init-db postgresql://foo:bar@postgresql/mydb
 
 # crontab
 
