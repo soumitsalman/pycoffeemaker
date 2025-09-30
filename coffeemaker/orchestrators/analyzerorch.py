@@ -95,8 +95,6 @@ class Orchestrator:
             except Exception as e:
                 log.error(f"failed indexing - {e}", extra={"source": run_id, "num_items": len(beans)})        
         log.info("total indexed", extra={"source": run_id, "num_items": total})
-        self.db.recompute()
-        log.info("recomputed warehouse", extra={"source": run_id, "num_items": 1})
 
     @log_runtime(logger=log)
     def run_digestor(self):

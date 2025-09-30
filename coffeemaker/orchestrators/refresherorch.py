@@ -24,7 +24,10 @@ class Orchestrator:
         self.espresso_db = initialize_db(replica_conn_str)
 
     def run_refresh(self): 
+        self.master_db.recompute()
+        log.info("recomputed warehouse", extra={"source": self.run_id, "num_items": 1})
         self.espresso_db.cleanup()  
+        log.info("cleaned up espresso", extra={"source": self.run_id, "num_items": 1})
         # TODO: enable in future
         # self.master_db.cleanup()                 
         # TODO: submit this as parallel
@@ -60,7 +63,7 @@ class Orchestrator:
             ) for bc in chatter_stats
         ]
         total = self.espresso_db.update_beans(chatter_stats)
-        log.info("refreshed bean chatters", extra={'source': self.run_id, 'num_items': total})
+        log.info("refreshed chatters", extra={'source': self.run_id, 'num_items': total})
    
     def run(self):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
