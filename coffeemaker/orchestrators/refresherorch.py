@@ -58,17 +58,17 @@ class Orchestrator:
    
     def run(self):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+        log.info("starting refresher", extra={"source": self.run_id, "num_items": os.cpu_count()})
+
         self.master_db.recompute()
         log.info("recomputed warehouse", extra={"source": self.run_id, "num_items": 1})
 
         # NOTE: skipping cleanup for now as it is too aggressive
-        # self.master_db.cleanup()
-        # log.info("cleaned up warehouse", extra={"source": self.run_id, "num_items": 1})
+        self.master_db.cleanup()
+        log.info("cleaned up warehouse", extra={"source": self.run_id, "num_items": 1})
         
         # get the snapshot
-        from icecream import ic
-        current_snapshot = ic(self.master_db.snapshot())
+        current_snapshot = self.master_db.snapshot()
         # then upload what is in the directory
         # this way if some
         s3sync_cmd = os.getenv("S3SYNC_CMD")
@@ -77,6 +77,6 @@ class Orchestrator:
             log.info("synced storage", extra={"source": self.run_id, "num_items": 1})
         # then update cache
         self.cache.set("current_snapshot", current_snapshot)
-        log.info("saved snapshot", extra={"source": self.run_id, "num_items": 1})
+        log.info("saved snapshot", extra={"source": self.run_id, "num_items": current_snapshot})
         
         self.port_contents()

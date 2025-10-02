@@ -341,9 +341,24 @@ def test_dbcache():
     cache = kvstore(os.getenv('PG_CONNECTION_STRING'))
     # cache.set("current_snapshot", 15509)
     print(cache.get("current_snapshot")+10)
+
+def s3store_test():
+    from coffeemaker.pybeansack.s3store import S3Store
+    # import os
+
+    store = S3Store(
+        endpoint_url=os.environ.get('PUBLICATIONS_S3_ENDPOINT'),
+        region=os.environ.get('S3_REGION'),
+        access_key_id=os.environ.get('S3_ACCESS_KEY_ID'),
+        secret_key=os.environ.get('S3_SECRET_ACCESS_KEY'),
+        bucket=os.environ.get('PUBLICATIONS_S3_BUCKET'),
+        public_url=os.environ.get('PUBLICATIONS_PUBLIC_URL')
+    )
+
+    print(store.upload_bytes(b"<html><body><b>hello</b> world</body></html>", ext='html'))
+    print(store.upload_file("/workspaces/beansack/espresso/images/linkedin.png"))
+
     
-
-
 import argparse
 import subprocess
 parser = argparse.ArgumentParser(description="Run pycoffeemaker tests")
@@ -360,6 +375,7 @@ parser.add_argument("--rundigestor", action="store_true", help="Test digestor or
 parser.add_argument("--runcomposer", action="store_true", help="Test composer orchestrator")
 parser.add_argument("--runrefresher", action="store_true", help="Test refresher orchestrator")
 parser.add_argument("--dbcache", action="store_true", help="Test dbcache")
+parser.add_argument("--s3store", action="store_true", help="Test S3 store")
 # parser.add_argument("--test-fullstack-orch", action="store_true", help="Test fullstack orchestrator")
 # parser.add_argument("--create-test-data-file", metavar="OUTPUT_PATH", help="Create test data file at OUTPUT_PATH")
 
@@ -393,6 +409,8 @@ def main():
         test_refresher_orch()
     if args.dbcache:
         test_dbcache()
+    if args.s3store:
+        s3store_test()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:

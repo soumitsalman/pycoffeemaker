@@ -60,18 +60,19 @@ if __name__ == "__main__":
     # Use command line args if provided, otherwise fall back to env vars    
     mode = args.mode or os.getenv("MODE")
     batch_size = int(args.batch_size or os.getenv('BATCH_SIZE') or os.cpu_count())
+    db_conn_str = (os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH"))
     
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
         orch = Orchestrator(
-            db_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR")),
+            db_conn_str=db_conn_str,
             batch_size=batch_size
         )
         asyncio.run(orch.run_async(os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml")))
     elif mode == "INDEXER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
-            db_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR")),
+            db_conn_str=db_conn_str,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
             batch_size=batch_size
@@ -80,7 +81,7 @@ if __name__ == "__main__":
     elif mode == "DIGESTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
-            db_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR")),
+            db_conn_str=db_conn_str,
             digestor_path=os.getenv("DIGESTOR_PATH"), 
             digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)),
             batch_size=batch_size
@@ -89,7 +90,7 @@ if __name__ == "__main__":
     elif mode == "COMPOSER":
         from coffeemaker.orchestrators.composerorch import Orchestrator
         orch = Orchestrator(
-            db_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR")),
+            db_conn_str=db_conn_str,
             cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
             cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
             cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
@@ -110,7 +111,7 @@ if __name__ == "__main__":
     elif mode == "REFRESHER":
         from coffeemaker.orchestrators.refresherorch import Orchestrator
         orch = Orchestrator(
-            master_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR")),
+            master_conn_str=db_conn_str,
             replica_conn_str=(os.getenv("MONGO_CONNECTION_STRING"), os.getenv("MONGO_DATABASE"))
         )
         orch.run()

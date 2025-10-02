@@ -93,11 +93,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_USER=localuser
+      - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=localpsss
-      - POSTGRES_DB=coffeemaker
-    volumes:
-      - ~/codes/.localpostgres:/var/lib/postgresql/data
+      - POSTGRES_DB=postgres
     networks:
       - coffeemaker-bridge
     cpus: 1
