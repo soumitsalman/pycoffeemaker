@@ -222,25 +222,49 @@ def test_digestor_orch():
 
 def test_composer_orch():
     from coffeemaker.orchestrators.composerorch import Orchestrator
-    from coffeemaker.nlp import ArticleMetadata, agents, NEWSRECAP_SYSTEM_PROMPT
     orch = Orchestrator(
-        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack/"),
-        cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
-        cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
-        cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
-        composer_path="openai/gpt-oss-20b",
-        extractor_path="openai/gpt-oss-20b",
-        composer_base_url=os.getenv("DIGESTOR_BASE_URL"),
-        composer_api_key=os.getenv("DIGESTOR_API_KEY"),
-        composer_context_len=50000,
-        banner_model="black-forest-labs/FLUX-1-dev",
-        banner_base_url=os.getenv('DEEPINFRA_BASE_URL'),
-        banner_api_key=os.getenv('DEEPINFRA_API_KEY'),
-        # backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR")
+        db_conn=(
+            os.getenv("PG_CONNECTION_STRING"), 
+            ".beansack/"
+        ),
+        cdn_conn=(
+            os.getenv("PUBLICATIONS_S3_ENDPOINT"),
+            os.getenv("S3_ACCESS_KEY_ID"),
+            os.getenv("S3_SECRET_ACCESS_KEY"),
+            os.getenv("PUBLICATIONS_S3_BUCKET"),
+            os.getenv("S3_REGION"),
+            os.getenv("PUBLICATIONS_PUBLIC_URL")
+        ),
+        embedder_model="avsolatorio/GIST-small-Embedding-v0",
+        analyst_model="openai/gpt-oss-20b",
+        writer_model="openai/gpt-oss-120b",
+        composer_conn=(
+            os.getenv("COMPOSER_BASE_URL"),
+            os.getenv("COMPOSER_API_KEY")
+        )
     )
 
-    topics = f"{os.path.dirname(__file__)}/composer-topics.json"
-    orch.run(topics)
+    domains = [
+        {
+            "_id": "Artificial Intelligence",
+            "kind": "blog",
+            "description": "Machine learning algorithms performance benchmarks, neural networks architecture training methods, AI ethics safety guidelines implementation, computer vision object recognition systems, natural language processing models applications, robotics automation industrial deployment, AI research papers methodology results, deep learning model optimization techniques."
+        },
+        {
+            "_id": "Business",
+            "kind": "news",
+            "description": "Financial markets stock trading analysis, corporate earnings quarterly reports mergers acquisitions, economic indicators GDP employment statistics, retail industry sales trends consumer behavior, workplace automation digital transformation implementation, banking investment strategies risk management, marketing advertising campaign effectiveness data, real estate property market valuations development."
+        },
+        {
+            "_id": "Career & Professional Growth",
+            "kind": "blog",
+            "description": "Professional skills development certification programs, job market demand analysis trends, workplace culture remote work practices, career advancement strategies mentorship, leadership management training methods, salary compensation benefits analysis, work-life balance employee wellbeing research, continuing education professional training programs."
+        }
+    ]
+    res = asyncio.run(orch.run_async(domains))
+    if res: [print(r.title, "\n\n", r.summary, "\n\n", r.content) for r in res]
+
+        
     # for bean in orch.run(topics):
     #     print(">>>>>>>>>>>>>>>>")
     #     print(bean.title)
@@ -277,63 +301,6 @@ def test_refresher_orch():
     )
     orch.run()
 
-def hydrate_local_gobeansack():
-    import requests
-    from concurrent.futures import ThreadPoolExecutor
-    from coffeemaker.pybeansack.mongosack import Beansack   
-    beansack = Beansack(os.getenv("MONGODB_CONN_STR"), "test")
-    gobeansack_url = "http://localhost:8080/publisher"
-    test_api_key = "contributor"
-
-    def store_beans(skip: int, limit: int):
-        beans = beansack.query_beans(project={K_RELATED: 0}, skip=skip, limit=limit)
-        beans = [json.loads(b.model_dump_json(by_alias=True, exclude_none=True, exclude_unset=True, exclude_defaults=True)) for b in beans]
-        ic(skip, len(beans))
-        ic(requests.post(f"{gobeansack_url}/beans", json=beans, headers={"X-API-KEY": test_api_key}))
-        ic(requests.post(f"{gobeansack_url}/beans/embeddings", json=beans, headers={"X-API-KEY": test_api_key}))
-        ic(requests.post(f"{gobeansack_url}/beans/tags", json=beans, headers={"X-API-KEY": test_api_key}))
-
-    def store_chatters(skip: int, limit: int):
-        chatters = [json.loads(Chatter(**c).model_dump_json(by_alias=True, exclude_none=True, exclude_unset=True, exclude_defaults=True)) for c in beansack.chatterstore.find(projection={K_ID: 0}, skip=skip, limit=limit)]
-        ic(skip, len(chatters))
-        ic(requests.post(f"{gobeansack_url}/chatters", json=chatters, headers={"X-API-KEY": test_api_key}))
-
-    batch_size = 256
-    with ThreadPoolExecutor(max_workers=batch_size) as executor:
-        executor.map(lambda x: store_beans(x, batch_size), range(0, 158000, batch_size))
-        executor.map(lambda x: store_chatters(x, batch_size), range(0, 318000, batch_size))
-
-def test_local_gobeansack_query():
-    import requests
-    from rfc3339 import rfc3339
-    gobeansack_url = "http://localhost:8080/privileged"
-    test_api_key = "regapp"
-
-    def vector_search_beans(embedding):
-        search_params = {
-            "embedding": embedding, 
-            "max_distance": 0.3, 
-            "limit": 200, 
-            "kind": "news",
-            "created_since": rfc3339(datetime.now() - timedelta(days=1))
-        }
-        resp = requests.get(
-            f"{gobeansack_url}/beans/trending/gists",
-            json=search_params,
-            headers={"X-API-KEY": test_api_key}
-        )
-        ic(len(resp.json()))
-
-    from coffeemaker.orchestrators.composerorch import _parse_topics
-
-
-    topics = """/workspaces/beansack/pycoffeemaker/tests/composer-topics.json"""
-    topics = _parse_topics(topics)    
-    
-    with ThreadPoolExecutor(max_workers=32) as executor:
-        embeddings = [t[K_EMBEDDING] for t in topics]*2000
-        executor.map(lambda x: vector_search_beans(x), embeddings)
-
 def test_dbcache():
     from dbcache.api import kvstore
 
@@ -342,11 +309,11 @@ def test_dbcache():
     # cache.set("current_snapshot", 15509)
     print(cache.get("current_snapshot")+10)
 
-def s3store_test():
-    from coffeemaker.pybeansack.s3store import S3Store
+def cdnstore_test():
+    from coffeemaker.pybeansack.cdnstore import CDNStore
     # import os
 
-    store = S3Store(
+    store = CDNStore(
         endpoint_url=os.environ.get('PUBLICATIONS_S3_ENDPOINT'),
         region=os.environ.get('S3_REGION'),
         access_key_id=os.environ.get('S3_ACCESS_KEY_ID'),
@@ -355,15 +322,40 @@ def s3store_test():
         public_url=os.environ.get('PUBLICATIONS_PUBLIC_URL')
     )
 
-    print(store.upload_bytes(b"<html><body><b>hello</b> world</body></html>", ext='html'))
-    print(store.upload_file("/workspaces/beansack/espresso/images/linkedin.png"))
+    article = """<p>Our review of recent technical reports confirms that the acceleration of generative‑AI capabilities is accompanied by a parallel increase in privacy‑related risk vectors, compliance complexity, and governance gaps across sectors.</p>
+
+<p>Data‑harvesting analyses reveal that more than 173 000 YouTube videos from 48 000 channels have been systematically extracted for model training without uniform opt‑out mechanisms. Similar practices are evident on LinkedIn, Quora, and X (Grok), where user‑generated content is ingested at scale. In the Philippines, 85 % of organizations have reported AI‑related cyber incidents, yet only 6 % demonstrate mature cybersecurity readiness. The Cisco 2025 study and Bitdefender 2025 report jointly indicate a high incidence of breach concealment (58 %) and an elevated exposure to prompt‑injection and adversarial‑training attacks.</p>
+
+<p>Technical attack surfaces have broadened as cybercriminals hijack AI pipelines to deploy “evil LLMs” such as FraudGPT and WormGPT, which are available on dark‑web marketplaces for as little as US $100. These models enable automated ransomware, phishing, and credential‑harvesting operations. Microsoft Copilot data in H1 2025 exposed three million sensitive records per organization, illustrating the magnitude of “zombie” data retained in persistent prompt caches. The resulting “enormous data trail” facilitates profiling, black‑mail, and unauthorized data resale.</p>
+
+<p>Regulatory environments are fragmenting. The Philippines’ NPC advisory (2024) establishes AI system standards with fines up to US $90 000 per breach, while the EU AI Act, California SB 53, and Colorado’s pending legislation impose divergent compliance requirements. Assuming a 15 % breach probability across the global internet user base and the US $90 k fine ceiling, aggregate penalties could exceed US $1.6 trillion over five years.</p>
+
+<p>Enterprise adoption of AI is driven by projected economic output of up to US $15 trillion globally by 2030, with the Philippines targeting a P2.8 trillion uplift. However, the same analyses indicate that organizations lacking robust data‑governance frameworks experience a 30 % project abandonment rate, reducing net gains. IDC data show that only 40 % of firms currently invest in “trustworthy AI” guardrails, despite a 60 % higher probability of doubling ROI for those that do.</p>
+
+<p>Model releases such as Claude Sonnet 4.5 and Gemini 2.0 Flash illustrate the industry’s shift toward token efficiency and multimodal capabilities. Both models achieve approximately 15 % token reductions relative to prior generations, translating into estimated compute cost savings of US $150 k per month for enterprises processing ten million tokens daily. Sonnet 4.5’s integration of Sora‑2 video‑audio generation (1080p output at 20 seconds per clip) expands the agentic AI ecosystem, supported by eleven new tutorials for rapid agent development. Gemini 2.0 Flash offers lower inference latency (≤100 ms for text) and broad cloud integration, positioning it as a direct competitor in enterprise deployments.</p>
+
+<p>In education, token‑based pricing models and data‑compression techniques enable campus‑wide LLM deployments with a projected total cost of ownership of US $1.2 million per semester, offset by up to 30 % reductions in manual grading time. Nevertheless, 71 % of workforces and 58 % of faculty report insufficient AI fluency, creating a skills gap that hampers effective integration. Governance frameworks that embed trustworthy‑AI safeguards increase the likelihood of achieving measurable productivity gains, with a projected 35 % reduction in compliance incidents for institutions that implement token‑level provenance tracking.</p>
+
+<p>Technical recommendations emerging from the reports converge on four pillars:</p>
+
+<p>1. <strong>Data Governance:</strong> Enforce provenance tagging, immutable audit logs, and automated data‑minimization pipelines before model training to limit exposure of “zombie” data and satisfy proportionality requirements.</p>
+
+<p>2. <strong>Access Controls:</strong> Deploy role‑based, least‑privilege APIs for LLMs and enforce token‑level revocation for cached prompts in hosted services, mitigating permission sprawl and unauthorized data retrieval.</p>
+
+<p>3. <strong>Adversarial Robustness:</strong> Integrate continuous adversarial training, poisoned‑data detection, and explainable‑AI modules to monitor refusal‑rate decay and prevent self‑evolving agent drift.</p>
+
+<p>4. <strong>Regulatory Alignment:</strong> Map internal policies to the most stringent jurisdiction (e.g., EU AI Act, US SB 53), adopt privacy‑by‑design architectures, and prepare for the US $90 k fine ceiling.</p>
+
+<p>Additional actions include establishing AI‑specific incident response playbooks to raise cybersecurity readiness from the current 6 % to above 50 %, and conducting third‑party risk assessments for all external data sources to prevent inadvertent harvesting. Implementing these controls will reduce the projected incident rate of 85 % in high‑adoption sectors and align AI deployments with emerging global standards.</p>
+
+<p>In summary, the confluence of expansive data harvesting, commoditized malicious LLMs, and fragmented regulatory regimes creates a high‑risk environment that outweighs short‑term economic incentives for organizations lacking robust governance. Immediate adoption of provenance‑driven data governance, stringent access controls, continuous adversarial robustness, and harmonized compliance frameworks is essential to mitigate privacy erosion, avoid multi‑trillion‑dollar penalties, and sustain public trust in generative‑AI systems.</p>"""
+    print(store.upload_article(article))
 
     
 import argparse
 import subprocess
 parser = argparse.ArgumentParser(description="Run pycoffeemaker tests")
 parser.add_argument("--hydrate", action="store_true", help="Hydrate local gobeansack database")
-# parser.add_argument("--test-local-gobeansack-query", action="store_true", help="Test local gobeansack query")
 # parser.add_argument("--hydrate-test-db", action="store_true", help="Hydrate test database")
 # parser.add_argument("--test-static-db", action="store_true", help="Test static database")
 # parser.add_argument("--test-trend-analysis", action="store_true", help="Test trend analysis")
@@ -375,7 +367,7 @@ parser.add_argument("--rundigestor", action="store_true", help="Test digestor or
 parser.add_argument("--runcomposer", action="store_true", help="Test composer orchestrator")
 parser.add_argument("--runrefresher", action="store_true", help="Test refresher orchestrator")
 parser.add_argument("--dbcache", action="store_true", help="Test dbcache")
-parser.add_argument("--s3store", action="store_true", help="Test S3 store")
+parser.add_argument("--cdnstore", action="store_true", help="Test S3 store")
 # parser.add_argument("--test-fullstack-orch", action="store_true", help="Test fullstack orchestrator")
 # parser.add_argument("--create-test-data-file", metavar="OUTPUT_PATH", help="Create test data file at OUTPUT_PATH")
 
@@ -409,8 +401,8 @@ def main():
         test_refresher_orch()
     if args.dbcache:
         test_dbcache()
-    if args.s3store:
-        s3store_test()
+    if args.cdnstore:
+        cdnstore_test()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:

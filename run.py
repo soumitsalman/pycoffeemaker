@@ -90,22 +90,22 @@ if __name__ == "__main__":
     elif mode == "COMPOSER":
         from coffeemaker.orchestrators.composerorch import Orchestrator
         orch = Orchestrator(
-            db_conn_str=db_conn_str,
-            cdn_endpoint=os.getenv("DOSPACES_ENDPOINT"),
-            cdn_access_key=os.getenv("DOSPACES_ACCESS_KEY"),
-            cdn_secret_key=os.getenv("DOSPACES_SECRET_KEY"),
-            composer_path=os.getenv("COMPOSER_PATH"), 
-            extractor_path=os.getenv("EXTRACTOR_PATH"),
-            composer_base_url=os.getenv("COMPOSER_BASE_URL"),
-            composer_api_key=os.getenv("COMPOSER_API_KEY"),
-            composer_context_len=int(os.getenv("COMPOSER_CONTEXT_LEN", COMPOSER_CONTEXT_LEN)),
-            banner_model=os.getenv("BANNER_MODEL"),
-            banner_base_url=os.getenv("BANNER_BASE_URL"),
-            banner_api_key=os.getenv("BANNER_API_KEY"),
-            embedder_path=os.getenv("EMBEDDER_PATH"),
-            embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
-            backup_azstorage_conn_str=os.getenv("AZSTORAGE_CONN_STR"),
-            max_articles = args.max_articles or int(os.getenv('MAX_ARTICLES', os.cpu_count()))
+            db_conn=db_conn_str,
+            cdn_conn=(
+                os.getenv("PUBLICATIONS_S3_ENDPOINT") or os.getenv("DOSPACES_ENDPOINT"),
+                os.getenv("S3_ACCESS_KEY_ID") or os.getenv("DOSPACES_ACCESS_KEY"),
+                os.getenv("S3_SECRET_ACCESS_KEY") or os.getenv("DOSPACES_SECRET_KEY"),
+                os.getenv("PUBLICATIONS_S3_BUCKET") or os.getenv("DOSPACES_BUCKET"),
+                os.getenv("S3_REGION"),
+                os.getenv("PUBLICATIONS_PUBLIC_URL")
+            ),
+            embedder_model=os.getenv("EMBEDDER_PATH"),
+            analyst_model=os.getenv("ANALYST_MODEL"),
+            writer_model=os.getenv("WRITER_MODEL"),
+            composer_conn=(
+                os.getenv("COMPOSER_BASE_URL"),
+                os.getenv("COMPOSER_API_KEY")
+            )
         )
         orch.run(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml"))
     elif mode == "REFRESHER":

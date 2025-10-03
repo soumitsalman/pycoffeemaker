@@ -19,4 +19,7 @@ azure-storage-blob
 icecream
 dbcache
 psycopg2-binary
+logfire
+pydantic-ai
+pydantic-ai-slim[logfire]
 python-dotenv
