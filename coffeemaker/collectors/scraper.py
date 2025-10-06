@@ -435,7 +435,7 @@ class PublisherScraper:
             meta[K_SOURCE] = extract_domain(url)
             meta[K_BASE_URL] = base_url
             if K_FAVICON not in meta:
-                meta[K_FAVICON] = ic(await self._scrape_favicon(url))
+                meta[K_FAVICON] = await self._scrape_favicon(url)
             return meta
         except Exception as e: 
             log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": url, "num_items": 1})
