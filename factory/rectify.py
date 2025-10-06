@@ -9,11 +9,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 load_dotenv()
 
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from itertools import chain
 from icecream import ic
 from datetime import datetime, timedelta
-# from coffeemaker.pybeansack.models import *
+from coffeemaker.pybeansack.models import *
 # from coffeemaker.pybeansack.mongosack import *
 # from coffeemaker.pybeansack.ducksack import *
 # from coffeemaker.orchestrators.fullstack import Orchestrator
@@ -776,11 +776,41 @@ def migrate_from_mongo_to_warehouse():
             beans = [Chatter(**doc) for doc in mongo.db.chatterstore.find(filter = filter, skip=i, limit=batch_size)]
             wh.db.store_chatters(beans)
             pbar.update(len(beans))
+
+async def prefill_publishers():
+    from coffeemaker.pybeansack.warehouse import Beansack
+    from coffeemaker.collectors.utils import extract_base_url
+    from coffeemaker.collectors.scraper import PublisherScraper  
+    import requests
+
+    db = Beansack(
+        os.getenv('PG_CONNECTION_STRING'),
+        os.getenv('CACHE_DIR')
+    )    
+    query_expr = """SELECT source, FIRST(url) as url FROM warehouse.bean_cores
+    GROUP BY source
+    """
+    publishers = db.query(query_expr)
+
+    for pub in publishers:
+        pub[K_BASE_URL] = extract_base_url(pub[K_URL])
+
+    async with PublisherScraper(batch_size=384) as scraper:
+        pub_meta = await scraper.scrape_urls(["https://"+pub[K_BASE_URL] for pub in publishers])
+
+    for pub, meta in zip(publishers, pub_meta):
+        if meta: pub.update(meta)
+        if 'site_name' in pub: pub[K_TITLE] = pub['site_name']
+        if K_DESCRIPTION in pub: pub[K_SUMMARY] = pub[K_DESCRIPTION]       
+
+    publishers = [Publisher(**pub) for pub in publishers]    
+    db.store_publishers(publishers)
+
     
 
 # adding data porting logic
 if __name__ == "__main__":
-    migrate_from_mongo_to_warehouse()
+    asyncio.run(prefill_publishers())
     # rectify_parquets()
     # merge_to_classification()
     # create_composer_topics_locally()

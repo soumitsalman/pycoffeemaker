@@ -14,15 +14,17 @@ from icecream import ic
 log = logging.getLogger(__name__)
 
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()*os.cpu_count()))
+RETRY_COUNT = 3
+RETRY_JITTER = (1, 10)
 
 _METADATA_SELECTORS = {
-    'description': "meta[name='description']",
+    'site_name': "meta[property='og:site_name'], meta[property='sitename'], meta[itemprop='name']",
+    'description': "meta[name='description'], meta[itemprop='description'], meta[property='og:description']",
     'meta_title': "meta[property='og:title'], meta[name='og:title']",
     'published_time': "meta[property='article:published_time'], meta[name='OriginalPublicationDate'], meta[itemprop='datePublished']",
     'top_image': "meta[property='og:image'], meta[property='og:image:url']",
     'kind': "meta[property='og:type']",
-    'author': "meta[name='author'], meta[name='dc.creator']",
-    'site_name': "meta[property='og:site_name'], meta[property='sitename']",
+    'author': "meta[name='author'], meta[name='dc.creator']",    
     'favicon': "link[rel='shortcut icon'], link[rel='icon']",
     'rss_feed': "link[type='application/rss+xml']"
 }
@@ -68,8 +70,8 @@ class WebScraperLite:
         if 'favicon' in metadata: metadata['favicon'] = urljoin(url, metadata['favicon'])
         if 'rss_feed' in metadata: metadata['rss_feed'] = urljoin(url, metadata['rss_feed'])
         return metadata
-    
-    @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=3, jitter=(1, 10))
+
+    @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
     async def _scrape(self, url: str) -> str:
         async with self.throttle, self.session.get(url) as response:
             html = await response.text()
@@ -78,8 +80,7 @@ class WebScraperLite:
     async def scrape_url(self, url: str, collect_metadata=True): 
         from readability import Document
         if excluded_url(url): return 
-        try:  
-                
+        try:    
             html = await self._scrape(url)
             doc = Document(html)
             body = {
@@ -367,121 +368,85 @@ class WebScraper:
             ret.update(metadata)
         return ret
     
+# <meta property="og:site_name" content="Digital Seams"/>
+# <meta property="og:title" content="Digital Seams"/>
+# <meta property="og:url" content="https://digitalseams.com"/>
+# <meta property="og:type" content="website"/>
+# <meta property="og:description" content="A blog about the connections in our often-online existence, written by Bobbie Chen."/>
+# <meta itemprop="name" content="Digital Seams"/>
+# <meta itemprop="url" content="https://digitalseams.com"/>
+# <meta itemprop="description" content="A blog about the connections in our often-online existence, written by Bobbie Chen."/>
+# <link rel="icon" type="image/x-icon" href="https://images.squarespace-cdn.com/content/v1/598a2436f7e0ab837d08f4c6/5ba8778d-1fd1-45e3-a8cb-346b861097fe/favicon.ico?format=100w"/>
+# <link rel="alternate" type="application/rss+xml" title="RSS Feed" href="https://digitalseams.com/blog?format=rss" />
 
-    # async def _collect_url(self, url: str, config: CrawlerRunConfig) -> dict:
-    #     if _excluded_url(url): return
-    #     result = await self.web_crawler.arun(url=url, config=config)
-    #     return AsyncCollector._package_result(result)
+class PublisherScraper:
+    session: aiohttp.ClientSession = None
+    throttle: asyncio.Semaphore = None
+
+    def __init__(self, batch_size: int = BATCH_SIZE):
+        self.throttle = asyncio.Semaphore(batch_size)
+        
+    async def __aenter__(self):
+        """Async context manager enter"""
+        self.session = aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(limit=BATCH_SIZE, limit_per_host=os.cpu_count()),
+            headers=_HTML_REQUEST_HEADERS, 
+            timeout=aiohttp.ClientTimeout(total=TIMEOUT),
+            raise_for_status=True
+        )
+        return self
+        
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit"""
+        if self.session:
+            await self.session.close()
+            self.session = None
+
+    def _get_metadata(self, url: str, html: str):
+        soup = BeautifulSoup(html, 'lxml')
+        metadata = {}
+        for key, selector in _METADATA_SELECTORS.items():
+            for sel in selector.split(", "):                
+                if tag := soup.select_one(sel):
+                    metadata[key] = tag.get('content') or tag.get('href')
+                    break
+
+        if 'favicon' in metadata: metadata['favicon'] = urljoin(url, metadata['favicon'])
+        if 'rss_feed' in metadata: metadata['rss_feed'] = urljoin(url, metadata['rss_feed'])
+        return metadata
     
-    # async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
-    #     """Collects the bodies of the urls as markdowns"""
-    #     # NOTE: serializing this cause otherwise shit dies
-    #     config = AsyncCollector._run_config(collect_metadata)
-    #     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session, AsyncWebCrawler(config=AsyncCollector._browser_config) as crawler:
-    #         async def _collect(url: str):
-    #             try:
-    #                 if _excluded_url(url): return
+    @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
+    async def _scrape_favicon(self, url: str):
+        async with self.throttle, self.session.get("https://www.google.com/s2/favicons?domain="+extract_base_url(url)) as response:
+            if response.status == 200: return response.headers.get('Content-Location')
 
-    #                 body = await session.get(url, headers=HTML_REQUEST_HEADERS)
-    #                 body.raise_for_status()
-    #                 result = await crawler.arun(url="raw:"+(await body.text()), config=config)
-    #                 return AsyncCollector._package_result(result)
-    #             except Exception as e:
-    #                 ic(e.__class__.__name__, e)            
-    #         results = await asyncio.gather(*[_collect(url) for url in urls])
+    @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
+    async def _scrape_html(self, url: str) -> str:
+        async with self.throttle, self.session.get(url) as response:
+            html = await response.text()
+        return html
 
-    #     return results             
+    async def scrape_url(self, url: str): 
+        base_url = extract_base_url(url)
+        url = "https://"+extract_base_url(url)
+        try:                  
+            html = await self._scrape_html(url)
+            meta = self._get_metadata(url, html)
+            meta[K_SOURCE] = extract_domain(url)
+            meta[K_BASE_URL] = base_url
+            if K_FAVICON not in meta:
+                meta[K_FAVICON] = ic(await self._scrape_favicon(url))
+            return meta
+        except Exception as e: 
+            log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": url, "num_items": 1})
 
-    # async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
-    #     """Collects the bodies of the urls as markdowns"""        
-    #     async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
-    #         config = AsyncCollector._run_config(collect_metadata)
-    #         async def _collect(url: str):
-    #             if _excluded_url(url): return
-    #             result = await crawler.arun(url=url, config=config)
-    #             return AsyncCollector._package_result(result)
-    #         results = await asyncio.gather(*[_collect(url) for url in urls])
-    #     return results
-
-    # async def _collect_url(self, url: str, session: aiohttp.ClientSession, config: CrawlerRunConfig) -> dict:
-    #     if _excluded_url(url): return
-    #     try:
-    #         resp = await session.get(url, headers=HTML_REQUEST_HEADERS, timeout=TIMEOUT)            
-    #         resp.raise_for_status()
-    #         result = await self.web_crawler.arun(url="raw:"+await resp.text(), config=config)
-    #         if isinstance(result, CrawlResult): return AsyncCollector._package_result(result)
-    #     except Exception as e:
-    #         ic(e.__class__.__name__, e)
-
-    # async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
-    #     config = AsyncCollector._run_config(collect_metadata)
-    #     try:
-    #         return await asyncio.gather(*[self._collect_url(url, config) for url in urls])
-    #     except Exception as e:
-    #         ic(e.__class__.__name__, e)
-
-    # async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
-    #     """Collects the bodies of the urls as markdowns"""
-    #     config = AsyncCollector._run_config(collect_metadata)
-    #     results = await self.web_crawler.arun_many(urls=urls, config=config)
-    #     return [AsyncCollector._package_result(result) for result in results]
-
-    # async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
-    #     """Collects the bodies of the urls as markdowns"""
-    #     # NOTE: serializing this cause otherwise shit dies
-    #     config = AsyncCollector._run_config(collect_metadata)
-    #     bodies = []
-    #     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-    #         for url in urls:
-    #             body = None
-    #             try:
-    #                 response = await session.get(url, headers=HTML_REQUEST_HEADERS)
-    #                 response.raise_for_status()
-    #                 body = AsyncCollector._package_result(await self.web_crawler.arun(url="raw:"+(await response.text()), config=config))
-    #             except Exception as e:
-    #                 ic(e.__class__.__name__, e)
-    #             bodies.append(body)
-    #     return bodies
-
-    # async def collect_urls(self, urls: list[str], collect_metadata: bool = False) -> list[dict]:
-    #     """Collects the bodies of the urls as markdowns"""
-    #     config = AsyncCollector._run_config(collect_metadata)
-    #     results = await self.web_crawler.arun_many(urls=urls, config=config)
-    #     return [(AsyncCollector._package_result(result) if (isinstance(result, CrawlResult) and result.status_code == 200) else None) for result in results]
-  
-    # async def _collect_html(self, session: aiohttp.ClientSession, url: str, config: CrawlerRunConfig):
-    #     try:
-    #         if _excluded_url(url): return
-    #         response = await session.get(url, headers=HTML_REQUEST_HEADERS, timeout=TIMEOUT)
-    #         if response.status == 200:
-    #             html_body = await response.text()
-    #             result = await self.web_crawler.arun(url="raw:"+html_body, config=config)
-    #             return AsyncCollector._package_result(result)
-    #     except Exception as e:
-    #         ic(e.__class__.__name__, e)
-
-    # async def _fetch_urls(self, urls: list[str]) -> list[aiohttp.ClientResponse]:
-    #     responses = []
-    #     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=TIMEOUT)) as session:
-    #         for i in range(0, len(urls), COLLECTION_THROTTLE):
-    #             batch = urls[i:i+COLLECTION_THROTTLE]
-    #             responses.extend(await asyncio.gather(*[session.get(url, headers=HTML_REQUEST_HEADERS) for url in batch]))
-    #     return responses
+    async def scrape_urls(self, urls: list[str]):
+        results = await asyncio.gather(*[self.scrape_url(url) for url in urls])
+        return results
     
-    # async def _package_http_responses(self, responses: list[aiohttp.ClientResponse], collect_metadata: bool = False) -> list[dict]:
-    #     config = AsyncCollector._run_config(collect_metadata)
-    #     results = []
-    #     for i in range(0, len(responses), COLLECTION_THROTTLE):
-    #         batch = responses[i:i+COLLECTION_THROTTLE]
-    #         results.extend(await asyncio.gather(*[self._package_http_response(resp, config) for resp in batch]))
-    #     return results
-
-    # async def _package_http_response(self, response: aiohttp.ClientResponse, config: CrawlerRunConfig) -> dict:
-    #     try:
-    #         response.raise_for_status()
-    #         result = await self.web_crawler.arun(url="raw:"+(await response.text()), config=config)
-    #         if isinstance(result, CrawlResult): return AsyncCollector._package_result(result)
-    #     except Exception as e:
-    #         ic(e.__class__.__name__, e)
-
-
+    async def scrape_beans(self, beans: list[Bean]):
+        results = await self.scrape_urls([bean.url for bean in beans])
+        for bean, result in zip(beans, results):
+            if not result: continue
+            bean.publisher = Publisher(**result)           
+        return beans
