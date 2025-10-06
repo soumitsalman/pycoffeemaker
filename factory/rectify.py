@@ -834,10 +834,63 @@ def swap_gist_regions_entities(batch_size: int = 256):
     db.close()
 
 
+def split_parquet_into_chunks(src_path: str = "/home/soumitsr/.beansack/main/bean_gists/bean-gists-rectified.parquet",
+                              chunk_size: int = 1024,
+                              dest_dir: str | None = None,
+                              prefix: str = "bean-gists-chunk") -> list[str]:
+    """Read a Parquet file, split it into chunks of `chunk_size` rows and
+    write each chunk as a separate Parquet file.
+
+    Returns the list of written file paths.
+    """
+    import pandas as pd
+
+    if not os.path.exists(src_path):
+        raise FileNotFoundError(f"source parquet not found: {src_path}")
+
+    if dest_dir is None:
+        dest_dir = os.path.dirname(src_path)
+
+    os.makedirs(dest_dir, exist_ok=True)
+
+    # Load dataframe (assumes it fits in memory). If this becomes a problem
+    # we can switch to pyarrow.dataset scanning.
+    df = pd.read_parquet(src_path)
+    total = len(df)
+    ic(f"loaded parquet|rows={total}")
+
+    written = []
+    for i in range(0, total, chunk_size):
+        chunk = df.iloc[i : i + chunk_size]
+        idx = i // chunk_size
+        out_name = f"{prefix}-{idx:04d}.parquet"
+        out_path = os.path.join(dest_dir, out_name)
+        # Use pyarrow engine for compatibility with other code in this repo
+        chunk.to_parquet(out_path, engine="pyarrow")
+        written.append(out_path)
+        ic(f"wrote chunk|{out_path}|rows={len(chunk)}")
+
+    ic(f"wrote_total_chunks|{len(written)}")
+    return written
+
+def register_new_gist_files():
+    from coffeemaker.pybeansack.warehouse import Beansack, SQL_INSERT_PARQUET
+    db = Beansack(
+        os.getenv('PG_CONNECTION_STRING'),
+        os.getenv('STORAGE_DATAPATH')
+    )
+
+    import glob
+    files = glob.glob(os.getenv("STORAGE_DATAPATH") + "/main/bean_gists/bean-gists-chunk-*.parquet")
+    for f in files:
+        db.execute(SQL_INSERT_PARQUET, ('bean_gists', f,))
+
+    db.close()
 
 # adding data porting logic
 if __name__ == "__main__":
-    asyncio.run(prefill_publishers())
+    register_new_gist_files()
+    # asyncio.run(prefill_publishers())
     # swap_gist_regions_entities()
     # rectify_parquets()
     # merge_to_classification()
