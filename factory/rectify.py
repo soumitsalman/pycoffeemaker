@@ -792,25 +792,53 @@ async def prefill_publishers():
     """
     publishers = db.query(query_expr)
 
-    for pub in publishers:
-        pub[K_BASE_URL] = extract_base_url(pub[K_URL])
-
     async with PublisherScraper(batch_size=384) as scraper:
-        pub_meta = await scraper.scrape_urls(["https://"+pub[K_BASE_URL] for pub in publishers])
+        publishers = await scraper.scrape_urls([pub[K_URL] for pub in publishers])
+        publishers = [pub for pub in publishers if pub]
 
-    for pub, meta in zip(publishers, pub_meta):
-        if meta: pub.update(meta)
-        if 'site_name' in pub: pub[K_TITLE] = pub['site_name']
-        if K_DESCRIPTION in pub: pub[K_SUMMARY] = pub[K_DESCRIPTION]       
+    ic(random.sample(publishers, 3))
+    ic([pub for pub in publishers if K_BASE_URL not in pub])
 
-    publishers = [Publisher(**pub) for pub in publishers]    
-    db.store_publishers(publishers)
+    import pandas as pd
+    pd.DataFrame(publishers).to_parquet(os.getenv("CACHE_DIR") + "/main/publishers/publishers-rectified.parquet")
+    db.close()
 
-    
+
+def swap_gist_regions_entities(batch_size: int = 256):
+    """Query all rows from warehouse.bean_gists, swap the `entities` and
+    `regions` values for each row and update the table in batches.
+
+    This uses the warehouse Beansack.query and Beansack.execute APIs so it
+    behaves like other functions in this module.
+    """
+    from coffeemaker.pybeansack.warehouse import Beansack
+
+    db = Beansack(
+        os.getenv('PG_CONNECTION_STRING'),
+        os.getenv('CACHE_DIR')
+    )
+
+    # Fetch all gists with their entities/regions
+    query_expr = "SELECT url, gist, entities, regions FROM warehouse.bean_gists"
+    rows = db.query(query_expr)
+    total = len(rows)
+    print(datetime.now(), f"fetched bean_gists|{total}")
+
+    for item in rows:
+        temp = item.get('entities')
+        item['entities'] = item.get('regions')
+        item['regions'] = temp
+
+    import pandas as pd
+    pd.DataFrame(rows).to_parquet(os.getenv("CACHE_DIR") + "/main/bean_gists/bean-gists-rectified.parquet")
+    db.close()
+
+
 
 # adding data porting logic
 if __name__ == "__main__":
     asyncio.run(prefill_publishers())
+    # swap_gist_regions_entities()
     # rectify_parquets()
     # merge_to_classification()
     # create_composer_topics_locally()

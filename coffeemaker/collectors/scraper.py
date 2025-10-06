@@ -426,14 +426,17 @@ class PublisherScraper:
             html = await response.text()
         return html
 
-    async def scrape_url(self, url: str): 
+    async def scrape_url(self, url: str):
+        meta = {} 
         base_url = extract_base_url(url)
+        meta[K_BASE_URL] = base_url
         url = "https://"+extract_base_url(url)
+        meta[K_SOURCE] = extract_domain(url)
         try:                  
             html = await self._scrape_html(url)
-            meta = self._get_metadata(url, html)
-            meta[K_SOURCE] = extract_domain(url)
-            meta[K_BASE_URL] = base_url
+            meta.update(self._get_metadata(url, html))
+            meta[K_TITLE] = meta.get('site_name') or meta.get('meta_title')
+            meta[K_SUMMARY] = meta.get(K_DESCRIPTION)
             if K_FAVICON not in meta:
                 meta[K_FAVICON] = await self._scrape_favicon(url)
             return meta
