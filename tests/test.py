@@ -139,8 +139,8 @@ def create_test_data_file(output_path):
 
 def hydrate_test_db():
     from factory.rectify import migrate_mongodb
-    migrate_mongodb("test", "master", from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
-    migrate_mongodb("espresso", "master", from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
+    # migrate_mongodb("test", "master", from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
+    migrate_mongodb("espresso", "espresso1", from_db_conn=os.getenv('MONGO_CONNECTION_STRING'), to_db_conn=DB_LOCAL_TEST)
 
 
 def test_trend_analysis():
@@ -375,8 +375,8 @@ def main():
     
     args = parser.parse_args()
 
-    # if args.hydrate:
-    #     hydrate_local_gobeansack()
+    if args.hydrate:
+        hydrate_test_db()
     # if args.test_local_gobeansack_query:
     #     test_local_gobeansack_query()
     # if args.hydrate_test_db:

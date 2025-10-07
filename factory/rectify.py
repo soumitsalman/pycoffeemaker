@@ -671,7 +671,7 @@ def migrate_mongodb(from_db_name, to_db_name, from_db_conn = os.getenv('MONGODB_
 
     tasks = [
         lambda: to_db.beanstore.insert_many(from_db.beanstore.find({K_COLLECTED: {"$gte": ndays_ago(3)}}), ordered=False),
-        lambda: to_db.chatterstore.insert_many(from_db.chatterstore.find({K_COLLECTED: {"$gte": ndays_ago(3)}}), ordered=False),
+        # lambda: to_db.chatterstore.insert_many(from_db.chatterstore.find({K_COLLECTED: {"$gte": ndays_ago(3)}}), ordered=False),
         lambda: to_db.pagestore.insert_many(from_db.pagestore.find({}), ordered=False),
         lambda: to_db.userstore.insert_many(from_db.userstore.find({}), ordered=False),
         lambda: to_db.sourcestore.insert_many(from_db.sourcestore.find({}), ordered=False),

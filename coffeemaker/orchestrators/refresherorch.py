@@ -55,7 +55,7 @@ class Orchestrator:
         log.info("refreshed chatters", extra={'source': self.run_id, 'num_items': total})
 
         publishers = self.master_db.query_publishers()
-        self.espresso_db.update_beans_adhoc(list(map(
+        total = self.espresso_db.update_beans_adhoc(list(map(
             lambda p: UpdateMany(
                 {
                     models.K_SOURCE: p.source,
