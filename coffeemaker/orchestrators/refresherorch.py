@@ -71,6 +71,19 @@ class Orchestrator:
 
         self.espresso_db.cleanup()  
         log.info("cleaned up espresso", extra={"source": self.run_id, "num_items": 1})
+
+    def sync_storage(self):
+        # get the snapshot
+        current_snapshot = self.master_db.snapshot()
+        # then upload what is in the directory
+        # this way if some
+        s3sync_cmd = os.getenv("S3SYNC_CMD")
+        if s3sync_cmd: 
+            subprocess.run(s3sync_cmd.split(), check=True)
+            log.info("synced storage", extra={"source": self.run_id, "num_items": 1})
+        # then update cache
+        self.cache.set("current_snapshot", current_snapshot)
+        log.info("saved snapshot", extra={"source": self.run_id, "num_items": current_snapshot})
    
     def run(self):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -83,16 +96,6 @@ class Orchestrator:
         self.master_db.cleanup()
         log.info("cleaned up warehouse", extra={"source": self.run_id, "num_items": 1})
         
-        # get the snapshot
-        current_snapshot = self.master_db.snapshot()
-        # then upload what is in the directory
-        # this way if some
-        s3sync_cmd = os.getenv("S3SYNC_CMD")
-        if s3sync_cmd: 
-            subprocess.run(s3sync_cmd.split(), check=True)
-            log.info("synced storage", extra={"source": self.run_id, "num_items": 1})
-        # then update cache
-        self.cache.set("current_snapshot", current_snapshot)
-        log.info("saved snapshot", extra={"source": self.run_id, "num_items": current_snapshot})
-        
-        self.port_contents()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            executor.submit(self.sync_storage)
+            executor.submit(self.port_contents)
