@@ -101,6 +101,23 @@ services:
     cpus: 1
     mem_limit: 4g
 
+  localn8n:
+    image: n8nio/n8n:latest
+    environment:
+      - N8N_HOST=workable-feline-deeply.ngrok-free.app
+      - N8N_PROTOCOL=https
+      - N8N_EDITOR_BASE_URL=http://localhost:5678/
+      - DB_SQLITE_POOL_SIZE=10
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      - N8N_AVAILABLE_BINARY_DATA_MODES=filesystem
+      - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+    ports:
+      - "5678:5678"
+    volumes:
+      - .n8n:/home/node/.n8n
+
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite:latest
     ports:

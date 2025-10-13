@@ -10,6 +10,7 @@
 .beansack
 .mongodb
 .vscode
+.n8n
 .logs
 .scrapingqueue
 .delete-models
