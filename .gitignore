@@ -12,6 +12,10 @@
 .vscode
 .n8n
 .logs
+.tmp
+.beansackv2
+.config
+.postgresql
 .scrapingqueue
 .delete-models
 .deploy.sh

@@ -222,18 +222,12 @@ def test_digestor_orch():
 
 def test_composer_orch():
     from coffeemaker.orchestrators.composerorch import Orchestrator
+    from coffeemaker.nlp.src.models import Metadata
+
     orch = Orchestrator(
         db_conn=(
             os.getenv("PG_CONNECTION_STRING"), 
             ".beansack/"
-        ),
-        cdn_conn=(
-            os.getenv("PUBLICATIONS_S3_ENDPOINT"),
-            os.getenv("S3_ACCESS_KEY_ID"),
-            os.getenv("S3_SECRET_ACCESS_KEY"),
-            os.getenv("PUBLICATIONS_S3_BUCKET"),
-            os.getenv("S3_REGION"),
-            os.getenv("PUBLICATIONS_PUBLIC_URL")
         ),
         embedder_model="avsolatorio/GIST-small-Embedding-v0",
         analyst_model="openai/gpt-oss-20b",
@@ -241,6 +235,10 @@ def test_composer_orch():
         composer_conn=(
             os.getenv("COMPOSER_BASE_URL"),
             os.getenv("COMPOSER_API_KEY")
+        ),
+        publisher_conn=(
+            os.getenv("PUBLISHER_BASE_URL"),
+            os.getenv("PUBLISHER_API_KEY")
         )
     )
 
@@ -255,43 +253,32 @@ def test_composer_orch():
             "kind": "news",
             "description": "Financial markets stock trading analysis, corporate earnings quarterly reports mergers acquisitions, economic indicators GDP employment statistics, retail industry sales trends consumer behavior, workplace automation digital transformation implementation, banking investment strategies risk management, marketing advertising campaign effectiveness data, real estate property market valuations development."
         },
-        {
-            "_id": "Career & Professional Growth",
-            "kind": "blog",
-            "description": "Professional skills development certification programs, job market demand analysis trends, workplace culture remote work practices, career advancement strategies mentorship, leadership management training methods, salary compensation benefits analysis, work-life balance employee wellbeing research, continuing education professional training programs."
-        }
+        # {
+        #     "_id": "Career & Professional Growth",
+        #     "kind": "blog",
+        #     "description": "Professional skills development certification programs, job market demand analysis trends, workplace culture remote work practices, career advancement strategies mentorship, leadership management training methods, salary compensation benefits analysis, work-life balance employee wellbeing research, continuing education professional training programs."
+        # }
     ]
-    res = asyncio.run(orch.run_async(domains))
-    if res: [print(r.title, "\n\n", r.summary, "\n\n", r.content) for r in res]
+    res = ic(asyncio.run(orch.run_async(domains)))
 
-        
-    # for bean in orch.run(topics):
-    #     print(">>>>>>>>>>>>>>>>")
-    #     print(bean.title)
-    #     print(bean.url)
-    #     print(bean.image_url)
-    #     if bean.highlights: print("ANALYSIS:\n", "\n".join(bean.highlights))
-    #     if bean.insights: print("INSIGHTS:\n", "\n".join(bean.insights))
-    #     if bean.entities: print("TAGS:\n", ", ".join(bean.entities))
-    #     print(bean.content)
-    #     print("<<<<<<<<<<<<<<<<")
-    ## test cluster
-    # orch.run_id = now().strftime("%Y-%m-%d-%H-%M-%S")
-    # clusters = orch.get_topic_clusters(topics)
-    # [ic(c[0], c[1], len(c[2])) for c in clusters]
-    # beans = orch.get_beans(filter = {K_KIND: NEWS})
+    # data = [
+    #     (
+    #         d,
+    #         Metadata(
+    #             headline=f"Latest updates in {d['_id']}",
+    #             question=f"What are the latest updates in {d['_id']}?",
+    #             summary="blah blah",
+    #             highlights=["1", "2", "3"],
+    #             keywords=[d['_id'], "trends", "latest", "news"]
 
-    # for idx, cl in enumerate(orch.cluster_beans(beans, method="HDBSCAN")):
-    #     print(len(cl))
-    #     save_markdown(f"{orch.run_id}-{idx}", "\n".join([b.gist for b in cl]))
+    #         ),
+    #         "sample body",
+    #         None
+    #     ) for d in domains
+    # ]
 
-    ## test generation
-    # infilename = "/home/soumitsr/codes/pycoffeemaker/.test/2025-06-04-20-41-00-5.md"
-    # outfilename = f"/home/soumitsr/Dropbox/ObsidianNotes/cafecito.tech/test-md/{infilename.split('/')[-1]}"
-    # with open(infilename, "r") as infile:
-    #     resp = orch.news_writer.run(infile.read())
-    # with open(outfilename, "w") as outfile:
-    #     outfile.write(resp.raw)
+    # asyncio.run(orch.bulk_publish_articles(data))
+
 
 def test_refresher_orch():
     from coffeemaker.orchestrators.refresherorch import Orchestrator

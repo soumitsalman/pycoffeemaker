@@ -1,4 +1,6 @@
 import os
+import aiohttp
+import requests
 import yaml
 import json
 import asyncio
@@ -20,7 +22,7 @@ log = logging.getLogger(__name__)
 
 EMBEDDER_CTX_LEN = 512
 COMPOSER_CTX_LEN = 32768
-LAST_NDAYS = 3
+LAST_NDAYS = 2
 
 MIN_BEANS_PER_TOPIC = int(os.getenv('MIN_BEANS_PER_TOPIC', 8))
 MAX_BEANS_PER_TOPIC = int(os.getenv('MAX_BEANS_PER_TOPIC', 24))
@@ -44,9 +46,10 @@ INSTRUCTIONS:
 EXAMPLE_OUTPUT={"headlines":["Headline1","Headline2"]}
 """
 
-COLUMNIST_INSTRUCTIONS = """
+COLUMNIST_INSTRUCTIONS = f"""
 ROLE=NewsColumist;
-TASK=WriteTechnicalReport;       
+TASK=WriteTechnicalReport;  
+TODAYS_DATE: {datetime.now().strftime('%Y-%m-%d')}     
 INPUT=Topic:String\n\nList<NewsString>;NewsString=Format<U:Date;P:KeyPoints|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;C:Categories|...;S:Sentiment|...>
 STEPS:
     1. ANALYZE=AnalyzeDatastreams;UseFields:U,P,E,D,R,N,S;
@@ -54,26 +57,28 @@ STEPS:
     3. GROUNDING=Normative,MultiNews;
     4. FOCUS=TopicRelevance;
     5. INCLUDE=influential events, emerging trends, important data points, market predictions and verdict.
-    6. PHRASING=1st-person,direct,technical,factual,data-centric;
-    7. AVOID=speculative,narrative,emotive language;
-    8. TONE=identified-tone;
-    9. CONTENT_LENGTH<=700Words;
+    6. [OPTIONAL] Show side-by-side comparison of conflicting viewpoints and data
+    7. PHRASING=1st-person,direct,technical,factual,data-centric;
+    8. AVOID=speculative,narrative,emotive language;
+    9. TONE=identified-tone;
+    10. CONTENT_LENGTH<=700Words;
 """
 
 EDITOR_INSTRUCTIONS = f"""
 ROLE=NewsEditor;
 TASK=WriteSectionEditorial;
+TODAYS_DATE: {datetime.now().strftime('%Y-%m-%d')}
 INPUT=Domain:String\n\n\nTechnicalReports:List<String>
+OUTPUT=HTML;IncludeBodyOnly=True
 STEPS:
-    1. STRUCTURE=Based on the 'Headline' and the 'Drafts', determine the headings structure that optimizes for gradual flow of an opinion pieces;
-    2. CONTENT=Use the 'Drafts' as the ONLY source of information; Create content that aims to answer the question in the 'Headline'; Adapt to the headings structure;
-    3. FOCUS=TopicRelevance;
-    4. PHRASING=1st-person,direct,technical,factual,data-centric;Grounded on observation from the 'Drafts';
-    5. AVOID=speculative,narrative,emotive language, self-describing verbiage, input references;
-    6. CLEANUP=Remove inconsistent narratives, self-contradictory statements, incomplete sentences, headers like 'Introduction' and 'Conclusion'
-    7. CONTENT_LENGTH<=1000Words
-OUTPUT=HTML;IncludeBodyOnly=True,IncludeHeadings=False
-CURRENT_DATE: {datetime.now().strftime('%Y-%m-%d')}
+    1. CONTENT_SOURCE=Use the technical reports as the ONLY assertable source of authoritative information;    
+    2. CONTENT_STRUCTURE=Leverage HTML syntax to optimize the layout and structure for better readability and flow;
+    3. FOCUS=DomainRelevance;
+    4. [OPTIONAL] Show side-by-side comparison of conflicting viewpoints and data
+    5. PHRASING=1st-person,direct,technical,factual,data-centric
+    6. AVOID=speculative,narrative,emotive language,self-describing verbiage, input references;
+    7. CLEANUP=Remove inconsistent narratives, self-contradictory statements, incomplete sentences, headers like 'Introduction' and 'Conclusion'
+    8. CONTENT_LENGTH<=1000Words
 """
 
 # OUTPUT=JSON;{"headline":String,"question":String,"highlights":List<String>,"keywords":List<String>,"banner_prompt":String}
@@ -101,19 +106,19 @@ class Orchestrator:
     editor = None
     synthesizer = None
     sketcher = None
+    publisher_conn = None
 
     def __init__(self, 
         db_conn: tuple[str, str],    
-        cdn_conn: tuple,
         embedder_model: str,          
         analyst_model: str,
         writer_model: str,
         composer_conn: tuple[str, str],
         banner_model: str = None,
-        banner_conn: tuple[str, str] = None
+        banner_conn: tuple[str, str] = None,
+        publisher_conn: tuple[str, str] = None
     ):
         self.db = initialize_db(db_conn)
-        self.cdn = CDNStore(*cdn_conn) 
 
         logfire.configure(token=os.getenv("PUBLICATIONS_LOGFIRE_TOKEN"))
         logfire.instrument_pydantic_ai()
@@ -157,6 +162,8 @@ class Orchestrator:
             name="BannerMaker",
             model=OpenAIChatModel(banner_model, provider=OpenAIProvider(*banner_conn)),
         )
+
+        self.publisher_conn = publisher_conn
 
     async def _query_beans(self, kind: str, last_ndays: int, query_text: str, query_emb: list[float], distance: float, limit: int):
         if not query_emb and query_text:           
@@ -214,7 +221,7 @@ class Orchestrator:
         clusters = filter(lambda x: MIN_BEANS_PER_DOMAIN <= len(x) <= MAX_BEANS_PER_DOMAIN, clusters)
         return list(map(lambda x: (x[0].categories[0], x[0].kind, x), clusters))
     
-     # processing stages for each topic
+    # processing stages for each topic
     # Option 1:
         # get the beans
         # identify section to write on
@@ -240,8 +247,8 @@ class Orchestrator:
         res = await self.analyst.run(prompt)
         return res.output
 
-    async def _get_beans_for_topic(self, topic: str) -> list[Bean]:
-        beans = await self._query_beans(kind=NEWS, last_ndays=LAST_NDAYS, query_text=topic, query_emb=None, distance=MAX_DISTANCE_PER_TOPIC, limit=MAX_BEANS_PER_TOPIC)
+    async def _get_beans_for_topic(self, topic: str, emb: list[float] = None) -> list[Bean]:
+        beans = await self._query_beans(kind=NEWS, last_ndays=LAST_NDAYS, query_text=topic, query_emb=emb, distance=MAX_DISTANCE_PER_TOPIC, limit=MAX_BEANS_PER_TOPIC)
         log.info("found beans", extra={'source': topic, 'num_items': len(beans)})
         return beans if beans and len(beans) >= MIN_BEANS_PER_TOPIC else None
 
@@ -250,12 +257,12 @@ class Orchestrator:
         res = await self.columnist.run(prompt)
         return res.output
 
-    async def _edit_article(self, domain: dict, reports: list[str]):
+    async def _write_main_content(self, domain: dict, reports: list[str]):
         prompt = f"Domain: {domain[K_ID]}\n\n\n" + "\n\n=================\n\n".join(reports)
         res = await self.editor.run(prompt)
         return res.output
 
-    async def _synthesize_article(self, article: str):        
+    async def _synthesize_content(self, article: str):        
         res = await self.synthesizer.run(article)
         return res.output
 
@@ -270,8 +277,9 @@ class Orchestrator:
             topics = await self._shortlist_topics(domain, beans)
             log.info("shortlisted topics", extra={'source': domain[K_ID], 'num_items': len(topics.headlines)})
             if not topics.headlines: return
-            
-            beans_list = await asyncio.gather(*[self._get_beans_for_topic(topic) for topic in topics.headlines])
+
+            topic_embs = self.embedder([f"topic: {t}" for t in topics.headlines])
+            beans_list = await asyncio.gather(*[self._get_beans_for_topic(topic, emb) for topic, emb in zip(topics.headlines, topic_embs)])
             beans_list = [beans for beans in beans_list if beans]
             if not beans_list: return
             reports = await asyncio.gather(*[self._write_report(topic, beans) for topic, beans in zip(topics.headlines, beans_list)])
@@ -279,11 +287,11 @@ class Orchestrator:
             log.info("created reports", extra={'source': domain[K_ID], 'num_items': len(reports)})
             if not reports: return
             
-            article = await self._edit_article(domain, reports)
-            log.info("created article", extra={'source': domain[K_ID], 'num_items': 1})            
-            if not article: return
+            body = await self._write_main_content(domain, reports)
+            log.info("created body", extra={'source': domain[K_ID], 'num_items': 1})            
+            if not body: return
 
-            metadata = await self._synthesize_article(article)
+            metadata = await self._synthesize_content(body)
             log.info("synthesized metadata", extra={'source': domain[K_ID], 'num_items': 1})
             
             banner = None
@@ -291,11 +299,82 @@ class Orchestrator:
                 banner = await self._create_banner(metadata.banner_prompt)
                 log.info("created banner", extra={'source': domain[K_ID], 'num_items': 1})
 
-            return (metadata, article, banner)
+            return (metadata, body, banner)
 
         except Exception as e:
             log.warning(f"compose article failed - {e}", extra={'source': domain[K_ID], 'num_items': 1}, exc_info=True)
-            return
+
+    async def bulk_publish_articles(self, articles: list[tuple[dict, Metadata, str, bytes]]):
+        published = []
+        async with aiohttp.ClientSession(base_url=self.publisher_conn[0], raise_for_status=True) as session:
+            for a in articles:
+                domain, metadata, body, banner = a
+                async with session.post("espresso/articles", json={
+                    "id": random_filename(metadata.headline),
+                    "title": metadata.headline,
+                    "summary": metadata.question,
+                    "content": body,
+                    "format": "html",
+                    "author": "Espresso AI",
+                    "tags": [domain[K_ID]]+metadata.keywords
+                }) as resp:
+                    res = await resp.json()                
+                    log.info("published", extra={'source': domain[K_ID], 'num_items': 1})      
+                    published.append(res)
+        return published
+          
+    async def run_async(self, domains):
+        self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
+        domains = _parse_domains(domains)
+
+        # create vectors if there is none
+        if any(K_EMBEDDING not in d for d in domains):
+            domain_embs = self.embedder([f"topic: {d.get(K_DESCRIPTION)}" for d in domains])
+            for d, emb in zip(domains, domain_embs): d[K_EMBEDDING] = emb
+
+        articles = await asyncio.gather(*[self.compose_article(domain) for domain in domains])
+        published_urls = await self.bulk_publish_articles([(domain, *article) for domain, article in zip(domains, articles) if article])
+        log.info("composed and published", extra={"source": self.run_id, "num_items": len(published_urls)})
+        return published_urls
+
+def _process_banner(banner):
+    if hasattr(banner, "save"): 
+        filename = ".cache/"+re.sub(r'[^a-zA-Z0-9]', '-', f"banner-{int(now().timestamp())}-{random.randint(1000,9999)}").lower()+".png"
+        banner.save(filename)
+        return filename
+    return banner
+
+def _parse_domains(topics: list|dict|str):
+    if isinstance(topics, list): return topics
+    if isinstance(topics, dict): return list(topics.values())
+    if os.path.exists(topics):
+        if topics.endswith(".parquet"): return pd.read_parquet(topics).to_dict(orient="records")
+        if topics.endswith(".yaml"): 
+            with open(topics, 'r') as file:
+                return list(yaml.safe_load(file).values())
+        if topics.endswith(".json"): 
+            with open(topics, 'r') as file:
+                return list(json.load(file).values())
+        raise ValueError(f"unsupported file type: {topics}")
+    return list(yaml.safe_load(topics).values())
+
+    # def _make_bean(metadata: Metadata, content: str, banner_url: str): 
+    # current = now()
+    # bean_id = random_filename(metadata.headline)
+    # return BeanCore(
+    #     url=f"https://publications.cafecito.tech/articles/{bean_id}.html",
+    #     kind=OPED,
+    #     title=metadata.headline,
+    #     summary="\n".join(metadata.highlights),
+    #     content=content,
+    #     restricted_content=True,
+    #     author="Barista AI",
+    #     source="cafecito",
+    #     image_url=banner_url,
+    #     created=current,        
+    #     collected=current
+    # )
 
     # def stage0_get_clusters(self, topics = None):
     #     if topics:
@@ -415,67 +494,10 @@ class Orchestrator:
     #     bean = self.stage4_create_bean(topic, metadata, content)
     #     return bean
 
-    async def _save_article(self, domain: dict, metadata: Metadata, article: str, banner: bytes = None):
-        filename = random_filename(metadata.headline)
-        article_url = await asyncio.to_thread(self.cdn.upload_article, article, filename)
-        banner_url = None
-        if banner: banner_url = await asyncio.to_thread(self.cdn.upload_image, banner, filename)  
-        log.info("saved", extra={'source': domain[K_ID], 'num_items': 1})      
-        return ic(article_url, banner_url)
-
-    async def _publish_article(self, domain: dict, article: str, metadata: Metadata, banner: bytes = None):
-        log.info("published", extra={'source': domain[K_ID], 'num_items': 1})      
-        return f"{domain[K_ID]}-{now().strftime('%Y-%m-%d')}.html"
-          
-    async def run_async(self, domains):
-        self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
-        domains = _parse_domains(domains)
-        articles = await asyncio.gather(*[self.compose_article(domain) for domain in domains])
-        das = [(domain, *article) for domain, article in zip(domains, articles) if article]
-        saved_urls = await asyncio.gather(*[self._save_article(domain, metadata, article, banner) for domain, metadata, article, banner in das])
-        published_urls = await asyncio.gather(*[self._publish_article(domain, article, metadata, banner) for domain, metadata, article, banner in das])
-        beans = [_make_bean(metadata, article, banner_url) for (_, metadata, article, banner), (_, banner_url) in zip(das, saved_urls)]
-        for bean, published_url in zip(beans, published_urls):
-            bean.url = published_url
-        beans = self.db.store_cores(beans)
-        log.info("stored", extra={"source": self.run_id, "num_items": len(beans)})
-        return beans
-
-def _make_bean(metadata: Metadata, content: str, banner_url: str): 
-    current = now()
-    bean_id = random_filename(metadata.headline)
-    return BeanCore(
-        url=f"https://publications.cafecito.tech/articles/{bean_id}.html",
-        kind=OPED,
-        title=metadata.headline,
-        summary="\n".join(metadata.highlights),
-        content=content,
-        restricted_content=True,
-        author="Barista AI",
-        source="cafecito",
-        image_url=banner_url,
-        created=current,        
-        collected=current
-    )
-
-def _process_banner(banner):
-    if hasattr(banner, "save"): 
-        filename = ".cache/"+re.sub(r'[^a-zA-Z0-9]', '-', f"banner-{int(now().timestamp())}-{random.randint(1000,9999)}").lower()+".png"
-        banner.save(filename)
-        return filename
-    return banner
-
-def _parse_domains(topics: list|dict|str):
-    if isinstance(topics, list): return topics
-    if isinstance(topics, dict): return list(topics.values())
-    if os.path.exists(topics):
-        if topics.endswith(".parquet"): return pd.read_parquet(topics).to_dict(orient="records")
-        if topics.endswith(".yaml"): 
-            with open(topics, 'r') as file:
-                return list(yaml.safe_load(file).values())
-        if topics.endswith(".json"): 
-            with open(topics, 'r') as file:
-                return list(json.load(file).values())
-        raise ValueError(f"unsupported file type: {topics}")
-    return list(yaml.safe_load(topics).values())
+    # async def _save_article(self, domain: dict, metadata: Metadata, article: str, banner: bytes = None):
+    #     filename = random_filename(metadata.headline)
+    #     article_url = await asyncio.to_thread(self.cdn.upload_article, article, filename)
+    #     banner_url = None
+    #     if banner: banner_url = await asyncio.to_thread(self.cdn.upload_image, banner, filename)  
+    #     log.info("saved", extra={'source': domain[K_ID], 'num_items': 1})      
+    #     return ic(article_url, banner_url)
