@@ -32,7 +32,7 @@ class Orchestrator:
     async def _triage_collection_async(self, source: str, beans: list[Bean]):
         if not beans: return
 
-        chatters = [Chatter(**bean.chatter.model_dump(exclude={"shares"})) for bean in beans if bean and bean.chatter and bean.chatter.chatter_url]
+        chatters = [Chatter(**bean.chatter.model_dump(exclude={"shares"})) for bean in beans if (bean and bean.chatter and bean.chatter.chatter_url and len(bean.chatter.chatter_url)>=1)]
         if chatters: await asyncio.to_thread(self.db.store_chatters, chatters)
 
         # TODO: disabled for now
