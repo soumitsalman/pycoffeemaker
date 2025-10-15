@@ -304,6 +304,21 @@ class Orchestrator:
         except Exception as e:
             log.warning(f"compose article failed - {e}", extra={'source': domain[K_ID], 'num_items': 1}, exc_info=True)
 
+    async def publish_article(self, domain: dict, metadata: Metadata, body: str, banner: bytes = None):
+        async with aiohttp.ClientSession(base_url=self.publisher_conn[0], raise_for_status=True) as session:            
+            async with session.post("articles", json={
+                "id": random_filename(metadata.headline),
+                "title": metadata.headline,
+                "summary": metadata.question,
+                "content": body,
+                "format": "html",
+                "author": "Espresso AI",
+                "tags": [domain[K_ID]]+metadata.keywords
+            }) as resp:
+                res = await resp.json()                
+        if res: log.info("published", extra={'source': domain[K_ID], 'num_items': 1})      
+        else: log.warning("publish failed", extra={'source': domain[K_ID], 'num_items': 1})
+
     async def bulk_publish_articles(self, articles: list[tuple[dict, Metadata, str, bytes]]):
         published = []
         async with aiohttp.ClientSession(base_url=self.publisher_conn[0], raise_for_status=True) as session:
@@ -322,6 +337,11 @@ class Orchestrator:
                     log.info("published", extra={'source': domain[K_ID], 'num_items': 1})      
                     published.append(ic(res))
         return published
+    
+    async def _compose_and_publish(self, domain: dict):
+        article = await self.compose_article(domain)
+        if not article: log.info("no article", extra={'source': domain[K_ID], 'num_items': 1})
+        else: return await self.publish_article(domain, *article)
           
     async def run_async(self, domains):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -333,10 +353,9 @@ class Orchestrator:
             domain_embs = self.embedder([f"topic: {d.get(K_DESCRIPTION)}" for d in domains])
             for d, emb in zip(domains, domain_embs): d[K_EMBEDDING] = emb
 
-        articles = await asyncio.gather(*[self.compose_article(domain) for domain in domains])
-        published_urls = await self.bulk_publish_articles([(domain, *article) for domain, article in zip(domains, articles) if article])
-        log.info("composed and published", extra={"source": self.run_id, "num_items": len(published_urls)})
-        return published_urls
+        published = await asyncio.gather(*[self._compose_and_publish(domain) for domain in domains])
+        log.info("composed and published", extra={"source": self.run_id, "num_items": len(published)})
+        return published
 
 def _process_banner(banner):
     if hasattr(banner, "save"): 
