@@ -103,7 +103,7 @@ if __name__ == "__main__":
                 os.getenv("PUBLISHER_API_KEY")
             )
         )
-        orch.run(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml"))
+        asyncio.run(orch.run_async(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml")))
     elif mode == "REFRESHER":
         from coffeemaker.orchestrators.refresherorch import Orchestrator
         orch = Orchestrator(
