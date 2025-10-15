@@ -54,20 +54,21 @@ class Orchestrator:
         total = self.espresso_db.update_beans(chatter_stats)
         log.info("refreshed chatters", extra={'source': self.run_id, 'num_items': total})
 
-        publishers = self.master_db.query_publishers()
-        total = self.espresso_db.update_beans_adhoc(list(map(
-            lambda p: UpdateMany(
-                {
-                    models.K_SOURCE: p.source,
-                    "publisher": {"$exists": False}
-                }, 
-                {
-                    "$set": {"publisher": p.model_dump(exclude_unset=True, exclude_none=True)}
-                }
-            ), 
-            publishers
-        )))
-        log.info("refreshed publishers", extra={'source': self.run_id, 'num_items': total})
+        # NOTE: temporarily disabling publishers
+        # publishers = self.master_db.query_publishers()
+        # total = self.espresso_db.update_beans_adhoc(list(map(
+        #     lambda p: UpdateMany(
+        #         {
+        #             models.K_SOURCE: p.source,
+        #             "publisher": {"$exists": False}
+        #         }, 
+        #         {
+        #             "$set": {"publisher": p.model_dump(exclude_unset=True, exclude_none=True)}
+        #         }
+        #     ), 
+        #     publishers
+        # )))
+        # log.info("refreshed publishers", extra={'source': self.run_id, 'num_items': total})
 
         self.espresso_db.cleanup()  
         log.info("cleaned up espresso", extra={"source": self.run_id, "num_items": 1})
