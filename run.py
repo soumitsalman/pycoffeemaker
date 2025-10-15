@@ -90,21 +90,17 @@ if __name__ == "__main__":
     elif mode == "COMPOSER":
         from coffeemaker.orchestrators.composerorch import Orchestrator
         orch = Orchestrator(
-            db_conn=db_conn_str,
-            cdn_conn=(
-                os.getenv("PUBLICATIONS_S3_ENDPOINT") or os.getenv("DOSPACES_ENDPOINT"),
-                os.getenv("S3_ACCESS_KEY_ID") or os.getenv("DOSPACES_ACCESS_KEY"),
-                os.getenv("S3_SECRET_ACCESS_KEY") or os.getenv("DOSPACES_SECRET_KEY"),
-                os.getenv("PUBLICATIONS_S3_BUCKET") or os.getenv("DOSPACES_BUCKET"),
-                os.getenv("S3_REGION"),
-                os.getenv("PUBLICATIONS_PUBLIC_URL")
-            ),
+            db_conn=db_conn_str,           
             embedder_model=os.getenv("EMBEDDER_PATH"),
             analyst_model=os.getenv("ANALYST_MODEL"),
             writer_model=os.getenv("WRITER_MODEL"),
             composer_conn=(
                 os.getenv("COMPOSER_BASE_URL"),
                 os.getenv("COMPOSER_API_KEY")
+            ),
+            publisher_conn=(
+                os.getenv("PUBLISHER_BASE_URL"),
+                os.getenv("PUBLISHER_API_KEY")
             )
         )
         orch.run(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml"))

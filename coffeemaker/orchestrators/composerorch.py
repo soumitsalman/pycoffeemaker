@@ -309,7 +309,7 @@ class Orchestrator:
         async with aiohttp.ClientSession(base_url=self.publisher_conn[0], raise_for_status=True) as session:
             for a in articles:
                 domain, metadata, body, banner = a
-                async with session.post("espresso/articles", json={
+                async with session.post("articles", json={
                     "id": random_filename(metadata.headline),
                     "title": metadata.headline,
                     "summary": metadata.question,
@@ -320,7 +320,7 @@ class Orchestrator:
                 }) as resp:
                     res = await resp.json()                
                     log.info("published", extra={'source': domain[K_ID], 'num_items': 1})      
-                    published.append(res)
+                    published.append(ic(res))
         return published
           
     async def run_async(self, domains):
