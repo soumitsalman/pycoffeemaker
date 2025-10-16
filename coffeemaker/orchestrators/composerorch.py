@@ -304,38 +304,28 @@ class Orchestrator:
         except Exception as e:
             log.warning(f"compose article failed - {e}", extra={'source': domain[K_ID], 'num_items': 1}, exc_info=True)
 
-    async def publish_article(self, domain: dict, metadata: Metadata, body: str, banner: bytes = None):
-        async with aiohttp.ClientSession(base_url=self.publisher_conn[0], raise_for_status=True) as session:            
-            async with session.post("articles", json={
-                "id": random_filename(metadata.headline),
-                "title": metadata.headline,
-                "summary": metadata.question,
-                "content": body,
-                "format": "html",
-                "author": "Espresso AI",
-                "tags": [domain[K_ID]]+metadata.keywords
-            }) as resp:
-                res = await resp.json()                
+    async def _publish_article(self, session, domain: dict, metadata: Metadata, body: str, banner: bytes = None):
+        async with session.post("articles", json={
+            "id": random_filename(metadata.headline),
+            "title": metadata.headline,
+            "summary": metadata.question,
+            "content": body,
+            "type": "html",
+            "author": "barista@cafecito.tech",
+            "tags": [domain[K_ID]]+metadata.keywords
+        }) as resp:
+            res = await resp.json()                
         if res: log.info("published", extra={'source': domain[K_ID], 'num_items': 1})      
         else: log.warning("publish failed", extra={'source': domain[K_ID], 'num_items': 1})
+        return res
+
+    async def publish_article(self, domain: dict, metadata: Metadata, body: str, banner: bytes = None):
+        async with aiohttp.ClientSession(base_url=self.publisher_conn[0], headers={"X_API_KEY": self.publisher_conn[1] }, raise_for_status=True) as session:            
+            return await self._publish_article(session, domain, metadata, body, banner)
 
     async def bulk_publish_articles(self, articles: list[tuple[dict, Metadata, str, bytes]]):
-        published = []
-        async with aiohttp.ClientSession(base_url=self.publisher_conn[0], raise_for_status=True) as session:
-            for a in articles:
-                domain, metadata, body, banner = a
-                async with session.post("articles", json={
-                    "id": random_filename(metadata.headline),
-                    "title": metadata.headline,
-                    "summary": metadata.question,
-                    "content": body,
-                    "format": "html",
-                    "author": "Espresso AI",
-                    "tags": [domain[K_ID]]+metadata.keywords
-                }) as resp:
-                    res = await resp.json()                
-                    log.info("published", extra={'source': domain[K_ID], 'num_items': 1})      
-                    published.append(ic(res))
+        async with aiohttp.ClientSession(base_url=self.publisher_conn[0], headers={"X_API_KEY": self.publisher_conn[1] }, raise_for_status=True) as session:
+            published = await asyncio.gather(*[self._publish_article(session,*a) for a in articles])
         return published
     
     async def _compose_and_publish(self, domain: dict):
