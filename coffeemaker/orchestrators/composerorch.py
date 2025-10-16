@@ -1,3 +1,4 @@
+from itertools import count
 import os
 import aiohttp
 import requests
@@ -344,6 +345,7 @@ class Orchestrator:
             for d, emb in zip(domains, domain_embs): d[K_EMBEDDING] = emb
 
         published = await asyncio.gather(*[self._compose_and_publish(domain) for domain in domains])
+        published = [pub for pub in published if pub]
         log.info("composed and published", extra={"source": self.run_id, "num_items": len(published)})
         return published
 
