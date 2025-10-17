@@ -93,7 +93,7 @@ class Orchestrator:
 
         log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
         await self.run_collection_async(sources)
-        # self.run_trend_ranking() # trend rank from this collection if execution finished
+        self.db.close()
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 
     # def _get_collect_funcs(self, sources):

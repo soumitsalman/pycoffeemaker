@@ -93,7 +93,9 @@ class Orchestrator:
                 beans = self.embed_beans(beans)
                 total += len(beans)
             except Exception as e:
-                log.error(f"failed indexing - {e}", extra={"source": run_id, "num_items": len(beans)})        
+                log.error(f"failed indexing - {e}", extra={"source": run_id, "num_items": len(beans)})    
+                    
+        self.db.close()
         log.info("total indexed", extra={"source": run_id, "num_items": total})
 
     @log_runtime(logger=log)
@@ -114,6 +116,8 @@ class Orchestrator:
                 total += len(beans)
             except Exception as e:
                 log.error(f"failed digesting - {e}", extra={"source": run_id, "num_items": len(beans)})
+
+        self.db.close()
         log.info("total digested", extra={"source": run_id, "num_items": total})
 
 

@@ -100,3 +100,5 @@ class Orchestrator:
         with ThreadPoolExecutor(max_workers=2) as executor:
             executor.submit(self.sync_storage)
             executor.submit(self.port_contents)
+
+        self.db.close()

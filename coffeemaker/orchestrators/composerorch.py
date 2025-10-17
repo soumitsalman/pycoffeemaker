@@ -11,7 +11,7 @@ import logfire
 from coffeemaker.nlp import *
 from coffeemaker.pybeansack.cdnstore import *
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.warehouse import *
+from coffeemaker.pybeansack.warehouse_readonly import *
 from coffeemaker.pybeansack.utils import *
 from coffeemaker.orchestrators.utils import *
 from icecream import ic
@@ -23,14 +23,14 @@ log = logging.getLogger(__name__)
 
 EMBEDDER_CTX_LEN = 512
 COMPOSER_CTX_LEN = 32768
-LAST_NDAYS = 2
+LAST_NDAYS = 1
 
-MIN_BEANS_PER_TOPIC = int(os.getenv('MIN_BEANS_PER_TOPIC', 8))
+MIN_BEANS_PER_TOPIC = int(os.getenv('MIN_BEANS_PER_TOPIC', 4))
 MAX_BEANS_PER_TOPIC = int(os.getenv('MAX_BEANS_PER_TOPIC', 24))
 MAX_DISTANCE_PER_TOPIC = 0.2
 MIN_BEANS_PER_DOMAIN = int(os.getenv('MIN_BEANS_PER_DOMAIN', 24))
 MAX_BEANS_PER_DOMAIN = int(os.getenv('MAX_BEANS_PER_DOMAIN', 128))
-MAX_DISTANCE_PER_DOMAIN = 0.35
+MAX_DISTANCE_PER_DOMAIN = 0.3
 
 
 # OUTPUT=JSON;{"headlines":List<Headline>};Headline=String;Length<=20Words;
@@ -119,7 +119,7 @@ class Orchestrator:
         banner_conn: tuple[str, str] = None,
         publisher_conn: tuple[str, str] = None
     ):
-        self.db = initialize_db(db_conn)
+        self.db = Beansack(db_conn[0], db_conn[1])
 
         logfire.configure(token=os.getenv("PUBLICATIONS_LOGFIRE_TOKEN"))
         logfire.instrument_pydantic_ai()
@@ -166,19 +166,19 @@ class Orchestrator:
 
         self.publisher_conn = publisher_conn
 
-    async def _query_beans(self, kind: str, last_ndays: int, query_text: str, query_emb: list[float], distance: float, limit: int):
+    async def _query_beans(self, trending: bool, kind: str, last_ndays: int, query_text: str, query_emb: list[float], distance: float, limit: int):
         if not query_emb and query_text:           
             query_emb = self.embedder.embed_query(query_text)
 
         return await asyncio.to_thread(
-            self.db.query_processed_beans,
+            self.db.query_trending_beans if trending else self.db.query_processed_beans,
             kind=kind,
             created=ndays_ago(last_ndays),
             # categories=categories if not query_emb else None,
             embedding=query_emb,
             distance=distance if query_emb else None,
             limit=limit,
-            select=[K_URL, K_CREATED, K_GIST, K_CATEGORIES, K_SENTIMENTS]
+            columns=[K_URL, K_CREATED, K_GIST, K_CATEGORIES, K_SENTIMENTS]
         )      
     
     def _kmeans_cluster(self, beans)-> list[list[Bean]]:
@@ -239,7 +239,7 @@ class Orchestrator:
         # create headline, highlights, summary, prompt for image, tags
     
     async def _get_beans_for_domain(self, domain: dict):
-        beans = await self._query_beans(kind=NEWS, last_ndays=LAST_NDAYS, query_text=domain.get(K_DESCRIPTION), query_emb=domain.get(K_EMBEDDING), distance=MAX_DISTANCE_PER_DOMAIN, limit=MAX_BEANS_PER_DOMAIN)
+        beans = await self._query_beans(True, kind=NEWS, last_ndays=2, query_text=domain.get(K_DESCRIPTION), query_emb=domain.get(K_EMBEDDING), distance=MAX_DISTANCE_PER_DOMAIN, limit=MAX_BEANS_PER_DOMAIN)
         log.info("found beans", extra={'source': domain[K_ID], 'num_items': len(beans)})
         return beans if beans and len(beans) >= MIN_BEANS_PER_DOMAIN else None
 
@@ -249,7 +249,7 @@ class Orchestrator:
         return res.output
 
     async def _get_beans_for_topic(self, topic: str, emb: list[float] = None) -> list[Bean]:
-        beans = await self._query_beans(kind=NEWS, last_ndays=LAST_NDAYS, query_text=topic, query_emb=emb, distance=MAX_DISTANCE_PER_TOPIC, limit=MAX_BEANS_PER_TOPIC)
+        beans = await self._query_beans(False, kind=None, last_ndays=1, query_text=topic, query_emb=emb, distance=MAX_DISTANCE_PER_TOPIC, limit=MAX_BEANS_PER_TOPIC)
         log.info("found beans", extra={'source': topic, 'num_items': len(beans)})
         return beans if beans and len(beans) >= MIN_BEANS_PER_TOPIC else None
 
@@ -347,6 +347,8 @@ class Orchestrator:
         published = await asyncio.gather(*[self._compose_and_publish(domain) for domain in domains])
         published = [pub for pub in published if pub]
         log.info("composed and published", extra={"source": self.run_id, "num_items": len(published)})
+
+        self.db.close()
         return published
 
 def _process_banner(banner):
