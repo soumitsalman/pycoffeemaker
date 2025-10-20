@@ -244,7 +244,7 @@ class Orchestrator:
         return beans if beans and len(beans) >= MIN_BEANS_PER_DOMAIN else None
 
     async def _shortlist_topics(self, domain: dict, beans: list[Bean]):
-        prompt = f"Domain: {domain[K_ID]}\n\n\n" + "\n\n".join([b.digest() for b in beans])
+        prompt = f"Domain: {domain[K_DESCRIPTION]}\n\n\n" + "\n\n".join([b.digest() for b in beans])
         res = await self.analyst.run(prompt)
         return res.output
 
@@ -259,7 +259,7 @@ class Orchestrator:
         return res.output
 
     async def _write_main_content(self, domain: dict, reports: list[str]):
-        prompt = f"Domain: {domain[K_ID]}\n\n\n" + "\n\n=================\n\n".join(reports)
+        prompt = f"Domain: {domain[K_DESCRIPTION]}\n\n\n" + "\n\n=================\n\n".join(reports)
         res = await self.editor.run(prompt)
         return res.output
 
