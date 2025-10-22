@@ -89,13 +89,15 @@ services:
     mem_limit: 4g
 
   localpostgres:
-    image: postgres:17
+    image: postgres:17-alpine
     ports:
       - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=localpass
       - POSTGRES_DB=postgres
+    volumes:
+      - .postgres:/var/lib/postgresql/data
     networks:
       - coffeemaker-bridge
     cpus: 1
