@@ -2,8 +2,9 @@ sudo apt update
 sudo apt upgrade -y 
 sudo apt-get install -y software-properties-common
 sudo apt install -y python3 python3-venv python3-pip git
+cd ~
 git clone https://www.github.com/soumitsalman/pycoffeemaker.git
-cd pycoffeemaker/coffeemaker
+cd ~/pycoffeemaker/coffeemaker
 git clone https://www.github.com/soumitsalman/pybeansack.git
 git clone https://www.github.com/soumitsalman/nlp.git
 cd ~/pycoffeemaker
@@ -11,7 +12,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 pip install -r coffeemaker/pybeansack/requirements.txt
-pip install -r coffeemaker/nlp/requirements.txt
+
+curl https://install.duckdb.org | sh
 
 # sudo snap install go
 # go install github.com/peak/s5cmd/v2@v2.3.0
