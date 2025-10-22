@@ -242,29 +242,34 @@ def test_composer_orch():
         )
     )
 
-    domains = _parse_domains("/home/soumitsr/pycoffeemaker/factory/composer-topics.json")
-
-    topics = [
-        "Microsoft expands Copilot Studio with GPT‑5 and enterprise agent runtime",
-        "Nation-State Hackers Breach F5 Networks, Exfiltrate BIG‑IP Source Code and Vulnerability Data",
-        "Digital Marketing Spend Shifts Toward Direct Channels for Banks",
-        "October 2025 Government Shutdown Fires Over 4,500 Employees, Exposes RIF and Wage Issues",
-        "Deel Secures $300M Series E Funding, Valued at $17.3B Amid Talent and Pay Growth"
-    ]
+    domains = _parse_domains("/workspaces/beansack/pycoffeemaker/tests/composer-topics.json")   
 
     for domain in domains:
-        # print("============ DOMAIN:", domain["_id"], "=============")
+        print("============ DOMAIN:", domain["_id"], "=============")
+        res = asyncio.run(orch.compose_article(domain))
+        if not res:
+            print("No article composed")
+        else:
+            print(res[1])
+            print("Title:", res[0].headline)
+            print("Tags:", res[0].keywords)
         # res = asyncio.run(orch._get_beans_for_domain(domain))
         # [print(bean.digest(),"\n------------------------------") for bean in res]
-        res = asyncio.run(orch._get_beans_for_domain(domain))
-        print(domain["_id"], ":", len(res) if res else 0)
+        # res = asyncio.run(orch._get_beans_for_domain(domain))
+        # print(domain["_id"], ":", len(res) if res else 0)
 
-
+     # topics = [
+    #     "Microsoft expands Copilot Studio with GPT‑5 and enterprise agent runtime",
+    #     "Nation-State Hackers Breach F5 Networks, Exfiltrate BIG‑IP Source Code and Vulnerability Data",
+    #     "Digital Marketing Spend Shifts Toward Direct Channels for Banks",
+    #     "October 2025 Government Shutdown Fires Over 4,500 Employees, Exposes RIF and Wage Issues",
+    #     "Deel Secures $300M Series E Funding, Valued at $17.3B Amid Talent and Pay Growth"
+    # ]
     # for topic in topics:
     #     print("TOPIC:", topic)
     #     res = asyncio.run(
     #         orch._query_beans(
-    #             kind=None,python
+    #             kind=None,
     #             last_ndays=1,
     #             query_text=f"Topic: {topic}",
     #             query_emb=None,
@@ -302,15 +307,10 @@ def test_readonly_warehouse():
     [print(bean.digest()) for bean in beans]
 
 def test_dbcache():
-    from dbcache.api import kvstore
-
-    
+    from dbcache.api import kvstore    
     cache = kvstore(os.getenv('PG_CONNECTION_STRING'))
     # cache.set("current_snapshot", 15509)
     print(cache.get("current_snapshot")+10)
-
-
-
     
 import argparse
 import subprocess

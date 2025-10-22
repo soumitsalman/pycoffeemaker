@@ -1,7 +1,7 @@
 from itertools import count
 import os
 import aiohttp
-import requests
+import re
 import yaml
 import json
 import asyncio
@@ -23,80 +23,126 @@ log = logging.getLogger(__name__)
 
 EMBEDDER_CTX_LEN = 512
 COMPOSER_CTX_LEN = 32768
-LAST_NDAYS = 1
+LAST_NDAYS = int(os.getenv('COMPOSER_BEANS_LAST_NDAYS', 1))
 
 MIN_BEANS_PER_TOPIC = int(os.getenv('MIN_BEANS_PER_TOPIC', 4))
 MAX_BEANS_PER_TOPIC = int(os.getenv('MAX_BEANS_PER_TOPIC', 24))
 MAX_DISTANCE_PER_TOPIC = 0.2
 MIN_BEANS_PER_DOMAIN = int(os.getenv('MIN_BEANS_PER_DOMAIN', 24))
 MAX_BEANS_PER_DOMAIN = int(os.getenv('MAX_BEANS_PER_DOMAIN', 128))
-MAX_DISTANCE_PER_DOMAIN = 0.3
-
+MAX_DISTANCE_PER_DOMAIN = 0.27
 
 # OUTPUT=JSON;{"headlines":List<Headline>};Headline=String;Length<=20Words;
 ANALYST_INSTRUCTIONS = """
 ROLE=NewsAnalyst;
-TASK=Extract Top 3 - 7 Topic Headlines
-INPUT=Domain:String\n\nList<NewsString>;NewsString=Format<U:Date;P:KeyPoints|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;C:Categories|...;S:Sentiment|...>
+TASK=Extract Top 3 - 7 Headlines
+INPUT=Topic:String\n\nList<NewsString>;NewsString=Format<U:Date;P:KeyPoints|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;C:Categories|...;S:Sentiment|...>
 OUTPUT=JSON
 INSTRUCTIONS:
-1.AnalyzeArticles;UseFields=U,P,E,D,N;GenerateTopicHeadlines=Dynamic,Specific,Granular;Cluster=SemanticSimilarity;Avoid=GenericCategoriesFromC;AllowMultiTagging=True
-2.CountFrequency;Frequency=NumArticlesPerTopic
-3.FilterFrequency=Min2;KeepTopics=Frequency>=2
-5.Headline=Length<=20Words;Avoid=Clickbait,Sensationalism,Ambiguity,Vagueness;Tone=Neutral,Informative,Objective;IncludeKeywords;Keywords=Specific,Searchable,Entities,Phrases;MinimizeFalsePositives=True
+1.AnalyzeArticles;UseFields=U,P,E,D,N;GenerateHeadlines=Dynamic,Specific,Granular;Cluster=SemanticSimilarity;Avoid=GenericCategoriesFromC;AllowMultiTagging=True
+2.CountFrequency;Frequency=NumArticlesPerHeadline
+3.FilterFrequency=Min2,TopicAdherence;KeepHeadlines=Frequency>=2,TopicAdherence=Strict
+5.Headline=Length<=25Words;Avoid=Clickbait,Sensationalism,Ambiguity,Vagueness;Tone=Neutral,Informative,Objective;IncludeKeywords;Keywords=Specific,Searchable,Entities,Phrases;MinimizeFalsePositives=True
 EXAMPLE_OUTPUT={"headlines":["Headline1","Headline2"]}
 """
 
 COLUMNIST_INSTRUCTIONS = f"""
-ROLE=NewsColumist;
-TASK=WriteTechnicalReport;  
+ROLE=Columnist;
+TASK=WriteTechnicalReport; 
 TODAYS_DATE: {datetime.now().strftime('%Y-%m-%d')}     
 INPUT=Topic:String\n\nList<NewsString>;NewsString=Format<U:Date;P:KeyPoints|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;C:Categories|...;S:Sentiment|...>
+OUTPUT=TechnicalReport;Markdown;IncludeBodyOnly=True;ContentLength<600Words;en-US
 STEPS:
-    1. ANALYZE=AnalyzeDatastreams;UseFields:U,P,E,D,R,N,S;
-    2. IDENTIFY=Patterns,Themes,Insights,EmergingTrends,Tone,Predictions;
-    3. GROUNDING=Normative,MultiNews;
-    4. FOCUS=TopicRelevance;
-    5. INCLUDE=influential events, emerging trends, important data points, market predictions and verdict.
-    6. [OPTIONAL] Show side-by-side comparison of conflicting viewpoints and data
-    7. PHRASING=1st-person,direct,technical,factual,data-centric;
-    8. AVOID=speculative,narrative,emotive language;
-    9. TONE=identified-tone;
-    10. CONTENT_LENGTH<=700Words;
+    1. ANALYZE=AnalyzeDatastreams;UseFields:U,P,E,D,R,N,S
+    2. IDENTIFY=Patterns,Themes,Insights,EmergingTrends,Predictions
+    3. GROUNDING=Normative,MultiNews
+    4. FOCUS=TopicRelevance
+    5. INCLUDE=Events,DataPoints,Trends,AnalyzedPatterns,SpecifiedPredictions
+    6. OPTIONAL_INCLUDE=If conflicting viewpoints or data -> show comparison; else -> skip
+    7. OPTIONAL_INCLUDE=If time-based trends or evolution of events (based on U field) -> show the timeline progression analysis; else -> skip
+    8. PHRASING=direct,technical,factual,data-centric,1st-person
+    9. REMOVE=speculative,narrative,emotive language
 """
 
 EDITOR_INSTRUCTIONS = f"""
-ROLE=NewsEditor;
-TASK=WriteSectionEditorial;
-TODAYS_DATE: {datetime.now().strftime('%Y-%m-%d')}
-INPUT=Domain:String\n\n\nTechnicalReports:List<String>
-OUTPUT=HTML;IncludeBodyOnly=True
+ROLE=Editor;
+TASK=WriteOpinionPiece;
+INPUT=TechnicalReport;
+OUTPUT=OP-ED;HTML;IncludeBodyOnly=True;en-US
 STEPS:
-    1. CONTENT_SOURCE=Use the technical reports as the ONLY assertable source of authoritative information;    
-    2. CONTENT_STRUCTURE=Leverage HTML syntax to optimize the layout and structure for better readability and flow;
-    3. FOCUS=DomainRelevance;
-    4. [OPTIONAL] Show side-by-side comparison of conflicting viewpoints and data
-    5. PHRASING=1st-person,direct,technical,factual,data-centric
-    6. AVOID=speculative,narrative,emotive language,self-describing verbiage, input references;
-    7. CLEANUP=Remove inconsistent narratives, self-contradictory statements, incomplete sentences, headers like 'Introduction' and 'Conclusion'
-    8. CONTENT_LENGTH<=1000Words
+    - REMOVE=SelfReferencingLines,RedundantInformation,RepetitiveStatements,OffTopicContent,InconsistentNarratives,SelfContradictoryStatements,IncompleteSentences,NonContentBearingSections,ReportTitle,ReportDate,IntroductoryPhrases,ConclusionPhrases;
+    - REMOVE_SAMPLES
+        - I’ve sifted through independent feeds ...
+        - I tried to keep this concise ...
+        - My analysis draws exclusively from ...
+        - I note that the 20 Oct 2025 ...
+        - My assessment of the October 2025 ...
+        - By the author, 21 Oct 2025 – 670 words ...
+        - Prepared 10 Oct 2025 – Technical Briefing
+        - AWS Outage – Technical Report (10 Oct 2025)
+        - Conflicting Viewpoints: The data are not contradictory ...
+        - Subject: OpenAI’s claim that ...
+    - MAINTAIN=DataCentricity,TechnicalDetails
+    - REFINE=ContentStructure,SectionLayout->ReadabilityOptimized,OP-EDStyle
+    - REFINE=SectionHeaderPhrasing->SearchEngineOptimized
+    - REFINE=Table,Timeline->MobileRenderingOptimized
+    - REMOVE=SectionHeader->Introduction,Conclusion,Verdict,ConflictingViewpoints;
+    - REMOVE=Speculative,Narrative,Emotive Verbiage
 """
 
-# OUTPUT=JSON;{"headline":String,"question":String,"highlights":List<String>,"keywords":List<String>,"banner_prompt":String}
 SYNTHESIZER_INSTRUCTIONS = """
 ROLE=NewsSynthesizer;
-TASK=Extract Headline,Question,Highlights,Keywords,BannerPrompt;
-INPUT=Article(HTML)
+TASK=CreateHeadline,Question,Keywords
+INPUT=ListOfEventHighlights
 OUTPUT=JSON
-1. headline: One line capturing the primary who, what, whom and where. Length <= 20 Words.
-2. question: A specific question that the article addresses. Length <= 20 Words
-3. highlights (List<String>): Top 5 main events, trends and takeaways
-4. keywords (List<String>): Top 5 names of people, organizations, geographic regions
-5. banner_prompt: A prompt that can be passed on to a text-to-image LLM for generating article banner. Length <= 20 Words
+1. headline (String): One linear news/podcast headline capturing the primary subjects, actions, objects and location of the events. Length < 25 Words
+2. question (String): A precision question answer to which results in the INPUT news highlights. Length < 25 Words
+3. keywords (List<String>): Name of top 2-5 people, organizations, geographic regions
+"""
+
+# PROMPT DATE: 10-21-2025
+# EDITOR_INSTRUCTIONS = f"""
+# ROLE=Editor;
+# TASK=WriteSectionEditorial;
+# TODAYS_DATE: {datetime.now().strftime('%Y-%m-%d')}
+# INPUT=Domain:String\n\n\nTechnicalReports:List<String>
+# OUTPUT=HTML;IncludeBodyOnly=True
+# STEPS:
+#     1. CONTENT_SOURCE=Use the technical reports as the ONLY assertable source of authoritative information;    
+#     2. CONTENT_STRUCTURE=Leverage HTML syntax to optimize the layout and structure for better readability and flow;
+#     3. FOCUS=DomainRelevance;
+#     4. [OPTIONAL] Show side-by-side comparison of conflicting viewpoints and data
+#     5. PHRASING=1st-person,direct,technical,factual,data-centric
+#     6. AVOID=speculative,narrative,emotive language,self-describing verbiage, input references;
+#     7. CLEANUP=Remove inconsistent narratives, self-contradictory statements, incomplete sentences, headers like 'Introduction' and 'Conclusion'
+#     8. CONTENT_LENGTH<=1000Words
+# """
+
+#PROMPT DATE: 10-21-2025
+# SYNTHESIZER_INSTRUCTIONS = """
+# ROLE=NewsSynthesizer;
+# TASK=Extract Headline,Question,Highlights,Keywords,BannerPrompt;
+# INPUT=Article(HTML)
+# OUTPUT=JSON
+# 1. headline: One line capturing the primary who, what, whom and where. Length <= 20 Words.
+# 2. question: A specific question that the article addresses. Length <= 20 Words
+# 3. highlights (List<String>): Top 5 main events, trends and takeaways
+# 4. keywords (List<String>): Top 5 names of people, organizations, geographic regions
+# 5. banner_prompt: A prompt that can be passed on to a text-to-image LLM for generating article banner. Length <= 20 Words
+# """
+
+ARTICLE_TEMPLATE = """
+<details style="border:1px solid lightgray;border-radius:8px;padding:8px;">
+    <summary style="font-weight: bold;">TL;DR</summary>
+    <ul>
+        {highlights}
+    </ul>
+</details>
+{reports}
 """
 
 class ShortlistedTopics(BaseModel):
-    headlines: list[str] = Field(description="List of shortlisted headlines. each headline length <= 20 Words")
+    headlines: list[str] = Field(description="List of shortlisted headlines. each headline length <= 25 Words")
 
 class Orchestrator:
     db: Beansack
@@ -134,7 +180,7 @@ class Orchestrator:
         writer_model = OpenAIChatModel(
             writer_model, 
             provider=composer_provider, 
-            settings=ModelSettings(temperature=0.6, timeout=120, seed=666)
+            settings=ModelSettings(temperature=0.3, timeout=120, seed=666)
         )
 
         self.analyst = Agent(
@@ -173,13 +219,12 @@ class Orchestrator:
         return await asyncio.to_thread(
             self.db.query_trending_beans if trending else self.db.query_processed_beans,
             kind=kind,
-            created=ndays_ago(last_ndays),
-            # categories=categories if not query_emb else None,
+            last_ndays=ndays_ago(last_ndays),
             embedding=query_emb,
             distance=distance if query_emb else None,
             limit=limit,
-            columns=[K_URL, K_CREATED, K_GIST, K_CATEGORIES, K_SENTIMENTS]
-        )      
+            columns=DIGEST_COLUMNS
+        )  
     
     def _kmeans_cluster(self, beans)-> list[list[Bean]]:
         from sklearn.cluster import KMeans
@@ -239,32 +284,34 @@ class Orchestrator:
         # create headline, highlights, summary, prompt for image, tags
     
     async def _get_beans_for_domain(self, domain: dict):
-        beans = await self._query_beans(True, kind=NEWS, last_ndays=2, query_text=domain.get(K_DESCRIPTION), query_emb=domain.get(K_EMBEDDING), distance=MAX_DISTANCE_PER_DOMAIN, limit=MAX_BEANS_PER_DOMAIN)
+        beans = await self._query_beans(True, kind=NEWS, last_ndays=LAST_NDAYS, query_text=domain.get(K_DESCRIPTION), query_emb=domain.get(K_EMBEDDING), distance=MAX_DISTANCE_PER_DOMAIN, limit=MAX_BEANS_PER_DOMAIN)
         log.info("found beans", extra={'source': domain[K_ID], 'num_items': len(beans)})
         return beans if beans and len(beans) >= MIN_BEANS_PER_DOMAIN else None
 
     async def _shortlist_topics(self, domain: dict, beans: list[Bean]):
-        prompt = f"Domain: {domain[K_DESCRIPTION]}\n\n\n" + "\n\n".join([b.digest() for b in beans])
+        prompt = f"Topic: {domain[K_DESCRIPTION]}\n\n\n" + "\n\n".join([b.digest() for b in beans])
         res = await self.analyst.run(prompt)
         return res.output
 
     async def _get_beans_for_topic(self, topic: str, emb: list[float] = None) -> list[Bean]:
-        beans = await self._query_beans(False, kind=None, last_ndays=1, query_text=topic, query_emb=emb, distance=MAX_DISTANCE_PER_TOPIC, limit=MAX_BEANS_PER_TOPIC)
+        beans = await self._query_beans(False, kind=None, last_ndays=LAST_NDAYS, query_text=topic, query_emb=emb, distance=MAX_DISTANCE_PER_TOPIC, limit=MAX_BEANS_PER_TOPIC)
         log.info("found beans", extra={'source': topic, 'num_items': len(beans)})
         return beans if beans and len(beans) >= MIN_BEANS_PER_TOPIC else None
 
     async def _write_report(self, topic: str, beans: list[Bean]):        
         prompt = f"Topic: {topic}\n\n\n" + "\n\n".join([b.digest() for b in beans])
-        res = await self.columnist.run(prompt)
-        return res.output
+        draft = await self.columnist.run(prompt)
+        if not draft.output: return
+        report = await self.editor.run(draft.output)
+        return report.output
 
-    async def _write_main_content(self, domain: dict, reports: list[str]):
-        prompt = f"Domain: {domain[K_DESCRIPTION]}\n\n\n" + "\n\n=================\n\n".join(reports)
-        res = await self.editor.run(prompt)
-        return res.output
+    # async def _write_main_content(self, domain: dict, reports: list[str]):
+    #     prompt = f"Domain: {domain[K_DESCRIPTION]}\n\n\n" + "\n\n=================\n\n".join(reports)
+    #     res = await self.editor.run(prompt)
+    #     return res.output
 
-    async def _synthesize_content(self, article: str):        
-        res = await self.synthesizer.run(article)
+    async def _synthesize_content(self, content: str):        
+        res = await self.synthesizer.run(content)
         return res.output
 
     async def _create_banner(self, banner_query: str):
@@ -273,33 +320,38 @@ class Orchestrator:
 
     async def compose_article(self, domain: dict):
         try:
-            beans = await self._get_beans_for_domain(domain)
-            if not beans: return
-            topics = await self._shortlist_topics(domain, beans)
+            analyst_beans = await self._get_beans_for_domain(domain)
+            if not analyst_beans: return
+            topics = await self._shortlist_topics(domain, analyst_beans)
             log.info("shortlisted topics", extra={'source': domain[K_ID], 'num_items': len(topics.headlines)})
             if not topics.headlines: return
 
             topic_embs = self.embedder([f"topic: {t}" for t in topics.headlines])
-            beans_list = await asyncio.gather(*[self._get_beans_for_topic(topic, emb) for topic, emb in zip(topics.headlines, topic_embs)])
-            beans_list = [beans for beans in beans_list if beans]
-            if not beans_list: return
-            reports = await asyncio.gather(*[self._write_report(topic, beans) for topic, beans in zip(topics.headlines, beans_list)])
+            columnist_beans = await asyncio.gather(*[self._get_beans_for_topic(topic, emb) for topic, emb in zip(topics.headlines, topic_embs)])
+            columnist_beans = [(headline, beans) for headline, beans in zip(topics.headlines, columnist_beans) if beans]
+            if not columnist_beans: return
+
+            reports = await asyncio.gather(*[self._write_report(headline, beans) for headline, beans in columnist_beans])
             reports = [report for report in reports if report]
             log.info("created reports", extra={'source': domain[K_ID], 'num_items': len(reports)})
             if not reports: return
             
-            body = await self._write_main_content(domain, reports)
-            log.info("created body", extra={'source': domain[K_ID], 'num_items': 1})            
-            if not body: return
+            # body = await self._write_main_content(domain, reports)
+            # log.info("created body", extra={'source': domain[K_ID], 'num_items': 1})            
+            # if not body: return
 
-            metadata = await self._synthesize_content(body)
+            metadata = await self._synthesize_content(str([headline for headline, _ in columnist_beans]))
             log.info("synthesized metadata", extra={'source': domain[K_ID], 'num_items': 1})
             
             banner = None
-            if self.sketcher and metadata.banner_prompt: 
-                banner = await self._create_banner(metadata.banner_prompt)
-                log.info("created banner", extra={'source': domain[K_ID], 'num_items': 1})
-
+            # if self.sketcher and metadata.banner_prompt: 
+            #     banner = await self._create_banner(metadata.banner_prompt)
+            #     log.info("created banner", extra={'source': domain[K_ID], 'num_items': 1})
+            body = ARTICLE_TEMPLATE.format(
+                highlights="\n".join([f"<li>{hl}</li>" for hl in topics.headlines]),
+                # cleaning up body tags
+                reports="\n".join([re.sub(r'<body[^>]*>', '', report).replace("</body>", "") for report in reports])
+            )
             return (metadata, body, banner)
 
         except Exception as e:
