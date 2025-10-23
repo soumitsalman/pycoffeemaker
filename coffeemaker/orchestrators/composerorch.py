@@ -30,7 +30,7 @@ MAX_BEANS_PER_TOPIC = int(os.getenv('MAX_BEANS_PER_TOPIC', 24))
 MAX_DISTANCE_PER_TOPIC = 0.2
 MIN_BEANS_PER_DOMAIN = int(os.getenv('MIN_BEANS_PER_DOMAIN', 24))
 MAX_BEANS_PER_DOMAIN = int(os.getenv('MAX_BEANS_PER_DOMAIN', 128))
-MAX_DISTANCE_PER_DOMAIN = 0.27
+MAX_DISTANCE_PER_DOMAIN = 0.3
 
 # OUTPUT=JSON;{"headlines":List<Headline>};Headline=String;Length<=20Words;
 ANALYST_INSTRUCTIONS = """
@@ -87,7 +87,7 @@ STEPS:
     - REFINE=HeaderPhrasing->SearchEngineOptimized
     - REMOVE=Headers->Introduction,Conclusion,Verdict,ConflictingViewpoints;
     - REMOVE=Speculative,Narrative,Emotive Verbiage
-    - HTML_TAGS=OPEDHeader-><h1>,SectionHeaders-><h2>,Tables->MobileViewOptimized,Timelines->MobileViewOptimized
+    - HTML_TAGS=OPEDHeader-><h2>,SectionHeaders-><h1>,Tables->MobileViewOptimized,Timelines->MobileViewOptimized
 """
 
 SYNTHESIZER_INSTRUCTIONS = """
@@ -132,12 +132,12 @@ OUTPUT=JSON
 # """
 
 ARTICLE_TEMPLATE = """
-<details style="border:1px solid lightgray;border-radius:8px;padding:8px;">
-    <summary style="font-weight: bold;">TL;DR</summary>
+<section style="border:1px solid lightgray;border-radius:8px;padding:8px;">
+    <h4>TL;DR</h4>
     <ul>
         {highlights}
     </ul>
-</details>
+</section>
 {reports}
 """
 
