@@ -35,9 +35,10 @@ MAX_DISTANCE_PER_DOMAIN = 0.3
 # OUTPUT=JSON;{"headlines":List<Headline>};Headline=String;Length<=20Words;
 ANALYST_INSTRUCTIONS = """
 ROLE=NewsAnalyst;
-TASK=Extract Top 3 - 7 Headlines
+TASK=ExtractHeadlines
 INPUT=Topic:String\n\nList<NewsString>;NewsString=Format<U:Date;P:KeyPoints|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;C:Categories|...;S:Sentiment|...>
-OUTPUT=JSON;{"headlines":["Headline1","Headline2"]}
+OUTPUT=JSON;
+- headlines (List<String>): Top 3 - 7 headline statements.
 INSTRUCTIONS:
 1.AnalyzeArticles;UseFields=U,P,E,D,N;GenerateHeadlines=Dynamic,Specific,Granular;Cluster=SemanticSimilarity;Avoid=GenericCategoriesFromC;AllowMultiTagging=True
 2.CountFrequency;Frequency=NumArticlesPerHeadline
@@ -68,10 +69,10 @@ EDITOR_INSTRUCTIONS = f"""
 ROLE=Editor;
 TASK=WriteOpinionPiece;
 INPUT=DraftTechnicalReport;
-OUTPUT=OP-ED;HTML;IncludeBodyOnly=True;en-US
-STEPS:
-    - REMOVE=SelfReferencingLines,RedundantInformation,RepetitiveStatements,OffTopicContent,InconsistentNarratives,SelfContradictoryStatements,IncompleteSentences,NonContentBearingSections,ReportTitle,ReportDate,IntroductoryPhrases,ConclusionPhrases;
-    - REMOVE_SAMPLES
+OUTPUT=OP-ED;HTML;IncludeBodyOnly=True;en-US;ContentLength<450Words;
+STEPS=
+    - REMOVE:SelfReferencingLines,RedundantInformation,RepetitiveStatements,OffTopicContent,InconsistentNarratives,SelfContradictoryStatements,IncompleteSentences,NonContentBearingSections,ReportTitle,ReportDate,IntroductoryPhrases,ConclusionPhrases;
+    - REMOVE_SAMPLES:
         - I’ve sifted through independent feeds ...
         - I tried to keep this concise ...
         - My analysis draws exclusively from ...
@@ -82,12 +83,11 @@ STEPS:
         - AWS Outage – Technical Report (10 Oct 2025)
         - Conflicting Viewpoints: The data are not contradictory ...
         - Subject: OpenAI’s claim that ...
-    - MAINTAIN=DataCentricity,TechnicalDetails
-    - REFINE=ContentStructure,SectionLayout->ReadabilityOptimized,OP-EDStyle
-    - REFINE=HeaderPhrasing->SearchEngineOptimized
-    - REMOVE=Headers->Introduction,Conclusion,Verdict,ConflictingViewpoints;
-    - REMOVE=Speculative,Narrative,Emotive Verbiage
-    - HTML_TAGS=OPEDHeader-><h2>,SectionHeaders-><h3>,Tables->MobileViewOptimized,Timelines->MobileViewOptimized
+        - Recent announcements (22 Oct 2025) describe a ...
+    - MAINTAIN:TechnicalDetails;DataCentricity
+    - REFINE:ContentStructure,ContentPhrasing=OP-EDStyle;SectionLayout=ReadFlowOptimized;HeaderPhrasing=SearchEngineOptimized;Lists=ParagraphInterpretation;Tables=DataClarityOptimized;Timelines=ChronologicalOrder
+    - REMOVE:SectionHeaders=Introduction,Conclusion,Verdict,ConflictingViewpoints,ExecutiveSummary;Verbiage=Speculative,Narrative,EmotiveStatements
+    - HTML_TAGS:OPEDHeader=<h2>;SectionHeaders=<h3>;Tables=<div flex>;Timelines=<ul>;Lists=<p>
 """
 
 SYNTHESIZER_INSTRUCTIONS = """
