@@ -37,13 +37,13 @@ ANALYST_INSTRUCTIONS = """
 ROLE=NewsAnalyst;
 TASK=Extract Top 3 - 7 Headlines
 INPUT=Topic:String\n\nList<NewsString>;NewsString=Format<U:Date;P:KeyPoints|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;C:Categories|...;S:Sentiment|...>
-OUTPUT=JSON
+OUTPUT=JSON;{"headlines":["Headline1","Headline2"]}
 INSTRUCTIONS:
 1.AnalyzeArticles;UseFields=U,P,E,D,N;GenerateHeadlines=Dynamic,Specific,Granular;Cluster=SemanticSimilarity;Avoid=GenericCategoriesFromC;AllowMultiTagging=True
 2.CountFrequency;Frequency=NumArticlesPerHeadline
-3.FilterFrequency=Min2,TopicAdherence;KeepHeadlines=Frequency>=2,TopicAdherence=Strict
+3.MeasureTopicAdherence;TopicAdherence=SemanticAndThematicRelevanceToTopic
+4.Filter=FrequencyMin2,TopicAdherenceHigh;KeepHeadlines=Frequency>=2,TopicAdherence=Strict
 5.Headline=Length<=25Words;Avoid=Clickbait,Sensationalism,Ambiguity,Vagueness;Tone=Neutral,Informative,Objective;IncludeKeywords;Keywords=Specific,Searchable,Entities,Phrases;MinimizeFalsePositives=True
-EXAMPLE_OUTPUT={"headlines":["Headline1","Headline2"]}
 """
 
 COLUMNIST_INSTRUCTIONS = f"""
@@ -67,7 +67,7 @@ STEPS:
 EDITOR_INSTRUCTIONS = f"""
 ROLE=Editor;
 TASK=WriteOpinionPiece;
-INPUT=TechnicalReport;
+INPUT=DraftTechnicalReport;
 OUTPUT=OP-ED;HTML;IncludeBodyOnly=True;en-US
 STEPS:
     - REMOVE=SelfReferencingLines,RedundantInformation,RepetitiveStatements,OffTopicContent,InconsistentNarratives,SelfContradictoryStatements,IncompleteSentences,NonContentBearingSections,ReportTitle,ReportDate,IntroductoryPhrases,ConclusionPhrases;
@@ -84,10 +84,10 @@ STEPS:
         - Subject: OpenAI’s claim that ...
     - MAINTAIN=DataCentricity,TechnicalDetails
     - REFINE=ContentStructure,SectionLayout->ReadabilityOptimized,OP-EDStyle
-    - REFINE=SectionHeaderPhrasing->SearchEngineOptimized
-    - REFINE=Table,Timeline->MobileRenderingOptimized
-    - REMOVE=SectionHeader->Introduction,Conclusion,Verdict,ConflictingViewpoints;
+    - REFINE=HeaderPhrasing->SearchEngineOptimized
+    - REMOVE=Headers->Introduction,Conclusion,Verdict,ConflictingViewpoints;
     - REMOVE=Speculative,Narrative,Emotive Verbiage
+    - HTML_TAGS=OPEDHeader-><h1>,SectionHeaders-><h2>,Tables->MobileViewOptimized,Timelines->MobileViewOptimized
 """
 
 SYNTHESIZER_INSTRUCTIONS = """
