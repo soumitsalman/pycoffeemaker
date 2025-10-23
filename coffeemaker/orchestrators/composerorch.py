@@ -87,7 +87,7 @@ STEPS:
     - REFINE=HeaderPhrasing->SearchEngineOptimized
     - REMOVE=Headers->Introduction,Conclusion,Verdict,ConflictingViewpoints;
     - REMOVE=Speculative,Narrative,Emotive Verbiage
-    - HTML_TAGS=OPEDHeader-><h2>,SectionHeaders-><h1>,Tables->MobileViewOptimized,Timelines->MobileViewOptimized
+    - HTML_TAGS=OPEDHeader-><h2>,SectionHeaders-><h3>,Tables->MobileViewOptimized,Timelines->MobileViewOptimized
 """
 
 SYNTHESIZER_INSTRUCTIONS = """
