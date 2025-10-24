@@ -85,9 +85,9 @@ STEPS=
         - Subject: OpenAI’s claim that ...
         - Recent announcements (22 Oct 2025) describe a ...
     - MAINTAIN:TechnicalDetails;DataCentricity
-    - REFINE:ContentStructure,ContentPhrasing=OP-EDStyle;SectionLayout=ReadFlowOptimized;HeaderPhrasing=SearchEngineOptimized;Lists=ParagraphInterpretation;Tables=DataClarityOptimized;Timelines=ChronologicalOrder
+    - REFINE:ContentStructure,ContentPhrasing=OP-EDStyle;SectionLayout=ReadFlowOptimized;HeaderPhrasing=SearchEngineOptimized;Timelines=ChronologicalOrder;CorrectArithmaticErrors;
     - REMOVE:SectionHeaders=Introduction,Conclusion,Verdict,ConflictingViewpoints,ExecutiveSummary;Verbiage=Speculative,Narrative,EmotiveStatements
-    - HTML_TAGS:OPEDHeader=<h2>;SectionHeaders=<h3>;Tables=<div flex>;Timelines=<ul>;Lists=<p>
+    - HTML_TAGS:OPEDHeader=<h2>;SectionHeaders=<h3>;Tables=<ul>;Timelines=<ul>;
 """
 
 SYNTHESIZER_INSTRUCTIONS = """
@@ -294,7 +294,7 @@ class Orchestrator:
         return res.output
 
     async def _get_beans_for_topic(self, topic: str, emb: list[float] = None) -> list[Bean]:
-        beans = await self._query_beans(False, kind=None, last_ndays=LAST_NDAYS, query_text=topic, query_emb=emb, distance=MAX_DISTANCE_PER_TOPIC, limit=MAX_BEANS_PER_TOPIC)
+        beans = await self._query_beans(False, kind=None, last_ndays=LAST_NDAYS+1, query_text=topic, query_emb=emb, distance=MAX_DISTANCE_PER_TOPIC, limit=MAX_BEANS_PER_TOPIC)
         log.info("found beans", extra={'source': topic, 'num_items': len(beans)})
         return beans if beans and len(beans) >= MIN_BEANS_PER_TOPIC else None
 

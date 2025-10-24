@@ -14,6 +14,7 @@ pip install -r requirements.txt
 pip install -r coffeemaker/pybeansack/requirements.txt
 
 curl https://install.duckdb.org | sh
+echo "export PATH='/home/soumitsr/.duckdb/cli/latest':\$PATH" >> ~/.bashrc
 
 # sudo snap install go
 # go install github.com/peak/s5cmd/v2@v2.3.0
