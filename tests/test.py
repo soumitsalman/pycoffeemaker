@@ -352,7 +352,9 @@ def test_warehousev2():
             with ThreadPoolExecutor(max_workers=30) as executor:
                 executor.map(query, vecs)
             # list(map(query, vecs))
-    if True: run_vector_query()
+    if False: run_vector_query()
+
+    if True: ic(db.query_aggregated_chatters(updated=ndays_ago(7), limit=16))
 
     db.close()
 
