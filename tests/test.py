@@ -281,8 +281,6 @@ def test_composer_orch():
     #     print("==============================\n")
 
   
-
-
 def test_refresher_orch():
     from coffeemaker.orchestrators.refresherorch import Orchestrator
     orch = Orchestrator(
@@ -306,6 +304,39 @@ def test_readonly_warehouse():
     beans = db.query_processed_beans(limit=5, columns = [K_URL, K_CREATED, "gist", "categories", "sentiments"])
     [print(bean.digest()) for bean in beans]
 
+def test_warehousev2():
+    from coffeemaker.pybeansack.warehousev2 import Beansack
+    from coffeemaker.pybeansack.models import K_URL, K_CREATED, K_CONTENT, Bean
+    from coffeemaker.collectors.collector import APICollector, parse_sources
+    from coffeemaker.nlp.src import embedders, agents
+   
+    db = Beansack(
+        catalogdb="sqlite:.test/beansack/catalogdb.db",
+        storagedb=".test/beansack/storage",
+        factory_dir="factory"
+    )
+    col = APICollector(batch_size=128)
+    sources = parse_sources(f"{os.path.dirname(__file__)}/sources-2.yaml")
+    embedder = embedders.from_path(os.getenv('EMBEDDER_PATH'), EMBEDDER_CONTEXT_LEN)
+    
+    async def run_collector():
+        async with col:
+            for rss in sources['rss'][:5]:
+                beans = await col.collect_rssfeed_async(rss)
+                ic(db.store_beans(beans))
+    # asyncio.run(run_collector())
+
+    def run_indexer():
+        while beans := db.query_latest_beans(exprs=["embedding IS NULL", "content_length >= 10"], limit=8, select = [K_URL, K_CONTENT, K_CREATED]):
+            vecs = embedder.embed_documents([bean.content for bean in beans])
+            beans = [Bean(url=bean.url, embedding=vec) for bean, vec in zip(beans, vecs) if vec]
+            ic(db.update_beans(beans, columns=[K_EMBEDDING]))
+    # run_indexer()
+
+    ic(db.update_classifications())
+    ic(db.update_clusters())
+    db.close()
+
 def test_dbcache():
     from dbcache.api import kvstore    
     cache = kvstore(os.getenv('PG_CONNECTION_STRING'))
@@ -328,6 +359,7 @@ parser.add_argument("--runcomposer", action="store_true", help="Test composer or
 parser.add_argument("--runrefresher", action="store_true", help="Test refresher orchestrator")
 parser.add_argument("--dbcache", action="store_true", help="Test dbcache")
 parser.add_argument("--readonly", action="store_true", help="Test readonly warehouse")
+parser.add_argument("--warehousev2", action="store_true", help="Test warehouse v2")
 
 # parser.add_argument("--test-fullstack-orch", action="store_true", help="Test fullstack orchestrator")
 # parser.add_argument("--create-test-data-file", metavar="OUTPUT_PATH", help="Create test data file at OUTPUT_PATH")
@@ -364,6 +396,8 @@ def main():
         test_dbcache()
     if args.readonly:
         test_readonly_warehouse()
+    if args.warehousev2:
+        test_warehousev2()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:
