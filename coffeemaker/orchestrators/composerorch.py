@@ -389,7 +389,7 @@ class Orchestrator:
     async def run_async(self, domains):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
-        domains = _parse_domains(domains)
+        domains = parse_topics(domains)
 
         # create vectors if there is none
         if any(K_EMBEDDING not in d for d in domains):
@@ -410,7 +410,7 @@ def _process_banner(banner):
         return filename
     return banner
 
-def _parse_domains(topics: list|dict|str):
+def parse_topics(topics: list|dict|str):
     if isinstance(topics, list): return topics
     if isinstance(topics, dict): return list(topics.values())
     if os.path.exists(topics):

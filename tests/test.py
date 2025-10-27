@@ -221,7 +221,7 @@ def test_digestor_orch():
     orch.run_digestor()
 
 def test_composer_orch():
-    from coffeemaker.orchestrators.composerorch import Orchestrator, _parse_domains
+    from coffeemaker.orchestrators.composerorch import Orchestrator, parse_topics
     from coffeemaker.nlp.src.models import Metadata
 
     orch = Orchestrator(
@@ -242,7 +242,7 @@ def test_composer_orch():
         )
     )
 
-    domains = _parse_domains("/workspaces/beansack/pycoffeemaker/tests/composer-topics.json")   
+    domains = parse_topics("/workspaces/beansack/pycoffeemaker/tests/composer-topics.json")   
 
     for domain in domains:
         print("============ DOMAIN:", domain["_id"], "=============")
@@ -305,10 +305,12 @@ def test_readonly_warehouse():
     [print(bean.digest()) for bean in beans]
 
 def test_warehousev2():
-    from coffeemaker.pybeansack.warehousev2 import Beansack
+    from coffeemaker.pybeansack.warehousev2 import Beansack, DIGEST_COLUMNS
     from coffeemaker.pybeansack.models import K_URL, K_CREATED, K_CONTENT, Bean
     from coffeemaker.collectors.collector import APICollector, parse_sources
+    from coffeemaker.orchestrators.composerorch import parse_topics
     from coffeemaker.nlp.src import embedders, agents
+    from tqdm import tqdm
    
     db = Beansack(
         catalogdb="sqlite:.test/beansack/catalogdb.db",
@@ -324,17 +326,34 @@ def test_warehousev2():
             for rss in sources['rss'][:5]:
                 beans = await col.collect_rssfeed_async(rss)
                 ic(db.store_beans(beans))
-    # asyncio.run(run_collector())
+    if False: asyncio.run(run_collector())
 
     def run_indexer():
         while beans := db.query_latest_beans(exprs=["embedding IS NULL", "content_length >= 10"], limit=8, select = [K_URL, K_CONTENT, K_CREATED]):
             vecs = embedder.embed_documents([bean.content for bean in beans])
             beans = [Bean(url=bean.url, embedding=vec) for bean, vec in zip(beans, vecs) if vec]
             ic(db.update_beans(beans, columns=[K_EMBEDDING]))
-    # run_indexer()
+    if False: run_indexer()
 
-    ic(db.update_classifications())
-    ic(db.update_clusters())
+    if False: ic(db.refresh_classifications())
+    if False: ic(db.refresh_clusters())
+
+    def run_vector_query():
+        topics = parse_topics("/workspaces/beansack/pycoffeemaker/tests/composer-topics.json")
+        vecs = embedder.embed_documents([topic[K_DESCRIPTION] for topic in topics])*100
+        
+        def query(vec):
+            limit = random.randint(24,256)
+            beans=db.query_trending_beans(updated=ndays_ago(7), embedding=vec, distance=0.3, limit=limit, columns=DIGEST_COLUMNS)
+            pbar.update(1)
+            # ic(limit, len(beans))
+        
+        with tqdm(total=len(vecs)) as pbar:
+            with ThreadPoolExecutor(max_workers=30) as executor:
+                executor.map(query, vecs)
+            # list(map(query, vecs))
+    if True: run_vector_query()
+
     db.close()
 
 def test_dbcache():
