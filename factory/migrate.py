@@ -60,7 +60,7 @@ def register_parquets(catalogdb: str, storagedb: str, factory_dir: str = "factor
         parquet_dir = root_dir / table
         filenames = list(os.scandir(parquet_dir))
         log.info(f"Found {len(filenames)} parquet files in {table}")
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=56) as executor:
             executor.map(lambda filename: register_file(beansack, filename), filenames)
             
     beansack.close()
@@ -71,5 +71,5 @@ if __name__ == "__main__":
     factory = os.getenv("FACTORY_DIR")
     if not catalog:
         log.warning("PG_CONNECTION_STRING not set; Beansack will try to initialize without a catalog.")
-    register_parquets(catalog, ".beansackv2", factory)
+    register_parquets(catalog, storage, factory)
     # compact_files(".beansack", ".beansackv2")

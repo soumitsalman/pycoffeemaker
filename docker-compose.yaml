@@ -97,7 +97,7 @@ services:
       - POSTGRES_PASSWORD=localpass
       - POSTGRES_DB=postgres
     volumes:
-      - .postgres:/var/lib/postgresql/data
+      - ./.postgresql/data:/var/lib/postgresql/data
     networks:
       - coffeemaker-bridge
     cpus: 1
