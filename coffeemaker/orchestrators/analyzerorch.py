@@ -4,7 +4,7 @@ import os
 import logging
 from concurrent.futures import ThreadPoolExecutor
 # from pymongo import UpdateOne
-from coffeemaker.pybeansack import mongosack, warehousev2 as warehouse
+from coffeemaker.pybeansack import warehouse
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.utils import *
 from coffeemaker.nlp import embedders, agents, Digest, DIGEST_SYSTEM_PROMPT
@@ -47,22 +47,22 @@ class Orchestrator:
         )
         self.batch_size = batch_size
     
-    def embed_beans(self, beans: list[BeanCore]) -> list[BeanEmbedding]|None:   
+    def embed_beans(self, beans: list[Bean]) -> list[Bean]|None:   
         if not beans: return beans
 
         # this is a cpu heavy calculation. run it on the main thread and let the nlp take care of it
         embeddings = self.embedder.embed_documents([bean.content or bean.summary for bean in beans])
-        embs = [BeanEmbedding(url=b.url, embedding=e) for b, e in zip(beans, embeddings) if e]
+        embs = [Bean(url=b.url, embedding=e) for b, e in zip(beans, embeddings) if e]
         self.db.update_beans(embs, [K_EMBEDDING])
         log.info("embedded", extra={"source": beans[0].source, "num_items": len(beans)})
-        return beans  
-        
-    def digest_beans(self, beans: list[BeanCore]) -> list[BeanGist]|None:
+        return beans
+
+    def digest_beans(self, beans: list[Bean]) -> list[Bean]|None:
         if not beans: return beans
 
         # this is a cpu heavy calculation. run it on the main thread and let the nlp take care of it
         digests = self.digestor.run_batch([bean.content for bean in beans])
-        gists = [BeanGist(url=b.url, gist=d.raw, regions=d.regions, entities=d.entities) for b, d in zip(beans, digests) if d and d.raw]
+        gists = [Bean(url=b.url, gist=d.raw, regions=d.regions, entities=d.entities) for b, d in zip(beans, digests) if d and d.raw]
         self.db.update_beans(gists, [K_GIST, K_REGIONS, K_ENTITIES])
         log.info("digested", extra={"source": beans[0].source, "num_items": len(gists)})
 
@@ -73,7 +73,7 @@ class Orchestrator:
             beans = self.db.query_latest_beans(
                 exprs=filter,
                 limit=self.batch_size,
-                columns=[K_URL, K_CREATED, K_CONTENT]
+                columns=[K_URL, K_CREATED, K_CONTENT, K_SOURCE]
             )            
             if beans: yield beans
             else: break

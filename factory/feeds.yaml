@@ -182,7 +182,6 @@ sources:
   - https://alanwinfield.blogspot.com/feeds/posts/default?alt=rss
   - https://alanwu.space/index.xml
   - https://alaskapublic.org/index.rss
-  - https://albertapolitics.ca/feed/
   - https://alec-c4.com/rss.xml
   - https://alethonews.com/feed/
   - https://alex-jacobs.com/index.xml
@@ -1627,9 +1626,6 @@ sources:
   - https://inclouds.space/feed.rss
   - https://indepthnews.net/feed/
   - https://indepthnh.org/feed/
-  - https://indiandefencereview.com/feed/
-  - https://indianopinion.org/feed/
-  - https://indiantinker.bearblog.dev/feed/?type=rss
   - https://industrydecarbonization.com/rss.xml
   - https://infiniteundo.com/rss
   - https://infisical.com/feed.xml
@@ -5029,8 +5025,6 @@ sources:
   - https://www.zmescience.com/feed/
   - https://www.zocalopublicsquare.org/feed/
   - https://www.zonehero.io/index.xml
-  - https://wyborcza.pl/pub/rss/gazetawyborcza_kraj.xml
-  - https://wyborcza.pl/pub/rss/najnowsze_wyborcza.xml
   - https://wyofile.com/feed/
   - https://x64dbg.com/blog/atom.xml
   - https://xeiaso.net/blog.rss

@@ -11,7 +11,7 @@ import logfire
 from coffeemaker.nlp import *
 from coffeemaker.pybeansack.cdnstore import *
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.warehousev2 import *
+from coffeemaker.pybeansack.warehouse import *
 from coffeemaker.pybeansack.utils import *
 from coffeemaker.orchestrators.utils import *
 from icecream import ic

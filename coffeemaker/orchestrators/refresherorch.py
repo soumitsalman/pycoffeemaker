@@ -96,9 +96,7 @@ class Orchestrator:
         # NOTE: skipping cleanup for now as it is too aggressive
         self.master_db.cleanup()
         log.info("cleaned up warehouse", extra={"source": self.run_id, "num_items": 1})
-        
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            executor.submit(self.sync_storage)
-            executor.submit(self.port_contents)
 
-        self.db.close()
+        self.port_contents()
+
+        self.master_db.close()

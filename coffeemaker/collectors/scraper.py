@@ -108,7 +108,7 @@ class WebScraperLite:
             bean.image_url = bean.image_url or result.get("top_image") 
             bean.author = result.get("author") or bean.author
             bean.created = min(result.get("published_time") or bean.created, bean.collected)            
-            bean.publisher.title = result.get('site_name')
+            bean.publisher.site_name = result.get('site_name')
             bean.publisher.favicon = result.get('favicon')
             bean.publisher.rss_feed = result.get("rss_feed")
            

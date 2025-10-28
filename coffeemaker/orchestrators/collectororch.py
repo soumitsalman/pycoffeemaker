@@ -43,7 +43,7 @@ class Orchestrator:
         # if publishers: await asyncio.to_thread(self.db.store_publishers, publishers)
 
         # filtering out new beans        
-        beans = await asyncio.to_thread(self.db.deduplicate, "bean_cores", "url", beans)
+        beans = await asyncio.to_thread(self.db.deduplicate, "beans", "url", beans)
         if beans: await self.store_beans_async(source, storables(beans))
        
         return scrapables(beans)
@@ -51,13 +51,14 @@ class Orchestrator:
     async def _triage_scrape_async(self, source: str, beans: list[Bean]):
         beans = storables(beans)
         log.info("scraped", extra={"source": source, "num_items": len(beans)})
-        beans = await asyncio.to_thread(self.db.deduplicate, "bean_cores", "url", beans)
+        beans = await asyncio.to_thread(self.db.deduplicate, "beans", "url", beans)
         if beans: return await self.store_beans_async(source, beans)
 
     async def store_beans_async(self, source: str, beans: list[Bean]):
         if not beans: return       
+        prev_count = await asyncio.to_thread(self.db.count_items, "beans")
         items = await asyncio.to_thread(self.db.store_beans, cores(beans))
-        count = len(items) if items else 0
+        count = (await asyncio.to_thread(self.db.count_items, "beans")) - prev_count
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count
         return beans
