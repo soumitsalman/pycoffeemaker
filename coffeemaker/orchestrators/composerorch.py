@@ -11,7 +11,7 @@ import logfire
 from coffeemaker.nlp import *
 from coffeemaker.pybeansack.cdnstore import *
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.warehouse_readonly import *
+from coffeemaker.pybeansack.warehousev2 import *
 from coffeemaker.pybeansack.utils import *
 from coffeemaker.orchestrators.utils import *
 from icecream import ic
@@ -216,15 +216,23 @@ class Orchestrator:
         if not query_emb and query_text:           
             query_emb = self.embedder.embed_query(query_text)
 
-        return await asyncio.to_thread(
-            self.db.query_trending_beans if trending else self.db.query_processed_beans,
+        trending_beans = lambda: self.db.query_trending_beans(
             kind=kind,
-            last_ndays=ndays_ago(last_ndays),
+            updated=ndays_ago(last_ndays),
             embedding=query_emb,
             distance=distance if query_emb else None,
             limit=limit,
             columns=DIGEST_COLUMNS
-        )  
+        )
+        latest_beans = lambda: self.db.query_latest_beans(
+            kind=kind,
+            created=ndays_ago(last_ndays),
+            embedding=query_emb,
+            distance=distance if query_emb else None,
+            limit=limit,
+            columns=DIGEST_COLUMNS
+        )
+        return await asyncio.to_thread(trending_beans if trending else latest_beans)  
     
     def _kmeans_cluster(self, beans)-> list[list[Bean]]:
         from sklearn.cluster import KMeans

@@ -4,7 +4,7 @@ import asyncio
 import random
 from concurrent.futures import ThreadPoolExecutor
 from icecream import ic
-from coffeemaker.pybeansack import mongosack, warehouse
+from coffeemaker.pybeansack import mongosack, warehousev2 as warehouse
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
 from coffeemaker.orchestrators.utils import *
@@ -56,7 +56,7 @@ class Orchestrator:
 
     async def store_beans_async(self, source: str, beans: list[Bean]):
         if not beans: return       
-        items = await asyncio.to_thread(self.db.store_cores, cores(beans))
+        items = await asyncio.to_thread(self.db.store_beans, cores(beans))
         count = len(items) if items else 0
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count

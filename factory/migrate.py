@@ -78,26 +78,26 @@ def migrate_from_v1_to_v2(v1_conn, v2_conn):
 
     batch_size = 1<<16
 
-    if False:
+    if True:
         for offset in range(0, ic(v1db.count_items("bean_cores")), batch_size):
             res = v1db.get_items("bean_cores", offset=offset, limit=batch_size)
             target_db.store_beans([Bean(**row) for row in res])
             ic(offset)
 
-    if False:
+    if True:
         for offset in range(0, ic(v1db.count_items("bean_embeddings")), batch_size):
             res = v1db.get_items("bean_embeddings", offset=offset, limit=batch_size)
             target_db.update_beans([Bean(**row) for row in res], columns=["embedding"])
-            target_db.update_classifications()
+            target_db.refresh_classifications()
             ic(offset)
 
-    if False:
+    if True:
         for offset in range(0, ic(v1db.count_items("bean_gists")), batch_size):
             res = v1db.get_items("bean_gists", offset=offset, limit=batch_size)
             target_db.update_beans([Bean(**{k:v for k,v in row.items() if v}) for row in res], columns=["gist", "regions", "entities"])
             ic(offset)
 
-    if False:  
+    if True:  
         for offset in range(0, ic(v1db.count_items("chatters")), batch_size):
             res = v1db.get_items("chatters", offset=offset, limit=batch_size)
             target_db.store_chatters([Chatter(**row) for row in res])
@@ -130,5 +130,5 @@ if __name__ == "__main__":
 
     migrate_from_v1_to_v2(
         (os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH")),
-        ("sqlite:/workspaces/beansack/pycoffeemaker/.test/beansack/catalogdb.db", "/workspaces/beansack/pycoffeemaker/.test/beansack/storage/"),
+        (os.getenv("TARGET_PG_CONNECTION_STRING"), os.getenv("TARGET_STORAGE_DATAPATH")),
     )

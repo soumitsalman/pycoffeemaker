@@ -4,7 +4,7 @@ import os
 import logging
 from concurrent.futures import ThreadPoolExecutor
 # from pymongo import UpdateOne
-from coffeemaker.pybeansack import mongosack, warehouse
+from coffeemaker.pybeansack import mongosack, warehousev2 as warehouse
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.utils import *
 from coffeemaker.nlp import embedders, agents, Digest, DIGEST_SYSTEM_PROMPT
@@ -24,7 +24,7 @@ index_storables = lambda beans: [bean for bean in beans if bean.embedding]
 digest_storables = lambda beans: [bean for bean in beans if bean.gist]
 
 class Orchestrator:
-    db: warehouse.Beansack|mongosack.Beansack = None
+    db: warehouse.Beansack = None
     dbworker = None
     backup_container = None    
 
@@ -53,7 +53,7 @@ class Orchestrator:
         # this is a cpu heavy calculation. run it on the main thread and let the nlp take care of it
         embeddings = self.embedder.embed_documents([bean.content or bean.summary for bean in beans])
         embs = [BeanEmbedding(url=b.url, embedding=e) for b, e in zip(beans, embeddings) if e]
-        self.db.store_embeddings(embs)
+        self.db.update_beans(embs, [K_EMBEDDING])
         log.info("embedded", extra={"source": beans[0].source, "num_items": len(beans)})
         return beans  
         
@@ -63,16 +63,17 @@ class Orchestrator:
         # this is a cpu heavy calculation. run it on the main thread and let the nlp take care of it
         digests = self.digestor.run_batch([bean.content for bean in beans])
         gists = [BeanGist(url=b.url, gist=d.raw, regions=d.regions, entities=d.entities) for b, d in zip(beans, digests) if d and d.raw]
-        self.db.store_gists(gists)
+        self.db.update_beans(gists, [K_GIST, K_REGIONS, K_ENTITIES])
         log.info("digested", extra={"source": beans[0].source, "num_items": len(gists)})
 
         return gists
     
     def stream_beans(self, filter):
         while True:
-            beans = self.db.query_unprocessed_beans(
-                filter,
-                limit=self.batch_size
+            beans = self.db.query_latest_beans(
+                exprs=filter,
+                limit=self.batch_size,
+                columns=[K_URL, K_CREATED, K_CONTENT]
             )            
             if beans: yield beans
             else: break

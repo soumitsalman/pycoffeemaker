@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import subprocess
-from coffeemaker.pybeansack import mongosack, warehouse, utils, models
+from coffeemaker.pybeansack import mongosack, warehousev2 as warehouse, utils, models
 from pymongo import UpdateMany
 from dbcache.api import kvstore
 from .utils import *
