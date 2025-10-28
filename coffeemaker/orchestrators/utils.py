@@ -74,6 +74,6 @@ def initialize_azblobstore(azstorage_conn_str, container_name):
 merge_tags = lambda *args: list(set(item.lower() for arg in args if arg for item in arg))
 
 def initialize_db(conn: tuple[str, str]):
-    from coffeemaker.pybeansack import mongosack, warehousev2 as warehouse
+    from coffeemaker.pybeansack import mongosack, warehouse
     if conn[0].startswith("mongodb"): return mongosack.Beansack(conn[0], conn[1])
     else: return warehouse.Beansack(catalogdb=conn[0], storagedb=conn[1], factory_dir=os.getenv('FACTORY_DIR', '../factory'))
