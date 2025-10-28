@@ -6,7 +6,7 @@ az login
 
 RESOURCE_GROUP_NAME="coffeemaker-rg"
 STORAGE_ACCOUNT_NAME="coffeemakerstorage"
-FILE_SHARE_NAME="beansack-devex"
+FILE_SHARE_NAME="beansack-prod"
 
 # This command assumes you have logged in with az login
 HTTP_ENDPOINT=$(az storage account show \
@@ -30,7 +30,7 @@ sudo mkdir -p $MNT_PATH
 
 # Create a folder to store the credentials for this storage account and
 # any other that you might set up.
-CREDENTIAL_ROOT=".az/smbcredentials"
+CREDENTIAL_ROOT=".az"
 sudo mkdir -p $CREDENTIAL_ROOT
 
 # Get the storage account key for the indicated storage account.
