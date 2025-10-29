@@ -4,7 +4,7 @@ import asyncio
 import random
 from concurrent.futures import ThreadPoolExecutor
 from icecream import ic
-from coffeemaker.pybeansack import mongosack, warehousev2 as warehouse
+from coffeemaker.pybeansack import mongosack, warehouse
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
 from coffeemaker.orchestrators.utils import *
@@ -22,7 +22,7 @@ storables = lambda beans: [bean for bean in beans if not is_scrapable(bean)]
 cores = lambda beans: [BeanCore(**bean.model_dump()) for bean in beans if bean and bean.title]
 
 class Orchestrator:
-    db: warehouse.Beansack|mongosack.Beansack = None
+    db: warehouse.Beansack = None
     run_total: int = 0
 
     def __init__(self, db_conn_str: tuple[str,str], batch_size: int = BATCH_SIZE):
@@ -57,7 +57,7 @@ class Orchestrator:
     async def store_beans_async(self, source: str, beans: list[Bean]):
         if not beans: return       
         prev_count = await asyncio.to_thread(self.db.count_items, "beans")
-        items = await asyncio.to_thread(self.db.store_beans, cores(beans))
+        await asyncio.to_thread(self.db.store_beans, cores(beans))
         count = (await asyncio.to_thread(self.db.count_items, "beans")) - prev_count
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count
