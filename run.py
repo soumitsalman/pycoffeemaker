@@ -64,29 +64,29 @@ if __name__ == "__main__":
     
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
-        orch = Orchestrator(
-            db_conn_str=db_conn_str,
+        orch = Orchestrator(db_conn_str=db_conn_str)
+        asyncio.run(orch.run_async(
+            os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
             batch_size=batch_size
-        )
-        asyncio.run(orch.run_async(os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml")))
+        ))
     elif mode == "INDEXER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
-        orch = Orchestrator(
-            db_conn_str=db_conn_str,
+        orch = Orchestrator(db_conn_str=db_conn_str)
+        orch.run_indexer(
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
             batch_size=batch_size
         )
-        orch.run_indexer()
+        orch.close()
     elif mode == "DIGESTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
-        orch = Orchestrator(
-            db_conn_str=db_conn_str,
+        orch = Orchestrator(db_conn_str=db_conn_str)
+        orch.run_digestor(
             digestor_path=os.getenv("DIGESTOR_PATH"), 
             digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)),
             batch_size=batch_size
         )
-        orch.run_digestor()
+        orch.close()
     elif mode == "COMPOSER":
         from coffeemaker.orchestrators.composerorch import Orchestrator
         orch = Orchestrator(

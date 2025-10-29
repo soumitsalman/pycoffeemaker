@@ -25,9 +25,8 @@ class Orchestrator:
     db: warehouse.Beansack = None
     run_total: int = 0
 
-    def __init__(self, db_conn_str: tuple[str,str], batch_size: int = BATCH_SIZE):
+    def __init__(self, db_conn_str: tuple[str,str]):
         self.db = initialize_db(db_conn_str)
-        self.batch_size = batch_size     
 
     async def _triage_collection_async(self, source: str, beans: list[Bean]):
         if not beans: return
@@ -64,7 +63,7 @@ class Orchestrator:
         return beans
 
     @log_runtime_async(logger=log)
-    async def run_collection_async(self, sources):   
+    async def run_collection_async(self, sources, batch_size):   
         def get_collection_tasks():
             tasks = []
             for source_type, source_paths in parse_sources(sources).items():
@@ -84,16 +83,16 @@ class Orchestrator:
             except Exception as e:
                 log.warning(f"collection failed - {e.__class__.__name__} {e}", extra={"source": source, "num_items": 1})
 
-        async with APICollector(self.batch_size) as apicollector, WebScraperLite(self.batch_size) as webscraper:
+        async with APICollector(batch_size) as apicollector, WebScraperLite(batch_size) as webscraper:
             await asyncio.gather(*[collect(source, func) for source, func in get_collection_tasks()])    
 
     @log_runtime_async(logger=log)
-    async def run_async(self, sources):
+    async def run_async(self, sources, batch_size: int = BATCH_SIZE):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.run_total = 0        
 
         log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
-        await self.run_collection_async(sources)
+        await self.run_collection_async(sources, batch_size=batch_size)
         self.db.close()
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 
