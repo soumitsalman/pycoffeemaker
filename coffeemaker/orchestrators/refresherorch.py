@@ -30,7 +30,7 @@ class Orchestrator:
         total = 0
         for offset in range(0, max_offset, batch_size):
             # TODO: in future add a fixed list of sources
-            beans = self.master_db.query_processed_beans(
+            beans = self.master_db.query_latest_beans(
                 created=utils.ndays_ago(PORT_WINDOW),
                 offset=offset,
                 limit=batch_size
@@ -39,7 +39,7 @@ class Orchestrator:
             total += self.espresso_db.store_beans(beans)
         log.info("refreshed beans", extra={'source': self.run_id, 'num_items': total})
 
-        chatter_stats = self.master_db.query_bean_chatters(
+        chatter_stats = self.master_db.query_aggregated_chatters(
             collected=utils.ndays_ago(PORT_WINDOW),
             limit=batch_size
         )
@@ -98,6 +98,6 @@ class Orchestrator:
         log.info("cleaned up warehouse", extra={"source": self.run_id, "num_items": 1})
 
         self.port_contents()
-        # self.syncdf_storage()
+        # self.sync_storage()
 
         self.master_db.close()
