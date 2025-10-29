@@ -165,7 +165,7 @@ class Orchestrator:
         banner_conn: tuple[str, str] = None,
         publisher_conn: tuple[str, str] = None
     ):
-        self.db = Beansack(db_conn[0], db_conn[1])
+        self.db = initialize_db(db_conn)
 
         logfire.configure(token=os.getenv("PUBLICATIONS_LOGFIRE_TOKEN"))
         logfire.instrument_pydantic_ai()
