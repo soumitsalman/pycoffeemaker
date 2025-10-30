@@ -32,6 +32,11 @@ class Orchestrator:
             # TODO: in future add a fixed list of sources
             beans = self.master_db.query_latest_beans(
                 created=utils.ndays_ago(PORT_WINDOW),
+                exprs=[
+                    "GIST IS NOT NULL",
+                    "CATEGORIES IS NOT NULL",
+                    "CLUSTER_ID IS NOT NULL"
+                ],
                 offset=offset,
                 limit=batch_size
             )
@@ -40,7 +45,7 @@ class Orchestrator:
         log.info("refreshed beans", extra={'source': self.run_id, 'num_items': total})
 
         chatter_stats = self.master_db.query_aggregated_chatters(
-            collected=utils.ndays_ago(PORT_WINDOW),
+            updated=utils.ndays_ago(PORT_WINDOW),
             limit=batch_size
         )
         chatter_stats = [

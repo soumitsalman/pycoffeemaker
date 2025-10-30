@@ -31,7 +31,7 @@ def _embed(embedder: embedders.Embeddings, beans: list[Bean]) -> list[Bean]|None
     if not beans: return None
 
     vecs = embedder.embed_documents([bean.content for bean in beans])
-    embs = [Bean(url=b.url, embedding=e) for b, e in zip(beans, vecs) if e]
+    embs = [Bean(url=b.url, source=b.source, embedding=e) for b, e in zip(beans, vecs) if e]
     log.info("embedded", extra={"source": beans[0].source, "num_items": len(embs)})
     return embs
 
@@ -40,7 +40,7 @@ def _digest(digestor: agents.Text2TextAgent, beans: list[Bean]) -> list[Bean]|No
 
     # this is a cpu heavy calculation. run it on the main thread and let the nlp take care of it
     gists = digestor.run_batch([bean.content for bean in beans])
-    digests = [Bean(url=b.url, gist=d.raw, regions=d.regions, entities=d.entities) for b, d in zip(beans, gists) if d and d.raw]
+    digests = [Bean(url=b.url, source=b.source, gist=d.raw, regions=d.regions, entities=d.entities) for b, d in zip(beans, gists) if d and d.raw]
     log.info("digested", extra={"source": beans[0].source, "num_items": len(digests)})
     return digests
 

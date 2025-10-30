@@ -93,11 +93,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=localpass
-      - POSTGRES_DB=postgres
-    volumes:
-      - ./.postgresql/data:/var/lib/postgresql/data
+      - POSTGRES_USER=doadmin
+      - POSTGRES_PASSWORD=eatabagofdicks
+      - POSTGRES_DB=test_beansackdb0
     networks:
       - coffeemaker-bridge
     cpus: 1
