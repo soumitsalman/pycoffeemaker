@@ -132,9 +132,11 @@ class Orchestrator:
                 self.update_queue.task_done()
     
     def _update(self, beans: list[Bean], columns: list[str]):
-        """Add update task to queue"""
-        if beans:
-            self.update_queue.put((beans, columns))
+        # """Add update task to queue"""
+        # if beans:
+        #     self.update_queue.put((beans, columns))
+        self.db.update_beans(beans, columns)
+        log.info("updated", extra={"source": beans[0].source, "num_items": len(beans)})
     
     def _wait_for_updates(self):        
         """Wait for all pending database updates to complete"""
