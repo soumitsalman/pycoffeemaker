@@ -292,7 +292,7 @@ class Orchestrator:
         # create headline, highlights, summary, prompt for image, tags
     
     async def _get_beans_for_domain(self, domain: dict):
-        beans = await self._query_beans(True, kind=NEWS, last_ndays=LAST_NDAYS, query_text=domain.get(K_DESCRIPTION), query_emb=domain.get(K_EMBEDDING), distance=MAX_DISTANCE_PER_DOMAIN, limit=MAX_BEANS_PER_DOMAIN)
+        beans = await self._query_beans(False, kind=NEWS, last_ndays=LAST_NDAYS, query_text=domain.get(K_DESCRIPTION), query_emb=domain.get(K_EMBEDDING), distance=MAX_DISTANCE_PER_DOMAIN, limit=MAX_BEANS_PER_DOMAIN)
         log.info("found beans", extra={'source': domain[K_ID], 'num_items': len(beans)})
         return beans if beans and len(beans) >= MIN_BEANS_PER_DOMAIN else None
 
