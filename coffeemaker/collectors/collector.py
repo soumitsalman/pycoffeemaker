@@ -191,8 +191,8 @@ class APICollector:
         entry_link = urljoin(source_url, entry.link)
         source = extract_source(entry_link)
 
-        if 'slash_comments' in entry: chatter = Chatter(
-            chatter_url=entry.get('wfw_commentrss', urljoin(entry_link, "#comments")),
+        if entry.get('wfw_commentrss'): chatter = Chatter(
+            chatter_url=entry.get('wfw_commentrss'),
             url=entry_link,
             source=source,
             collected=current_time,

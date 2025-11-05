@@ -31,12 +31,9 @@ class Orchestrator:
     async def _triage_collection_async(self, source: str, beans: list[Bean]):
         if not beans: return
 
-        try:
-            chatters = [bean.chatter for bean in beans if bean and bean.chatter and bean.chatter.chatter_url]
-            chatters = [Chatter(**chatter.model_dump(exclude={"shares"})) for chatter in chatters]
-            if chatters: await asyncio.to_thread(self.db.store_chatters, chatters)
-        except Exception as e:
-            ic(chatters)
+        chatters = [bean.chatter for bean in beans if bean and bean.chatter]
+        if chatters: await asyncio.to_thread(self.db.store_chatters, chatters)
+
         # TODO: disabled for now
         # publishers = [bean.publisher for bean in beans if bean and bean.publisher]
         # if publishers: await asyncio.to_thread(self.db.store_publishers, publishers)
@@ -92,7 +89,9 @@ class Orchestrator:
         self.run_total = 0        
 
         log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
+        self.db.refresh_chatter_aggregates()
         await self.run_collection_async(sources, batch_size=batch_size)
+        self.db.refresh_chatter_aggregates()
         self.db.close()
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 

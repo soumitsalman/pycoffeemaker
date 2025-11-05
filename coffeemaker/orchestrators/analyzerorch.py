@@ -155,8 +155,12 @@ class Orchestrator:
         total = self.embed_beans(beans, embedder_path, embedder_context_len, batch_size)
         
         # Wait for all pending updates to complete
-        self.update_queue.put(END_OF_QUEUE)
+        self.update_queue.put(END_OF_QUEUE)        
         self._wait_for_updates()
+        self.db.refresh_classifications()
+        log.info("refreshed classifications", extra={"source": run_id, "num_items": len(beans)})
+        self.db.refresh_clusters()
+        log.info("refreshed clusters", extra={"source": run_id, "num_items": len(beans)})
         log.info("total indexed", extra={"source": run_id, "num_items": total})
 
     @log_runtime(logger=log)

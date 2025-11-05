@@ -95,12 +95,12 @@ class Orchestrator:
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting refresher", extra={"source": self.run_id, "num_items": os.cpu_count()})
 
-        self.master_db.recompute()
-        log.info("recomputed warehouse", extra={"source": self.run_id, "num_items": 1})
+        # self.master_db.recompute()
+        # log.info("recomputed warehouse", extra={"source": self.run_id, "num_items": 1})
 
-        # NOTE: skipping cleanup for now as it is too aggressive
-        self.master_db.cleanup()
-        log.info("cleaned up warehouse", extra={"source": self.run_id, "num_items": 1})
+        # # NOTE: skipping cleanup for now as it is too aggressive
+        # self.master_db.cleanup()
+        # log.info("cleaned up warehouse", extra={"source": self.run_id, "num_items": 1})
 
         self.port_contents()
         # self.sync_storage()
