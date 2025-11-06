@@ -93,9 +93,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_USER=doadmin
+      - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=eatabagofdicks
-      - POSTGRES_DB=test_beansackdb0
+      - POSTGRES_DB=test_db0
     networks:
       - coffeemaker-bridge
     cpus: 1
