@@ -93,26 +93,38 @@ class WebScraperLite:
         except Exception as e: 
             log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": url, "num_items": 1})
 
+    def _prep_result(self, bean: Bean, result) -> dict:
+        if not result: return {
+            "bean": bean,
+            "publisher": None
+        }
+        bean.title = bean.title or result.get("meta_title") or result.get("title") # this sequence is important because result['title'] is often crap
+        bean.summary = bean.summary or result.get("description")
+        bean.content = result.get("content")
+        bean.restricted_content = True
+        bean.image_url = bean.image_url or result.get("top_image") 
+        bean.author = result.get("author") or bean.author
+        bean.created = min(result.get("published_time") or bean.created, bean.collected)     
+
+        publisher = Publisher(
+            source=bean.source,
+            base_url=extract_base_url(bean.url),
+            site_name=result.get('site_name'),
+            favicon=result.get('favicon'),
+            rss_feed=result.get("rss_feed")
+        )
+        return {
+            "bean": bean,
+            "publisher": publisher
+        }      
+
     async def scrape_urls(self, urls: list[str], collect_metadata=True):
         results = await asyncio.gather(*[self.scrape_url(url, collect_metadata) for url in urls])
         return results
     
     async def scrape_beans(self, beans: list[Bean], collect_metadata=True):
         results = await self.scrape_urls([bean.url for bean in beans], collect_metadata)
-        for bean, result in zip(beans, results):
-            if not result: continue
-            bean.title = bean.title or result.get("meta_title") or result.get("title") # this sequence is important because result['title'] is often crap
-            bean.summary = bean.summary or result.get("description")
-            bean.content = result.get("content")
-            bean.restricted_content = True
-            bean.image_url = bean.image_url or result.get("top_image") 
-            bean.author = result.get("author") or bean.author
-            bean.created = min(result.get("published_time") or bean.created, bean.collected)            
-            bean.publisher.site_name = result.get('site_name')
-            bean.publisher.favicon = result.get('favicon')
-            bean.publisher.rss_feed = result.get("rss_feed")
-           
-        return beans
+        return [self._prep_result(bean, result) for bean, result in zip(beans, results)]
 
 # GENERIC URL COLLECTOR CONFIG
 _BASE_EXCLUDED_TAGS = ["script", "style", "nav", "footer", "navbar", "comment", "contact",
@@ -447,9 +459,6 @@ class PublisherScraper:
         results = await asyncio.gather(*[self.scrape_url(url) for url in urls])
         return results
     
-    async def scrape_beans(self, beans: list[Bean]):
+    async def scrape_beans(self, beans: list[Bean]) -> list[Publisher]:
         results = await self.scrape_urls([bean.url for bean in beans])
-        for bean, result in zip(beans, results):
-            if not result: continue
-            bean.publisher = Publisher(**result)           
-        return beans
+        return [Publisher(**result) if result else None for result in results]

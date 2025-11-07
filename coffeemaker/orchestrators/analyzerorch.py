@@ -93,20 +93,15 @@ class Orchestrator:
         del digestor
         return total
 
-    def stream_beans(self, filter):
-        while True:
-            beans = self.db.query_latest_beans(
-                exprs=filter,
-                limit=self.batch_size,
-                columns=[K_URL, K_CREATED, K_CONTENT, K_SOURCE]
-            )            
-            if beans: yield beans
-            else: break
+    def stream_beans(self, filter, batch_size: int):
+        while beans := self.get_beans(filter, batch_size):
+            yield beans
 
-    def get_beans(self, filter):
+    def get_beans(self, filter, batch_size: int = None):
         return self.db.query_latest_beans(
             created=ndays_ago(MAX_ANALYZE_NDAYS),
-            exprs=filter,
+            conditions=filter,
+            limit=batch_size,
             columns=[K_URL, K_CREATED, K_CONTENT, K_SOURCE]
         )
     

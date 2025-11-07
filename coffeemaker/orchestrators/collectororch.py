@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 is_scrapable = lambda bean: not above_threshold(bean.content, WORDS_THRESHOLD_FOR_SCRAPING) 
 scrapables = lambda beans: list(filter(is_scrapable, beans)) if beans else beans 
 storables = lambda beans: [bean for bean in beans if not is_scrapable(bean)]
-cores = lambda beans: [BeanCore(**bean.model_dump()) for bean in beans if bean and bean.title]
+# cores = lambda beans: [BeanCore(**bean.model_dump()) for bean in beans if bean and bean.title]
 
 class Orchestrator:
     db: warehouse.Beansack = None
@@ -28,33 +28,42 @@ class Orchestrator:
     def __init__(self, db_conn_str: tuple[str,str]):
         self.db = initialize_db(db_conn_str)
 
-    async def _triage_collection_async(self, source: str, beans: list[Bean]):
-        if not beans: return
+    async def _triage_collection_async(self, source: str, items: list[dict]):
+        if not items: return
 
-        chatters = [bean.chatter for bean in beans if bean and bean.chatter]
+        beans = [item['bean'] for item in items if item and item.get('bean')]
+        publishers = [item['publisher'] for item in items if item and item.get('publisher')]
+        chatters = [item['chatter'] for item in items if item and item.get('chatter')]
+
+        if beans: await asyncio.to_thread(self.store_beans, source, beans)
+        if publishers: await asyncio.to_thread(self.db.store_publishers, publishers)
         if chatters: await asyncio.to_thread(self.db.store_chatters, chatters)
 
-        # TODO: disabled for now
-        # publishers = [bean.publisher for bean in beans if bean and bean.publisher]
-        # if publishers: await asyncio.to_thread(self.db.store_publishers, publishers)
+        return await asyncio.to_thread(self.db.deduplicate, "beans", "url", scrapables(beans))
 
-        # filtering out new beans        
-        beans = await asyncio.to_thread(self.db.deduplicate, "beans", "url", beans)
-        if beans: await self.store_beans_async(source, storables(beans))
-       
-        return scrapables(beans)
+    async def _triage_scrape_async(self, source: str, items: list[dict]):
+        beans = storables([item['bean'] for item in items if item and item.get('bean')])
+        publishers = [item['publisher'] for item in items if item and item.get('publisher')]
 
-    async def _triage_scrape_async(self, source: str, beans: list[Bean]):
-        beans = storables(beans)
         log.info("scraped", extra={"source": source, "num_items": len(beans)})
-        beans = await asyncio.to_thread(self.db.deduplicate, "beans", "url", beans)
-        if beans: return await self.store_beans_async(source, beans)
+        if beans: return await asyncio.to_thread(self.store_beans, source, beans)
+        if publishers: return await asyncio.to_thread(self.db.store_publishers, publishers)
 
-    async def store_beans_async(self, source: str, beans: list[Bean]):
+    # async def store_beans_async(self, source: str, beans: list[Bean]):
+    #     if not beans: return       
+    #     prev_count = await asyncio.to_thread(self.db.count_items, "beans")
+    #     await asyncio.to_thread(self.db.store_beans, cores(beans))
+    #     count = (await asyncio.to_thread(self.db.count_items, "beans")) - prev_count
+    #     log.info("stored", extra={"source": source, "num_items": count})
+    #     self.run_total += count
+    #     return beans
+    
+    def store_beans(self, source: str, beans: list[Bean]):
+        beans = storables(beans)
         if not beans: return       
-        prev_count = await asyncio.to_thread(self.db.count_items, "beans")
-        await asyncio.to_thread(self.db.store_beans, cores(beans))
-        count = (await asyncio.to_thread(self.db.count_items, "beans")) - prev_count
+        prev_count = self.db.count_items("beans")
+        self.db.store_beans(beans)
+        count = self.db.count_items("beans") - prev_count
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count
         return beans
@@ -89,9 +98,9 @@ class Orchestrator:
         self.run_total = 0        
 
         log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
-        self.db.refresh_chatter_aggregates()
+        self.db.refresh_aggregated_chatters()
         await self.run_collection_async(sources, batch_size=batch_size)
-        self.db.refresh_chatter_aggregates()
+        self.db.refresh_aggregated_chatters()
         self.db.close()
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 

@@ -191,7 +191,7 @@ class APICollector:
         entry_link = urljoin(source_url, entry.link)
         source = extract_source(entry_link)
 
-        if entry.get('wfw_commentrss'): chatter = Chatter(
+        if entry.get('wfw_commentrss') and entry.get('slash_comments'): chatter = Chatter(
             chatter_url=entry.get('wfw_commentrss'),
             url=entry_link,
             source=source,
@@ -200,25 +200,25 @@ class APICollector:
         ) 
         else: chatter = None
         
-        return Bean(
-            url=entry_link,
-            kind=guess_article_type(entry_link, source) or default_kind,
-            # in case of rss feed, the created time is the same as the updated time during collection. if it is mentioned in a social media feed then the updated time will get change      
-            # updated=created_time,
-            source=source,
-            title=entry.get('title'),
-            summary=summary,
-            content=content,
-            author=entry.get('author'),        
-            image_url=_extract_main_image(entry),
-            created=created_time,         
-            collected=current_time,
-            chatter=chatter,
-            publisher=Publisher(
+        return {
+            "bean": Bean(
+                url=entry_link,
+                kind=guess_article_type(entry_link, source) or default_kind,
+                source=source,
+                title=entry.get('title'),
+                summary=summary,
+                content=content,
+                author=entry.get('author'),        
+                image_url=_extract_main_image(entry),
+                created=created_time,         
+                collected=current_time
+            ),
+            "chatter": chatter,
+            "publisher": Publisher(
                 source=source,
                 base_url=extract_base_url(entry_link)
             )
-        )
+        }
 
     def _cleanup_tags(self, html: str) -> str:
         """Converts the given html into a markdown"""
@@ -265,19 +265,18 @@ class APICollector:
                 url = reddit_submission_permalink(post.url)
                 kind = POST
                 source = subreddit
-        return Bean(
-            url=url,
-            kind=kind,
-            # updated=created_time,
-            # this is done because sometimes is_self value is wrong
-            title=post.title,
-            content=post.selftext,
-            author=post.author.name if post.author else None,
-            source=source,
-            created=created_time,
-            collected=current_time,
-            # fill in the defaults
-            chatter=Chatter(
+        return {
+            "bean": Bean(
+                url=url,
+                kind=kind,
+                title=post.title,
+                content=post.selftext,
+                author=post.author.name if post.author else None,
+                source=source,
+                created=created_time,
+                collected=current_time
+            ),
+            "chatter": Chatter(
                 chatter_url=chatter_link,
                 url=url,
                 source=REDDIT,                        
@@ -286,13 +285,11 @@ class APICollector:
                 likes=post.score,
                 comments=post.num_comments
             ),
-            publisher=Publisher(
+            "publisher": Publisher(
                 source=source,
                 base_url=extract_base_url(url)
             )
-            # likes=post.score,
-            # comments=post.num_comments
-        )
+        }
     
     ### hackernews related utilities ###
     async def collect_ychackernews_async(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[Bean]:
@@ -334,24 +331,18 @@ class APICollector:
             source = HACKERNEWS           
             kind = POST
                     
-        return Bean(            
-            url=url, # this is either a linked url or a direct post
-            kind=kind, # blog, post or job
-            # initially the bean's updated time will be the same as the created time
-            # if there is a chatter that links to this, then the updated time will be changed to collection time of the chatter
-            
-            # updated=created_time,
-            title=story.get('title'),
-            content=self._cleanup_tags(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
-            author=story.get('by'),
-            source=source,
-            created=created_time,                
-            collected=current_time,
-            # fill in the defaults
-            # shared_in=[hackernews_story_permalink(id)],
-            # likes=story.get('score'),
-            # comments=len(story.get('kids', []))
-            chatter=Chatter(
+        return {
+            "bean": Bean(            
+                url=url, # this is either a linked url or a direct post
+                kind=kind, # blog, post or job
+                title=story.get('title'),
+                content=self._cleanup_tags(story['text']) if 'text' in story else None, # load if it has a text which usually applies to posts
+                author=story.get('by'),
+                source=source,
+                created=created_time,                
+                collected=current_time
+            ),
+            "chatter": Chatter(
                 chatter_url=hackernews_story_permalink(id),
                 url=url,
                 source=HACKERNEWS,
@@ -360,9 +351,9 @@ class APICollector:
                 likes=story.get('score'),
                 comments=len(story.get('kids', []))
             ),
-            publisher=Publisher(
+            "publisher": Publisher(
                 source=source,
                 base_url=extract_base_url(url)
             )
-        )
+        }
     

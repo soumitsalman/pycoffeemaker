@@ -4,10 +4,10 @@ services:
   localcollector:
     image: soumitsr/coffeemaker:06-25
     depends_on:
-      - localdb
+      - localmongo
     environment:      
       - DB_NAME=20250625
-      - MONGODB_CONN_STR=mongodb://localdb:27017
+      - MONGODB_CONN_STR=mongodb://localmongo:27017
       - MODE=COLLECTOR
       - BATCH_SIZE=32
     env_file:
@@ -20,10 +20,10 @@ services:
   localindexer:
     image: soumitsr/coffeemaker:06-25-1
     depends_on:
-      - localdb
+      - localmongo
     environment:
       - DB_NAME=20250625
-      - MONGODB_CONN_STR=mongodb://localdb:27017
+      - MONGODB_CONN_STR=mongodb://localmongo:27017
       - MODE=INDEXER
       - BATCH_SIZE=64
     env_file:
@@ -36,11 +36,11 @@ services:
   localdigestor:
     image: soumitsr/coffeemaker:gpu-06-25
     depends_on:
-      - localdb
+      - localmongo
       - azurite
     environment:
       - DB_NAME=20250625
-      - MONGODB_CONN_STR=mongodb://localdb:27017
+      - MONGODB_CONN_STR=mongodb://localmongo:27017
       - AZSTORAGE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;BlobEndpoint=http://azurite:10000/devstoreaccount1;
       - MODE=DIGESTOR
       - BATCH_SIZE=4
@@ -55,11 +55,11 @@ services:
   localcomposer:
     image: soumitsr/coffeemaker:06-25
     depends_on:
-      - localdb
+      - localmongo
       - azurite
     environment:      
       - DB_NAME=20250623
-      - MONGODB_CONN_STR=mongodb://localdb:27017
+      - MONGODB_CONN_STR=mongodb://localmongo:27017
       - AZSTORAGE_CONN_STR=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;BlobEndpoint=http://azurite:10000/devstoreaccount1;
       - MIN_CLUSTER_SIZE=24
       - MAX_CLUSTER_SIZE=64
@@ -79,14 +79,14 @@ services:
     cpus: 1
     mem_limit: 1g
 
-  localdb:
+  localmongo:
     image: mongodb/mongodb-community-server:latest
     ports:
       - "27017:27017"
     networks:
       - coffeemaker-bridge
     cpus: 1
-    mem_limit: 4g
+    mem_limit: 2g
 
   localpostgres:
     image: postgres:17-alpine

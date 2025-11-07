@@ -167,37 +167,34 @@ def test_static_db():
 
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Orchestrator
-    orch = Orchestrator(
-        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack/"),
-        batch_size=128
-    )
+    orch = Orchestrator(db_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH")))
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
-    sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
-    # sources = """
-    # sources:
-    #     rss:
-    #         - https://newatlas.com/index.rss
-    #         - https://www.channele2e.com/feed/topic/latest
-    #         - https://www.ghacks.net/feed/
-    #         - https://thenewstack.io/feed
-    #         - https://scitechdaily.com/feed/
-    #         - https://www.techradar.com/feeds/articletype/news
-    #         - https://www.geekwire.com/feed/
-    #         - https://investorplace.com/content-feed/
-    #     ychackernews:
-    #         - https://hacker-news.firebaseio.com/v0/newstories.json
-    #     reddit:
-    #         - news
-    #         - worldnews
-    #         - InternationalNews
-    #         - GlobalNews
-    #         - GlobalMarketNews
-    #         - FinanceNews
-    #         - StockNews
-    #         - CryptoNews
-    #         - energyStocks
-    # """
-    asyncio.run(orch.run_async(sources))
+    # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
+    sources = """
+    sources:
+        rss:
+            - https://newatlas.com/index.rss
+            - https://www.channele2e.com/feed/topic/latest
+            - https://www.ghacks.net/feed/
+            - https://thenewstack.io/feed
+            - https://scitechdaily.com/feed/
+            - https://www.techradar.com/feeds/articletype/news
+            - https://www.geekwire.com/feed/
+            - https://investorplace.com/content-feed/
+        ychackernews:
+            - https://hacker-news.firebaseio.com/v0/newstories.json
+        reddit:
+            - news
+            - worldnews
+            - InternationalNews
+            - GlobalNews
+            - GlobalMarketNews
+            - FinanceNews
+            - StockNews
+            - CryptoNews
+            - energyStocks
+    """
+    asyncio.run(orch.run_async(sources, batch_size=128))
     # orch.run(sources)
 
 def test_indexer_orch():
