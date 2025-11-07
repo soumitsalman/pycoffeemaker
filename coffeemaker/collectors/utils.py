@@ -10,7 +10,7 @@ from coffeemaker.pybeansack.models import NEWS, POST, BLOG
 
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
-USER_AGENT = "Cafecito-Coffeemaker/v0.3.3+https://github.com/soumitsalman/pycoffeemaker"
+USER_AGENT = "Cafecito-Coffeemaker/v0.4.0+https://github.com/soumitsalman/pycoffeemaker"
 TIMEOUT =  int(os.getenv('TIMEOUT', 60)) # 1 minute
 RATELIMIT_WAIT = 600 # 600 seconds / 10 minutes
 

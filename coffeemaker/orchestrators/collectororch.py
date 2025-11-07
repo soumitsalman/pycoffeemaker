@@ -48,15 +48,6 @@ class Orchestrator:
         log.info("scraped", extra={"source": source, "num_items": len(beans)})
         if beans: return await asyncio.to_thread(self.store_beans, source, beans)
         if publishers: return await asyncio.to_thread(self.db.store_publishers, publishers)
-
-    # async def store_beans_async(self, source: str, beans: list[Bean]):
-    #     if not beans: return       
-    #     prev_count = await asyncio.to_thread(self.db.count_items, "beans")
-    #     await asyncio.to_thread(self.db.store_beans, cores(beans))
-    #     count = (await asyncio.to_thread(self.db.count_items, "beans")) - prev_count
-    #     log.info("stored", extra={"source": source, "num_items": count})
-    #     self.run_total += count
-    #     return beans
     
     def store_beans(self, source: str, beans: list[Bean]):
         beans = storables(beans)

@@ -115,11 +115,9 @@ class APICollector:
         if not self._reddit_client:
             self._reddit_client = praw.Reddit(
                 check_for_updates=True,
-                client_id=os.getenv("REDDIT_APP_ID"),
-                client_secret=os.getenv("REDDIT_APP_SECRET"),
-                user_agent=USER_AGENT+" (by u/randomizer_000)",
-                username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
-                password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
+                client_id=os.getenv("REDDIT_CLIENT_ID"),
+                client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+                user_agent=USER_AGENT+" (by u/IntelligentLeave680)",
                 timeout=TIMEOUT,
                 rate_limit_seconds=RATELIMIT_WAIT,
             )
@@ -134,11 +132,9 @@ class APICollector:
         )
         self._reddit_client = asyncpraw.Reddit(
             check_for_updates=True,
-            client_id=os.getenv("REDDIT_APP_ID"),
-            client_secret=os.getenv("REDDIT_APP_SECRET"),
-            user_agent=USER_AGENT+" (by u/randomizer_000)",
-            username=os.getenv("REDDIT_COLLECTOR_USERNAME"),
-            password=os.getenv("REDDIT_COLLECTOR_PASSWORD"),
+            client_id=os.getenv("REDDIT_CLIENT_ID"),
+            client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+            user_agent=USER_AGENT+" (by u/IntelligentLeave680)",
             timeout=TIMEOUT,
             rate_limit_seconds=RATELIMIT_WAIT,
             requestor_kwargs={"session": self.session}
