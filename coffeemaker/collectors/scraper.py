@@ -423,13 +423,13 @@ class PublisherScraper:
                     metadata[key] = tag.get('content') or tag.get('href')
                     break
 
-        if 'favicon' in metadata: metadata['favicon'] = urljoin(url, metadata['favicon'])
-        if 'rss_feed' in metadata: metadata['rss_feed'] = urljoin(url, metadata['rss_feed'])
+        if K_FAVICON in metadata: metadata[K_FAVICON] = urljoin(url, metadata[K_FAVICON])
+        if K_RSS_FEED in metadata: metadata[K_RSS_FEED] = urljoin(url, metadata[K_RSS_FEED])
         return metadata
     
     @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
-    async def _scrape_favicon(self, url: str):
-        async with self.throttle, self.session.get("https://www.google.com/s2/favicons?domain="+extract_base_url(url)) as response:
+    async def _scrape_favicon(self, base_url: str):
+        async with self.throttle, self.session.get("https://www.google.com/s2/favicons?domain="+base_url) as response:
             if response.status == 200: return response.headers.get('Content-Location')
 
     @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
@@ -438,27 +438,35 @@ class PublisherScraper:
             html = await response.text()
         return html
 
-    async def scrape_url(self, url: str):
-        meta = {} 
-        base_url = extract_base_url(url)
-        meta[K_BASE_URL] = base_url
-        url = "https://"+extract_base_url(url)
-        meta[K_SOURCE] = extract_domain(url)
+    async def _scrape_base_url(self, base_url: str) -> Publisher:
+        if not base_url.startswith("http"): url = "https://"+base_url
+        else: url = base_url
+
+        meta = {
+            K_BASE_URL: base_url,
+            K_SOURCE: extract_domain(url)
+        } 
+        
         try:                  
             html = await self._scrape_html(url)
             meta.update(self._get_metadata(url, html))
-            meta[K_TITLE] = meta.get('site_name') or meta.get('meta_title')
-            meta[K_SUMMARY] = meta.get(K_DESCRIPTION)
-            if K_FAVICON not in meta:
-                meta[K_FAVICON] = await self._scrape_favicon(url)
-            return meta
+            meta[K_SITE_NAME] = meta.get(K_SITE_NAME) or meta.get('meta_title')
+            meta[K_FAVICON] = meta.get(K_FAVICON) or (await self._scrape_favicon(base_url))
+            return Publisher(**meta)
         except Exception as e: 
-            log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": url, "num_items": 1})
+            log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": base_url, "num_items": 1})
 
-    async def scrape_urls(self, urls: list[str]):
-        results = await asyncio.gather(*[self.scrape_url(url) for url in urls])
-        return results
+    async def scrape_url(self, url: str) -> Publisher:
+        return await self._scrape_base_url(extract_base_url(url))
+
+    async def scrape_urls(self, urls: list[str]) -> list[Publisher]:
+        base_urls = {url: extract_base_url(url) for url in urls}
+        publishers = await asyncio.gather(*[self._scrape_base_url(base_url) for base_url in list(set(base_urls.values()))])
+        publishers = {publisher.base_url: publisher for publisher in publishers if publisher}
+        return [publishers.get(base_urls[url]) for url in urls]
     
     async def scrape_beans(self, beans: list[Bean]) -> list[Publisher]:
-        results = await self.scrape_urls([bean.url for bean in beans])
-        return [Publisher(**result) if result else None for result in results]
+        return await self.scrape_urls([bean.url for bean in beans])
+    
+    async def scrape_publishers(self, publishers: list[Publisher]) -> list[Publisher]:
+        return await asyncio.gather(*[self._scrape_base_url(publisher.base_url) for publisher in publishers])

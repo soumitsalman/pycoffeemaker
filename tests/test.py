@@ -102,6 +102,37 @@ def test_scraper():
     
     asyncio.run(run())
 
+def test_publisher_scraper():
+    from coffeemaker.collectors import PublisherScraper
+    from coffeemaker.pybeansack import models, warehouse
+    urls = [
+        "https://financebuzz.com/retirees-should-buy-at-bjs-4",
+        "https://financebuzz.com/southern-lake-towns-afford-social-security",
+        "https://financebuzz.com/professional-skills-more-valuable-after-60",
+        "https://www.cyberark.com/blog/distinguishing-authn-and-authz/",
+        "http://jalammar.github.io/ai-image-generation-tools/",
+        "https://aws.amazon.com/blogs/aws/introducing-aws-capabilities-by-region-for-easier-regional-planning-and-faster-global-deployments/",
+        "https://www.camilleroux.com/la-veille-technologique-ma-methode-complete-pour-rester-a-jour/",
+        "https://www.neelc.org/posts/freebsd-signal-proxy/",
+        "https://aws.amazon.com/blogs/storage/cross-account-amazon-s3-bulk-transfers-with-enhanced-aws-kms-support/",
+        "https://aws.amazon.com/blogs/storage/cross-account-disaster-recovery-setup-using-aws-elastic-disaster-recovery-in-secured-networks-part-1-architecture-and-network-setup/",
+        "https://aws.amazon.com/blogs/storage/mastering-cross-account-amazon-efs-seamlessly-mount-amazon-efs-on-amazon-eks-cluster/"
+    ]
+    db = warehouse.Beansack(
+        catalogdb=os.getenv("PG_CONNECTION_STRING"),
+        storagedb=os.getenv("STORAGE_DATAPATH"),
+        factory_dir="factory"
+    )   
+
+    async def run():
+        async with PublisherScraper() as scraper:
+            ic(await scraper.scrape_urls(urls))
+            pubs = db.query_publishers(conditions=["rss_feed IS NULL", "favicon IS NULL", "site_name IS NULL"], limit=5)
+            ic(await scraper.scrape_publishers(pubs))            
+    
+    asyncio.run(run())
+
+
 def test_fullstack_orch():
     from coffeemaker.orchestrators.fullstack import Orchestrator
     orch = Orchestrator(
@@ -369,6 +400,7 @@ parser.add_argument("--hydrate", action="store_true", help="Hydrate local gobean
 # parser.add_argument("--test-static-db", action="store_true", help="Test static database")
 # parser.add_argument("--test-trend-analysis", action="store_true", help="Test trend analysis")
 parser.add_argument("--collect", action="store_true", help="Test collector and scraper")
+parser.add_argument("--scrapepubs", action="store_true", help="Test publisher scraper")
 parser.add_argument("--scrape", action="store_true", help="Test web scraper")
 parser.add_argument("--runcollector", action="store_true", help="Test collector orchestrator")
 parser.add_argument("--runindexer", action="store_true", help="Test indexer orchestrator")
@@ -400,6 +432,8 @@ def main():
         test_collector_and_scraper()
     if args.scrape:
         test_scraper()
+    if args.scrapepubs:
+        test_publisher_scraper()
     if args.runcollector:
         test_collector_orch()
     if args.runindexer:

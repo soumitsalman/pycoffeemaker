@@ -4,6 +4,7 @@ import asyncio
 import random
 from concurrent.futures import ThreadPoolExecutor
 from icecream import ic
+from coffeemaker.collectors.scraper import PublisherScraper
 from coffeemaker.pybeansack import mongosack, warehouse
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
@@ -59,8 +60,8 @@ class Orchestrator:
         self.run_total += count
         return beans
 
-    @log_runtime_async(logger=log)
-    async def run_collection_async(self, sources, batch_size):   
+    # @log_runtime_async(logger=log)
+    async def collect_beans_async(self, sources, batch_size):   
         def get_collection_tasks():
             tasks = []
             for source_type, source_paths in parse_sources(sources).items():
@@ -82,6 +83,17 @@ class Orchestrator:
 
         async with APICollector(batch_size) as apicollector, WebScraperLite(batch_size) as webscraper:
             await asyncio.gather(*[collect(source, func) for source, func in get_collection_tasks()])    
+    
+    async def scrape_publishers_async(self, batch_size: int = BATCH_SIZE):
+        pubs = self.db.query_publishers(conditions=["rss_feed IS NULL", "favicon IS NULL", "site_name IS NULL"])
+        log.info("scraping publishers", extra={"source": self.run_id, "num_items": len(pubs)})
+
+        async with PublisherScraper(batch_size) as scraper:
+            result = await scraper.scrape_publishers(pubs)
+
+        result = [pub for pub in result if pub]
+        log.info("scraped publishers", extra={"source": self.run_id, "num_items": len(result)})
+        if result: await asyncio.to_thread(self.db.update_publishers, result)
 
     @log_runtime_async(logger=log)
     async def run_async(self, sources, batch_size: int = BATCH_SIZE):
@@ -89,9 +101,11 @@ class Orchestrator:
         self.run_total = 0        
 
         log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
-        self.db.refresh_aggregated_chatters()
-        await self.run_collection_async(sources, batch_size=batch_size)
-        self.db.refresh_aggregated_chatters()
+        await asyncio.gather(*[
+            self.collect_beans_async(sources, batch_size=batch_size),
+            self.scrape_publishers_async(batch_size=batch_size),
+            asyncio.to_thread(self.db.refresh_aggregated_chatters),
+        ])
         self.db.close()
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 
