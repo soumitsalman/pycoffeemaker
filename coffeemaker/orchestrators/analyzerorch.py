@@ -31,7 +31,7 @@ def _embed(embedder: embedders.Embeddings, beans: list[Bean]) -> list[Bean]|None
     if not beans: return None
 
     vecs = embedder.embed_documents([bean.content for bean in beans])
-    embs = [Bean(url=b.url, source=b.source, embedding=e) for b, e in zip(beans, vecs) if e]
+    embs = [Bean(url=b.url, source=b.source, embedding=e) for b, e in zip(beans, vecs) if len(e) == VECTOR_LEN]
     log.info("embedded", extra={"source": beans[0].source, "num_items": len(embs)})
     return embs
 
@@ -52,7 +52,7 @@ class Orchestrator:
     def __init__(self, db_conn_str: tuple[str, str]):     
         self.db = initialize_db(db_conn_str)
         self.update_queue = queue.Queue()
-        self.worker_thread = threading.Thread(target=self._update_worker, daemon=True)
+        self.worker_thread = threading.Thread(target=self._run_updates, daemon=True)
         self.worker_thread.start()    
 
     def embed_beans(self, beans: list[Bean], embedder_path: str, context_len: int, batch_size: int) -> list[Bean]|None:
@@ -63,7 +63,7 @@ class Orchestrator:
         for chunk in batched(beans, batch_size):
             try:
                 chunk = _embed(embedder, list(chunk))
-                self._update(chunk, [K_EMBEDDING])
+                self._queue_update(chunk, None, self.db.update_bean_embeddings)
                 total += len(chunk)
             except Exception as e:
                 log.error(f"failed indexing - {e}", extra={"source": chunk[0].source, "num_items": len(chunk)})
@@ -84,7 +84,7 @@ class Orchestrator:
         for chunk in batched(beans, batch_size):
             try:
                 chunk = _digest(digestor, list(chunk))
-                self._update(chunk, [K_GIST, K_REGIONS, K_ENTITIES])
+                self._queue_update(chunk, [K_GIST, K_REGIONS, K_ENTITIES])
                 total += len(chunk)
             except Exception as e:
                 log.error(f"failed indexing - {e}", extra={"source": chunk[0].source, "num_items": len(chunk)})
@@ -105,7 +105,7 @@ class Orchestrator:
             columns=[K_URL, K_CREATED, K_CONTENT, K_SOURCE]
         )
     
-    def _update_worker(self):
+    def _run_updates(self):
         """Worker thread that processes updates from the queue"""
         while True:
             try:
@@ -116,8 +116,9 @@ class Orchestrator:
                     self.update_queue.task_done()
                     break
                 
-                beans, columns = update_task
-                self.db.update_beans(beans, columns)
+                beans, columns, update_func = update_task
+                if columns: self.db.update_beans(beans, columns)
+                elif update_func: update_func(beans)
                 log.info("updated", extra={"source": beans[0].source, "num_items": len(beans)})
                 self.update_queue.task_done()
             except queue.Empty:
@@ -126,11 +127,8 @@ class Orchestrator:
                 log.error(f"update worker error - {e}")
                 self.update_queue.task_done()
     
-    def _update(self, beans: list[Bean], columns: list[str]):
-        # """Add update task to queue"""
-        if beans: self.update_queue.put((beans, columns))
-        # self.db.update_beans(beans, columns)
-        # log.info("updated", extra={"source": beans[0].source, "num_items": len(beans)})
+    def _queue_update(self, beans: list[Bean], columns: list[str] = None, update_func=None):
+        if beans: self.update_queue.put((beans, columns, update_func))
     
     def _wait_for_updates(self):        
         """Wait for all pending database updates to complete"""
@@ -152,8 +150,8 @@ class Orchestrator:
         # Wait for all pending updates to complete
         self.update_queue.put(END_OF_QUEUE)        
         self._wait_for_updates()
-        self.db.refresh_classifications()
-        log.info("refreshed classifications", extra={"source": run_id, "num_items": len(beans)})
+        # self.db.refresh_classifications()
+        # log.info("refreshed classifications", extra={"source": run_id, "num_items": len(beans)})
         self.db.refresh_clusters()
         log.info("refreshed clusters", extra={"source": run_id, "num_items": len(beans)})
         log.info("total indexed", extra={"source": run_id, "num_items": total})
