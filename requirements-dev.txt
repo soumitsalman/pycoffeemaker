@@ -25,3 +25,4 @@ onnx
 optimum[onnxruntime]
 dbcache
 psycopg2-binary
+faker

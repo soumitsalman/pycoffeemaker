@@ -4,8 +4,6 @@ from dotenv import load_dotenv
 import requests
 import logging
 from icecream import ic
-from slugify import slugify
-from faker import Faker
 
 load_dotenv()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -395,9 +393,11 @@ def test_dbcache():
     print(cache.get("current_snapshot")+10)
 
 def test_cupboard():
-    from coffeemaker.orchestrators.cupboard import CupboardDB, Mug, Sip, EmbeddingAdapter
+    from coffeemaker.orchestrators.cupboard import CupboardDB, Mug, Sip
+    from slugify import slugify
+    from faker import Faker
     
-    db = CupboardDB(db_path=".test/cupboard0/")
+    db = CupboardDB(db_path=".test/cupboard1/")
     fake = Faker()
 
     def store_sips():

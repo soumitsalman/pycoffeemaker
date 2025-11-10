@@ -1,109 +1,77 @@
 import os
-import chromadb
-from chromadb import Documents, EmbeddingFunction, Embeddings
-from datetime import datetime
-from pydantic import BaseModel, Field, field_serializer, field_validator
+import lancedb
+from lancedb.pydantic import LanceModel, Vector
+from lancedb.embeddings import register, TextEmbeddingFunction, get_registry
+from functools import cached_property
+from datetime import datetime, timedelta
+from pydantic import Field
 from typing import Optional
 import numpy as np
 from coffeemaker.nlp import embedders
-from coffeemaker.pybeansack.models import K_EMBEDDING, K_ID
+from coffeemaker.pybeansack.models import K_EMBEDDING, K_ID, VECTOR_LEN
 from icecream import ic
 
+# @register("cafecito-embedding-adapter")
+# class EmbeddingAdapter(TextEmbeddingFunction):
+#     model_path: str = None
+#     context_len: int = None
 
-class CupboardBaseModel(BaseModel):
-    id: str = Field(..., description="This is the slug")
+#     def compute_query_embeddings(self, query: str, *args, **kwargs):
+#         return self.embedder._embed(query)
+
+#     def generate_embeddings(self, texts: list[str], *args, **kwargs):
+#         response = self.embedder.embed_documents(list(texts))
+#         return [np.array(embedding, dtype=np.float32) for embedding in response]
+    
+#     def ndims(self) -> int:        
+#         return VECTOR_LEN
+
+#     @cached_property
+#     def embedder(self):
+#         return embedders.from_path(self.model_path, self.context_len)
+    
+class CupboardModel(LanceModel):
+    id: str = Field(...)
     title: Optional[str] = Field(None, description="This is the title")
     content: Optional[str] = Field(None, description="This is the content")
+    embedding: Vector(VECTOR_LEN, nullable=True) = Field(None, description="This is the embedding vector of title+content")
     created: Optional[datetime] = Field(None, description="This is the created timestamp")
     updated: Optional[datetime] = Field(None, description="This is the updated timestamp")
 
-    @field_validator('created', 'updated', mode='before')
-    @classmethod
-    def parse_created(cls, v):
-        if v is None: return None
-        if isinstance(v, (int, float)): return datetime.fromtimestamp(v)
-        return v
+class Sip(CupboardModel):
+    past_sips: Optional[list[str]] = Field(None, description="These are the slugs to related past sips")
+    source_beans: Optional[list[str]] = Field(None, description="These are the urls to the beans")
 
-    @field_serializer('created', 'updated')
-    def serialize_created(self, dt: Optional[datetime], _info):
-        return dt.timestamp() if dt else None
-
-    class Config:
-        arbitrary_types_allowed = False
-        exclude = {K_EMBEDDING, K_ID}
-        exclude_none = True
-        
-
-class Sip(CupboardBaseModel):
-    beans: Optional[list[str]] = Field(None, description="These are the urls to the beans")
-    related: Optional[list[str]] = Field(None, description="These are the slugs to related past sips")
-
-class Mug(CupboardBaseModel):
+class Mug(CupboardModel):
     sips: Optional[list[str]] = Field(None, description="These are the slugs to the sips/sections")
     highlights: Optional[list[str]] = Field(None, description="These are the highlights")   
     tags: Optional[list[str]] = Field(None, description="These are the tags")
   
-
-class EmbeddingAdapter(EmbeddingFunction):
-    embedder = None
-
-    def __init__(self, model_path: str, context_len: int):
-        self.embedder = embedders.from_path(model_path, context_len)
-
-    def embed_query(self, input):
-        return self.embedder._embed(input)
-
-    def __call__(self, input: Documents) -> Embeddings:
-        response = self.embedder.embed_documents(list(input))
-        return [np.array(embedding, dtype=np.float32) for embedding in response]
-    
-    def name(self) -> str:
-        return "cafecito-embedding-adapter"
-
-doc_template = lambda item: f"# {item.title}\n\n{item.content}"
-
 class CupboardDB: 
     db = None
     allmugs = None
     allsips = None
+    embedder: embedders.Embeddings = None
 
     def __init__(self, db_path: str):
-        self.db = chromadb.PersistentClient(path=db_path)
-        em_function = EmbeddingAdapter(model_path=os.getenv("EMBEDDER_PATH"), context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")))
-        self.allmugs = self.db.get_or_create_collection(name="mugs", embedding_function=em_function)
-        self.allsips = self.db.get_or_create_collection(name="sips", embedding_function=em_function)  
+        self.db = lancedb.connect(uri=db_path, read_consistency_interval = timedelta(hours=1))
+        self.allmugs = self.db.create_table("mugs", schema=Mug, exist_ok=True)
+        self.allsips = self.db.create_table("sips", schema=Sip, exist_ok=True)
+        self.embedder = embedders.from_path(model_path=os.getenv("EMBEDDER_PATH"), context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN")))
 
-    def add(self, item: Mug|Sip):
-        from icecream import ic
-        docs = ic([doc_template(item)])
-        metadatas = ic([item.model_dump(exclude=[K_ID], exclude_none=True)])
-        ids = [item.id]
-        if isinstance(item, Mug):
-            self.allmugs.add(
-                documents=docs,
-                metadatas=metadatas,
-                ids=ids
-            )
-        elif isinstance(item, Sip):
-            self.allsips.add(
-                documents=docs,
-                metadatas=metadatas,
-                ids=ids
-            )
+    def _rectify(self, items: list[Mug]|list[Sip]):
+        get_content = lambda item: f"{item.title}\n\n{item.content}"
+        contents = [get_content(item) for item in items]
+        vecs = self.embedder.embed_documents(contents)
+        for item, vec in zip(items, vecs):
+            item.embedding = vec
+        return items
 
-    def add_sips(self, sips: list[Sip]):
-        self.allsips.add(
-            documents=[doc_template(sip) for sip in sips],
-            metadatas=[sip.model_dump(exclude={K_EMBEDDING, K_ID}) for sip in sips],
-            ids=[sip.id for sip in sips]
-        )
+    def add(self, items: Mug|Sip|list[Mug]|list[Sip]):
+        to_store = items if isinstance(items, list) else [items]
+        to_store = self._rectify(to_store)
+        if isinstance(to_store[0], Mug): self.allmugs.add(to_store)
+        elif isinstance(to_store[0], Sip): self.allsips.add(to_store)
 
     def query_sips(self, query_text: str, distance: float = 0, limit: int = 5):
-        from icecream import ic
-        ic(self.allsips.get(limit=5))
-        result = ic(self.allsips.query(
-            query_texts=[query_text],
-            n_results=limit,
-            include=["metadatas", "distances"]
-        ))
-        return [Sip(id=id, **metadata) for id, metadata, d in zip(result.ids[0], result.metadatas[0], result.distances[0]) if d <= distance]
+        return self.allsips.search(self.embedder.embed_query(query_text)).limit(limit).to_pydantic(Sip)
