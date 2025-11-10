@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 import requests
 import logging
 from icecream import ic
+from slugify import slugify
+from faker import Faker
 
 load_dotenv()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -394,9 +396,47 @@ def test_dbcache():
 
 def test_cupboard():
     from coffeemaker.orchestrators.cupboard import CupboardDB, Mug, Sip, EmbeddingAdapter
+    
+    db = CupboardDB(db_path=".test/cupboard0/")
+    fake = Faker()
 
-    db = CupboardDB(db_path=".test/cupboarddb/")
-   
+    def store_sips():
+        for _ in range(fake.random_int(min=2, max=5)):
+            title = fake.sentence(nb_words=8)
+            date = fake.date_between(start_date='-1y', end_date='today')
+            sip = Sip(
+                id=slugify(f"{title} {date}"),
+                created=date,
+                title=title,
+                content=fake.paragraph(nb_sentences=3)
+            )
+            db.add(sip)
+            yield sip
+
+    def store_mugs():
+        for _ in range(fake.random_int(min=3, max=8)):
+            sips = list(store_sips())
+            title = fake.sentence(nb_words=6)
+            date = fake.date_between(start_date='-1y', end_date='today')
+            mug = Mug(
+                id=slugify(f"{title} {date}"),
+                title=title,
+                content=fake.paragraph(nb_sentences=5),
+                created=date,
+                updated=fake.date_between(start_date=date, end_date='today'),
+                sips=[sip.id for sip in sips],
+                tags=[fake.word() for _ in range(fake.random_int(min=1, max=4))],
+                highlights=[sip.title for sip in sips]
+            )
+            db.add(mug)
+            yield mug
+
+
+    list(store_mugs())
+
+    ic(db.query_sips(query_text=fake.sentence(nb_words=6), distance=0.9, limit=5))
+    
+    
    
     
 import argparse

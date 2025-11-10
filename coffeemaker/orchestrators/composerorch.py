@@ -16,8 +16,11 @@ from coffeemaker.pybeansack.utils import *
 from coffeemaker.orchestrators.utils import *
 from icecream import ic
 from pydantic_ai import Agent, ModelSettings
+from pydantic_ai.retries import AsyncTenacityTransport, RetryConfig, wait_retry_after
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from httpx import AsyncClient, HTTPStatusError
+from tenacity import retry_if_exception_type, stop_after_attempt
 
 log = logging.getLogger(__name__)
 
@@ -171,7 +174,16 @@ class Orchestrator:
         logfire.instrument_pydantic_ai()
         
         self.embedder = embedders.from_path(embedder_model, EMBEDDER_CTX_LEN)
-        composer_provider = OpenAIProvider(*composer_conn) 
+
+        transport = AsyncTenacityTransport(
+            RetryConfig(
+                wait=wait_retry_after(max_wait=120),
+                stop=stop_after_attempt(3),
+                reraise=True
+            ),
+            validate_response=lambda r: r.raise_for_status()
+        )
+        composer_provider = OpenAIProvider(*composer_conn, http_client=AsyncClient(transport=transport)) 
         analyst_model = OpenAIChatModel(
             analyst_model, 
             provider=composer_provider, 
