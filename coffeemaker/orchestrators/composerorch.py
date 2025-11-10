@@ -397,6 +397,7 @@ class Orchestrator:
     async def run_async(self, domains):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
+        self.db.refresh_aggregated_chatters()
         domains = parse_topics(domains)
 
         # create vectors if there is none

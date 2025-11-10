@@ -99,7 +99,7 @@ class Orchestrator:
 
     def get_beans(self, filter, batch_size: int = None):
         return self.db.query_latest_beans(
-            created=ndays_ago(MAX_ANALYZE_NDAYS),
+            collected=ndays_ago(MAX_ANALYZE_NDAYS),
             conditions=filter,
             limit=batch_size,
             columns=[K_URL, K_CREATED, K_CONTENT, K_SOURCE]
