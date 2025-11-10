@@ -7,8 +7,6 @@ tldextract
 praw
 asyncpraw
 readability-lxml
-persist-queue
 icecream
 python-dotenv
 pyyaml
-tqdm

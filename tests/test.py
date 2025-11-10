@@ -391,6 +391,13 @@ def test_dbcache():
     cache = kvstore(os.getenv('PG_CONNECTION_STRING'))
     # cache.set("current_snapshot", 15509)
     print(cache.get("current_snapshot")+10)
+
+def test_cupboard():
+    from coffeemaker.orchestrators.cupboard import CupboardDB, Mug, Sip, EmbeddingAdapter
+
+    db = CupboardDB(db_path=".test/cupboarddb/")
+   
+   
     
 import argparse
 import subprocess
@@ -410,6 +417,7 @@ parser.add_argument("--runrefresher", action="store_true", help="Test refresher 
 parser.add_argument("--dbcache", action="store_true", help="Test dbcache")
 parser.add_argument("--readonly", action="store_true", help="Test readonly warehouse")
 parser.add_argument("--warehousev2", action="store_true", help="Test warehouse v2")
+parser.add_argument("--cupboard", action="store_true", help="Test cupboard orchestrator")
 
 # parser.add_argument("--test-fullstack-orch", action="store_true", help="Test fullstack orchestrator")
 # parser.add_argument("--create-test-data-file", metavar="OUTPUT_PATH", help="Create test data file at OUTPUT_PATH")
@@ -450,6 +458,8 @@ def main():
         test_readonly_warehouse()
     if args.warehousev2:
         test_warehousev2()
+    if args.cupboard:
+        test_cupboard()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:

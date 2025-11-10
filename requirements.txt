@@ -21,3 +21,4 @@ logfire
 pydantic-ai
 pydantic-ai-slim[logfire]
 python-dotenv
+chromadb
