@@ -21,5 +21,5 @@ logfire
 pydantic-ai
 pydantic-ai-slim[logfire]
 python-dotenv
-lancdb
+lancedb
 python-slugify
