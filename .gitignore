@@ -16,6 +16,7 @@
 .beansackv2
 .config
 .postgresql
+.aws
 .scrapingqueue
 .delete-models
 .deploy.sh
