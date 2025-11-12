@@ -107,8 +107,8 @@ if __name__ == "__main__":
     elif mode == "REFRESHER":
         from coffeemaker.orchestrators.refresherorch import Orchestrator
         orch = Orchestrator(
-            master_conn_str=db_conn_str,
-            replica_conn_str=(os.getenv("MONGO_CONNECTION_STRING"), os.getenv("MONGO_DATABASE"))
+            masterdb_conn_str=db_conn_str,
+            espressodb_conn_str=(os.getenv("MONGO_CONNECTION_STRING"), os.getenv("MONGO_DATABASE"))
         )
         orch.run()
     else:

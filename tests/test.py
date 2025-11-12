@@ -290,28 +290,15 @@ def test_composer_orch():
 def test_refresher_orch():
     from coffeemaker.orchestrators.refresherorch import Orchestrator
     orch = Orchestrator(
-        master_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack"),
-        replica_conn_str=("mongodb://localhost:27017", "replica1")
+        masterdb_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack/prod/storage"),
+        # espressodb_conn_str=("mongodb://localhost:27017", "replica1")
+        espressodb_conn_str=(None),
+        ragdb_conn_str=".beansack/lancesack/"
     )
     orch.run()
 
-def test_readonly_warehouse():
-    from coffeemaker.pybeansack.warehouse_readonly import Beansack
-    from coffeemaker.pybeansack.models import K_URL, K_CREATED
-    from coffeemaker.nlp.src import embedders
-   
-    db = Beansack(
-        catalogdb=os.getenv("PG_CONNECTION_STRING"),
-        storagedb=os.getenv("STORAGE_DATAPATH")    
-    )
-    embedder = embedders.from_path(os.getenv('EMBEDDER_PATH'), EMBEDDER_CONTEXT_LEN)
-    topics = []
-    
-    beans = db.query_processed_beans(limit=5, columns = [K_URL, K_CREATED, "gist", "categories", "sentiments"])
-    [print(bean.digest()) for bean in beans]
-
-def test_warehousev2():
-    from coffeemaker.pybeansack.warehousev2 import Beansack, DIGEST_COLUMNS
+def test_warehouse():
+    from coffeemaker.pybeansack.warehouse import Beansack, DIGEST_COLUMNS
     from coffeemaker.pybeansack.models import K_URL, K_CREATED, K_CONTENT, Bean
     from coffeemaker.collectors.collector import APICollector, parse_sources
     from coffeemaker.orchestrators.composerorch import parse_topics
@@ -370,50 +357,7 @@ def test_dbcache():
     # cache.set("current_snapshot", 15509)
     print(cache.get("current_snapshot")+10)
 
-def test_cupboard():
-    from coffeemaker.orchestrators.cupboarddb import CupboardDB, Mug, Sip
-    from slugify import slugify
-    from faker import Faker
-    
-    db = CupboardDB(db_path=".test/cupboard1/")
-    fake = Faker()
-
-    def store_sips():
-        for _ in range(fake.random_int(min=2, max=5)):
-            title = fake.sentence(nb_words=8)
-            date = fake.date_between(start_date='-1y', end_date='today')
-            sip = Sip(
-                id=slugify(f"{title} {date}"),
-                created=date,
-                title=title,
-                content=fake.paragraph(nb_sentences=3)
-            )
-            db.add(sip)
-            yield sip
-
-    def store_mugs():
-        for _ in range(fake.random_int(min=3, max=8)):
-            sips = list(store_sips())
-            title = fake.sentence(nb_words=6)
-            date = fake.date_between(start_date='-1y', end_date='today')
-            mug = Mug(
-                id=slugify(f"{title} {date}"),
-                title=title,
-                content=fake.paragraph(nb_sentences=5),
-                created=date,
-                updated=fake.date_between(start_date=date, end_date='today'),
-                sips=[sip.id for sip in sips],
-                tags=[fake.word() for _ in range(fake.random_int(min=1, max=4))],
-                highlights=[sip.title for sip in sips]
-            )
-            db.add(mug)
-            yield mug
-
-
-    list(store_mugs())
-
-    ic(db.query_sips(query_text=fake.sentence(nb_words=6), distance=0.9, limit=5))
-    
+   
 import argparse
 import subprocess
 parser = argparse.ArgumentParser(description="Run pycoffeemaker tests")
@@ -431,7 +375,7 @@ parser.add_argument("--runcomposer", action="store_true", help="Test composer or
 parser.add_argument("--runrefresher", action="store_true", help="Test refresher orchestrator")
 parser.add_argument("--dbcache", action="store_true", help="Test dbcache")
 parser.add_argument("--readonly", action="store_true", help="Test readonly warehouse")
-parser.add_argument("--warehousev2", action="store_true", help="Test warehouse v2")
+parser.add_argument("--warehouse", action="store_true", help="Test warehouse v2")
 parser.add_argument("--cupboard", action="store_true", help="Test cupboard orchestrator")
 
 # parser.add_argument("--test-fullstack-orch", action="store_true", help="Test fullstack orchestrator")
@@ -469,12 +413,8 @@ def main():
         test_refresher_orch()
     if args.dbcache:
         test_dbcache()
-    if args.readonly:
-        test_readonly_warehouse()
-    if args.warehousev2:
-        test_warehousev2()
-    if args.cupboard:
-        test_cupboard()
+    if args.warehouse:
+        test_warehouse()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:
