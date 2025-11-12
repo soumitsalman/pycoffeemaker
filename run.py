@@ -108,7 +108,8 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.refresherorch import Orchestrator
         orch = Orchestrator(
             masterdb_conn_str=db_conn_str,
-            espressodb_conn_str=(os.getenv("MONGO_CONNECTION_STRING"), os.getenv("MONGO_DATABASE"))
+            espressodb_conn_str=(os.getenv("MONGO_CONNECTION_STRING"), os.getenv("MONGO_DATABASE")),
+            ragdb_conn_str=os.getenv("RAGDB_STORAGE_DATAPATH")
         )
         orch.run()
     else:

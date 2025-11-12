@@ -250,7 +250,8 @@ def test_digestor_orch():
 
 def test_composer_orch():
     from coffeemaker.orchestrators.composerorch import Orchestrator, parse_topics
-    from coffeemaker.orchestrators.cupboarddb import CupboardDB, Sip, Mug
+    from coffeemaker.pybeansack import lancesack as ls
+    from coffeemaker.pybeansack.models import Mug, Sip, Bean
 
     orch = Orchestrator(
         db_conn=(
@@ -268,22 +269,29 @@ def test_composer_orch():
 
     domains = parse_topics(os.path.dirname(__file__) + "/composer-topics.json")  
     domains = orch._create_topic_embeddings(domains)
-    cupboard = CupboardDB(db_path=".beansack/cupboard/prod0/")
+    cupboard = ls.Beansack(".beansack/lancesack")
+
+    # sips = cupboard.allsips.search().limit(5).to_pydantic(ls._Sip)
+    # ic([(sip.title, sip.embedding[:5]) for sip in sips])
 
     async def run():
         for domain in domains:
             print("============ DOMAIN:", domain["_id"], "=============")
-            beans = orch.db.query_latest_beans(
-                kind=NEWS,
-                created=ndays_ago(2),
-                embedding=domain[K_EMBEDDING],
-                distance=0.3,
-                limit=10,
-                columns=DIGEST_COLUMNS + [K_EMBEDDING, K_TITLE]
-            )
+            beans = cupboard.allbeans \
+                .search(domain[K_EMBEDDING], query_type="vector", vector_column_name=K_EMBEDDING, ordering_field_name=K_CREATED) \
+                .distance_type("cosine") \
+                .distance_range(upper_bound=0.3) \
+                .where(f"created >= date '{ndays_ago_str(2)}'") \
+                .limit(10) \
+                .to_pydantic(ls._Bean)
             for bean in beans:                
-                sips = cupboard.allsips.search(bean.embedding, query_type="vector", vector_column_name ="embedding").limit(5).select([K_ID, K_TITLE]).to_pydantic(Sip)
-                ic(bean.title, [sip.title for sip in sips])
+                sips = cupboard.allsips \
+                    .search(bean.embedding, query_type="vector", vector_column_name=K_EMBEDDING, ordering_field_name=K_CREATED) \
+                    .distance_type("cosine") \
+                    .distance_range(upper_bound=0.15) \
+                    .limit(5) \
+                    .to_pydantic(ls._Sip)
+                if sips: ic(bean.title, [sip.title for sip in sips])
 
     asyncio.run(run())
   

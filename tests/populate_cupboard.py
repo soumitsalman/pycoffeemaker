@@ -158,7 +158,7 @@ def load_espresso_to_cupboard(cupboard_data, db_path: str = ".beansack/cupboard/
     embedder = embedders.from_path(os.getenv("EMBEDDER_PATH"))
     
     def _embed(items: list):
-        if not all([item.embedding for item in items]): return items
+        if all([item.embedding for item in items]): return items
 
         get_content = lambda item: f"{item.title}\n\n{item.content}"
         contents = [get_content(item) for item in items]
@@ -190,8 +190,8 @@ def load_espresso_to_cupboard(cupboard_data, db_path: str = ".beansack/cupboard/
             title=sip_data.get('title'),
             content=sip_data.get('content'),
             created=datetime.fromisoformat(sip_data['created']) if sip_data.get('created') else None,
-            past_sips=sip_data.get('past_sips', []),
-            source_beans=sip_data.get('source_beans', [])
+            related=sip_data.get('past_sips', []),
+            beans=sip_data.get('source_beans', [])
         )
         sips_to_insert.append(sip)
     
