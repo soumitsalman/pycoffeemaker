@@ -13,6 +13,7 @@
 .n8n
 .logs
 .tmp
+.aws
 .beansackv2
 .config
 .postgresql

@@ -98,8 +98,8 @@ ROLE=NewsSynthesizer;
 TASK=CreateHeadline,Question,Keywords
 INPUT=ListOfEventHighlights
 OUTPUT=JSON
-1. headline (String): One linear news/podcast headline capturing the primary subjects, actions, objects and location of the events. Length < 25 Words
-2. question (String): A precision question answer to which results in the INPUT news highlights. Length < 25 Words
+1. headline (String): Create a headline / title for a daily news recap + podcast with the input event highlights. Length < 25 Words
+2. question (String): A precision question answer to which results in the INPUT event highlights. Length < 25 Words
 3. keywords (List<String>): Name of top 2-5 people, organizations, geographic regions
 """
 
@@ -364,9 +364,6 @@ class Orchestrator:
             log.info("synthesized metadata", extra={'source': domain[K_ID], 'num_items': 1})
             
             banner = None
-            # if self.sketcher and metadata.banner_prompt: 
-            #     banner = await self._create_banner(metadata.banner_prompt)
-            #     log.info("created banner", extra={'source': domain[K_ID], 'num_items': 1})
             body = ARTICLE_TEMPLATE.format(
                 highlights="\n".join([f"<li>{hl}</li>" for hl in topics.headlines]),
                 # cleaning up body tags
@@ -405,17 +402,19 @@ class Orchestrator:
         article = await self.compose_article(domain)
         if not article: log.info("no article", extra={'source': domain[K_ID], 'num_items': 1})
         else: return await self.publish_article(domain, *article)
+
+    def _create_topic_embeddings(self, domains: list[dict])-> list[dict]:
+        if any(K_EMBEDDING not in d for d in domains):
+            domain_embs = self.embedder([f"topic: {d.get(K_DESCRIPTION)}" for d in domains])
+            for d, emb in zip(domains, domain_embs): d[K_EMBEDDING] = emb
+        return domains
           
     async def run_async(self, domains):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
         self.db.refresh_aggregated_chatters()
         domains = parse_topics(domains)
-
-        # create vectors if there is none
-        if any(K_EMBEDDING not in d for d in domains):
-            domain_embs = self.embedder([f"topic: {d.get(K_DESCRIPTION)}" for d in domains])
-            for d, emb in zip(domains, domain_embs): d[K_EMBEDDING] = emb
+        domains = self._create_topic_embeddings(domains)
 
         published = await asyncio.gather(*[self._compose_and_publish(domain) for domain in domains])
         published = [pub for pub in published if pub]
@@ -444,6 +443,8 @@ def parse_topics(topics: list|dict|str):
                 return list(json.load(file).values())
         raise ValueError(f"unsupported file type: {topics}")
     return list(yaml.safe_load(topics).values())
+
+
 
     # def _make_bean(metadata: Metadata, content: str, banner_url: str): 
     # current = now()

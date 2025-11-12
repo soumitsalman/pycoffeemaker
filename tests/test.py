@@ -250,12 +250,12 @@ def test_digestor_orch():
 
 def test_composer_orch():
     from coffeemaker.orchestrators.composerorch import Orchestrator, parse_topics
-    from coffeemaker.nlp.src.models import Metadata
+    from coffeemaker.orchestrators.cupboarddb import CupboardDB, Sip, Mug
 
     orch = Orchestrator(
         db_conn=(
             os.getenv("PG_CONNECTION_STRING"), 
-            ".beansack/"
+            os.getenv("STORAGE_DATAPATH")
         ),
         embedder_model="avsolatorio/GIST-small-Embedding-v0",
         analyst_model="openai/gpt-oss-20b",
@@ -263,51 +263,29 @@ def test_composer_orch():
         composer_conn=(
             os.getenv("COMPOSER_BASE_URL"),
             os.getenv("COMPOSER_API_KEY")
-        ),
-        publisher_conn=(
-            os.getenv("PUBLISHER_BASE_URL"),
-            os.getenv("PUBLISHER_API_KEY")
         )
     )
 
-    domains = parse_topics("/workspaces/beansack/pycoffeemaker/tests/composer-topics.json")   
+    domains = parse_topics(os.path.dirname(__file__) + "/composer-topics.json")  
+    domains = orch._create_topic_embeddings(domains)
+    cupboard = CupboardDB(db_path=".beansack/cupboard/prod0/")
 
-    for domain in domains:
-        print("============ DOMAIN:", domain["_id"], "=============")
-        res = asyncio.run(orch.compose_article(domain))
-        if not res:
-            print("No article composed")
-        else:
-            print(res[1])
-            print("Title:", res[0].headline)
-            print("Tags:", res[0].keywords)
-        # res = asyncio.run(orch._get_beans_for_domain(domain))
-        # [print(bean.digest(),"\n------------------------------") for bean in res]
-        # res = asyncio.run(orch._get_beans_for_domain(domain))
-        # print(domain["_id"], ":", len(res) if res else 0)
+    async def run():
+        for domain in domains:
+            print("============ DOMAIN:", domain["_id"], "=============")
+            beans = orch.db.query_latest_beans(
+                kind=NEWS,
+                created=ndays_ago(2),
+                embedding=domain[K_EMBEDDING],
+                distance=0.3,
+                limit=10,
+                columns=DIGEST_COLUMNS + [K_EMBEDDING, K_TITLE]
+            )
+            for bean in beans:                
+                sips = cupboard.allsips.search(bean.embedding, query_type="vector", vector_column_name ="embedding").limit(5).select([K_ID, K_TITLE]).to_pydantic(Sip)
+                ic(bean.title, [sip.title for sip in sips])
 
-     # topics = [
-    #     "Microsoft expands Copilot Studio with GPT‑5 and enterprise agent runtime",
-    #     "Nation-State Hackers Breach F5 Networks, Exfiltrate BIG‑IP Source Code and Vulnerability Data",
-    #     "Digital Marketing Spend Shifts Toward Direct Channels for Banks",
-    #     "October 2025 Government Shutdown Fires Over 4,500 Employees, Exposes RIF and Wage Issues",
-    #     "Deel Secures $300M Series E Funding, Valued at $17.3B Amid Talent and Pay Growth"
-    # ]
-    # for topic in topics:
-    #     print("TOPIC:", topic)
-    #     res = asyncio.run(
-    #         orch._query_beans(
-    #             kind=None,
-    #             last_ndays=1,
-    #             query_text=f"Topic: {topic}",
-    #             query_emb=None,
-    #             distance=0.2,
-    #             limit=8
-    #         )
-    #     )
-    #     [print(bean.digest(),"\n------------------------------") for bean in res]
-    #     print("==============================\n")
-
+    asyncio.run(run())
   
 def test_refresher_orch():
     from coffeemaker.orchestrators.refresherorch import Orchestrator
@@ -393,7 +371,7 @@ def test_dbcache():
     print(cache.get("current_snapshot")+10)
 
 def test_cupboard():
-    from coffeemaker.orchestrators.cupboard import CupboardDB, Mug, Sip
+    from coffeemaker.orchestrators.cupboarddb import CupboardDB, Mug, Sip
     from slugify import slugify
     from faker import Faker
     
@@ -435,9 +413,6 @@ def test_cupboard():
     list(store_mugs())
 
     ic(db.query_sips(query_text=fake.sentence(nb_words=6), distance=0.9, limit=5))
-    
-    
-   
     
 import argparse
 import subprocess
