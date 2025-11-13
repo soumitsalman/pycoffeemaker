@@ -246,35 +246,13 @@ class Orchestrator:
         )
         return await asyncio.to_thread(trending_beans if trending else latest_beans)  
     
-    def _kmeans_cluster(self, beans)-> list[list[Bean]]:
-        from sklearn.cluster import KMeans
-        n_clusters = len(beans)//(MIN_BEANS_PER_DOMAIN>>1)
-        return KMeans(n_clusters=n_clusters, random_state=666)
-    
-    def _hdbscan_cluster(self, beans):
-        from hdbscan import HDBSCAN
-        return HDBSCAN(
-            min_cluster_size=MIN_BEANS_PER_DOMAIN, 
-            min_samples=2, 
-            max_cluster_size=MAX_BEANS_PER_DOMAIN, 
-            cluster_selection_epsilon_max=MAX_DISTANCE_PER_DOMAIN
-        )
-            
-    def _dbscan_cluster(self, beans):
-        from sklearn.cluster import DBSCAN
-        return DBSCAN(min_samples=MIN_BEANS_PER_DOMAIN>>1, eps=MAX_DISTANCE_PER_DOMAIN)
-    
-    def _affinity_cluster(self, beans):
-        from sklearn.cluster import AffinityPropagation
-        return AffinityPropagation(copy=False, damping=0.55, random_state=666)    
-    
     def _cluster_beans(self, beans: list[Bean], method: str = "KMEANS")-> list[list[Bean]]:
         if not beans: return 
 
-        if method == "HDBSCAN": method = self._hdbscan_cluster(beans) 
-        elif method == "DBSCAN": method = self._dbscan_cluster(beans) 
-        elif method == "AFFINITY": method = self._affinity_cluster(beans)
-        else: method = self._kmeans_cluster(beans)
+        if method == "HDBSCAN": method = _hdbscan_cluster(beans) 
+        elif method == "DBSCAN": method = _dbscan_cluster(beans) 
+        elif method == "AFFINITY": method = _affinity_cluster(beans)
+        else: method = _kmeans_cluster(beans)
 
         labels = method.fit_predict(np.array([bean.embedding for bean in beans]))
         clusters = {}
@@ -445,6 +423,27 @@ def parse_topics(topics: list|dict|str):
     return list(yaml.safe_load(topics).values())
 
 
+def _kmeans_cluster(self, beans)-> list[list[Bean]]:
+    from sklearn.cluster import KMeans
+    n_clusters = len(beans)//(MIN_BEANS_PER_DOMAIN>>1)
+    return KMeans(n_clusters=n_clusters, random_state=666)
+    
+def _hdbscan_cluster(self, beans):
+    from hdbscan import HDBSCAN
+    return HDBSCAN(
+        min_cluster_size=MIN_BEANS_PER_DOMAIN, 
+        min_samples=2, 
+        max_cluster_size=MAX_BEANS_PER_DOMAIN, 
+        cluster_selection_epsilon_max=MAX_DISTANCE_PER_DOMAIN
+    )
+        
+def _dbscan_cluster(self, beans):
+    from sklearn.cluster import DBSCAN
+    return DBSCAN(min_samples=MIN_BEANS_PER_DOMAIN>>1, eps=MAX_DISTANCE_PER_DOMAIN)
+
+def _affinity_cluster(self, beans):
+    from sklearn.cluster import AffinityPropagation
+    return AffinityPropagation(copy=False, damping=0.55, random_state=666)    
 
     # def _make_bean(metadata: Metadata, content: str, banner_url: str): 
     # current = now()
