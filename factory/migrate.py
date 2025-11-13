@@ -79,39 +79,39 @@ def migrate_from_v1_to_v2(v1_conn, v2_conn):
     batch_size = 1<<16
 
     if True:
-        for offset in range(0, ic(v1db.count_items("bean_cores")), batch_size):
+        for offset in range(0, ic(v1db.count_rows("bean_cores")), batch_size):
             res = v1db.get_items("bean_cores", offset=offset, limit=batch_size)
             target_db.store_beans([Bean(**row) for row in res])
             ic(offset)
 
     if True:
-        for offset in range(0, ic(v1db.count_items("bean_embeddings")), batch_size):
+        for offset in range(0, ic(v1db.count_rows("bean_embeddings")), batch_size):
             res = v1db.get_items("bean_embeddings", offset=offset, limit=batch_size)
             target_db.update_beans([Bean(**row) for row in res], columns=["embedding"])
             target_db.refresh_classifications()
             ic(offset)
 
     if True:
-        for offset in range(0, ic(v1db.count_items("bean_gists")), batch_size):
+        for offset in range(0, ic(v1db.count_rows("bean_gists")), batch_size):
             res = v1db.get_items("bean_gists", offset=offset, limit=batch_size)
             target_db.update_beans([Bean(**{k:v for k,v in row.items() if v}) for row in res], columns=["gist", "regions", "entities"])
             ic(offset)
 
     if True:  
-        for offset in range(0, ic(v1db.count_items("chatters")), batch_size):
+        for offset in range(0, ic(v1db.count_rows("chatters")), batch_size):
             res = v1db.get_items("chatters", offset=offset, limit=batch_size)
             target_db.store_chatters([Chatter(**row) for row in res])
             target_db.refresh_chatter_aggregates()
             ic(offset)
 
     if True:
-        for offset in range(0, ic(v1db.count_items("publishers")), batch_size):
+        for offset in range(0, ic(v1db.count_rows("publishers")), batch_size):
             res = v1db.get_items("publishers", offset=offset, limit=batch_size)
             target_db.store_publishers([Publisher(**row) for row in res])
             ic(offset)
 
     if True:
-        for offset in range(0, ic(v1db.count_items("computed_bean_clusters")), batch_size):
+        for offset in range(0, ic(v1db.count_rows("computed_bean_clusters")), batch_size):
             res = v1db.get_items("computed_bean_clusters", offset=offset, limit=batch_size)
             target_db._store_related_beans(res)
             ic(offset)
@@ -119,16 +119,26 @@ def migrate_from_v1_to_v2(v1_conn, v2_conn):
     v1db.close()
     target_db.close()
 
-if __name__ == "__main__":
-    catalog = os.getenv("PG_CONNECTION_STRING")
-    storage = os.getenv("STORAGE_DATAPATH")
-    factory = os.getenv("FACTORY_DIR")
-    if not catalog:
-        log.warning("PG_CONNECTION_STRING not set; Beansack will try to initialize without a catalog.")
-    # register_parquets(catalog, storage, factory)
-    # compact_files(".beansack", ".beansackv2")
+def migrate_to_lancesack():
+    from coffeemaker.pybeansack import lancesack as ls
+    from coffeemaker.pybeansack import warehouse as wh
+    from tqdm import tqdm
 
-    migrate_from_v1_to_v2(
-        (os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH")),
-        (os.getenv("TARGET_PG_CONNECTION_STRING"), os.getenv("TARGET_STORAGE_DATAPATH")),
-    )
+    source_db = wh.Beansack(os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH"), factory_dir=os.getenv("FACTORY_DIR"))
+    target_db = ls.Beansack(os.getenv("RAGDB_STORAGE_DATAPATH"))
+    
+    ic(target_db.allbeans.count_rows())
+    offset = 0
+    batch_size = 1<<11
+    with tqdm(total=source_db.count_rows("beans"), desc="Porting Beans", unit="beans") as pbar:
+        while beans := source_db._query_beans(conditions=["gist IS NOT NULL", "embedding IS NOT NULL"], columns=["* EXCLUDE(cluster_id, cluster_size, content, content_length)"], offset=offset, limit=batch_size):
+            pbar.update(target_db.store_beans(beans))
+            offset = offset + len(beans)
+    ic(target_db.allbeans.count_rows())
+    
+    ic(target_db.allpublishers.count_rows())
+    target_db.store_publishers(source_db.query_publishers())
+    ic(target_db.allpublishers.count_rows())
+
+if __name__ == "__main__":
+    migrate_to_lancesack()

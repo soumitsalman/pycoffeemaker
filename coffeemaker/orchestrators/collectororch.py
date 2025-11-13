@@ -53,9 +53,9 @@ class Orchestrator:
     def store_beans(self, source: str, beans: list[Bean]):
         beans = storables(beans)
         if not beans: return       
-        prev_count = self.db.count_items("beans")
+        prev_count = self.db.count_rows("beans")
         self.db.store_beans(beans)
-        count = self.db.count_items("beans") - prev_count
+        count = self.db.count_rows("beans") - prev_count
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count
         return beans
