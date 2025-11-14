@@ -2,11 +2,8 @@ from itertools import chain, batched
 import json
 import os
 import logging
-import threading
+import threading as th
 import queue
-import gc
-from concurrent.futures import ThreadPoolExecutor
-# from pymongo import UpdateOne
 from coffeemaker.pybeansack import warehouse
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.utils import *
@@ -55,6 +52,7 @@ digest_storables = lambda beans: [bean for bean in beans if bean.gist]
 #     return digests
 
 class Orchestrator:
+    db_conn_str: tuple[str, str] = None
     db: warehouse.Beansack = None
     embedder_model: str = None
     embedder_context_len: int = 0
@@ -70,14 +68,15 @@ class Orchestrator:
         digestor_path: str = None, 
         digestor_context_len: int = 0
     ):     
+        self.db_conn_str = db_conn_str
         self.db = initialize_db(db_conn_str)
         self.embedder_model = embedder_path
         self.embedder_context_len = embedder_context_len
         self.digestor_model = digestor_path
         self.digestor_context_len = digestor_context_len
         self.update_queue = queue.Queue()
-        self.worker_thread = threading.Thread(target=self._run_updates, daemon=True)
-        self.worker_thread.start()  
+        self.updater = th.Thread(target=self._run_updates, daemon=True)
+        self.updater.start()  
     
     def get_beans(self, filter, batch_size: int = None):
         return self.db.query_latest_beans(
@@ -100,7 +99,7 @@ class Orchestrator:
                 try:
                     vectors = embedder.embed_documents([bean.content for bean in chunk])
                     updates = [Bean(url=b.url, source=b.source, embedding=v) for b, v in zip(chunk, vectors) if len(v) == VECTOR_LEN]                
-                    self._queue_update(updates, None, self.db.update_bean_embeddings)
+                    self._queue_update(updates, None, self.db.update_embeddings)
                     log.info("embedded", extra={"source": chunk[0].source, "num_items": len(updates)})
                     total += len(chunk)
                 except Exception as e:
@@ -127,11 +126,7 @@ class Orchestrator:
                 except Exception as e:
                     log.error(f"failed indexing - {e}", extra={"source": chunk[0].source, "num_items": len(chunk)})        
         return total
-    
-    def cluster_beans(self):
-        self.db.refresh_clusters()
-        log.info("refreshed clusters", extra={"source": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "num_items": 1})
-    
+         
     def _run_updates(self):
         """Worker thread that processes updates from the queue"""
         while True:
@@ -157,9 +152,10 @@ class Orchestrator:
     def _queue_update(self, beans: list[Bean], columns: list[str] = None, update_func=None):
         if beans: self.update_queue.put((beans, columns, update_func))
     
-    def _wait_for_updates(self):        
-        """Wait for all pending database updates to complete"""        
-        self.update_queue.join()
+    def _finish_updates(self):        
+        """Wait for all pending database updates to complete"""   
+        self.update_queue.put(END_OF_QUEUE)     
+        self.updater.join()
            
     @log_runtime(logger=log)
     def run_indexer(self, batch_size: int = BATCH_SIZE):
@@ -168,12 +164,10 @@ class Orchestrator:
         beans = self.get_beans(EMBED_FILTER)    
         log.info("starting indexer", extra={"source": run_id, "num_items":len(beans)}) 
         total = self.embed_beans(beans, batch_size)
-        self.cluster_beans()
         log.info("total indexed", extra={"source": run_id, "num_items": total})
         
         # Wait for all pending updates to complete
-        self.update_queue.put(END_OF_QUEUE)        
-        self._wait_for_updates()
+        self._finish_updates()
 
     @log_runtime(logger=log)
     def run_digestor(self, batch_size: int = BATCH_SIZE):
@@ -185,8 +179,7 @@ class Orchestrator:
         log.info("total digested", extra={"source": run_id, "num_items": total}) 
 
         # Wait for all pending updates to complete
-        self.update_queue.put(END_OF_QUEUE)
-        self._wait_for_updates()
+        self._finish_updates()
 
     def run(self, embedder_batch_size: int = BATCH_SIZE, digestor_batch_size: int = BATCH_SIZE):
         run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -196,22 +189,16 @@ class Orchestrator:
         total = self.embed_beans(beans, embedder_batch_size)
         log.info("total indexed", extra={"source": run_id, "num_items": total})
 
-        # kick of clustering and move on to digestor
-        # TODO: there is a bug here since im not checking the end of it
-        threading.Thread(target=self.cluster_beans, daemon=True).start()
-
         beans = self.get_beans(DIGEST_FILTER)  
         log.info("starting digestor", extra={"source": run_id, "num_items": len(beans)})  
         total = self.digest_beans(beans, digestor_batch_size)
         log.info("total digested", extra={"source": run_id, "num_items": total}) 
 
-        self.update_queue.put(END_OF_QUEUE)
-        self._wait_for_updates()
+        self._finish_updates()
 
     def close(self):        
         # Close database connection
-        self.update_queue.put(END_OF_QUEUE)
-        self._wait_for_updates()
+        self._finish_updates()
         self.db.close()
 
 

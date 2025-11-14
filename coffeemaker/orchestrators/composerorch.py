@@ -12,6 +12,7 @@ from coffeemaker.nlp import *
 from coffeemaker.pybeansack.cdnstore import *
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.warehouse import *
+from coffeemaker.pybeansack.lancesack import Beansack as Cupboard
 from coffeemaker.pybeansack.utils import *
 from coffeemaker.orchestrators.utils import *
 from icecream import ic
@@ -21,8 +22,12 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from httpx import AsyncClient, HTTPStatusError
 from tenacity import retry_if_exception_type, stop_after_attempt
+from slugify import slugify
+
 
 log = logging.getLogger(__name__)
+
+BARISTA = "barista@cafecito.tech"
 
 EMBEDDER_CTX_LEN = 512
 COMPOSER_CTX_LEN = 32768
@@ -47,7 +52,8 @@ INSTRUCTIONS:
 2.CountFrequency;Frequency=NumArticlesPerHeadline
 3.MeasureTopicAdherence;TopicAdherence=SemanticAndThematicRelevanceToTopic
 4.Filter=FrequencyMin2,TopicAdherenceHigh;KeepHeadlines=Frequency>=2,TopicAdherence=Strict
-5.Headline=Length<=25Words;Avoid=Clickbait,Sensationalism,Ambiguity,Vagueness;Tone=Neutral,Informative,Objective;IncludeKeywords;Keywords=Specific,Searchable,Entities,Phrases;MinimizeFalsePositives=True
+6.OrderBy=Actor/Subject
+5.Headline=Length<=25Words;MustInclude=Action/Subject,Action/Event,Object/Target,Impact,;Avoid=Clickbait,Sensationalism,Ambiguity,Vagueness;Tone=Neutral,Informative,Objective;IncludeKeywords;Keywords=Specific,Searchable,Entities,Phrases;MinimizeFalsePositives=True
 """
 
 COLUMNIST_INSTRUCTIONS = f"""
@@ -57,15 +63,15 @@ TODAYS_DATE: {datetime.now().strftime('%Y-%m-%d')}
 INPUT=Topic:String\n\nList<NewsString>;NewsString=Format<U:Date;P:KeyPoints|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;C:Categories|...;S:Sentiment|...>
 OUTPUT=TechnicalReport;Markdown;IncludeBodyOnly=True;ContentLength<600Words;en-US
 STEPS:
-    1. ANALYZE=AnalyzeDatastreams;UseFields:U,P,E,D,R,N,S
-    2. IDENTIFY=Patterns,Themes,Insights,EmergingTrends,Predictions
-    3. GROUNDING=Normative,MultiNews
-    4. FOCUS=TopicRelevance
-    5. INCLUDE=Events,DataPoints,Trends,AnalyzedPatterns,SpecifiedPredictions
-    6. OPTIONAL_INCLUDE=If conflicting viewpoints or data -> show comparison; else -> skip
-    7. OPTIONAL_INCLUDE=If time-based trends or evolution of events (based on U field) -> show the timeline progression analysis; else -> skip
-    8. PHRASING=direct,technical,factual,data-centric,1st-person
-    9. REMOVE=speculative,narrative,emotive language
+    1.ANALYZE=AnalyzeDatastreams;UseFields:U,P,E,D,R,N,S
+    2.IDENTIFY=Patterns,Themes,Insights,EmergingTrends,Predictions
+    3.GROUNDING=Normative,MultiNews
+    4.FOCUS=TopicRelevance
+    5.INCLUDE=Events,DataPoints,Trends,AnalyzedPatterns,SpecifiedPredictions
+    6.OPTIONAL=if (conflicting viewpoints or contradictory data): INCLUDE comparison; else: pass
+    7.OPTIONAL=if (time-based trends or events): INCLUDE timeline progression; else: pass
+    8.PHRASING=direct,technical,factual,data-centric,1st-person
+    9.REMOVE=speculative,narrative,emotive language
 """
 
 EDITOR_INSTRUCTIONS = f"""
@@ -96,9 +102,9 @@ STEPS=
 SYNTHESIZER_INSTRUCTIONS = """
 ROLE=NewsSynthesizer;
 TASK=CreateHeadline,Question,Keywords
-INPUT=ListOfEventHighlights
+INPUT=ListOfNewsHighlights
 OUTPUT=JSON
-1. headline (String): Create a headline / title for a daily news recap + podcast with the input event highlights. Length < 25 Words
+1. headline (String): A headline / title for a daily news recap + podcast that captures the primary actors and associated actions. Length < 25 Words
 2. question (String): A precision question answer to which results in the INPUT event highlights. Length < 25 Words
 3. keywords (List<String>): Name of top 2-5 people, organizations, geographic regions
 """
@@ -138,11 +144,13 @@ ARTICLE_TEMPLATE = """
 <section style="border:1px solid lightgray;border-radius:8px;padding:8px;">
     <h4>TL;DR</h4>
     <ul>
-        {highlights}
+        {headlines}
     </ul>
 </section>
 {reports}
 """
+
+_create_id = lambda title: slugify(now().strftime("%Y-%m-%d")+" "+title)
 
 class ShortlistedTopics(BaseModel):
     headlines: list[str] = Field(description="List of shortlisted headlines. each headline length <= 25 Words")
@@ -157,6 +165,7 @@ class Orchestrator:
     synthesizer = None
     sketcher = None
     publisher_conn = None
+    cupboard = None
 
     def __init__(self, 
         db_conn: tuple[str, str],    
@@ -166,7 +175,8 @@ class Orchestrator:
         composer_conn: tuple[str, str],
         banner_model: str = None,
         banner_conn: tuple[str, str] = None,
-        publisher_conn: tuple[str, str] = None
+        publisher_conn: tuple[str, str] = None,
+        cupboard_conn_str: str = None
     ):
         self.db = initialize_db(db_conn)
 
@@ -223,6 +233,8 @@ class Orchestrator:
         )
 
         self.publisher_conn = publisher_conn
+        if cupboard_conn_str: self.cupboard = Cupboard(cupboard_conn_str)
+
 
     async def _query_beans(self, trending: bool, kind: str, last_ndays: int, query_text: str, query_emb: list[float], distance: float, limit: int):
         if not query_emb and query_text:           
@@ -287,7 +299,7 @@ class Orchestrator:
         return beans if beans and len(beans) >= MIN_BEANS_PER_DOMAIN else None
 
     async def _shortlist_topics(self, domain: dict, beans: list[Bean]):
-        prompt = f"Topic: {domain[K_DESCRIPTION]}\n\n\n" + "\n\n".join([b.digest for b in beans])
+        prompt = f"# Topic: {domain[K_DESCRIPTION]}\n\n\n" + "\n\n".join([b.digest for b in beans])
         res = await self.analyst.run(prompt)
         return res.output
 
@@ -297,19 +309,15 @@ class Orchestrator:
         return beans if beans and len(beans) >= MIN_BEANS_PER_TOPIC else None
 
     async def _write_report(self, topic: str, beans: list[Bean]):        
-        prompt = f"Topic: {topic}\n\n\n" + "\n\n".join([b.digest for b in beans])
+        prompt = f"# Topic: {topic}\n\n\n" + "\n\n".join([b.digest for b in beans])
         draft = await self.columnist.run(prompt)
         if not draft.output: return
         report = await self.editor.run(draft.output)
         return report.output
 
-    # async def _write_main_content(self, domain: dict, reports: list[str]):
-    #     prompt = f"Domain: {domain[K_DESCRIPTION]}\n\n\n" + "\n\n=================\n\n".join(reports)
-    #     res = await self.editor.run(prompt)
-    #     return res.output
-
-    async def _synthesize_content(self, content: str):        
-        res = await self.synthesizer.run(content)
+    async def _synthesize_content(self, headlines: list[str]):     
+        prompt = f"# Highlights:\n\n" + "\n".join([f"- {hl}" for hl in headlines])
+        res = await self.synthesizer.run(prompt)
         return res.output
 
     async def _create_banner(self, banner_query: str):
@@ -330,7 +338,15 @@ class Orchestrator:
             if not columnist_beans: return
 
             reports = await asyncio.gather(*[self._write_report(headline, beans) for headline, beans in columnist_beans])
-            reports = [report for report in reports if report]
+            reports = [
+                {
+                    K_ID: _create_id(headline),
+                    K_TITLE: headline, 
+                    K_CONTENT: re.sub(r'<body[^>]*>', '', report).replace("</body>", ""), # cleaning up body tags
+                    "beans": [bean.url for bean in beans]
+                } 
+                for headline, report, beans in zip(topics.headlines, reports, columnist_beans) if report
+            ]
             log.info("created reports", extra={'source': domain[K_ID], 'num_items': len(reports)})
             if not reports: return
             
@@ -338,48 +354,73 @@ class Orchestrator:
             # log.info("created body", extra={'source': domain[K_ID], 'num_items': 1})            
             # if not body: return
 
-            metadata = await self._synthesize_content(str([headline for headline, _ in columnist_beans]))
+            metadata = await self._synthesize_content([report[K_TITLE] for report in reports])
             log.info("synthesized metadata", extra={'source': domain[K_ID], 'num_items': 1})
-            
-            banner = None
-            body = ARTICLE_TEMPLATE.format(
-                highlights="\n".join([f"<li>{hl}</li>" for hl in topics.headlines]),
-                # cleaning up body tags
-                reports="\n".join([re.sub(r'<body[^>]*>', '', report).replace("</body>", "") for report in reports])
-            )
-            return (metadata, body, banner)
 
+            return {
+                K_ID: _create_id(metadata.headline),
+                K_TITLE: metadata.headline,
+                K_SUMMARY: metadata.question,
+                K_CONTENT: ARTICLE_TEMPLATE.format(
+                    headlines="\n".join([f"<li>{hl}</li>" for hl in topics.headlines]),
+                    reports="\n".join([report[K_CONTENT] for report in reports])
+                ),
+                K_TAGS: [domain[K_ID]]+domain.get(K_TAGS, [])+metadata.keywords,
+                K_AUTHOR: BARISTA,
+                "highlights": topics.headlines,
+                "sections": reports,
+                "type": "html",
+            }
         except Exception as e:
             log.warning(f"compose article failed - {e}", extra={'source': domain[K_ID], 'num_items': 1}, exc_info=True)
 
-    async def _publish_article(self, session, domain: dict, metadata: Metadata, body: str, banner: bytes = None):
-        async with session.post("articles", json={
-            "id": random_filename(metadata.headline),
-            "title": metadata.headline,
-            "summary": metadata.question,
-            "content": body,
-            "type": "html",
-            "author": "barista@cafecito.tech",
-            "tags": [domain[K_ID]]+metadata.keywords
-        }) as resp:
+    async def _publish(self, session, article: dict):
+        async with session.post("articles", json=article) as resp:
             res = await resp.json()                
-        if res: log.info("published", extra={'source': domain[K_ID], 'num_items': 1})      
-        else: log.warning("publish failed", extra={'source': domain[K_ID], 'num_items': 1})
-        return res
+        if res: log.info("published", extra={'source': article[K_TAGS][0], 'num_items': 1})      
+        else: log.warning("publish failed", extra={'source': article[K_TAGS][0], 'num_items': 1})
+        return res    
 
-    async def publish_article(self, domain: dict, metadata: Metadata, body: str, banner: bytes = None):
+    async def publish(self, article: dict):
         async with aiohttp.ClientSession(base_url=self.publisher_conn[0], headers={"X_API_KEY": self.publisher_conn[1] }, raise_for_status=True) as session:            
-            return await self._publish_article(session, domain, metadata, body, banner)
+            return await self._publish(session, article)
 
-    async def bulk_publish_articles(self, articles: list[tuple[dict, Metadata, str, bytes]]):
+    async def bulk_publish(self, articles: list[dict]):
         async with aiohttp.ClientSession(base_url=self.publisher_conn[0], headers={"X_API_KEY": self.publisher_conn[1] }, raise_for_status=True) as session:
-            published = await asyncio.gather(*[self._publish_article(session,*a) for a in articles])
+            published = await asyncio.gather(*[self._publish(session, a) for a in articles])
         return published
     
+    def bulk_store(self, articles: list[dict]):
+        new_mugs, new_sips = [], []
+        for a in articles:
+            sections = a.get("sections", [])
+            vecs = self.embedder.embed_documents([s[K_CONTENT] for s in sections])
+            sips = [
+                Sip(
+                    **s, 
+                    created=now(), 
+                    embedding=vec, 
+                    mug=a[K_ID]
+                ) 
+                for s, vec in zip(sections, vecs)
+            ]
+            new_sips.extend(sips)
+            new_mugs.append(Mug(
+                **a, 
+                created=now(), 
+                embedding=np.mean(vecs, axis=0).tolist(), 
+                sips=[s.id for s in sips]
+            ))
+
+        total = self.cupboard.store_sips(new_sips)
+        total += self.cupboard.store_mugs(new_mugs)
+        return total
+
     async def _compose_and_publish(self, domain: dict):
         article = await self.compose_article(domain)
         if not article: log.info("no article", extra={'source': domain[K_ID], 'num_items': 1})
-        else: return await self.publish_article(domain, *article)
+        else: await self.publish(article)
+        return article
 
     def _create_topic_embeddings(self, domains: list[dict])-> list[dict]:
         if any(K_EMBEDDING not in d for d in domains):
@@ -394,12 +435,13 @@ class Orchestrator:
         domains = parse_topics(domains)
         domains = self._create_topic_embeddings(domains)
 
-        published = await asyncio.gather(*[self._compose_and_publish(domain) for domain in domains])
-        published = [pub for pub in published if pub]
-        log.info("composed and published", extra={"source": self.run_id, "num_items": len(published)})
-
+        articles = await asyncio.gather(*[self._compose_and_publish(domain) for domain in domains])
+        articles = [a for a in articles if a]
+        log.info("composed and published", extra={"source": self.run_id, "num_items": len(articles)})
+        total = self.bulk_store(articles)
+        log.info("stored", extra={"source": self.run_id, "num_items": total})
         self.db.close()
-        return published
+        return articles
 
 def _process_banner(banner):
     if hasattr(banner, "save"): 

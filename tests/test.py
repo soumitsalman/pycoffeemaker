@@ -264,7 +264,8 @@ def test_composer_orch():
         composer_conn=(
             os.getenv("COMPOSER_BASE_URL"),
             os.getenv("COMPOSER_API_KEY")
-        )
+        ),
+        cupboard_conn_str=os.getenv("RAGDB_STORAGE_DATAPATH")
     )
 
     domains = parse_topics(os.path.dirname(__file__) + "/composer-topics.json")  
