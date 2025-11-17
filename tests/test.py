@@ -369,6 +369,38 @@ def test_dbcache():
     # cache.set("current_snapshot", 15509)
     print(cache.get("current_snapshot")+10)
 
+def test_orch_on_lancesack():
+    from coffeemaker.orchestrators.collectororch import parse_sources
+    from coffeemaker.collectors.collector import APICollector
+    from coffeemaker.pybeansack.lancesack import Beansack, _Bean
+    from coffeemaker.nlp.src import embedders, digestors, Digest
+
+    db = Beansack(".beansack/lancesack")
+    if False:
+        feeds = parse_sources(f"{os.path.dirname(__file__)}/sources-1.yaml")
+        collector = APICollector(batch_size=64)
+        for rss in random.sample(feeds['rss'], 5):
+            items = collector.collect_rssfeed(rss)
+            ic(db.store_beans([item['bean'] for item in items if item.get('bean')]))
+            ic(db.store_publishers([item['publisher'] for item in items if item.get("publisher")]))
+            ic(db.store_chatters([item['chatter'] for item in items if item.get("chatter")]))
+
+    if True:
+        with embedders.from_path(os.getenv('EMBEDDER_PATH'), EMBEDDER_CONTEXT_LEN) as embedder:
+            while beans := db.allbeans.search().where("embedding IS NULL AND content IS NOT NULL AND content <> ''").limit(16).select([K_URL, K_CONTENT, K_SOURCE]).to_pydantic(_Bean):
+                beans = [bean for bean in beans if bean.content]
+                vectors = embedder.embed_documents([bean.content for bean in beans])
+                updates = [Bean(url=bean.url, embedding=vec) for bean, vec in zip(beans, vectors) if vec]
+                # ic(db.update_beans(beans, columns=["embedding"]))
+                ic(db.update_embeddings(updates))
+
+    if True:
+        with digestors.from_path(os.getenv('DIGESTOR_PATH'), max_input_tokens=4096, max_output_tokens=384, output_parser=Digest.parse_compressed) as digestor:
+            while beans := db.allbeans.search().where("gist IS NULL AND content IS NOT NULL AND content <> ''").limit(2).select([K_URL, K_CONTENT, K_SOURCE]).to_pydantic(_Bean):
+                beans = [bean for bean in beans if bean.content]
+                digests = digestor.run_batch([bean.content for bean in beans])
+                updates = [Bean(url=bean.url, gist=d.raw, regions=d.regions, entities=d.entities) for bean, d in zip(beans, digests) if d]
+                ic(db.update_beans(updates, columns=[K_GIST, K_REGIONS, K_ENTITIES]))
    
 import argparse
 import subprocess
@@ -389,6 +421,7 @@ parser.add_argument("--dbcache", action="store_true", help="Test dbcache")
 parser.add_argument("--readonly", action="store_true", help="Test readonly warehouse")
 parser.add_argument("--warehouse", action="store_true", help="Test warehouse v2")
 parser.add_argument("--cupboard", action="store_true", help="Test cupboard orchestrator")
+parser.add_argument("--orchonlance", action="store_true", help="Test lancesack orchestrator")
 
 # parser.add_argument("--test-fullstack-orch", action="store_true", help="Test fullstack orchestrator")
 # parser.add_argument("--create-test-data-file", metavar="OUTPUT_PATH", help="Create test data file at OUTPUT_PATH")
@@ -427,6 +460,7 @@ def main():
         test_dbcache()
     if args.warehouse:
         test_warehouse()
+    if args.orchonlance: test_orch_on_lancesack()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:

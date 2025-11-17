@@ -1,159 +1,138 @@
 categories:
-- Artificial General Intelligence
-- Artificial Intelligence
-- Artificial Intelligence Safety
-- Artificial Life
-- Artificial Neural Networks
-- Artificial Plants
-- Artificial Sweeteners
-- Artificial Vision
-- Academic and Research
-- Accessibility
-- Advertising
-- Agriculture
-- Air and Aviation
-- Alcohol
+# Core AI and Computing
+- Artificial Intelligence and Machine Learning
+- AI Ethics and Governance
+- Artificial Life and Vision
 - Algorithm and Computation
-- Alien and Extraterrestrial Life
-- Alternative Energy
-- Anatomy and Physiology
-- Animation and Animation Industry
-- Anthropology
-- Antibiotics and Antimicrobial Resistance
-- Archaeology and Ancient History
-- Architecture and Design
-- Art and Art History
-- Artificial Intelligence Ethics and Governance
-- Astronomy and Astrophysics
-- Athletics and Sports
-- Audio and Sound Technology
-- Automation and Robotics
-- Banking and Finance
-- Behavioral Science
-- Biochemistry and Molecular Biology
-- Biotechnology
-- Blockchain and Cryptocurrency
-- Body and Health
-- Books and Literature
-- Business and Management
-- Cannabis and Cannabinoids
-- Career and Employment
-- Chemistry
-- Child Development and Welfare
-- Cloud Computing
-- Climate and Environment
-- Coding and Programming Languages
-- Communication and Media
-- Community and Society
-- Computing and Information Technology
-- Construction and Infrastructure
-- Consumer Goods and Retail
-- Cybersecurity and Cybercrime
 - Data Science and Analytics
-- Dentistry
-- Design and Creative Arts
-- Digital Media and Internet
-- Disaster and Emergency Management
-- Diversity and Inclusion
-- Drug and Medication
-- Earth Sciences and Geology
-- Education
-- Elder Care and Aging
-- Election and Voting
-- Energy and Utilities
-- Engineering
-- Entertainment and Performing Arts
-- Environment and Conservation
-- Esports and Gaming
-- Ethics and Philosophy
-- Family and Relationships
-- Fashion and Style
-- Film and Cinema
-- Food and Nutrition
-- Forensics and Crime Investigation
-- Gambling and Betting
-- Gender Studies
-- Genetics and Genomics
-- Government and Politics
-- Health and Medicine
-- History
+- Software Development and Programming
+- Cloud Computing
 - High Performance Computing
-- Home and Lifestyle
-- Human Rights and Social Justice
-- Humanities and Cultural Studies
-- Immunology and Infectious Diseases
-- Industry and Manufacturing
-- Innovation and Startups
-- Insurance
+- Cybersecurity and Privacy
 - Internet and Web Technologies
-- Justice and Legal System
-- Labor and Workforce
-- Languages and Linguistics
-- Law Enforcement and Public Safety
-- Legal Studies
-- LGBTQ+ Issues
-- Literacy and Education Development
-- Machine Learning and AI Applications
-- Marketing
-- Mathematics and Statistics
-- Mechanical Systems
-- Media and Journalism
-- Medical Research and Healthcare Technology
-- Mental Health and Psychology
-- Migration and Immigration
-- Military and Defense
-- Mining and Natural Resources
-- Music and Music Industry
-- Nanotechnology
-- Natural Disasters and Hazards
-- Nutrition and Dietetics
-- Nuclear Science and Energy
-- Nutrition and Supplements
-- Occupational Health and Safety
-- Ocean and Marine Science
-- Paleontology and Evolution
-- Parental and Childcare
-- Parks and Recreation
-- Pharmaceuticals and Drug Development
-- Philosophy and Theology
-- Physical Fitness and Sports Medicine
-- Physics
-- Planetary Science and Space Exploration
-- Political Science
-- Pollution and Environmental Hazards
-- Privacy and Data Protection
-- Product Development and Technology
-- Professional Development
-- Public Administration and Policy
-- Public Health
-- Real Estate
-- Rehabilitation and Therapy
-- Religion and Spirituality
-- Renewable Energy
-- Research and Development
-- Retail Industry
-- Robotics and Automation
-- Rural and Urban Development
-- Science and Technology
-- Security and Defense Technology
-- Social Media and Digital Culture
-- Social Sciences
-- Software Development
-- Space Industry and Technologies
-- Sports and Physical Activities
-- Sustainability and Environmental Management
-- Technology and Innovation
-- Transportation and Mobility
-- Urban Planning and Development
-- Veterinary Medicine and Animal Science
+- Digital and Social Media
 - Virtual and Augmented Reality
-- Water Resources and Management
-- Weaponry and Military Technology
-- Wildlife and Conservation
-- "Women\u2019s Issues and Gender Equality"
-- Workplace and Employment Law
-- Youth and Education
+- Product Development and Technology
+
+# Business and Economics
+- Marketing and Retail
+- Banking and Finance
+- Business and Management
+- Employment and Workplace
+- Professional Development and Innovation
+- Insurance
+- Real Estate
+- Sports and Athletics
+
+# Science and Engineering
+- Physics
+- Chemistry
+- Mathematics and Statistics
+- Engineering
+- Mechanical Systems
+- Nanotechnology
+- Energy Systems and Technologies
+- Air and Aviation
+- Space and Planetary Science
+- Space Industry and Technologies
+
+# Biology, Life Sciences, and Medicine
+- Human Biology and Physiology
+- Biotechnology
+- Genetics and Genomics
+- Paleontology and Evolution
 - Zoology and Animal Behavior
+- Veterinary Medicine and Animal Science
+- Medical Research and Healthcare Technology
+- Pharmaceuticals and Drug Development
+- Public Health
+- Occupational Health and Safety
+- Mental Health and Psychology
+- Physical Medicine and Rehabilitation
+- Infectious Diseases and Immunity
+
+# Health and Wellness
+- Nutrition, Food, and Supplements
+- Body and Health
+- Elder Care and Aging
+- Child and Family Care
+- Reproductive and Sexual Health
+
+# Earth and Environmental Sciences
+- Climate and Environmental Management
+- Conservation and Wildlife
+- Water Resources and Management
+- Ocean and Marine Science
+- Earth Sciences and Natural Resources
+- Disaster and Emergency Management
+- Urban and Rural Planning
+- Transportation and Mobility
+- Construction and Infrastructure
+- Agriculture and Land Use
+
+# Arts, Media, and Entertainment
+- Art and Design
+- Animation and Animation Industry
+- Entertainment and Performing Arts
+- Film and Cinema
+- Music and Music Industry
+- Books and Literature
+- Media and Journalism
+
+# Culture and Society
+- History
+- Archaeology and Ancient History
+- Anthropology
+- Languages and Linguistics
+- Philosophy, Religion, and Spirituality
+- Humanities and Cultural Studies
+- Fashion and Style
+- Home and Lifestyle
+
+# Government, Law, and Justice
+- Government and Politics
+- Political Science
+- Election and Voting
+- Public Administration and Policy
+- Legal System and Justice
+- Law Enforcement and Public Safety
+- Forensics and Crime Investigation
+
+# Social Issues and Demographics
+- Education and Youth Development
+- Diversity, Equity, and Inclusion
+- Gender Studies
+- LGBTQ+ Issues
+- Human Rights and Social Justice
+- Family and Relationships
+- Migration and Immigration
+- Labor and Workforce
+- Community and Society
+- Social Sciences
+- Behavioral Science and Economics
+
+# Military, Security, and Conflict
+- Military and Defense
+- Weaponry and Military Technology
+- Homeland Security and Safety
+- Geopolitics and International Relations
+
+# Emerging Technologies and Industries
+- Blockchain and Cryptocurrency
+- Gaming and Esports
+- Robotics and Automation
+- Internet of Things and Smart Systems
+- 3D Printing and Additive Manufacturing
+- Autonomous Vehicles
+
+# Specialized and Niche Topics
+- Academic Research
+- Accessibility
+- Alien and Extraterrestrial Life
+- Cannabis and Cannabinoids
+- Gambling and Betting
+- Alcohol and Beverages
+- Industry and Manufacturing
 sentiments:
 - bewildered
 - doubtful
@@ -164,18 +143,13 @@ sentiments:
 - overwhelmed
 - proud
 - cruel
-- dynamic
 - curious
-- cheerful
 - joyful
 - trusting
 - generous
 - subtle
-- graceful
 - desperate
-- resentful
 - fair
-- bitter
 - refined
 - focused
 - moral
@@ -185,58 +159,33 @@ sentiments:
 - serene
 - productive
 - peaceful
-- philosophical
 - perplexed
-- stunned
 - compassionate
 - love
 - disturbed
 - jealous
-- elegant
 - understanding
 - angry
-- striking
-- wise
-- hateful
-- helpless
-- positive
-- delicate
-- vigorous
-- mysterious
-- vivid
-- ethical
-- honorable
-- powerful
 - thoughtful
 - amazed
 - confident
 - conflicted
-- beautiful
 - inspiring
 - responsible
-- cooperative
 - ambivalent
 - analytical
 - ashamed
 - passionate
 - negative
-- objective
-- hopeful
-- rational
 - professional
 - friendly
 - intense
 - brave
-- worried
 - investigative
 - cautious
 - innovative
-- restless
 - bold
-- vengeful
-- hostile
 - fearful
-- complexpractical
 - admiring
 - fascinated
 - artistic
@@ -245,23 +194,14 @@ sentiments:
 - energetic
 - disciplined
 - grateful
-- bittersweet
-- just
 - surprised
 - harmonious
-- protective
 - honest
 - enthusiastic
-- decisive
-- efficient
 - determined
 - competent
 - anxious
-- delightful
-- insightful
 - dramatic
-- strategic
-- righteous
 - accepting
 - nostalgic
 - skeptical
@@ -269,11 +209,5 @@ sentiments:
 - contemplative
 - sad
 - respectful
-- principled
-- depressed
-- supportive
-- astonished
-- shocked
 - assertive
 - reflective
-- disgusted
