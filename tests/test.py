@@ -267,34 +267,37 @@ def test_composer_orch():
         ),
         cupboard_conn_str=os.getenv("RAGDB_STORAGE_DATAPATH")
     )
+    articles = asyncio.run(orch.run_async(os.path.dirname(__file__) + "/composer-topics.json"))
+    if not articles: raise Exception("No articles composed")
+    [print(a[K_CONTENT], "\n======================\n") for a in articles]
 
-    domains = parse_topics(os.path.dirname(__file__) + "/composer-topics.json")  
-    domains = orch._create_topic_embeddings(domains)
-    cupboard = ls.Beansack(".beansack/lancesack")
+    # domains = parse_topics(os.path.dirname(__file__) + "/composer-topics.json")  
+    # domains = orch._create_topic_embeddings(domains)
+    # cupboard = ls.Beansack(".beansack/lancesack")
 
-    # sips = cupboard.allsips.search().limit(5).to_pydantic(ls._Sip)
-    # ic([(sip.title, sip.embedding[:5]) for sip in sips])
+    # # sips = cupboard.allsips.search().limit(5).to_pydantic(ls._Sip)
+    # # ic([(sip.title, sip.embedding[:5]) for sip in sips])
 
-    async def run():
-        for domain in domains:
-            print("============ DOMAIN:", domain["_id"], "=============")
-            beans = cupboard.allbeans \
-                .search(domain[K_EMBEDDING], query_type="vector", vector_column_name=K_EMBEDDING, ordering_field_name=K_CREATED) \
-                .distance_type("cosine") \
-                .distance_range(upper_bound=0.3) \
-                .where(f"created >= date '{ndays_ago_str(2)}'") \
-                .limit(10) \
-                .to_pydantic(ls._Bean)
-            for bean in beans:                
-                sips = cupboard.allsips \
-                    .search(bean.embedding, query_type="vector", vector_column_name=K_EMBEDDING, ordering_field_name=K_CREATED) \
-                    .distance_type("cosine") \
-                    .distance_range(upper_bound=0.15) \
-                    .limit(5) \
-                    .to_pydantic(ls._Sip)
-                if sips: ic(bean.title, [sip.title for sip in sips])
+    # async def run():
+    #     for domain in domains:
+    #         print("============ DOMAIN:", domain["_id"], "=============")
+    #         beans = cupboard.allbeans \
+    #             .search(domain[K_EMBEDDING], query_type="vector", vector_column_name=K_EMBEDDING, ordering_field_name=K_CREATED) \
+    #             .distance_type("cosine") \
+    #             .distance_range(upper_bound=0.3) \
+    #             .where(f"created >= date '{ndays_ago_str(2)}'") \
+    #             .limit(10) \
+    #             .to_pydantic(ls._Bean)
+    #         for bean in beans:                
+    #             sips = cupboard.allsips \
+    #                 .search(bean.embedding, query_type="vector", vector_column_name=K_EMBEDDING, ordering_field_name=K_CREATED) \
+    #                 .distance_type("cosine") \
+    #                 .distance_range(upper_bound=0.15) \
+    #                 .limit(5) \
+    #                 .to_pydantic(ls._Sip)
+    #             if sips: ic(bean.title, [sip.title for sip in sips])
 
-    asyncio.run(run())
+    # asyncio.run(run())
   
 def test_refresher_orch():
     from coffeemaker.orchestrators.refresherorch import Orchestrator

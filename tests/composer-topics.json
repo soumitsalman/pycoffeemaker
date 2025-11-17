@@ -1,14 +1,14 @@
 {
   "HPC": {
-    "_id": "HPC",
+    "id": "HPC",
     "description": "Technical information on high performance computing (HPC) and data centers, covering HPC architectures (parallel processing, distributed systems, cluster configurations), GPU cloud computing (cloud-based GPU services, virtualization, scalability), supercomputers (top systems like Frontier, Fugaku, hardware specs, performance benchmarks), related technologies (quantum computing integration, AI accelerators, exascale computing), software stacks (MPI, OpenMP, CUDA, ROCm), HPC applications (scientific simulations, big data analytics, machine learning training), data center infrastructure (server racks, networking, storage systems), data center cooling and energy efficiency (liquid cooling, immersion cooling, renewable energy integration), data center management (automation, monitoring, orchestration tools), data center security (physical and cyber protections, compliance standards), and emerging trends (edge HPC, hybrid cloud deployments, modular data centers, sustainable data center designs)."
   },
   "Aviation": {
-    "_id": "Aviation",
+    "id": "Aviation",
     "description": "Information on aviation incidents and innovations, covering plane crashes (causes, investigations, safety recommendations), air traffic control issues (system failures, human error, congestion management), airline operational problems (delays, cancellations, crew shortages), technical malfunctions in aircraft (engine failures, avionics glitches, maintenance oversights), new airplane designs and launches (aerodynamic advancements, sustainable fuels, prototype unveilings), emerging air routes (new international connections, geopolitical impacts, demand forecasts), autonomous aircraft systems (fly-by-wire enhancements, AI-assisted piloting, regulatory approvals), commercial drone developments (delivery services, urban air mobility, certification processes), military drone advancements (surveillance UAVs, combat applications, swarm technologies), and introduction of new military aircraft and UAV technologies (stealth fighters, hypersonic capabilities, electronic warfare integrations)."
   },
   "Startups & Entrepreneurship": {
-    "_id": "Startups & Entrepreneurship",
+    "id": "Startups & Entrepreneurship",
     "description": "Information on start-up ecosystems, covering funding strategies (venture capital, angel investment, seed funding, crowdfunding), fund raising techniques (pitch decks, investor relations), IPO processes and examples, reasons for start-up closures due to insufficient operating cash, valuation methods (pre-money, post-money, comparable analysis), innovative business models (subscription, freemium, platform-based), role of accelerators (benefits, selection criteria, notable programs), emerging start-ups (industries, founding stories), mergers and acquisitions (trends, strategies, notable deals), new product development (ideation, prototyping, testing), successful product launch strategies (marketing, go-to-market plans), team building and recruitment (hiring, talent retention, culture development), geopolitical influences (trade policies, international markets, regional instability), and governmental policies (regulations, tax benefits, grants, compliance) impacting start-ups."
   }
 }

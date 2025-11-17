@@ -1,41 +1,41 @@
 {
   "Artificial Intelligence": {
-    "_id": "Artificial Intelligence",
+    "id": "Artificial Intelligence",
     "tags": ["Technology", "OPED"],
     "description": "Technical information on artificial intelligence (AI), focusing on new AI model releases (architectural specifications, training datasets, performance metrics), AI model integration (framework compatibility, inference pipelines, hardware acceleration), AI technical trends (advancements in model compression, quantization, sparsity), data science mechanisms (feature selection algorithms, data augmentation techniques, hyperparameter tuning), neural network technologies (transformer architectures, convolutional networks, attention mechanisms), AI execution and runtime engines (TensorFlow, PyTorch, ONNX runtime optimizations), robotics (control systems, path planning algorithms, sensor integration), AI applications (technical implementations in computer vision, NLP, reinforcement learning), AI research outputs (peer-reviewed papers, algorithmic breakthroughs, open-source repositories), computer vision (feature extraction, 3D reconstruction, real-time processing), and deep learning mechanisms (gradient descent variants, loss function design, regularization techniques)."
   },
   "Cybersecurity": {
-    "_id": "Cybersecurity",
+    "id": "Cybersecurity",
     "tags": ["Technology", "News"],
     "description": "Technical information on cybersecurity landscapes, covering emerging threats such as new malware (types, detection, mitigation), new data breaches (incidents, affected entities, lessons learned), new cybersecurity breaches (attack vectors, impacts), new privacy leaks (data exposure cases, regulatory responses), network breaches (intrusion methods, prevention strategies), vulnerability disclosures (zero-days, patches, CVE details), darkweb trends (marketplaces, leaked data, underground activities), cybersecurity threat analysis (risk assessments, intelligence reports), cybercrime investigations (case studies, forensic techniques, law enforcement actions), governmental policies on cybersecurity (regulations, frameworks, international agreements), and security compliance changes (updates to standards like GDPR, NIST, impacts on organizational practices, adaptation strategies)."
   },
   "HPC": {
-    "_id": "HPC",
+    "id": "HPC",
     "tags": ["Technology", "OPED"],
     "description": "Technical information on high performance computing (HPC) and data centers, covering HPC architectures (parallel processing, distributed systems, cluster configurations), GPU cloud computing (cloud-based GPU services, virtualization, scalability), supercomputers (top systems like Frontier, Fugaku, hardware specs, performance benchmarks), related technologies (quantum computing integration, AI accelerators, exascale computing), software stacks (MPI, OpenMP, CUDA, ROCm), HPC applications (scientific simulations, big data analytics, machine learning training), data center infrastructure (server racks, networking, storage systems), data center cooling and energy efficiency (liquid cooling, immersion cooling, renewable energy integration), data center management (automation, monitoring, orchestration tools), data center security (physical and cyber protections, compliance standards), and emerging trends (edge HPC, hybrid cloud deployments, modular data centers, sustainable data center designs)."
   },
   "Aviation": {
-    "_id": "Aviation",
+    "id": "Aviation",
     "tags": ["Travel", "Logistics", "Airplanes", "News"],
     "description": "Information on aviation incidents and innovations, covering plane crashes (causes, investigations, safety recommendations), air traffic control issues (system failures, human error, congestion management), airline operational problems (delays, cancellations, crew shortages), technical malfunctions in aircraft (engine failures, avionics glitches, maintenance oversights), new airplane designs and launches (aerodynamic advancements, sustainable fuels, prototype unveilings), emerging air routes (new international connections, geopolitical impacts, demand forecasts), autonomous aircraft systems (fly-by-wire enhancements, AI-assisted piloting, regulatory approvals), commercial drone developments (delivery services, urban air mobility, certification processes), military drone advancements (surveillance UAVs, combat applications, swarm technologies), and introduction of new military aircraft and UAV technologies (stealth fighters, hypersonic capabilities, electronic warfare integrations)."
   },
   "Autonomous Vehicles": {
-    "_id": "Autonomous Vehicles",
+    "id": "Autonomous Vehicles",
     "tags": ["Technology", "Logistics", "Cars", "News"],
     "description": "Information on autonomous vehicles (AV), covering autonomous vehicle technologies (sensors, AI algorithms, navigation systems), AV launches (product announcements, rollout timelines, case studies), leading AV companies (profiles, innovations, market positions), applications and use of autonomous vehicles (transportation, logistics, ride-sharing, industrial uses), governmental policies towards AV operations (regulations, incentives, international frameworks), new AV services (mobility-as-a-service, delivery fleets, public transit integrations), AV safety regulations and standards (testing protocols, certification processes, compliance requirements), AV safety issues (accident reports, risk assessments, mitigation strategies), AV engineering and technology advancements (hardware developments, software updates, integration challenges), and smart vehicles (connected ecosystems, V2X communication, IoT features)."
   },
   "Startups & Entrepreneurship": {
-    "_id": "Startups & Entrepreneurship",
+    "id": "Startups & Entrepreneurship",
     "tags": ["Business", "News"],
     "description": "Information on start-up ecosystems, covering funding strategies (venture capital, angel investment, seed funding, crowdfunding), fund raising techniques (pitch decks, investor relations), IPO processes and examples, reasons for start-up closures due to insufficient operating cash, valuation methods (pre-money, post-money, comparable analysis), innovative business models (subscription, freemium, platform-based), role of accelerators (benefits, selection criteria, notable programs), emerging start-ups (industries, founding stories), mergers and acquisitions (trends, strategies, notable deals), new product development (ideation, prototyping, testing), successful product launch strategies (marketing, go-to-market plans), team building and recruitment (hiring, talent retention, culture development), geopolitical influences (trade policies, international markets, regional instability), and governmental policies (regulations, tax benefits, grants, compliance) impacting start-ups."
   },
   "Career & Professional Growth": {
-    "_id": "Career & Professional Growth",
+    "id": "Career & Professional Growth",
     "tags": ["Career", "Profession", "OPED"],
     "description": "Information on career development, hiring trends, layoff trends, job market trends, career development strategies (skill building, networking, mentorship programs), emerging career trends (remote work, gig economy, AI-driven roles), job trends (in-demand industries, salary benchmarks, employment forecasts), guidance for new job hunters (resume tips, interview preparation, entry-level opportunities), leadership growth (executive coaching, decision-making skills, team management), career growth pathways (performance reviews, continuous learning, goal setting), career switching advice (transferable skills, industry transitions, mid-career pivots), job market analysis (labor statistics, economic impacts, hiring cycles), and essential job promotion skills (negotiation, public speaking, strategic planning)."
   },
   "Government & Politics": {
-    "_id": "Government & Politics",
+    "id": "Government & Politics",
     "description": "Electoral systems voting patterns analysis, legislative bills policy implementation impact, military operations defense strategy equipment, law enforcement crime statistics prevention programs, judicial system court decisions precedents, international relations diplomatic negotiations treaties, public administration budget allocation efficiency, national security intelligence operations protocols.",
     "tags": ["Politics", "News"]
   } 

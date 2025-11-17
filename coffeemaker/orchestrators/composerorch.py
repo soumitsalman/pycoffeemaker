@@ -29,9 +29,11 @@ log = logging.getLogger(__name__)
 
 BARISTA = "barista@cafecito.tech"
 
+K_ID = "id"
+
 EMBEDDER_CTX_LEN = 512
 COMPOSER_CTX_LEN = 32768
-LAST_NDAYS = int(os.getenv('COMPOSER_BEANS_LAST_NDAYS', 1))
+LAST_NDAYS = int(os.getenv('COMPOSER_LAST_NDAYS', 1))
 
 MIN_BEANS_PER_TOPIC = int(os.getenv('MIN_BEANS_PER_TOPIC', 4))
 MAX_BEANS_PER_TOPIC = int(os.getenv('MAX_BEANS_PER_TOPIC', 24))
@@ -52,8 +54,9 @@ INSTRUCTIONS:
 2.CountFrequency;Frequency=NumArticlesPerHeadline
 3.MeasureTopicAdherence;TopicAdherence=SemanticAndThematicRelevanceToTopic
 4.Filter=FrequencyMin2,TopicAdherenceHigh;KeepHeadlines=Frequency>=2,TopicAdherence=Strict
+5.MergeSimilar;SelectDistinct
 6.OrderBy=Actor/Subject
-5.Headline=Length<=25Words;MustInclude=Action/Subject,Action/Event,Object/Target,Impact,;Avoid=Clickbait,Sensationalism,Ambiguity,Vagueness;Tone=Neutral,Informative,Objective;IncludeKeywords;Keywords=Specific,Searchable,Entities,Phrases;MinimizeFalsePositives=True
+7.Headline=Length<=25Words;MustInclude=Action/Subject,Action/Event,Object/Target,Impact,;Avoid=Clickbait,Sensationalism,Ambiguity,Vagueness;Tone=Neutral,Informative,Objective;IncludeKeywords;Keywords=Specific,Searchable,Entities,Phrases;MinimizeFalsePositives=True
 """
 
 COLUMNIST_INSTRUCTIONS = f"""
@@ -293,29 +296,53 @@ class Orchestrator:
         # merge the sections and pass it on to editor to rewrite
         # create headline, highlights, summary, prompt for image, tags
     
-    async def _get_beans_for_domain(self, domain: dict):
-        beans = await self._query_beans(False, kind=NEWS, last_ndays=LAST_NDAYS, query_text=domain.get(K_DESCRIPTION), query_emb=domain.get(K_EMBEDDING), distance=MAX_DISTANCE_PER_DOMAIN, limit=MAX_BEANS_PER_DOMAIN)
-        log.info("found beans", extra={'source': domain[K_ID], 'num_items': len(beans)})
+    async def _get_beans_for_topic(self, topic: dict):
+        beans = await self._query_beans(False, kind=NEWS, last_ndays=LAST_NDAYS, query_text=topic.get(K_DESCRIPTION), query_emb=topic.get(K_EMBEDDING), distance=MAX_DISTANCE_PER_DOMAIN, limit=MAX_BEANS_PER_DOMAIN)
+        log.info("found beans", extra={'source': topic[K_ID], 'num_items': len(beans)})
         return beans if beans and len(beans) >= MIN_BEANS_PER_DOMAIN else None
 
-    async def _shortlist_topics(self, domain: dict, beans: list[Bean]):
-        prompt = f"# Topic: {domain[K_DESCRIPTION]}\n\n\n" + "\n\n".join([b.digest for b in beans])
-        res = await self.analyst.run(prompt)
-        return res.output
+    async def _create_headlines(self, topic: dict):
+        beans = await self._get_beans_for_topic(topic)
+        if not beans: return
 
-    async def _get_beans_for_topic(self, topic: str, emb: list[float] = None) -> list[Bean]:
+        prompt = f"# Topic: {topic[K_DESCRIPTION]}\n\n\n" + "\n\n".join([b.digest for b in beans])
+        res = await self.analyst.run(prompt)
+        return res.output.headlines
+
+    async def _get_beans_for_headline(self, topic: str, emb: list[float] = None) -> list[Bean]:
         beans = await self._query_beans(False, kind=None, last_ndays=LAST_NDAYS+1, query_text=topic, query_emb=emb, distance=MAX_DISTANCE_PER_TOPIC, limit=MAX_BEANS_PER_TOPIC)
         log.info("found beans", extra={'source': topic, 'num_items': len(beans)})
         return beans if beans and len(beans) >= MIN_BEANS_PER_TOPIC else None
 
-    async def _write_report(self, topic: str, beans: list[Bean]):        
-        prompt = f"# Topic: {topic}\n\n\n" + "\n\n".join([b.digest for b in beans])
+    # async def _write_report(self, headline: str, beans: list[Bean]):    
+    #     if not beans: return    
+
+    #     prompt = f"# Topic: {headline}\n\n\n" + "\n\n".join([b.digest for b in beans])
+    #     draft = await self.columnist.run(prompt)
+    #     if not draft.output: return
+    #     report = await self.editor.run(draft.output)
+    #     return report.output
+    
+    async def _create_section(self, topic: dict, headline: str, headline_emb: list[float]):
+        beans = await self._get_beans_for_headline(headline, headline_emb)
+        if not beans: return
+
+        prompt = f"# Topic: {headline}\n\n\n" + "\n\n".join([b.digest for b in beans])
         draft = await self.columnist.run(prompt)
         if not draft.output: return
-        report = await self.editor.run(draft.output)
-        return report.output
+        section = await self.editor.run(draft.output)
+        if not (section and section.output): return
+        log.info("created report", extra={'source': headline, 'num_items': 1})
+        return {
+            K_ID: _create_id(headline),
+            K_TITLE: headline, 
+            K_CONTENT: re.sub(r'<body[^>]*>', '', section.output).replace("</body>", ""), # cleaning up body tags
+            "beans": [bean.url for bean in beans]
+        } 
+                
+    async def _synthesize_content(self, headlines: list[str]):  
+        if not headlines: return
 
-    async def _synthesize_content(self, headlines: list[str]):     
         prompt = f"# Highlights:\n\n" + "\n".join([f"- {hl}" for hl in headlines])
         res = await self.synthesizer.run(prompt)
         return res.output
@@ -324,55 +351,40 @@ class Orchestrator:
         res = await self.sketcher.run(banner_query)
         return bytes(res.output)
 
-    async def compose_article(self, domain: dict):
+    async def compose_article(self, topic: dict):
         try:
-            analyst_beans = await self._get_beans_for_domain(domain)
-            if not analyst_beans: return
-            topics = await self._shortlist_topics(domain, analyst_beans)
-            log.info("shortlisted topics", extra={'source': domain[K_ID], 'num_items': len(topics.headlines)})
-            if not topics.headlines: return
+            headlines = await self._create_headlines(topic)
+            log.info("created headlines", extra={'source': topic[K_ID], 'num_items': len(headlines)})
+            if not ic(headlines): return
 
-            topic_embs = self.embedder([f"topic: {t}" for t in topics.headlines])
-            columnist_beans = await asyncio.gather(*[self._get_beans_for_topic(topic, emb) for topic, emb in zip(topics.headlines, topic_embs)])
-            columnist_beans = [(headline, beans) for headline, beans in zip(topics.headlines, columnist_beans) if beans]
-            if not columnist_beans: return
-
-            reports = await asyncio.gather(*[self._write_report(headline, beans) for headline, beans in columnist_beans])
-            reports = [
-                {
-                    K_ID: _create_id(headline),
-                    K_TITLE: headline, 
-                    K_CONTENT: re.sub(r'<body[^>]*>', '', report).replace("</body>", ""), # cleaning up body tags
-                    "beans": [bean.url for bean in beans]
-                } 
-                for headline, report, beans in zip(topics.headlines, reports, columnist_beans) if report
-            ]
-            log.info("created reports", extra={'source': domain[K_ID], 'num_items': len(reports)})
-            if not reports: return
+            headline_embs = self.embedder([f"topic: {t}" for t in headlines])
+            sections = await asyncio.gather(*[self._create_section(topic, headline, emb) for headline, emb in zip(headlines, headline_embs)])
+            sections = [s for s in sections if s]
+            if not sections: return
             
             # body = await self._write_main_content(domain, reports)
             # log.info("created body", extra={'source': domain[K_ID], 'num_items': 1})            
             # if not body: return
 
-            metadata = await self._synthesize_content([report[K_TITLE] for report in reports])
-            log.info("synthesized metadata", extra={'source': domain[K_ID], 'num_items': 1})
+            metadata = await self._synthesize_content([section[K_TITLE] for section in sections])
+            log.info("synthesized metadata", extra={'source': topic[K_ID], 'num_items': 1})
 
             return {
                 K_ID: _create_id(metadata.headline),
                 K_TITLE: metadata.headline,
                 K_SUMMARY: metadata.question,
                 K_CONTENT: ARTICLE_TEMPLATE.format(
-                    headlines="\n".join([f"<li>{hl}</li>" for hl in topics.headlines]),
-                    reports="\n".join([report[K_CONTENT] for report in reports])
+                    headlines="\n".join([f"<li>{hl}</li>" for hl in headlines]),
+                    reports="\n".join([section[K_CONTENT] for section in sections])
                 ),
-                K_TAGS: [domain[K_ID]]+domain.get(K_TAGS, [])+metadata.keywords,
+                K_TAGS: [topic[K_ID]]+topic.get(K_TAGS, [])+metadata.keywords,
                 K_AUTHOR: BARISTA,
-                "highlights": topics.headlines,
-                "sections": reports,
+                "highlights": headlines,
+                "sections": sections,
                 "type": "html",
             }
         except Exception as e:
-            log.warning(f"compose article failed - {e}", extra={'source': domain[K_ID], 'num_items': 1}, exc_info=True)
+            log.warning(f"compose article failed - {e}", extra={'source': topic[K_ID], 'num_items': 1}, exc_info=True)
 
     async def _publish(self, session, article: dict):
         async with session.post("articles", json=article) as resp:
@@ -382,10 +394,12 @@ class Orchestrator:
         return res    
 
     async def publish(self, article: dict):
+        if not self.publisher_conn: return
         async with aiohttp.ClientSession(base_url=self.publisher_conn[0], headers={"X_API_KEY": self.publisher_conn[1] }, raise_for_status=True) as session:            
             return await self._publish(session, article)
 
     async def bulk_publish(self, articles: list[dict]):
+        if not self.publisher_conn: return
         async with aiohttp.ClientSession(base_url=self.publisher_conn[0], headers={"X_API_KEY": self.publisher_conn[1] }, raise_for_status=True) as session:
             published = await asyncio.gather(*[self._publish(session, a) for a in articles])
         return published
@@ -393,7 +407,7 @@ class Orchestrator:
     def bulk_store(self, articles: list[dict]):
         new_mugs, new_sips = [], []
         for a in articles:
-            sections = a.get("sections", [])
+            sections = ic(a.get("sections", []))
             vecs = self.embedder.embed_documents([s[K_CONTENT] for s in sections])
             sips = [
                 Sip(
@@ -413,8 +427,9 @@ class Orchestrator:
             ))
 
         total = self.cupboard.store_sips(new_sips)
-        total += self.cupboard.store_mugs(new_mugs)
-        return total
+        log.info("stored sips", extra={'source': self.run_id, 'num_items': total})
+        total = self.cupboard.store_mugs(new_mugs)
+        log.info("stored mugs", extra={'source': self.run_id, 'num_items': total})
 
     async def _compose_and_publish(self, domain: dict):
         article = await self.compose_article(domain)
@@ -428,18 +443,17 @@ class Orchestrator:
             for d, emb in zip(domains, domain_embs): d[K_EMBEDDING] = emb
         return domains
           
-    async def run_async(self, domains):
+    async def run_async(self, topics):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting composer", extra={"source": self.run_id, "num_items": 1})
         self.db.refresh_aggregated_chatters()
-        domains = parse_topics(domains)
-        domains = self._create_topic_embeddings(domains)
+        topics = parse_topics(topics)
+        topics = self._create_topic_embeddings(topics)
 
-        articles = await asyncio.gather(*[self._compose_and_publish(domain) for domain in domains])
+        articles = await asyncio.gather(*[self._compose_and_publish(topic) for topic in topics])
         articles = [a for a in articles if a]
         log.info("composed and published", extra={"source": self.run_id, "num_items": len(articles)})
-        total = self.bulk_store(articles)
-        log.info("stored", extra={"source": self.run_id, "num_items": total})
+        self.bulk_store(articles)
         self.db.close()
         return articles
 
