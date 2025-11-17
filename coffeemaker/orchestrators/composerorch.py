@@ -64,7 +64,7 @@ ROLE=Columnist;
 TASK=WriteTechnicalReport; 
 TODAYS_DATE: {datetime.now().strftime('%Y-%m-%d')}     
 INPUT=Topic:String\n\nList<NewsString>;NewsString=Format<U:Date;P:KeyPoints|...;E:Events|...;D:Datapoints|...;R:Regions|...;N:Entities|...;C:Categories|...;S:Sentiment|...>
-OUTPUT=TechnicalReport;Markdown;IncludeBodyOnly=True;ContentLength<600Words;en-US
+OUTPUT=TechnicalReport;Markdown;IncludeBodyOnly=True;ContentLength<600Words;Language=AmericanEnglish en-US;
 STEPS:
     1.ANALYZE=AnalyzeDatastreams;UseFields:U,P,E,D,R,N,S
     2.IDENTIFY=Patterns,Themes,Insights,EmergingTrends,Predictions
@@ -81,7 +81,7 @@ EDITOR_INSTRUCTIONS = f"""
 ROLE=Editor;
 TASK=WriteOpinionPiece;
 INPUT=DraftTechnicalReport;
-OUTPUT=OP-ED;HTML;IncludeBodyOnly=True;en-US;ContentLength<450Words;
+OUTPUT=OP-ED;HTML;IncludeBodyOnly=True;ContentLength<450Words;
 STEPS=
     - REMOVE:SelfReferencingLines,RedundantInformation,RepetitiveStatements,OffTopicContent,InconsistentNarratives,SelfContradictoryStatements,IncompleteSentences,NonContentBearingSections,ReportTitle,ReportDate,IntroductoryPhrases,ConclusionPhrases;
     - REMOVE_SAMPLES:
@@ -355,7 +355,7 @@ class Orchestrator:
         try:
             headlines = await self._create_headlines(topic)
             log.info("created headlines", extra={'source': topic[K_ID], 'num_items': len(headlines)})
-            if not ic(headlines): return
+            if not headlines: return
 
             headline_embs = self.embedder([f"topic: {t}" for t in headlines])
             sections = await asyncio.gather(*[self._create_section(topic, headline, emb) for headline, emb in zip(headlines, headline_embs)])
@@ -407,7 +407,7 @@ class Orchestrator:
     def bulk_store(self, articles: list[dict]):
         new_mugs, new_sips = [], []
         for a in articles:
-            sections = ic(a.get("sections", []))
+            sections = a.get("sections", [])
             vecs = self.embedder.embed_documents([s[K_CONTENT] for s in sections])
             sips = [
                 Sip(
