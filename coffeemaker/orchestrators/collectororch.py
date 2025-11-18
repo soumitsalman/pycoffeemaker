@@ -5,7 +5,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from icecream import ic
 from coffeemaker.collectors.scraper import PublisherScraper
-from coffeemaker.pybeansack import mongosack, warehouse
+from coffeemaker.pybeansack import mongosack, warehouse, lancesack
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
 from coffeemaker.orchestrators.utils import *
@@ -23,11 +23,11 @@ storables = lambda beans: [bean for bean in beans if not is_scrapable(bean)]
 # cores = lambda beans: [BeanCore(**bean.model_dump()) for bean in beans if bean and bean.title]
 
 class Orchestrator:
-    db: warehouse.Beansack = None
+    db: warehouse.Beansack|lancesack.Beansack = None
     run_total: int = 0
 
     def __init__(self, db_conn_str: tuple[str,str]):
-        self.db = initialize_db(db_conn_str)
+        self.db = initialize_db(*db_conn_str)
 
     async def _triage_collection_async(self, source: str, items: list[dict]):
         if not items: return

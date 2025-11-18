@@ -198,7 +198,7 @@ def test_static_db():
 
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Orchestrator
-    orch = Orchestrator(db_conn_str=(os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH")))
+    orch = Orchestrator(db_conn_str=("lancedb:.beansack/lancesack_v2",))
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
     # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
     sources = """
@@ -231,22 +231,20 @@ def test_collector_orch():
 def test_indexer_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
-        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack/"),
+        db_conn_str=("lancedb:.beansack/lancesack_v2",),
         embedder_path="avsolatorio/GIST-small-Embedding-v0",
-        embedder_context_len=512,
-        batch_size=8
+        embedder_context_len=512
     )
-    orch.run_indexer()
+    orch.run_indexer(batch_size=32)
 
 def test_digestor_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator
     orch = Orchestrator(
-        db_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack/"),
+        db_conn_str=("lancedb:.beansack/lancesack_v2",),
         digestor_path="soumitsr/led-base-article-digestor",
-        digestor_context_len=4096,
-        batch_size=8
+        digestor_context_len=4096
     )
-    orch.run_digestor()
+    orch.run_digestor(batch_size=2)
 
 def test_composer_orch():
     from coffeemaker.orchestrators.composerorch import Orchestrator, parse_topics
@@ -254,10 +252,11 @@ def test_composer_orch():
     from coffeemaker.pybeansack.models import Mug, Sip, Bean
 
     orch = Orchestrator(
-        db_conn=(
-            os.getenv("PG_CONNECTION_STRING"), 
-            os.getenv("STORAGE_DATAPATH")
-        ),
+        # db_conn=(
+        #     os.getenv("PG_CONNECTION_STRING"), 
+        #     os.getenv("STORAGE_DATAPATH")
+        # ),
+        db_conn_str=("lancedb:.beansack/lancesack_v2",),
         embedder_model="avsolatorio/GIST-small-Embedding-v0",
         analyst_model="openai/gpt-oss-20b",
         writer_model="openai/gpt-oss-120b",
@@ -385,28 +384,38 @@ def test_orch_on_lancesack():
             ic(db.store_publishers([item['publisher'] for item in items if item.get("publisher")]))
             ic(db.store_chatters([item['chatter'] for item in items if item.get("chatter")]))
 
-    if False:
+    if True:
         with embedders.from_path(os.getenv('EMBEDDER_PATH'), EMBEDDER_CONTEXT_LEN) as embedder:
-            while beans := db.allbeans.search().where("embedding IS NULL AND content IS NOT NULL AND content <> ''").limit(16).select([K_URL, K_CONTENT, K_SOURCE]).to_pydantic(_Bean):
-                beans = [bean for bean in beans if bean.content]
+            while beans := db.query_latest_beans(collected=ndays_ago(2), conditions=["embedding IS NULL",  "content_length >= 200"], limit=32, columns=[K_URL, K_CONTENT, K_SOURCE]):
                 vectors = embedder.embed_documents([bean.content for bean in beans])
                 updates = [Bean(url=bean.url, embedding=vec) for bean, vec in zip(beans, vectors) if vec]
-                ic(db.update_embeddings(updates))
+                ic(db.update_embeddings(updates))    
 
-    if True:
-        beans = db.allbeans.search().where("embedding IS NOT NULL").limit(5).select([K_URL, K_CATEGORIES, K_SENTIMENTS]).to_pydantic(_Bean)
-        ic(beans)
-        clusters = db.allclusters.search().limit(5).to_list()
-        ic(clusters)
-
-    if True:
+    if False:
         with digestors.from_path(os.getenv('DIGESTOR_PATH'), max_input_tokens=4096, max_output_tokens=384, output_parser=Digest.parse_compressed) as digestor:
-            while beans := db.allbeans.search().where("gist IS NULL AND content IS NOT NULL AND content <> ''").limit(2).select([K_URL, K_CONTENT, K_SOURCE]).to_pydantic(_Bean):
-                beans = [bean for bean in beans if bean.content]
+            while beans := db.query_latest_beans(collected=ndays_ago(2), conditions=["gist IS NULL",  "content_length >= 200"], limit=2, columns=[K_URL, K_CONTENT, K_SOURCE]):
                 digests = digestor.run_batch([bean.content for bean in beans])
                 updates = [Bean(url=bean.url, gist=d.raw, regions=d.regions, entities=d.entities) for bean, d in zip(beans, digests) if d]
                 ic(db.update_beans(updates, columns=[K_GIST, K_REGIONS, K_ENTITIES]))
-   
+
+    if True:
+        print("===========")
+        beans = db.query_latest_beans(conditions=["embedding IS NOT NULL"], limit=10, columns=[K_URL, K_TITLE, K_CREATED, K_CATEGORIES, K_SENTIMENTS])
+        [print(bean.created, bean.title, bean.categories) for bean in beans]
+
+        print("===========")
+        beans = db.query_aggregated_beans(conditions=["embedding IS NOT NULL"], limit=5)
+        [print(bean.created, bean.title, bean.base_url, bean.cluster_size) for bean in beans]
+
+        with embedders.from_path(os.getenv('EMBEDDER_PATH'), EMBEDDER_CONTEXT_LEN) as embedder:
+            vec = embedder.embed_query("latest trends in artificial intelligence and machine learning")
+            print("===========")
+            beans = db.query_latest_beans(kind=BLOG, embedding=vec, distance=0.3, limit=10, columns=[K_URL, K_TITLE, K_CREATED, K_CATEGORIES, K_SENTIMENTS])
+            [print(bean.created, bean.title, bean.categories) for bean in beans]
+            print("===========")
+            beans = db.query_aggregated_beans(embedding=vec, distance=0.3, limit=5)
+            [print(bean.created, bean.title, bean.base_url, bean.cluster_size) for bean in beans]
+
 import argparse
 import subprocess
 parser = argparse.ArgumentParser(description="Run pycoffeemaker tests")

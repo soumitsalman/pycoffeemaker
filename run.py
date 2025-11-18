@@ -107,7 +107,7 @@ if __name__ == "__main__":
     elif mode == "COMPOSER":
         from coffeemaker.orchestrators.composerorch import Orchestrator
         orch = Orchestrator(
-            db_conn=db_conn_str,           
+            db_conn_str=db_conn_str,           
             embedder_model=os.getenv("EMBEDDER_PATH"),
             analyst_model=os.getenv("ANALYST_MODEL"),
             writer_model=os.getenv("WRITER_MODEL"),

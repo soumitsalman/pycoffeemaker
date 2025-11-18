@@ -4,7 +4,7 @@ import os
 import logging
 import threading as th
 import queue
-from coffeemaker.pybeansack import warehouse
+from coffeemaker.pybeansack import warehouse, lancesack
 from coffeemaker.pybeansack.models import *
 from coffeemaker.pybeansack.utils import *
 from coffeemaker.nlp import embedders, digestors, Digest, utils
@@ -52,8 +52,8 @@ digest_storables = lambda beans: [bean for bean in beans if bean.gist]
 #     return digests
 
 class Orchestrator:
-    db_conn_str: tuple[str, str] = None
-    db: warehouse.Beansack = None
+    # db_conn_str: tuple[str, str] = None
+    db: warehouse.Beansack|lancesack.Beansack = None
     embedder_model: str = None
     embedder_context_len: int = 0
     digestor_model: str = None
@@ -68,8 +68,8 @@ class Orchestrator:
         digestor_path: str = None, 
         digestor_context_len: int = 0
     ):     
-        self.db_conn_str = db_conn_str
-        self.db = initialize_db(db_conn_str)
+        # self.db_conn_str = db_conn_str
+        self.db = initialize_db(*db_conn_str)
         self.embedder_model = embedder_path
         self.embedder_context_len = embedder_context_len
         self.digestor_model = digestor_path

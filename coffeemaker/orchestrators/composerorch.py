@@ -11,8 +11,7 @@ import logfire
 from coffeemaker.nlp import *
 from coffeemaker.pybeansack.cdnstore import *
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.warehouse import *
-from coffeemaker.pybeansack.lancesack import Beansack as Cupboard
+from coffeemaker.pybeansack import warehouse, lancesack
 from coffeemaker.pybeansack.utils import *
 from coffeemaker.orchestrators.utils import *
 from icecream import ic
@@ -159,7 +158,7 @@ class ShortlistedTopics(BaseModel):
     headlines: list[str] = Field(description="List of shortlisted headlines. each headline length <= 25 Words")
 
 class Orchestrator:
-    db: Beansack
+    db: warehouse.Beansack | lancesack.Beansack
     cdn = None
     embedder = None
     analyst = None
@@ -171,7 +170,7 @@ class Orchestrator:
     cupboard = None
 
     def __init__(self, 
-        db_conn: tuple[str, str],    
+        db_conn_str: tuple[str, str],    
         embedder_model: str,          
         analyst_model: str,
         writer_model: str,
@@ -181,7 +180,7 @@ class Orchestrator:
         publisher_conn: tuple[str, str] = None,
         cupboard_conn_str: str = None
     ):
-        self.db = initialize_db(db_conn)
+        self.db = initialize_db(*db_conn_str)
 
         logfire.configure(token=os.getenv("PUBLICATIONS_LOGFIRE_TOKEN"))
         logfire.instrument_pydantic_ai()
@@ -236,7 +235,7 @@ class Orchestrator:
         )
 
         self.publisher_conn = publisher_conn
-        if cupboard_conn_str: self.cupboard = Cupboard(cupboard_conn_str)
+        if cupboard_conn_str: self.cupboard = lancesack.Beansack(cupboard_conn_str)
 
 
     async def _query_beans(self, trending: bool, kind: str, last_ndays: int, query_text: str, query_emb: list[float], distance: float, limit: int):
@@ -307,7 +306,9 @@ class Orchestrator:
 
         prompt = f"# Topic: {topic[K_DESCRIPTION]}\n\n\n" + "\n\n".join([b.digest for b in beans])
         res = await self.analyst.run(prompt)
-        return res.output.headlines
+        headlines = res.output.headlines
+        if headlines: log.info("created headlines", extra={'source': topic[K_ID], 'num_items': len(headlines)})
+        return headlines
 
     async def _get_beans_for_headline(self, topic: str, emb: list[float] = None) -> list[Bean]:
         beans = await self._query_beans(False, kind=None, last_ndays=LAST_NDAYS+1, query_text=topic, query_emb=emb, distance=MAX_DISTANCE_PER_TOPIC, limit=MAX_BEANS_PER_TOPIC)
@@ -354,7 +355,6 @@ class Orchestrator:
     async def compose_article(self, topic: dict):
         try:
             headlines = await self._create_headlines(topic)
-            log.info("created headlines", extra={'source': topic[K_ID], 'num_items': len(headlines)})
             if not headlines: return
 
             headline_embs = self.embedder([f"topic: {t}" for t in headlines])

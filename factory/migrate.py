@@ -125,7 +125,7 @@ def migrate_to_lancesack():
     from tqdm import tqdm
 
     source_db = wh.Beansack(os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH"), factory_dir=os.getenv("FACTORY_DIR"))
-    target_db = ls.Beansack(os.getenv("RAGDB_STORAGE_DATAPATH"))
+    target_db = ls.Beansack.create_db(os.getenv("RAGDB_STORAGE_DATAPATH"), "factory")
     
     ic(target_db.allbeans.count_rows())
     offset = int(os.getenv("MIGRATE_OFFSET", 0))

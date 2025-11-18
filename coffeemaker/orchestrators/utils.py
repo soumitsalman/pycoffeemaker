@@ -72,7 +72,10 @@ def initialize_azblobstore(azstorage_conn_str, container_name):
 
 merge_tags = lambda *args: list(set(item.lower() for arg in args if arg for item in arg))
 
-def initialize_db(conn: tuple[str, str]):
-    from coffeemaker.pybeansack import mongosack, warehouse
-    if conn[0].startswith("mongodb"): return mongosack.Beansack(conn[0], conn[1])
-    else: return warehouse.Beansack(catalogdb=conn[0], storagedb=conn[1], factory_dir=os.getenv('FACTORY_DIR', '../factory'))
+def initialize_db(*conn_params):
+    from coffeemaker.pybeansack import mongosack, warehouse, ducksack, lancesack
+    if conn_params[0].startswith("mongodb"): return mongosack.Beansack(conn_params[0], conn_params[1])
+    elif conn_params[0].startswith("ducklake:"): return warehouse.Beansack(catalogdb=conn_params[0].removeprefix("ducklake:"), storagedb=conn_params[1], factory_dir=os.getenv('FACTORY_DIR', '../factory'))
+    elif conn_params[0].startswith("duckdb:"): return ducksack.Beansack(conn_params[0].removeprefix("duckdb:"))
+    elif conn_params[0].startswith("lancedb:"): return lancesack.Beansack(conn_params[0].removeprefix("lancedb:"))
+    else: raise ValueError("unsupported connection string")
