@@ -375,7 +375,7 @@ def test_orch_on_lancesack():
     from coffeemaker.pybeansack.lancesack import Beansack, _Bean
     from coffeemaker.nlp.src import embedders, digestors, Digest
 
-    db = Beansack(".beansack/lancesack")
+    db = Beansack.create_db(".beansack/lancesack_v2", "factory")
     if False:
         feeds = parse_sources(f"{os.path.dirname(__file__)}/sources-1.yaml")
         collector = APICollector(batch_size=64)
@@ -385,14 +385,19 @@ def test_orch_on_lancesack():
             ic(db.store_publishers([item['publisher'] for item in items if item.get("publisher")]))
             ic(db.store_chatters([item['chatter'] for item in items if item.get("chatter")]))
 
-    if True:
+    if False:
         with embedders.from_path(os.getenv('EMBEDDER_PATH'), EMBEDDER_CONTEXT_LEN) as embedder:
             while beans := db.allbeans.search().where("embedding IS NULL AND content IS NOT NULL AND content <> ''").limit(16).select([K_URL, K_CONTENT, K_SOURCE]).to_pydantic(_Bean):
                 beans = [bean for bean in beans if bean.content]
                 vectors = embedder.embed_documents([bean.content for bean in beans])
                 updates = [Bean(url=bean.url, embedding=vec) for bean, vec in zip(beans, vectors) if vec]
-                # ic(db.update_beans(beans, columns=["embedding"]))
                 ic(db.update_embeddings(updates))
+
+    if True:
+        beans = db.allbeans.search().where("embedding IS NOT NULL").limit(5).select([K_URL, K_CATEGORIES, K_SENTIMENTS]).to_pydantic(_Bean)
+        ic(beans)
+        clusters = db.allclusters.search().limit(5).to_list()
+        ic(clusters)
 
     if True:
         with digestors.from_path(os.getenv('DIGESTOR_PATH'), max_input_tokens=4096, max_output_tokens=384, output_parser=Digest.parse_compressed) as digestor:
