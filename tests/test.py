@@ -400,7 +400,7 @@ def test_orch_on_lancesack():
 
     if True:
         print("===========")
-        beans = db.query_latest_beans(conditions=["embedding IS NOT NULL"], limit=10, columns=[K_URL, K_TITLE, K_CREATED, K_CATEGORIES, K_SENTIMENTS])
+        beans = db.query_latest_beans(conditions=["embedding IS NOT NULL"], limit=5, columns=[K_URL, K_TITLE, K_CREATED, K_CATEGORIES, K_SENTIMENTS])
         [print(bean.created, bean.title, bean.categories) for bean in beans]
 
         print("===========")

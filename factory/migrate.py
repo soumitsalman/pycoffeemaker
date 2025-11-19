@@ -127,10 +127,10 @@ def migrate_to_lancesack():
     source_db = wh.Beansack(os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH"), factory_dir=os.getenv("FACTORY_DIR"))
     target_db = ls.Beansack.create_db(os.getenv("RAGDB_STORAGE_DATAPATH"), "factory")
     
-    ic(target_db.allbeans.count_rows())
+    
     offset = int(os.getenv("MIGRATE_OFFSET", 0))
     batch_size = 1<<11
-    with tqdm(total=source_db.count_rows("beans"), desc="Porting Beans", unit="beans") as pbar:
+    with tqdm(total=source_db.count_rows("beans")-ic(target_db.allbeans.count_rows()), desc="Porting Beans", unit="beans") as pbar:
         while beans := source_db._query_beans(conditions=["gist IS NOT NULL", "embedding IS NOT NULL"], columns=["* EXCLUDE(cluster_id, cluster_size, content, content_length)"], offset=offset, limit=batch_size):
             pbar.update(target_db.store_beans(beans))
             offset = offset + len(beans)

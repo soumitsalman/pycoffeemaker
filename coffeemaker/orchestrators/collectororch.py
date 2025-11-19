@@ -106,8 +106,12 @@ class Orchestrator:
             self.scrape_publishers_async(batch_size=batch_size),
             asyncio.to_thread(self.db.refresh_aggregated_chatters),
         ])
-        self.db.close()
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
+
+    def close(self):
+        # Close database connection
+        self.db.refresh()
+        self.db.close()
 
     # def _get_collect_funcs(self, sources):
     #     tasks = []

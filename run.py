@@ -61,7 +61,8 @@ if __name__ == "__main__":
     args = parser.parse_args()  
     mode = args.mode or os.getenv("MODE")
     batch_size = int(args.batch_size or os.getenv('BATCH_SIZE') or os.cpu_count())
-    db_conn_str = (os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH"))
+    # db_conn_str = (os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH"))
+    db_conn_str = ("lancedb:"+os.getenv('STORAGE_DATAPATH'),)
     
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
@@ -70,6 +71,7 @@ if __name__ == "__main__":
             os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
             batch_size=batch_size
         ))
+        orch.close()
     elif mode == "INDEXER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
@@ -103,7 +105,6 @@ if __name__ == "__main__":
             digestor_batch_size=int(args.digestor_batch_size or batch_size)
         )
         orch.close()
-
     elif mode == "COMPOSER":
         from coffeemaker.orchestrators.composerorch import Orchestrator
         orch = Orchestrator(

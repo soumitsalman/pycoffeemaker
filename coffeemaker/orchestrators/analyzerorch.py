@@ -199,6 +199,7 @@ class Orchestrator:
     def close(self):        
         # Close database connection
         self._finish_updates()
+        self.db.refresh()
         self.db.close()
 
 

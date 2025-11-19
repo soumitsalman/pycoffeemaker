@@ -66,8 +66,7 @@ class Orchestrator:
             created=utils.ndays_ago(PORT_WINDOW),
             conditions=[
                 "gist IS NOT NULL",
-                "categories IS NOT NULL",
-                "cluster_id IS NOT NULL"
+                "embedding IS NOT NULL"
             ],
             limit=batch_size,
             columns=PORT_FIELDS

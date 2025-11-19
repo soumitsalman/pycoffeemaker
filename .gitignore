@@ -19,6 +19,7 @@
 .postgresql
 .aws
 .scrapingqueue
+.mount
 .delete-models
 .deploy.sh
 .s3upload.sh

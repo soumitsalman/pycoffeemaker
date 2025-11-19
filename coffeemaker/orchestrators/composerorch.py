@@ -405,6 +405,7 @@ class Orchestrator:
         return published
     
     def bulk_store(self, articles: list[dict]):
+        if not self.cupboard: return
         new_mugs, new_sips = [], []
         for a in articles:
             sections = a.get("sections", [])

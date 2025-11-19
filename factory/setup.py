@@ -37,13 +37,20 @@ def create_classification_files():
         ic(sentiments.sample(n=3))
         sentiments.to_parquet(f"{dir_name}/sentiments.parquet", engine='pyarrow')
 
-def establish_new_lancesack():
-    from coffeemaker.pybeansack.lancesack import establish_db
+def create_new_lancesack():
+    from coffeemaker.pybeansack.lancesack import Beansack
 
-    dir_name = os.path.dirname(__file__)
-    storage_path = ".beansack/lancesack/"
-    db = establish_db(storage_path, dir_name)
-    print("Created new lancesack at", db.uri)
+    db = Beansack.create_db(os.getenv('STORAGE_DATAPATH'), os.getenv('FACTORY_DIR'))
+    print("Created new lancesack at", db.db.uri)
+
+
+import argparse
+parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
+parser.add_argument("--lancedb", action="store_true", help="Setup new lancedb beansack")
+parser.add_argument("--ducklake", action="store_true", help="Setup new ducklake beansack")
+parser.add_argument("--duckdb", action="store_true", help="Setup new duckdb beansack")
+parser.add_argument("--mongodb", action="store_true", help="Setup new mongodb beansack")
 
 if __name__ == "__main__":
-    establish_new_lancesack()
+    args = parser.parse_args()
+    if args.lancedb: create_new_lancesack()
