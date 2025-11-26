@@ -37,20 +37,24 @@ def create_classification_files():
         ic(sentiments.sample(n=3))
         sentiments.to_parquet(f"{dir_name}/sentiments.parquet", engine='pyarrow')
 
-def create_new_lancesack():
-    from coffeemaker.pybeansack.lancesack import Beansack
+def create_db(db_type: str):
+    from coffeemaker.pybeansack import lancesack, pgsack, ducksack, lakehouse
 
-    db = Beansack.create_db(os.getenv('STORAGE_DATAPATH'), os.getenv('FACTORY_DIR'))
-    print("Created new lancesack at", db.db.uri)
+    if db_type in ["lancedb", "lancesack", "lance"]:
+        db = lancesack.create_db(os.getenv('LANCEDB_STORAGE'), os.getenv('FACTORY_DIR'))
+        print("Created new lancesack at", db.db.uri)
+    elif db_type in ["pg", "postgres", "postgresql"]:
+        db = pgsack.create_db(os.getenv('PG_CONNECTION_STRING'), os.getenv('FACTORY_DIR'))
+        print("Created new pgsack at", db.db.dsn)
+    elif db_type in ["duckdb", "duck"]:
+        db = ducksack.create_db(os.getenv('DUCKDB_STORAGE'), os.getenv('FACTORY_DIR'))
+        print("Created new ducksack at", db.storage_path)
 
 
 import argparse
 parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
-parser.add_argument("--lancedb", action="store_true", help="Setup new lancedb beansack")
-parser.add_argument("--ducklake", action="store_true", help="Setup new ducklake beansack")
-parser.add_argument("--duckdb", action="store_true", help="Setup new duckdb beansack")
-parser.add_argument("--mongodb", action="store_true", help="Setup new mongodb beansack")
+parser.add_argument('--create', type=str, help='Type of database to create')
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    if args.lancedb: create_new_lancesack()
+    if args.create: create_db(args.create)

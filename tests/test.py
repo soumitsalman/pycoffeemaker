@@ -198,7 +198,7 @@ def test_static_db():
 
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Orchestrator
-    orch = Orchestrator(db_conn_str=("lancedb:.beansack/lancesack_v2",))
+    orch = Orchestrator(db_kwargs=("lancedb:.beansack/lancesack_v2",))
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
     # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
     sources = """
@@ -256,7 +256,7 @@ def test_composer_orch():
         #     os.getenv("PG_CONNECTION_STRING"), 
         #     os.getenv("STORAGE_DATAPATH")
         # ),
-        db_conn_str=("lancedb:.beansack/lancesack_v2",),
+        db_kwargs=("lancedb:.beansack/lancesack_v2",),
         embedder_model="avsolatorio/GIST-small-Embedding-v0",
         analyst_model="openai/gpt-oss-20b",
         writer_model="openai/gpt-oss-120b",
@@ -301,10 +301,10 @@ def test_composer_orch():
 def test_refresher_orch():
     from coffeemaker.orchestrators.refresherorch import Orchestrator
     orch = Orchestrator(
-        masterdb_conn_str=(os.getenv("PG_CONNECTION_STRING"), ".beansack/prod/storage"),
+        db_kwargs=(os.getenv("PG_CONNECTION_STRING"), ".beansack/prod/storage"),
         # espressodb_conn_str=("mongodb://localhost:27017", "replica1")
         espressodb_conn_str=(None),
-        ragdb_conn_str=".beansack/lancesack/"
+        backup_db_conn_str=".beansack/lancesack/"
     )
     orch.run()
 

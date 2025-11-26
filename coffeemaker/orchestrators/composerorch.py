@@ -9,9 +9,8 @@ import numpy as np
 import pandas as pd
 import logfire
 from coffeemaker.nlp import *
-from coffeemaker.pybeansack.cdnstore import *
 from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack import warehouse, lancesack
+from coffeemaker.pybeansack import BeansackBase, lancesack
 from coffeemaker.pybeansack.utils import *
 from coffeemaker.orchestrators.utils import *
 from icecream import ic
@@ -158,7 +157,7 @@ class ShortlistedTopics(BaseModel):
     headlines: list[str] = Field(description="List of shortlisted headlines. each headline length <= 25 Words")
 
 class Orchestrator:
-    db: warehouse.Beansack | lancesack.Beansack
+    db: BeansackBase
     cdn = None
     embedder = None
     analyst = None
@@ -170,7 +169,7 @@ class Orchestrator:
     cupboard = None
 
     def __init__(self, 
-        db_conn_str: tuple[str, str],    
+        db_kwargs: dict[str, str],    
         embedder_model: str,          
         analyst_model: str,
         writer_model: str,
@@ -180,7 +179,7 @@ class Orchestrator:
         publisher_conn: tuple[str, str] = None,
         cupboard_conn_str: str = None
     ):
-        self.db = initialize_db(*db_conn_str)
+        self.db = initialize_db(**db_kwargs)
 
         logfire.configure(token=os.getenv("PUBLICATIONS_LOGFIRE_TOKEN"))
         logfire.instrument_pydantic_ai()

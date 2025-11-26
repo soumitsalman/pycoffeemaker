@@ -5,7 +5,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from icecream import ic
 from coffeemaker.collectors.scraper import PublisherScraper
-from coffeemaker.pybeansack import mongosack, warehouse, lancesack
+from coffeemaker.pybeansack import BeansackBase
 from coffeemaker.pybeansack.models import *
 from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
 from coffeemaker.orchestrators.utils import *
@@ -23,11 +23,11 @@ storables = lambda beans: [bean for bean in beans if not is_scrapable(bean)]
 # cores = lambda beans: [BeanCore(**bean.model_dump()) for bean in beans if bean and bean.title]
 
 class Orchestrator:
-    db: warehouse.Beansack|lancesack.Beansack = None
+    db: BeansackBase = None
     run_total: int = 0
 
-    def __init__(self, db_conn_str: tuple[str,str]):
-        self.db = initialize_db(*db_conn_str)
+    def __init__(self, db_kwargs: dict[str,str]):
+        self.db = initialize_db(**db_kwargs)
 
     async def _triage_collection_async(self, source: str, items: list[dict]):
         if not items: return
@@ -40,7 +40,7 @@ class Orchestrator:
         if publishers: await asyncio.to_thread(self.db.store_publishers, publishers)
         if chatters: await asyncio.to_thread(self.db.store_chatters, chatters)
 
-        return await asyncio.to_thread(self.db.deduplicate, "beans", "url", scrapables(beans))
+        return await asyncio.to_thread(self.db.deduplicate, BEANS, scrapables(beans))
 
     async def _triage_scrape_async(self, source: str, items: list[dict]):
         beans = storables([item['bean'] for item in items if item and item.get('bean')])
@@ -53,9 +53,7 @@ class Orchestrator:
     def store_beans(self, source: str, beans: list[Bean]):
         beans = storables(beans)
         if not beans: return       
-        prev_count = self.db.count_rows("beans")
-        self.db.store_beans(beans)
-        count = self.db.count_rows("beans") - prev_count
+        count = self.db.store_beans(beans)
         log.info("stored", extra={"source": source, "num_items": count})
         self.run_total += count
         return beans
@@ -103,8 +101,7 @@ class Orchestrator:
         log.info("starting collector", extra={"source": self.run_id, "num_items": os.cpu_count()})
         await asyncio.gather(*[
             self.collect_beans_async(sources, batch_size=batch_size),
-            self.scrape_publishers_async(batch_size=batch_size),
-            asyncio.to_thread(self.db.refresh_aggregated_chatters),
+            self.scrape_publishers_async(batch_size=batch_size)
         ])
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 

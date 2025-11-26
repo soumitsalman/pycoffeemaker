@@ -72,10 +72,12 @@ def initialize_azblobstore(azstorage_conn_str, container_name):
 
 merge_tags = lambda *args: list(set(item.lower() for arg in args if arg for item in arg))
 
-def initialize_db(*conn_params):
-    from coffeemaker.pybeansack import mongosack, warehouse, ducksack, lancesack
-    if conn_params[0].startswith("mongodb"): return mongosack.Beansack(conn_params[0], conn_params[1])
-    elif conn_params[0].startswith("ducklake:"): return warehouse.Beansack(catalogdb=conn_params[0].removeprefix("ducklake:"), storagedb=conn_params[1], factory_dir=os.getenv('FACTORY_DIR', '../factory'))
-    elif conn_params[0].startswith("duckdb:"): return ducksack.Beansack(conn_params[0].removeprefix("duckdb:"))
-    elif conn_params[0].startswith("lancedb:"): return lancesack.Beansack(conn_params[0].removeprefix("lancedb:"))
-    else: raise ValueError("unsupported connection string")
+def initialize_db(**kwargs):
+    from coffeemaker.pybeansack import mongosack, lancesack, ducksack, pgsack, lakehouse
+    db_type = kwargs['DB_TYPE'].lower()
+    if db_type in ["postgres", "postgresql", "pg"]: return pgsack.Beansack(kwargs.get('PG_CONNECTION_STRING'))
+    if db_type in ["mongodb", "mongo"]: return mongosack.Beansack(kwargs.get('MONGO_CONNECTION_STRING'), kwargs.get('MONGO_DATABASE'))
+    if db_type in ["duckdb", "duck"]: return ducksack.Beansack(kwargs.get('DUCKDB_STORAGE'))
+    if db_type in ["lancedb", "lance"]: return lancesack.Beansack(kwargs.get('LANCEDB_STORAGE'))
+    if db_type in ["ducklake", "dl"]: return lakehouse.Beansack(catalogdb=kwargs.get('DUCKLAKE_CATALOG'), storagedb=kwargs.get('DUCKLAKE_STORAGE'), factory_dir=os.getenv('FACTORY_DIR', '../factory'))
+    raise ValueError("unsupported connection string")

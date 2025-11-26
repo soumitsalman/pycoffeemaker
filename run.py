@@ -61,12 +61,20 @@ if __name__ == "__main__":
     args = parser.parse_args()  
     mode = args.mode or os.getenv("MODE")
     batch_size = int(args.batch_size or os.getenv('BATCH_SIZE') or os.cpu_count())
-    # db_conn_str = (os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH"))
-    db_conn_str = ("lancedb:"+os.getenv('STORAGE_DATAPATH'),)
+    db_kwargs = {
+        "DB_TYPE": os.getenv("DB_TYPE"),
+        "MONGO_CONNECTION_STRING": os.getenv("MONGO_CONNECTION_STRING"),
+        "MONGO_DATABASE": os.getenv("MONGO_DATABASE"),
+        "PG_CONNECTION_STRING": os.getenv("PG_CONNECTION_STRING"),
+        "DUCKDB_STORAGE": os.getenv("DUCKDB_STORAGE"),
+        "LANCEDB_STORAGE": os.getenv("LANCEDB_STORAGE"),
+        "DUCKLAKE_CATALOG": os.getenv("DUCKLAKE_CATALOG"),
+        "DUCKLAKE_STORAGE": os.getenv("DUCKLAKE_STORAGE")
+    }
     
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
-        orch = Orchestrator(db_conn_str=db_conn_str)
+        orch = Orchestrator(db_kwargs=db_kwargs)
         asyncio.run(orch.run_async(
             os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
             batch_size=batch_size
@@ -75,7 +83,7 @@ if __name__ == "__main__":
     elif mode == "INDEXER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
-            db_conn_str=db_conn_str,
+            db_kwargs=db_kwargs,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN))
         )
@@ -84,7 +92,7 @@ if __name__ == "__main__":
     elif mode == "DIGESTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
-            db_conn_str=db_conn_str,
+            db_kwargs=db_kwargs,
             digestor_path=os.getenv("DIGESTOR_PATH"), 
             digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN))
         )
@@ -94,7 +102,7 @@ if __name__ == "__main__":
     elif mode == "ANALYZER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
-            db_conn_str=db_conn_str,
+            db_kwargs=db_kwargs,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
             digestor_path=os.getenv("DIGESTOR_PATH"), 
@@ -108,7 +116,7 @@ if __name__ == "__main__":
     elif mode == "COMPOSER":
         from coffeemaker.orchestrators.composerorch import Orchestrator
         orch = Orchestrator(
-            db_conn_str=db_conn_str,           
+            db_kwargs=db_kwargs,           
             embedder_model=os.getenv("EMBEDDER_PATH"),
             analyst_model=os.getenv("ANALYST_MODEL"),
             writer_model=os.getenv("WRITER_MODEL"),
@@ -120,17 +128,20 @@ if __name__ == "__main__":
                 os.getenv("PUBLISHER_BASE_URL"),
                 os.getenv("PUBLISHER_API_KEY")
             ),
-            cupboard_conn_str=os.getenv("RAGDB_STORAGE_DATAPATH")
+            backup_db_conn_str=os.getenv("RAGDB_STORAGE_DATAPATH")
         )
         asyncio.run(orch.run_async(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml")))
     elif mode == "REFRESHER":
         from coffeemaker.orchestrators.refresherorch import Orchestrator
         orch = Orchestrator(
-            masterdb_conn_str=db_conn_str,
-            espressodb_conn_str=(os.getenv("MONGO_CONNECTION_STRING"), os.getenv("MONGO_DATABASE")),
-            ragdb_conn_str=os.getenv("RAGDB_STORAGE_DATAPATH")
+            db_kwargs=db_kwargs,
+            backup_db_kwargs={
+                "DB_TYPE": "lancedb",
+                "LANCEDB_STORAGE": os.getenv("RAGDB_STORAGE")
+            }
         )
         orch.run()
+        orch.close()
     else:
         raise ValueError("Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, COMPOSER, REFRESHER.")
  
