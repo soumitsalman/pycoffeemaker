@@ -128,7 +128,7 @@ if __name__ == "__main__":
                 os.getenv("PUBLISHER_BASE_URL"),
                 os.getenv("PUBLISHER_API_KEY")
             ),
-            backup_db_conn_str=os.getenv("RAGDB_STORAGE_DATAPATH")
+            cupboard_conn_str=os.getenv("RAGDB_STORAGE")
         )
         asyncio.run(orch.run_async(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml")))
     elif mode == "REFRESHER":
