@@ -11,7 +11,7 @@ from icecream import ic
 log = logging.getLogger(__name__)
 
 PORT_WINDOW = 2
-PORT_FIELDS = [
+BEAN_PORT_FIELDS = [
     K_URL,
     K_KIND,
     K_TITLE,
@@ -21,19 +21,12 @@ PORT_FIELDS = [
     K_IMAGEURL,
     K_CREATED,
     K_COLLECTED,
-    K_CATEGORIES,
-    K_REGIONS,
-    K_ENTITIES,
-    K_CLUSTER_ID,
-    K_CLUSTER_SIZE,
     K_EMBEDDING,
-    K_UPDATED,
-    K_COMMENTS,
-    K_LIKES,
-    K_SHARES,
-    K_SITE_NAME,
-    K_BASE_URL,
-    K_FAVICON
+    K_SENTIMENTS,
+    K_CATEGORIES,
+    K_GIST,
+    K_REGIONS,
+    K_ENTITIES
 ]
 
 calculate_trend_score = lambda bean_chatter: 100*(bean_chatter.comments or 0) + 10*(bean_chatter.shares or 0) + (bean_chatter.likes or 0)
@@ -58,6 +51,7 @@ class Orchestrator:
                 "gist IS NOT NULL",
                 "embedding IS NOT NULL"
             ]
+            # columns=BEAN_PORT_FIELDS
         )
         total = self.backup_db.store_beans(beans)
         log.info("ported beans", extra={'source': self.run_id, 'num_items': total})

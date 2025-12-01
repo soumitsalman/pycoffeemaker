@@ -175,8 +175,12 @@ def migrate(from_db: str, to_db: str, batch_size: int, *items):
     )"""]
 
     _port_beans = lambda offset: to_db_instance.store_beans(
-        from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size)
+        from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size, columns=["* EXCLUDE(content, content_length)"])
     )
+    _port_contents = lambda offset: to_db_instance.update_beans(
+        from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size, columns=[K_URL, K_CONTENT, K_CONTENT_LENGTH, K_GIST, K_SENTIMENTS]),
+        columns=[K_CONTENT, K_CONTENT_LENGTH, K_GIST, K_SENTIMENTS]
+    )   
     _port_publishers = lambda offset: to_db_instance.store_publishers(
         from_db_instance.query_publishers(conditions=PUBLISHER_CONDITIONS, offset=offset, limit=batch_size)
     )
@@ -189,6 +193,13 @@ def migrate(from_db: str, to_db: str, batch_size: int, *items):
         with tqdm(total=total_beans, desc="Porting Beans", unit="beans") as pbar:
             for offset in range(0, total_beans, batch_size):
                 _port_beans(offset)
+                pbar.update(batch_size)
+
+    if not items or "contents" in items:
+        total_beans = from_db_instance.count_rows(BEANS, conditions=BEAN_CONDITIONS)
+        with tqdm(total=total_beans, desc="Porting Contents", unit="beans") as pbar:
+            for offset in range(0, total_beans, batch_size):
+                _port_contents(offset)
                 pbar.update(batch_size)
     
     if not items or "publishers" in items:
