@@ -154,17 +154,16 @@ def db_instance(db_type: str) -> BeansackBase:
     elif db_type in ["duckdb", "duck"]:
         return ducksack.Beansack(os.getenv('DUCKDB_STORAGE'))
     elif db_type in ["ducklake", "dl"]:
-        return lakehouse.Beansack(os.getenv('LAKEHOUSE_STORAGE'))
+        return lakehouse.Beansack(os.getenv('DUCKLAKE_CATALOG'), os.getenv('DUCKLAKE_STORAGE'))
     else:
         raise ValueError(f"Unsupported db type: {db_type}")
 
-def migrate(from_db: str, to_db: str):
+def migrate(from_db: str, to_db: str, batch_size: int, *items):
     from tqdm import tqdm
 
     from_db_instance = db_instance(from_db)
     to_db_instance = db_instance(to_db)
 
-    BATCH_SIZE = 1<<11
     BEAN_CONDITIONS = [
         "gist IS NOT NULL",
         "embedding IS NOT NULL"
@@ -176,43 +175,47 @@ def migrate(from_db: str, to_db: str):
     )"""]
 
     _port_beans = lambda offset: to_db_instance.store_beans(
-        from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=BATCH_SIZE)
+        from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size)
     )
     _port_publishers = lambda offset: to_db_instance.store_publishers(
-        from_db_instance.query_publishers(conditions=PUBLISHER_CONDITIONS, offset=offset, limit=BATCH_SIZE)
+        from_db_instance.query_publishers(conditions=PUBLISHER_CONDITIONS, offset=offset, limit=batch_size)
     )
     _port_chatters = lambda offset: to_db_instance.store_chatters(
-        from_db_instance.query_chatters(offset=offset, limit=BATCH_SIZE)
+        from_db_instance.query_chatters(offset=offset, limit=batch_size)
     )
 
-    total_beans = from_db_instance.count_rows(BEANS, conditions=BEAN_CONDITIONS)
-    with tqdm(total=total_beans, desc="Porting Beans", unit="beans") as pbar:
-        for offset in range(0, total_beans, BATCH_SIZE):
-            _port_beans(offset)
-            pbar.update(BATCH_SIZE)
+    if not items or "beans" in items:
+        total_beans = from_db_instance.count_rows(BEANS, conditions=BEAN_CONDITIONS)
+        with tqdm(total=total_beans, desc="Porting Beans", unit="beans") as pbar:
+            for offset in range(0, total_beans, batch_size):
+                _port_beans(offset)
+                pbar.update(batch_size)
     
-    total_publishers = from_db_instance.count_rows(PUBLISHERS, conditions=PUBLISHER_CONDITIONS)
-    with tqdm(total=total_publishers, desc="Porting Publishers", unit="publishers") as pbar:
-        for offset in range(0, total_publishers, BATCH_SIZE):
-            _port_publishers(offset)
-            pbar.update(BATCH_SIZE)
+    if not items or "publishers" in items:
+        total_publishers = from_db_instance.count_rows(PUBLISHERS, conditions=PUBLISHER_CONDITIONS)
+        with tqdm(total=total_publishers, desc="Porting Publishers", unit="publishers") as pbar:
+            for offset in range(0, total_publishers, batch_size):
+                _port_publishers(offset)
+                pbar.update(batch_size)
 
-    total_chatters = from_db_instance.count_rows(CHATTERS)
-    with tqdm(total=total_chatters, desc="Porting Chatters", unit="chatters") as pbar:
-        for offset in range(0, total_chatters, BATCH_SIZE):
-            _port_chatters(offset)
-            pbar.update(BATCH_SIZE)
-
+    if not items or "chatters" in items:
+        total_chatters = from_db_instance.count_rows(CHATTERS)
+        with tqdm(total=total_chatters, desc="Porting Chatters", unit="chatters") as pbar:
+            for offset in range(0, total_chatters, batch_size):
+                _port_chatters(offset)
+                pbar.update(batch_size)
 
     from_db_instance.close()
-    to_db_instance.close()
-    
+    to_db_instance.close()    
 
 import argparse
 parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
 parser.add_argument('--from_db', type=str, help='Type of database to create')
 parser.add_argument('--to_db', type=str, help='Update the lancedb')
+parser.add_argument('--batch_size', type=int, default=2048, help='Batch size for migration')
+parser.add_argument('--items', type=str, nargs='*', help='Items to migrate (beans, publishers, chatters)')
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    migrate(args.from_db, args.to_db)
+    migrate(args.from_db, args.to_db, args.batch_size, *(args.items or []))
