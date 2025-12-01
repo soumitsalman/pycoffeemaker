@@ -188,20 +188,20 @@ def migrate(from_db: str, to_db: str):
     total_beans = from_db_instance.count_rows(BEANS, conditions=BEAN_CONDITIONS)
     with tqdm(total=total_beans, desc="Porting Beans", unit="beans") as pbar:
         for offset in range(0, total_beans, BATCH_SIZE):
-            num_ported = _port_beans(offset)
-            pbar.update(num_ported)
+            _port_beans(offset)
+            pbar.update(BATCH_SIZE)
     
     total_publishers = from_db_instance.count_rows(PUBLISHERS, conditions=PUBLISHER_CONDITIONS)
     with tqdm(total=total_publishers, desc="Porting Publishers", unit="publishers") as pbar:
         for offset in range(0, total_publishers, BATCH_SIZE):
-            num_ported = _port_publishers(offset)
-            pbar.update(num_ported)
+            _port_publishers(offset)
+            pbar.update(BATCH_SIZE)
 
     total_chatters = from_db_instance.count_rows(CHATTERS)
     with tqdm(total=total_chatters, desc="Porting Chatters", unit="chatters") as pbar:
         for offset in range(0, total_chatters, BATCH_SIZE):
-            num_ported = _port_chatters(offset)
-            pbar.update(num_ported)
+            _port_chatters(offset)
+            pbar.update(BATCH_SIZE)
 
 
     from_db_instance.close()
