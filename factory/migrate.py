@@ -7,6 +7,8 @@ import os
 from icecream import ic
 from dotenv import load_dotenv
 
+
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 load_dotenv()
 
@@ -14,6 +16,8 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 import pandas as pd
+from coffeemaker.pybeansack.models import *
+from coffeemaker.pybeansack.bases import BeansackBase
 
 def register_file(beansack, filename):
     from coffeemaker.pybeansack.warehouse import Beansack, SQL_INSERT_PARQUET
@@ -140,5 +144,75 @@ def migrate_to_lancesack():
     target_db.store_publishers(source_db.query_publishers())
     ic(target_db.allpublishers.count_rows())
 
+def db_instance(db_type: str) -> BeansackBase:
+    from coffeemaker.pybeansack import lancesack, pgsack, ducksack, lakehouse
+
+    if db_type in ["lancedb", "lancesack", "lance"]:
+        return lancesack.Beansack(os.getenv('LANCEDB_STORAGE'))
+    elif db_type in ["pg", "postgres", "postgresql"]:
+        return pgsack.Beansack(os.getenv('PG_CONNECTION_STRING'))
+    elif db_type in ["duckdb", "duck"]:
+        return ducksack.Beansack(os.getenv('DUCKDB_STORAGE'))
+    elif db_type in ["ducklake", "dl"]:
+        return lakehouse.Beansack(os.getenv('LAKEHOUSE_STORAGE'))
+    else:
+        raise ValueError(f"Unsupported db type: {db_type}")
+
+def migrate(from_db: str, to_db: str):
+    from tqdm import tqdm
+
+    from_db_instance = db_instance(from_db)
+    to_db_instance = db_instance(to_db)
+
+    BATCH_SIZE = 1<<11
+    BEAN_CONDITIONS = [
+        "gist IS NOT NULL",
+        "embedding IS NOT NULL"
+    ]
+    PUBLISHER_CONDITIONS = ["""(
+        rss_feed IS NOT NULL 
+        OR favicon IS NOT NULL 
+        OR site_name IS NOT NULL
+    )"""]
+
+    _port_beans = lambda offset: to_db_instance.store_beans(
+        from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=BATCH_SIZE)
+    )
+    _port_publishers = lambda offset: to_db_instance.store_publishers(
+        from_db_instance.query_publishers(conditions=PUBLISHER_CONDITIONS, offset=offset, limit=BATCH_SIZE)
+    )
+    _port_chatters = lambda offset: to_db_instance.store_chatters(
+        from_db_instance.query_chatters(offset=offset, limit=BATCH_SIZE)
+    )
+
+    total_beans = from_db_instance.count_rows(BEANS, conditions=BEAN_CONDITIONS)
+    with tqdm(total=total_beans, desc="Porting Beans", unit="beans") as pbar:
+        for offset in range(0, total_beans, BATCH_SIZE):
+            num_ported = _port_beans(offset)
+            pbar.update(num_ported)
+    
+    total_publishers = from_db_instance.count_rows(PUBLISHERS, conditions=PUBLISHER_CONDITIONS)
+    with tqdm(total=total_publishers, desc="Porting Publishers", unit="publishers") as pbar:
+        for offset in range(0, total_publishers, BATCH_SIZE):
+            num_ported = _port_publishers(offset)
+            pbar.update(num_ported)
+
+    total_chatters = from_db_instance.count_rows(CHATTERS)
+    with tqdm(total=total_chatters, desc="Porting Chatters", unit="chatters") as pbar:
+        for offset in range(0, total_chatters, BATCH_SIZE):
+            num_ported = _port_chatters(offset)
+            pbar.update(num_ported)
+
+
+    from_db_instance.close()
+    to_db_instance.close()
+    
+
+import argparse
+parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
+parser.add_argument('--from_db', type=str, help='Type of database to create')
+parser.add_argument('--to_db', type=str, help='Update the lancedb')
+
 if __name__ == "__main__":
-    migrate_to_lancesack()
+    args = parser.parse_args()
+    migrate(args.from_db, args.to_db)

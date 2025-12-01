@@ -212,7 +212,8 @@ class APICollector:
             "chatter": chatter,
             "publisher": Publisher(
                 source=source,
-                base_url=extract_base_url(entry_link)
+                base_url=extract_base_url(entry_link),
+                collected=current_time
             )
         }
 
@@ -283,7 +284,8 @@ class APICollector:
             ),
             "publisher": Publisher(
                 source=source,
-                base_url=extract_base_url(url)
+                base_url=extract_base_url(url),
+                collected=current_time
             )
         }
     
@@ -349,7 +351,8 @@ class APICollector:
             ),
             "publisher": Publisher(
                 source=source,
-                base_url=extract_base_url(url)
+                base_url=extract_base_url(url),
+                collected=current_time
             )
         }
     

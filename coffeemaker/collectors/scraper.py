@@ -452,7 +452,7 @@ class PublisherScraper:
             meta.update(self._get_metadata(url, html))
             meta[K_SITE_NAME] = meta.get(K_SITE_NAME) or meta.get('meta_title')
             meta[K_FAVICON] = meta.get(K_FAVICON) or (await self._scrape_favicon(base_url))
-            return Publisher(**meta)
+            return Publisher(**meta, collected=now())
         except Exception as e: 
             log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": base_url, "num_items": 1})
 

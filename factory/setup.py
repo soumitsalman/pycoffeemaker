@@ -37,6 +37,15 @@ def create_classification_files():
         ic(sentiments.sample(n=3))
         sentiments.to_parquet(f"{dir_name}/sentiments.parquet", engine='pyarrow')
 
+def update_db(db_type: str):
+    from coffeemaker.pybeansack import lancesack, pgsack, ducksack, lakehouse
+
+    if db_type in ["lancedb", "lancesack", "lance"]:
+        db = lancesack.Beansack(os.getenv('LANCEDB_STORAGE'))
+        db.allpublishers.alter_columns({"path": K_COLLECTED, "nullable": True})
+        db.allchatters.drop_columns([K_SHARES, K_UPDATED])
+
+
 def create_db(db_type: str):
     from coffeemaker.pybeansack import lancesack, pgsack, ducksack, lakehouse
 
@@ -49,12 +58,19 @@ def create_db(db_type: str):
     elif db_type in ["duckdb", "duck"]:
         db = ducksack.create_db(os.getenv('DUCKDB_STORAGE'), os.getenv('FACTORY_DIR'))
         print("Created new ducksack at", db.storage_path)
+    elif db_type in ["ducklake", "dl"]:
+        db = lakehouse.create_db(os.getenv('DUCKLAKE_CATALOG'), os.getenv('DUCKLAKE_STORAGE'), os.getenv('FACTORY_DIR'))
+        print("Created new lakehouse at catalog:", os.getenv('DUCKLAKE_CATALOG'), " storage:", os.getenv('DUCKLAKE_STORAGE'))
+    else:
+        raise ValueError("unsupported db type")
 
 
 import argparse
 parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
 parser.add_argument('--create', type=str, help='Type of database to create')
+parser.add_argument('--update', type=str, help='Update the lancedb')
 
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.create: create_db(args.create)
+    if args.update: update_db(args.update)

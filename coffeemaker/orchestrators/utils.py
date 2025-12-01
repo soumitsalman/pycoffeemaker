@@ -79,5 +79,5 @@ def initialize_db(**kwargs):
     if db_type in ["mongodb", "mongo"]: return mongosack.Beansack(kwargs.get('MONGO_CONNECTION_STRING'), kwargs.get('MONGO_DATABASE'))
     if db_type in ["duckdb", "duck"]: return ducksack.Beansack(kwargs.get('DUCKDB_STORAGE'))
     if db_type in ["lancedb", "lance"]: return lancesack.Beansack(kwargs.get('LANCEDB_STORAGE'))
-    if db_type in ["ducklake", "dl"]: return lakehouse.Beansack(catalogdb=kwargs.get('DUCKLAKE_CATALOG'), storagedb=kwargs.get('DUCKLAKE_STORAGE'), factory_dir=os.getenv('FACTORY_DIR', '../factory'))
+    if db_type in ["ducklake", "dl"]: return lakehouse.Beansack(catalogdb=kwargs.get('DUCKLAKE_CATALOG'), storagedb=kwargs.get('DUCKLAKE_STORAGE'))
     raise ValueError("unsupported connection string")

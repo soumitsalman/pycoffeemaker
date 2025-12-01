@@ -51,67 +51,44 @@ class Orchestrator:
         self.db = initialize_db(**db_kwargs)
         self.backup_db = initialize_db(**backup_db_kwargs)
 
-    def port_contents(self): 
-        # make this based on a count
-        # max_offset = 10000
-        batch_size = 10000
-        total = 0
-        # for offset in range(0, max_offset, batch_size):
-        #     # TODO: in future add a fixed list of sources
-        beans = self.db.query_aggregated_beans(
+    def port_contents(self):         
+        beans = self.db.query_latest_beans(
             created=ndays_ago(PORT_WINDOW),
             conditions=[
                 "gist IS NOT NULL",
                 "embedding IS NOT NULL"
-            ],
-            limit=batch_size
+            ]
         )
         total = self.backup_db.store_beans(beans)
-        
-        # value of total should be the same no matter who assigns.
-        log.info("refreshed beans", extra={'source': self.run_id, 'num_items': total})
+        log.info("ported beans", extra={'source': self.run_id, 'num_items': total})
 
-        # chatter_stats = self.db.query_aggregated_chatters(
-        #     updated=ndays_ago(PORT_WINDOW),
-        #     limit=batch_size
-        # )
-        # chatter_stats = [
-        #     Bean(
-        #         url = bc.url, 
-        #         updated=bc.collected, 
-        #         trend_score=calculate_trend_score(bc),
-        #         chatter=bc
-        #     ) for bc in chatter_stats
-        # ]
-        # if self.backup_db: total = self.backup_db.update_beans(chatter_stats)
-        # log.info("refreshed chatters", extra={'source': self.run_id, 'num_items': total})
+        publishers = self.db.query_publishers(     
+            collected=ndays_ago(PORT_WINDOW),       
+            conditions=["""(
+                rss_feed IS NOT NULL 
+                OR favicon IS NOT NULL 
+                OR site_name IS NOT NULL
+            )"""]
+        )
+        total = self.backup_db.store_publishers(publishers)
+        log.info("ported publishers", extra={'source': self.run_id, 'num_items': total})
 
-    # def sync_storage(self):
-    #     # get the snapshot
-    #     current_snapshot = self.db.snapshot()
-    #     # then upload what is in the directory
-    #     # this way if some
-    #     s3sync_cmd = os.getenv("S3SYNC_CMD")
-    #     if s3sync_cmd: 
-    #         subprocess.run(s3sync_cmd.split(), check=True)
-    #         log.info("synced storage", extra={"source": self.run_id, "num_items": 1})
-    #     # then update cache
-    #     self.cache.set("current_snapshot", current_snapshot)
-    #     log.info("saved snapshot", extra={"source": self.run_id, "num_items": current_snapshot})
+        chatters = self.db.query_chatters(collected=ndays_ago(PORT_WINDOW))
+        total = self.backup_db.store_chatters(chatters)
+        log.info("ported chatters", extra={'source': self.run_id, 'num_items': total})
    
     def run(self):
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting refresher", extra={"source": self.run_id, "num_items": os.cpu_count()})
 
         self.db.refresh()
-        log.info("recomputed warehouse", extra={"source": self.run_id, "num_items": 1})
+        log.info("optimized", extra={"source": self.run_id, "num_items": 1})
 
         # # NOTE: skipping cleanup for now as it is too aggressive
         # self.master_db.cleanup()
         # log.info("cleaned up warehouse", extra={"source": self.run_id, "num_items": 1})
 
         self.port_contents()
-        # self.sync_storage()
 
     def close(self):
         self.db.close()
