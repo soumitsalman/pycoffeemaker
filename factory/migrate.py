@@ -158,24 +158,30 @@ def db_instance(db_type: str) -> BeansackBase:
     else:
         raise ValueError(f"Unsupported db type: {db_type}")
 
-def migrate(from_db: str, to_db: str, batch_size: int, *items):
+def migrate(from_db: str, to_db: str, batch_size: int, window: int, *items):
     from tqdm import tqdm
 
     from_db_instance = db_instance(from_db)
     to_db_instance = db_instance(to_db)
 
+
     BEAN_CONDITIONS = [
         "gist IS NOT NULL",
         "embedding IS NOT NULL"
     ]
+    
     PUBLISHER_CONDITIONS = ["""(
         rss_feed IS NOT NULL 
         OR favicon IS NOT NULL 
         OR site_name IS NOT NULL
     )"""]
+    if window: 
+        collected_expr = f"collected >= CURRENT_TIMESTAMP - interval '{window} days'"
+        BEAN_CONDITIONS.append(collected_expr)
+        PUBLISHER_CONDITIONS.append(collected_expr)
 
     _port_beans = lambda offset: to_db_instance.store_beans(
-        from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size, columns=["* EXCLUDE(content, content_length)"])
+        from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size)
     )
     _port_contents = lambda offset: to_db_instance.update_beans(
         from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size, columns=[K_URL, K_CONTENT, K_CONTENT_LENGTH, K_GIST, K_SENTIMENTS]),
@@ -224,9 +230,9 @@ parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
 parser.add_argument('--from_db', type=str, help='Type of database to create')
 parser.add_argument('--to_db', type=str, help='Update the lancedb')
 parser.add_argument('--batch_size', type=int, default=2048, help='Batch size for migration')
+parser.add_argument("--window", type=int, default=0, help="Window size for migration")
 parser.add_argument('--items', type=str, nargs='*', help='Items to migrate (beans, publishers, chatters)')
-
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    migrate(args.from_db, args.to_db, args.batch_size, *(args.items or []))
+    migrate(args.from_db, args.to_db, args.batch_size, args.window, *(args.items or []))

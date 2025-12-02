@@ -165,6 +165,8 @@ class Orchestrator:
         log.info("starting indexer", extra={"source": run_id, "num_items":len(beans)}) 
         total = self.embed_beans(beans, batch_size)
         log.info("total indexed", extra={"source": run_id, "num_items": total})
+
+        self.db.refresh_clusters()
         
         # Wait for all pending updates to complete
         self._finish_updates()
@@ -188,6 +190,8 @@ class Orchestrator:
         log.info("starting indexer", extra={"source": run_id, "num_items":len(beans)}) 
         total = self.embed_beans(beans, embedder_batch_size)
         log.info("total indexed", extra={"source": run_id, "num_items": total})
+
+        th.Thread(target=self.db.refresh_clusters, daemon=True).start()  
 
         beans = self.get_beans(DIGEST_FILTER)  
         log.info("starting digestor", extra={"source": run_id, "num_items": len(beans)})  

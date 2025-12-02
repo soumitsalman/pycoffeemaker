@@ -7,6 +7,6 @@ tldextract
 praw
 asyncpraw
 readability-lxml
+pyyaml
 icecream
 python-dotenv
-pyyaml

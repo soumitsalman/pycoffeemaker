@@ -75,7 +75,7 @@ class Orchestrator:
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log.info("starting refresher", extra={"source": self.run_id, "num_items": os.cpu_count()})
 
-        self.db.refresh()
+        self.db.optimize()
         log.info("optimized", extra={"source": self.run_id, "num_items": 1})
 
         # # NOTE: skipping cleanup for now as it is too aggressive

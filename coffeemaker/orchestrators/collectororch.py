@@ -103,6 +103,7 @@ class Orchestrator:
             self.collect_beans_async(sources, batch_size=batch_size),
             self.scrape_publishers_async(batch_size=batch_size)
         ])
+        self.db.refresh_classifications()
         log.info("total collected", extra={"source": self.run_id, "num_items": self.run_total})
 
     def close(self):
