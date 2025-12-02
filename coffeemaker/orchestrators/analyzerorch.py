@@ -156,6 +156,10 @@ class Orchestrator:
         """Wait for all pending database updates to complete"""   
         self.update_queue.put(END_OF_QUEUE)     
         self.updater.join()
+
+    def _refresh_clusters(self):
+        self.db.refresh_clusters()
+        log.info("refreshed clusters", extra={"source": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "num_items": 1})
            
     @log_runtime(logger=log)
     def run_indexer(self, batch_size: int = BATCH_SIZE):
@@ -166,8 +170,7 @@ class Orchestrator:
         total = self.embed_beans(beans, batch_size)
         log.info("total indexed", extra={"source": run_id, "num_items": total})
 
-        self.db.refresh_clusters()
-        
+        self._refresh_clusters()        
         # Wait for all pending updates to complete
         self._finish_updates()
 
@@ -191,7 +194,7 @@ class Orchestrator:
         total = self.embed_beans(beans, embedder_batch_size)
         log.info("total indexed", extra={"source": run_id, "num_items": total})
 
-        th.Thread(target=self.db.refresh_clusters, daemon=True).start()  
+        th.Thread(target=self._refresh_clusters, daemon=True).start()  
 
         beans = self.get_beans(DIGEST_FILTER)  
         log.info("starting digestor", extra={"source": run_id, "num_items": len(beans)})  
