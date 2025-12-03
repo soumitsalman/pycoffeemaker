@@ -5921,6 +5921,8 @@ sources:
   - powerengineering
   - blogs
   - Blogging
+  - Bloggers
+  - BlogPromotions
   - Coronavirus
   - SaaS
   - sweatystartup
@@ -5929,6 +5931,7 @@ sources:
   - StockMarket
   - stocks
   - inthenews
+  - ClimateNews
   - climatechange
   - climate
   - dataengineering
@@ -5949,7 +5952,12 @@ sources:
   - space
   - sports
   - tennis
+  - businessnews
+  - TradeBusinessNews
+  - qualitynews
+  - internationalbusiness
   - userexperience
+  - TheWorldDaily
   - androiddev
   - books
   - movies
