@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from retry import retry
 from .utils import *
-from coffeemaker.pybeansack.models import *
+from pybeansack.models import *
 from icecream import ic
 
 log = logging.getLogger(__name__)

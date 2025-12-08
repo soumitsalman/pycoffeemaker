@@ -16,8 +16,8 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 import pandas as pd
-from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.bases import BeansackBase
+from pybeansack.models import *
+from pybeansack import *
 
 def register_file(beansack, filename):
     from coffeemaker.pybeansack.warehouse import Beansack, SQL_INSERT_PARQUET
@@ -124,8 +124,8 @@ def migrate_from_v1_to_v2(v1_conn, v2_conn):
     target_db.close()
 
 def migrate_to_lancesack():
-    from coffeemaker.pybeansack import lancesack as ls
-    from coffeemaker.pybeansack import warehouse as wh
+    from pybeansack import lancesack as ls
+    from pybeansack import warehouse as wh
     from tqdm import tqdm
 
     source_db = wh.Beansack(os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH"), factory_dir=os.getenv("FACTORY_DIR"))
@@ -144,17 +144,15 @@ def migrate_to_lancesack():
     target_db.store_publishers(source_db.query_publishers())
     ic(target_db.allpublishers.count_rows())
 
-def db_instance(db_type: str) -> BeansackBase:
-    from coffeemaker.pybeansack import lancesack, pgsack, ducksack, lakehouse
-
+def db_instance(db_type: str) -> Beansack:
     if db_type in ["lancedb", "lancesack", "lance"]:
-        return lancesack.Beansack(os.getenv('LANCEDB_STORAGE'))
+        return LanceDB(os.getenv('LANCEDB_STORAGE'))
     elif db_type in ["pg", "postgres", "postgresql"]:
-        return pgsack.Beansack(os.getenv('PG_CONNECTION_STRING'))
+        return Postgres(os.getenv('PG_CONNECTION_STRING'))
     elif db_type in ["duckdb", "duck"]:
-        return ducksack.Beansack(os.getenv('DUCKDB_STORAGE'))
+        return DuckDB(os.getenv('DUCKDB_STORAGE'))
     elif db_type in ["ducklake", "dl"]:
-        return lakehouse.Beansack(os.getenv('DUCKLAKE_CATALOG'), os.getenv('DUCKLAKE_STORAGE'))
+        return Ducklake(os.getenv('DUCKLAKE_CATALOG'), os.getenv('DUCKLAKE_STORAGE'))
     else:
         raise ValueError(f"Unsupported db type: {db_type}")
 
@@ -163,7 +161,6 @@ def migrate(from_db: str, to_db: str, batch_size: int, window: int, *items):
 
     from_db_instance = db_instance(from_db)
     to_db_instance = db_instance(to_db)
-
 
     BEAN_CONDITIONS = [
         "gist IS NOT NULL",

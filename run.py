@@ -62,14 +62,14 @@ if __name__ == "__main__":
     mode = args.mode or os.getenv("MODE")
     batch_size = int(args.batch_size or os.getenv('BATCH_SIZE') or os.cpu_count())
     db_kwargs = {
-        "DB_TYPE": os.getenv("DB_TYPE"),
-        "MONGO_CONNECTION_STRING": os.getenv("MONGO_CONNECTION_STRING"),
-        "MONGO_DATABASE": os.getenv("MONGO_DATABASE"),
-        "PG_CONNECTION_STRING": os.getenv("PG_CONNECTION_STRING"),
-        "DUCKDB_STORAGE": os.getenv("DUCKDB_STORAGE"),
-        "LANCEDB_STORAGE": os.getenv("LANCEDB_STORAGE"),
-        "DUCKLAKE_CATALOG": os.getenv("DUCKLAKE_CATALOG"),
-        "DUCKLAKE_STORAGE": os.getenv("DUCKLAKE_STORAGE")
+        "db_type": os.getenv("DB_TYPE"),
+        "mongo_connection_string": os.getenv("MONGO_CONNECTION_STRING"),
+        "mongo_database": os.getenv("MONGO_DATABASE"),
+        "pg_connection_string": os.getenv("PG_CONNECTION_STRING"),
+        "duckdb_storage": os.getenv("DUCKDB_STORAGE"),
+        "lancedb_storage": os.getenv("LANCEDB_STORAGE"),
+        "ducklake_catalog": os.getenv("DUCKLAKE_CATALOG"),
+        "ducklake_storage": os.getenv("DUCKLAKE_STORAGE")
     }
     
     if mode == "COLLECTOR":
@@ -112,25 +112,7 @@ if __name__ == "__main__":
             embedder_batch_size=int(args.embedder_batch_size or batch_size), 
             digestor_batch_size=int(args.digestor_batch_size or batch_size)
         )
-        orch.close()
-    elif mode == "COMPOSER":
-        from coffeemaker.orchestrators.composerorch import Orchestrator
-        orch = Orchestrator(
-            db_kwargs=db_kwargs,           
-            embedder_model=os.getenv("EMBEDDER_PATH"),
-            analyst_model=os.getenv("ANALYST_MODEL"),
-            writer_model=os.getenv("WRITER_MODEL"),
-            composer_conn=(
-                os.getenv("COMPOSER_BASE_URL"),
-                os.getenv("COMPOSER_API_KEY")
-            ),
-            publisher_conn=(
-                os.getenv("PUBLISHER_BASE_URL"),
-                os.getenv("PUBLISHER_API_KEY")
-            ),
-            cupboard_conn_str=os.getenv("RAGDB_STORAGE")
-        )
-        asyncio.run(orch.run_async(os.getenv("COMPOSER_TOPICS", "./factory/composer-topics.yaml")))
+        orch.close()   
     elif mode == "REFRESHER":
         from coffeemaker.orchestrators.refresherorch import Orchestrator
         orch = Orchestrator(

@@ -4,20 +4,16 @@ import os
 import logging
 import threading as th
 import queue
-from coffeemaker.pybeansack import BeansackBase
-from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack.utils import *
-from coffeemaker.nlp import embedders, digestors, Digest, utils
+from pybeansack import Beansack, create_client
+from pybeansack.models import *
+from pybeansack.utils import *
+from nlp import embedders, digestors, Digest
 from coffeemaker.orchestrators.utils import *
 from icecream import ic
 
 log = logging.getLogger(__name__)
 
-# CACHE_DIR = ".cache"
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()))
-# MAX_RELATED = int(os.getenv('MAX_RELATED', 128))
-# MAX_RELATED_NDAYS = int(os.getenv('MAX_RELATED_NDAYS', 7))
-# MAX_RELATED_EPS=float(os.getenv("MAX_RELATED_EPS", 0.48))
 MAX_ANALYZE_NDAYS =  int(os.getenv('MAX_ANALYZE_NDAYS', 2))
 END_OF_QUEUE = "__END_OF_QUEUE__" # Sentinel value to signal end of queue
 
@@ -34,26 +30,8 @@ DIGEST_FILTER = [
 index_storables = lambda beans: [bean for bean in beans if bean.embedding]
 digest_storables = lambda beans: [bean for bean in beans if bean.gist]
 
-# def _embed(embedder: embedders.Embeddings, beans: list[Bean]) -> list[Bean]|None:
-#     if not beans: return None
-
-#     vecs = embedder.embed_documents([bean.content for bean in beans])
-#     embs = [Bean(url=b.url, source=b.source, embedding=e) for b, e in zip(beans, vecs) if len(e) == VECTOR_LEN]
-#     log.info("embedded", extra={"source": beans[0].source, "num_items": len(embs)})
-#     return embs
-
-# def _digest(digestor: agents.Text2TextAgent, beans: list[Bean]) -> list[Bean]|None:
-#     if not beans: return beans
-
-#     # this is a cpu heavy calculation. run it on the main thread and let the nlp take care of it
-#     gists = digestor.run_batch([bean.content for bean in beans])
-#     digests = [Bean(url=b.url, source=b.source, gist=d.raw, regions=d.regions, entities=d.entities) for b, d in zip(beans, gists) if d and d.raw]
-#     log.info("digested", extra={"source": beans[0].source, "num_items": len(digests)})
-#     return digests
-
 class Orchestrator:
-    # db_conn_str: tuple[str, str] = None
-    db: BeansackBase = None
+    db: Beansack = None
     embedder_model: str = None
     embedder_context_len: int = 0
     digestor_model: str = None
@@ -68,8 +46,7 @@ class Orchestrator:
         digestor_path: str = None, 
         digestor_context_len: int = 0
     ):     
-        # self.db_conn_str = db_conn_str
-        self.db = initialize_db(**db_kwargs)
+        self.db = create_client(**db_kwargs)
         self.embedder_model = embedder_path
         self.embedder_context_len = embedder_context_len
         self.digestor_model = digestor_path

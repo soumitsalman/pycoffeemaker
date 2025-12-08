@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from urllib.parse import urlparse
 from dateutil.parser import parse as date_parser
-from coffeemaker.pybeansack.models import NEWS, POST, BLOG
+from pybeansack.models import NEWS, POST, BLOG
 
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 

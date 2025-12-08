@@ -69,15 +69,3 @@ def initialize_azblobstore(azstorage_conn_str, container_name):
     try: container.create_container()
     except: log.debug("blob container already exists %s", container_name)
     return container
-
-merge_tags = lambda *args: list(set(item.lower() for arg in args if arg for item in arg))
-
-def initialize_db(**kwargs):
-    from coffeemaker.pybeansack import mongosack, lancesack, ducksack, pgsack, lakehouse
-    db_type = kwargs['DB_TYPE'].lower()
-    if db_type in ["postgres", "postgresql", "pg"]: return pgsack.Beansack(kwargs.get('PG_CONNECTION_STRING'))
-    if db_type in ["mongodb", "mongo"]: return mongosack.Beansack(kwargs.get('MONGO_CONNECTION_STRING'), kwargs.get('MONGO_DATABASE'))
-    if db_type in ["duckdb", "duck"]: return ducksack.Beansack(kwargs.get('DUCKDB_STORAGE'))
-    if db_type in ["lancedb", "lance"]: return lancesack.Beansack(kwargs.get('LANCEDB_STORAGE'))
-    if db_type in ["ducklake", "dl"]: return lakehouse.Beansack(catalogdb=kwargs.get('DUCKLAKE_CATALOG'), storagedb=kwargs.get('DUCKLAKE_STORAGE'))
-    raise ValueError("unsupported connection string")

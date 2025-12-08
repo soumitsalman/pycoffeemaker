@@ -1,8 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import subprocess
-from coffeemaker.pybeansack.models import *
-from coffeemaker.pybeansack import BeansackBase, lancesack
+from pybeansack.models import *
+from pybeansack import Beansack, create_client
 from pymongo import UpdateMany
 from dbcache.api import kvstore
 from .utils import *
@@ -30,19 +30,15 @@ BEAN_PORT_FIELDS = [
 ]
 
 calculate_trend_score = lambda bean_chatter: 100*(bean_chatter.comments or 0) + 10*(bean_chatter.shares or 0) + (bean_chatter.likes or 0)
-def _preprocess_bean(bean: AggregatedBean) -> AggregatedBean:
-    bean.tags = merge_tags(bean.categories, bean.regions, bean.entities)
-    bean.trend_score = calculate_trend_score(bean)
-    return bean
 
 class Orchestrator:
-    db: BeansackBase = None
-    backup_db: lancesack.Beansack = None
+    db: Beansack = None
+    backup_db: Beansack = None
     run_total: int = 0
 
     def __init__(self, db_kwargs: dict[str, str], backup_db_kwargs: dict[str, str]):
-        self.db = initialize_db(**db_kwargs)
-        self.backup_db = initialize_db(**backup_db_kwargs)
+        self.db = create_client(**db_kwargs)
+        self.backup_db = create_client(**backup_db_kwargs)
 
     def port_contents(self):         
         beans = self.db.query_latest_beans(

@@ -18,7 +18,7 @@ from io import BytesIO
 from itertools import chain
 from concurrent.futures import ThreadPoolExecutor
 from .utils import *
-from coffeemaker.pybeansack.models import *
+from pybeansack.models import *
 from icecream import ic
 
 log = logging.getLogger(__name__)
