@@ -107,7 +107,6 @@ class Orchestrator:
 
     def close(self):
         # Close database connection
-        self.db.refresh()
         self.db.close()
 
     # def _get_collect_funcs(self, sources):
