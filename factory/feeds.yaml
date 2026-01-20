@@ -1566,7 +1566,6 @@ sources:
   - https://hycean.group.cam.ac.uk/feed/
   - https://hydrogen-central.com/feed/
   - https://hyperallergic.com/feed/
-  - https://hyperion-entertainment.com/index.php?format=feed&type=rss
   - https://ia.net/feed/
   - https://iagoleal.com/rss.xml
   - https://iakn.wpmudev.host/feed
@@ -3724,7 +3723,6 @@ sources:
   - https://www.devonlive.com/rss.xml
   - https://www.devontechnologies.com/blog.rss
   - https://www.devx.com/feed/
-  - https://www.dexerto.com/feed/category/entertainment/
   - https://www.df-f.com/blog?format=rss
   - https://www.dg-aviation.de/en/feed
   - https://www.dg-aviation.de/feed/
@@ -3987,7 +3985,6 @@ sources:
   - https://www.haproxy.com/feed
   - https://www.hardmo.de/rss/article
   - https://www.hardware-corner.net/feed/
-  - https://www.harpersbazaar.com/rss/culture.xml
   - https://www.harpersbazaar.com/rss/default.xml
   - https://www.harudagondi.space/rss.xml
   - https://www.haskellforall.com/feeds/posts/default?alt=rss
@@ -4029,7 +4026,6 @@ sources:
   - https://www.hungarianconservative.com/feed/
   - https://www.hustwit.com/home?format=rss
   - https://www.hyperdimensional.co/feed
-  - https://www.hyperion-entertainment.com/index.php/news?format=feed&type=rss
   - https://www.iamcharliegraham.com/rss/
   - https://www.ian-leslie.com/feed
   - https://www.ianvisits.co.uk/articles/feed/
@@ -5367,6 +5363,8 @@ sources:
   - https://readwrite.com/feed/
   - https://rg.ru/xml/index.xml
   - https://riotimesonline.com/feed/
+  - https://robohub.org/feed/
+  - https://blog.robotiq.com/rss.xml
   - https://robertheaton.com/feed.xml
   - https://rss.acast.com/cricket-unfiltered
   - https://rss.art19.com/masters-of-scale
@@ -5463,6 +5461,7 @@ sources:
   - https://www.caranddriver.com/rss/all.xml/
   - https://www.carbodydesign.com/feed/
   - https://www.cbc.ca/cmlink/rss-topstories
+  - https://clearpathrobotics.com/feed/
   - https://www.cnbc.com/id/100003114/device/rss/rss.html
   - https://www.cnbc.com/id/100003114/device/rss/rss.html
   - https://www.cnbc.com/id/100727362/device/rss/rss.html
@@ -5539,9 +5538,13 @@ sources:
   - https://www.ilpost.it/feed/
   - https://www.inc.com/rss/
   - https://www.indiewire.com/feed
+  - https://www.robotsforroboticists.com/feed/
+  - https://kawasakirobotics.com/blog/
+  - https://blog.geekplus.com/en/robotics-blog/rss.xml
   - https://www.informador.mx/rss/ultimas-noticias.xml
   - https://www.informationng.com/feed
   - https://www.inquirer.net/fullfeed
+  - https://modrobotics.com/blog/feed/
   - https://www.interaksyon.com/feed/
   - https://www.intercom.com/blog/feed
   - https://www.interiordesign.net/rss/
@@ -5576,6 +5579,7 @@ sources:
   - https://www.macworld.com/index.rss
   - https://www.makeupandbeautyblog.com/feed/
   - https://www.makingsenseofcents.com/feed
+  - https://makezine.com/category/technology/robotics/feed/
   - https://www.mediapart.fr/articles/feed
   - https://www.mehrnews.com/rss
   - https://www.merdeka.com/feed/
@@ -5592,6 +5596,7 @@ sources:
   - https://www.news18.com/rss/world.xml
   - https://www.newscientist.com/subject/space/feed/
   - https://www.newsweek.pl/rss.xml
+  - https://newatlas.com/index.rss
   - https://www.nigerianbulletin.com/forums/-/index.rss
   - https://www.nngroup.com/feed/rss/
   - https://www.nomadicmatt.com/travel-blog/feed/
@@ -5625,6 +5630,10 @@ sources:
   - https://www.repubblica.it/rss/homepage/rss2.0.xml
   - https://www.republika.co.id/rss/
   - https://www.rmf24.pl/feed
+  - https://www.roboticmagazine.com/feed
+  - https://www.therobotreport.com/feed/
+  - https://www.roboticstomorrow.com/rss/news
+  - https://www.tm-robot.com/en/feed/
   - https://www.rp.pl/rss/1019
   - https://www.rt.com/rss/
   - https://www.savingadvice.com/feed/
@@ -5695,6 +5704,189 @@ sources:
   - https://www.zacsweers.dev/rss/
   - https://zarah.dev/feed.xml
   - https://zsmb.co/index.xml
+  - https://ttnews.com/rss.xml
+  - https://truckersnews.com/feed
+  - https://trucknews.com/feed
+  - https://dat.com/blog/feed
+  - https://tlimagazine.com/feed
+  - https://activetrans.org/feed
+  - https://stnonline.com/feed
+  - https://shiphub.co/transport/feed
+  - https://metro-magazine.com/rss
+  - https://usa.streetsblog.org/feed
+  - https://transportist.org/feed
+  - https://nacto.org/feed
+  - https://thesource.metro.net/feed
+  - https://nextcity.org/feeds/daily
+  - https://sdotblog.seattle.gov/feed
+  - https://dtsone.com/feed
+  - https://gojarrett.com/blog/rss.xml
+  - https://itdp.org/feed
+  - https://quicargo.com/feed
+  - https://rideai.substack.com/feed
+  - https://gemlimo.com/blog-feed.xml
+  - https://thetransportpolitic.com/feed
+  - https://ngtnews.com/feed
+  - https://secondavenuesagas.com/feed
+  - https://blog.tstc.org/feed
+  - https://activetrans.org/blog/feed
+  - https://tms-transportation.com/feed
+  - https://truckersnews.com/feed
+  - https://trucknews.com/feed
+  - https://dat.com/blog/feed
+  - https://tlimagazine.com/feed
+  - https://activetrans.org/feed
+  - https://stnonline.com/feed
+  - https://shiphub.co/transport/feed
+  - https://metro-magazine.com/rss
+  - https://usa.streetsblog.org/feed
+  - https://transportist.org/feed
+  - https://nacto.org/feed
+  - https://thesource.metro.net/feed
+  - https://nextcity.org/feeds/daily
+  - https://sdotblog.seattle.gov/feed
+  - https://dtsone.com/feed
+  - https://gojarrett.com/blog/rss.xml
+  - https://itdp.org/feed
+  - https://quicargo.com/feed
+  - https://rideai.substack.com/feed
+  - https://gemlimo.com/blog-feed.xml
+  - https://thetransportpolitic.com/feed
+  - https://ngtnews.com/feed
+  - https://secondavenuesagas.com/feed
+  - https://blog.tstc.org/feed
+  - https://activetrans.org/blog/feed
+  - https://tms-transportation.com/feed
+  - https://steveblank.com/feed/
+  - https://techcrunch.com/category/startups/feed/
+  - https://thestartupmag.com/feed/
+  - https://magazine.startus.cc/feed/
+  - https://www.eu-startups.com/feed/
+  - https://startupnation.com/feed/
+  - https://www.startupdaily.net/feed/
+  - https://www.startupyeti.com/feed/
+  - https://startabusiness.center/feed/
+  - https://medium.com/feed/swlh
+  - https://blog.ourcrowd.com/feed/
+  - https://york.ie/feed/
+  - https://www.alleywatch.com/category/startups/feed/
+  - https://www.techpluto.com/feed/
+  - https://www.ncrypted.net/blog/feed/
+  - https://alltopstartups.com/feed/
+  - https://siliconcanals.com/news/startups/feed/
+  - https://www.rentallscript.com/resources/rss/
+  - https://gritdaily.com/feed/
+  - https://startups.co.uk/feed/
+  - https://blog.innmind.com/rss/
+  - https://feeds.feedburner.com/siliconflorist
+  - https://futurestartup.com/feed/
+  - https://feld.com/blog/feed/
+  - https://startupnews.com.au/feed/
+  - https://startupbeat.com/feed/
+  - https://www.startupcan.ca/feed/
+  - https://leanstartup.co/feed/
+  - https://wecanmag.com/feed/
+  - https://startupdevkit.com/feed/
+  - https://ourownstartup.com/feed/
+  - https://startupvalley.news/uk/feed/
+  - https://startupreporter.in/feed/
+  - https://feedmystartup.com/feed/
+  - https://nzentrepreneur.co.nz/feed/
+  - https://medium.com/feed/the-happy-startup-school
+  - https://startupsac.com/feed/
+  - https://www.thisisgoingtobebig.com/blog?format=rss
+  - https://startupsd.org/feed/
+  - http://redrocketvc.blogspot.com/feeds/posts/default?alt=rss
+  - https://www.venionaire.com/feed/
+  - https://www.cobbleweb.co.uk/feed/
+  - http://www.barcinno.com/feed/
+  - https://startupbusinessbureau.com/feed/
+  - http://www.way2world.in/feed
+  - https://venturefounders.com/feed/
+  - https://f3fundit.com/feed/
+  - https://aaronvick.com/feed/
+  - https://thestartuppitch.com/feed/
+  - http://startupyard.com/feed/
+  - https://e27.co/index_wp.php/feed/
+  - https://www.lowcostletterbox.com/blog/feed/
+  - https://gust.com/blog/feed/
+  - https://longform.asmartbear.com/index.xml
+  - https://dealstream.com/blog/feed/
+  - https://103degrees.com/web-stories/feed/
+  - https://corporateescapologist.substack.com/feed
+  - https://medium.com/feed/@thomasfairey
+  - https://entrepreneurshandbook.co/feed
+  - https://andrewchen.com/feed/
+  - https://bothsidesofthetable.com/feed
+  - https://crazyaboutstartups.com/feed/
+  - https://sloboda-studio.com/blog/feed/
+  - https://www.neoito.com/blog/rss/
+  - https://www.onstartups.com/rss.xml
+  - https://startupgenome.com/rss.xml
+  - https://lessonsatstartup.com/feed/
+  - https://medium.dave-bailey.com/feed
+  - https://startuptipsdaily.com/feed/
+  - https://unboxingstartups.com/feed/
+  - https://startup-buzz.com/feed/
+  - http://mydigitalstartup.net/feed/
+  - https://www.ghosh.com/blog/feed/
+  - https://500hats.com/feed
+  - https://zachizach.com/feed/
+  - https://startuphighway.com/feed/
+  - https://www.starteer.com/feed/
+  - https://love-startups.com/feed/
+  - https://startupwhale.com/feed/
+  - https://blog.startupvictoria.com.au/feed
+  - https://crowdwise.org/feed/
+  - https://feeds.feedburner.com/bizplancentral
+  - https://sharjeelsidd.medium.com/feed
+  - https://numbro.in/blog/feed/
+  - https://yourstory.com/feed/
+  - https://www.computerworld.com/feed/
+  - https://killerstartups.com/feed/
+  - https://www.yaypay.com/blog/rss.xml
+  - https://www.startupopinions.com/feed/
+  - https://graffersid.com/feed/
+  - https://www.successvalley.tech/blog/feed/
+  - https://pixr8.com/feed/
+  - https://startupsanonymous.com/feed/
+  - https://www.startuplagos.co/feed/
+  - https://startupjuncture.com/feed/
+  - https://www.lightercapital.com/blog/feed/
+  - https://www.forentrepreneurs.com/feed/
+  - https://startupmanagement.org/feed/
+  -   - https://www.businessgreen.com/feeds/rss
+  - https://feeds.feedburner.com/Eco-advantage
+  - https://www.greenbuoyconsulting.com/blog?format=rss
+  - https://greenmoney.com/feed/
+  - https://www.eco-business.com/feeds/all/
+  - https://greenbusinessjournal.co.uk/feed/
+  - https://greenerideal.com/news/business/feed/
+  - https://greenbusinessca.org/feed/
+  - https://eco-officegals.com/feed/
+  - https://clearstrategyco.com/feed/
+  - https://www.greenamerica.org/taxonomy/term/417/feed
+  - https://greenandgrumpy.com/feed/
+  - https://www.terrainfirma.co.uk/blog/feed/
+  - https://greenoffice.co.za/feed/
+  - http://sustainablesmartbusiness.com/feed/
+  - https://cooleeme.com/blogs/green-business.atom
+  - https://greenerjc.org/greener-jc-blog/f.rss
+  - https://greatgreencontent.com/feed/
+  - https://www.sagese.com/dosage/rss.xml
+  - https://www.environfocus.com/environbuzz/feed/
+  - https://www.environmentblog.net/category/green-business/feed/
+  - https://www.webuyitgreen.com/feed/
+  - https://www.hpcwire.com/feed/
+  - https://insidehpc.com/feed/
+  - https://www.advancedclustering.com/blog/feed/
+  - https://womeninhpc.org/feed
+  - http://feeds.feedburner.com/hpcnotes
+  - https://www.top500.org/news/feed/
+  - https://www.clustermonkey.net/feed/rss/
+  - https://aws.amazon.com/blogs/hpc/feed/
+  - https://www.pugetsystems.com/feed/
+  - https://www.scientific-computing.com/feed/news.xml
   reddit:
   - technology
   - tech
