@@ -5905,6 +5905,66 @@ sources:
   - golang
   - linux
   - HPC
+  - buildapc
+  - hardware
+  - pcmasterrace
+  - servers
+  - homelab
+  - sysadmin
+  - datacenter
+  - DataCenters
+  - cloudcomputing
+  - aws
+  - AZURE
+  - googlecloud
+  - kubernetes
+  - microsoft
+  - Office365
+  - Teams
+  - Windows10
+  - Windows11
+  - google
+  - Android
+  - GooglePixel
+  - chrome
+  - YouTube
+  - apple
+  - iOS
+  - MacOS
+  - iphone
+  - iPad
+  - AppleWatch
+  - adobe
+  - photoshop
+  - AfterEffects
+  - nvidia
+  - AMD
+  - intel
+  - tesla
+  - teslamotors
+  - netflix
+  - spotify
+  - docker
+  - github
+  - salesforce
+  - oracle
+  - IBM
+  - slack
+  - zoom
+  - discord
+  - twitch
+  - steam
+  - playstation
+  - PS4
+  - PS5
+  - xbox
+  - XboxOne
+  - nintendo
+  - NintendoSwitch
+  - supercomputing
+  - QuantumComputing
+  - quantum
+  - QuantumPhysics
   - news
   - worldnews
   - InternationalNews
@@ -5942,7 +6002,6 @@ sources:
   - uspolitics
   - AmericanPolitics
   - World_Politics
-  - InternationalNews
   - CanadaPolitics
   - ukpolitics
   - NeutralPolitics
@@ -6043,7 +6102,6 @@ sources:
   - Futurology
   - SideProject
   - newproducts
-  - PublicRelations
   - hireaprogrammer
   - DevelEire
   - careerguidance
@@ -6056,6 +6114,32 @@ sources:
   - flying
   - AirPassengerRights
   - pilots
+  - aviation
+  - aviationcareers
+  - AviationMaintenance
+  - ATC
+  - drones
+  - Multicopter
+  - quadcopter
+  - aerospace
+  - AerospaceEngineering
+  - MilitaryAviation
+  - Helicopters
+  - airplanes
+  - aviation_pics
+  - AviationHistory
+  - flying_lessons
+  - WeirdWings
+  - WWIIplanes
+  - modelaircraft
+  - flightsim
+  - aviationmemes
+  - Boeing
+  - Airbus
+  - planecrash
+  - AirForce
+  - Navy
+  - UAP
   - solarenergy
   - solar
   - solarpower
@@ -6092,8 +6176,36 @@ sources:
   - sweatystartup
   - LanguageTechnology
   - Economics
+  - GlobalEconomics
+  - MacroEconomics
+  - economy
+  - worldeconomics
+  - econmonitor
+  - finance
+  - investing
+  - ValueInvesting
   - StockMarket
   - stocks
+  - economics_webinars
+  - EconomicHistory
+  - AskEconomics
+  - badeconomics
+  - PoliticalEconomy
+  - DevelopmentEconomics
+  - BehavioralEconomics
+  - FinancialMarkets
+  - GlobalMarkets
+  - financialindependence
+  - Fire
+  - EuropeanFederalists
+  - geopolitics
+  - GlobalPolitics
+  - InternationalTrade
+  - China_Economy
+  - EuropeEconomy
+  - FinTech
+  - blockchain
+  - CryptoCurrency
   - inthenews
   - ClimateNews
   - climatechange
@@ -6107,12 +6219,10 @@ sources:
   - cricket
   - interiordesign
   - android
-  - apple
   - architecture
   - football
   - formula1
   - gaming
-  - iphone
   - space
   - sports
   - tennis
@@ -6127,6 +6237,15 @@ sources:
   - movies
   - science
   - television
+  - ROS
+  - ROS2
+  - microROS
+  - robotics
+  - IndustrialRobotics
+  - PLC
+  - Automate
+  - IndustrialEngineering
+  - FRC
   ychackernews:
   - https://hacker-news.firebaseio.com/v0/topstories.json
   - https://hacker-news.firebaseio.com/v0/newstories.json
