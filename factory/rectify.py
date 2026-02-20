@@ -233,7 +233,7 @@ def cleanup_bean_tags():
     # get total rows
     total = db.count_rows(BEANS, conditions=conditions)
     batch_size = 256
-    for offset in tqdm(range(0, total, batch_size), desc="Processing batches"):
+    for offset in tqdm(range(int(os.getenv("MIGRATE_OFFSET", 0)), total, batch_size), desc="Processing batches"):
         beans = db.query_latest_beans(conditions=conditions, limit=batch_size, offset=offset, columns=[K_URL, K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS])
 
         for bean in beans:
