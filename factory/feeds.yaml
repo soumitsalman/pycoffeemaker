@@ -229,7 +229,6 @@ sources:
   - https://andreabergia.com/index.xml
   - https://andregarzia.com/feeds/all.rss.xml
   - https://andrejradovic.com/rss.xml
-  - https://andrewvarsanyi.com/feed/
   - https://andreyor.st/feed.xml
   - https://androidoffsec.withgoogle.com/index.xml
   - https://andymaleh.blogspot.com/feeds/posts/default?alt=rss
@@ -290,17 +289,12 @@ sources:
   - https://arshsharma.com/index.xml
   - https://arslan.io/rss/
   - https://articles.pragdave.me/feed
-  - https://arynews.tv/feed/
   - https://ash.harvard.edu/feed/
   - https://ashley.dev/rss.xml
   - https://ashleyjanssen.com/blog/rss/
-  - https://ashpreetbedi.com/feed.xml
-  - https://ashvardanian.com/index.xml
   - https://asianews.network/feed/
   - https://asiatimes.com/feed/
   - https://askitout.com/feed/
-  - https://assamtribune.com/category/international/google_feeds.xml
-  - https://assamtribune.com/feed
   - https://assessingpsyche.wordpress.com/feed/
   - https://assetmanagementsoftware.app/blog/feed.atom
   - https://asteriskmag.com/feed
@@ -336,7 +330,6 @@ sources:
   - https://baizaar.tools/feed/
   - https://bakadesuyo.com/feed/
   - https://bakkenbaeck.com/work/feed.xml
-  - https://balajis.com/feed
   - https://ballot-access.org/feed/
   - https://balsamiq.com/company/news/feed/
   - https://baltazarstudios.com/feed/
@@ -1201,7 +1194,6 @@ sources:
   - https://everyonegaming.com/feed/
   - https://everything.intellectronica.net/feed
   - https://eviltux.com/feed/
-  - https://evoca.tv/feed/
   - https://evtolinsights.com/feed/
   - https://exformation.williamrinehart.com/feed
   - https://exo-blog.blogspot.com/feeds/posts/default?alt=rss
@@ -1276,7 +1268,6 @@ sources:
   - https://feeds.feedburner.com/GeekNative
   - https://feeds.feedburner.com/NDTV-LatestNews
   - https://feeds.feedburner.com/NiemanJournalismLab
-  - https://feeds.feedburner.com/ScrollinArticles.rss
   - https://feeds.feedburner.com/TheHackersNews
   - https://feeds.feedburner.com/Wwwtokyotimesorg
   - https://feeds.feedburner.com/americanthinker
@@ -1486,7 +1477,6 @@ sources:
   - https://groundworkcollaborative.org/feed/
   - https://group.ntt/en/newsrelease/rss/release.rdf
   - https://grumpygamer.com/index.xml
-  - https://gtvnewshd.com/feed/
   - https://gubello.me/index.xml
   - https://guidovranken.com/feed/
   - https://guptadeepak.com/rss/
@@ -1651,7 +1641,6 @@ sources:
   - https://isc.sans.edu/rssfeed.xml
   - https://ishadeed.com/feed.xml
   - https://ishamf.dev/rss/
-  - https://islamabadpost.com.pk/feed/
   - https://istio.io/latest/blog/feed.xml
   - https://it-notes.dragas.net/feed.xml
   - https://itif.org/feed/rss.xml
@@ -2084,7 +2073,6 @@ sources:
   - https://minireference.com/blog/feed/
   - https://minnesotareformer.com/feed/
   - https://mint-secure.de/feed/
-  - https://minutemirror.com.pk/feed/
   - https://misfitsarchitecture.com/feed/
   - https://misfra.me/index.xml
   - https://missionlocal.org/feed/
@@ -3355,7 +3343,6 @@ sources:
   - https://www.activestate.com/feed/
   - https://www.adacreate.com/resources?format=rss
   - https://www.addtosheets.com/index.xml
-  - https://www.adithyan.io/rss.xml
   - https://www.adityathebe.com/rss.xml
   - https://www.adktaste.com/blog?format=rss
   - https://www.admin-magazine.com/rss/feed/news
@@ -3444,7 +3431,6 @@ sources:
   - https://www.askwoody.com/feed/
   - https://www.astralcodexten.com/feed
   - https://www.astronomy.com/feed/
-  - https://www.aswathkrishnan.com/feeds/posts/default?alt=rss
   - https://www.atlanticcouncil.org/feed/
   - https://www.atlasobscura.com/feeds/latest
   - https://www.atlassian.com/blog/feed
@@ -3460,7 +3446,6 @@ sources:
   - https://www.axial.net/feed/
   - https://www.backblaze.com/blog/feed/
   - https://www.baltimoresun.com/feed/
-  - https://www.bangordailynews.com/feed/
   - https://www.bardannutrition.com.au/blog-feed.xml
   - https://www.bas.ac.uk/feed/
   - https://www.behind-the-enemy-lines.com/feeds/posts/default?alt=rss
@@ -3669,7 +3654,6 @@ sources:
   - https://www.dailyclimate.org/feeds/feed.rss
   - https://www.dailyclimate.org/feeds/solutions.rss
   - https://www.dailydot.com/feed/
-  - https://www.dailyexcelsior.com/feed/
   - https://www.dailyfetched.com/feed/
   - https://www.dailymail.co.uk/home/index.rss
   - https://www.dailymail.co.uk/news/index.rss
@@ -3696,23 +3680,19 @@ sources:
   - https://www.datasciencecentral.com/feed/atom/
   - https://www.davideaversa.it
   - https://www.davidrevoy.com/feed/rss
-  - https://www.dawn.com/feeds/home/
   - https://www.daytona.io/rss.xml
   - https://www.dcrainmaker.com/feed
   - https://www.ddmckinnon.com/feed/
   - https://www.dealflowiq.com/feed
   - https://www.debian.org/News/news
   - https://www.debugbear.com/blog/rss.xml
-  - https://www.debugpoint.com/feed
   - https://www.debugpoint.com/feed/
-  - https://www.deccanchronicle.com/google_feeds.xml
   - https://www.declassifieduk.org/feed/
   - https://www.dedoimedo.com/rss_feed.xml
   - https://www.deepvalueinsights.com/feed
   - https://www.deewhock.com/feed/
   - https://www.democracydocket.com/feed/
   - https://www.denizcemonduygu.com/feed/
-  - https://www.denizcemonduygu.com/philo/feed/
   - https://www.denofgeek.com/feed/
   - https://www.denver7.com/index.rss
   - https://www.denverpost.com/feed/
@@ -4115,7 +4095,6 @@ sources:
   - https://www.kenklippenstein.com/feed
   - https://www.kenneth-truyers.net/rss/
   - https://www.kentik.com/feed.xml
-  - https://www.khaleejtimes.com/api/v1/collections/top-section.rss
   - https://www.khou.com/feeds/syndication/rss/news
   - https://www.khoury.northeastern.edu/feed/
   - https://www.kimiascience.com/index.php?format=feed&type=rss
@@ -4326,8 +4305,6 @@ sources:
   - https://www.newcomer.co/feed
   - https://www.newlyswissed.com/feed/
   - https://www.news10.com/feed/
-  - https://www.news18.com/commonfeeds/v1/eng/rss/text.xml
-  - https://www.news18.com/commonfeeds/v1/eng/rss/world.xml
   - https://www.newschannel5.com/index.rss
   - https://www.newscientist.com/feed/home/
   - https://www.newscientist.com/section/news/feed/
@@ -5054,7 +5031,6 @@ sources:
   - http://feeds.feedburner.com/OneBigPhoto
   - http://feeds.feedburner.com/ProgrammingThrowdown
   - http://feeds.feedburner.com/RockPaperShotgun
-  - http://feeds.feedburner.com/ScrollinArticles.rss
   - http://feeds.feedburner.com/SdJapan
   - http://feeds.feedburner.com/StylingAndroid
   - http://feeds.feedburner.com/TechCrunch
@@ -5305,14 +5281,12 @@ sources:
   - https://iso.500px.com/feed/
   - https://jakewharton.com/atom.xml
   - https://jalopnik.com/rss
-  - https://jang.com.pk/rss/1/1
   - https://joebirch.co/feed
   - https://jornaldebrasilia.com.br/feed/
   - https://labs.spotify.com/feed/
   - https://lenta.ru/rss
   - https://lifehacker.com/rss
   - https://lightroomkillertips.com/feed/
-  - https://lokmat.news18.com/rss/program.xml
   - https://m.signalvnoise.com/feed/
   - https://maharashtratimes.com/rssfeedsdefault.cms
   - https://majornelson.com/feed/
@@ -5330,7 +5304,6 @@ sources:
   - https://mobilea11y.com/index.xml
   - https://moneysavingmom.com/feed/
   - https://mywifequitherjob.com/feed/
-  - https://nation.com.pk/rss/top-stories
   - https://nationalpost.com/feed/
   - https://nerdyak.tech/feed.xml
   - https://netflixtechblog.com/feed
@@ -5411,7 +5384,6 @@ sources:
   - https://tonite.abante.com.ph/feed/
   - https://torontosun.com/category/news/feed
   - https://toucharcade.com/community/forums/-/index.rss
-  - https://tribune.com.pk/feed/home
   - https://tsn.ua/rss/full.rss
   - https://tv.avclub.com/rss
   - https://tvline.com/feed/
@@ -5438,7 +5410,6 @@ sources:
   - https://www.apartmenttherapy.com/projects.rss
   - https://www.apple.com/newsroom/rss-feed.rss
   - https://www.architecturaldigest.com/feed/rss
-  - https://www.asriran.com/fa/rss/allnews
   - https://www.atptour.com/en/media/rss-feed/xml-feed
   - https://www.autoblog.com/rss.xml
   - https://www.autocar.co.uk/rss
@@ -5505,7 +5476,6 @@ sources:
   - https://www.eurogamer.net/?format=rss
   - https://www.euroweeklynews.com/feed/
   - https://www.excelsior.com.mx/rss.xml
-  - https://www.express.pk/feed/
   - https://www.fabisevi.ch/feed.xml
   - https://www.fanpage.it/feed/
   - https://www.fashionbeans.com/rss-feed/?category=fashion
@@ -5523,7 +5493,6 @@ sources:
   - https://www.goal.com/feeds/en/news
   - https://www.goodfinancialcents.com/feed/
   - https://www.gsmarena.com/rss-news-reviews.php3
-  - https://www.gujaratsamachar.com/rss/top-stories
   - https://www.heraldsun.com.au/news/breaking-news/rss
   - https://www.historyisnowmagazine.com/blog?format=RSS
   - https://www.hket.com/rss/hongkong
@@ -5654,7 +5623,6 @@ sources:
   - https://www.sudouest.fr/essentiel/rss.xml
   - https://www.sunstar.com.ph/rssFeed/selected
   - https://www.swiftbysundell.com/feed.rss
-  - https://www.tabnak.ir/fa/rss/allnews
   - https://www.the42.ie/feed/
   - https://www.theage.com.au/rss/feed.xml
   - https://www.thecrazyprogrammer.com/category/programming/feed
@@ -5670,7 +5638,6 @@ sources:
   - https://www.thekitchn.com/main.rss
   - https://www.themercury.com.au/rss
   - https://www.themoscowtimes.com/rss/news
-  - https://www.thenews.com.pk/rss/1/1
   - https://www.theonion.com/rss
   - https://www.thepennyhoarder.com/feed/
   - https://www.theroar.com.au/cricket/feed/
