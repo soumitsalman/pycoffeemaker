@@ -13,6 +13,7 @@ crawl4ai
 boto3
 persist-queue
 icecream
+tqdm
 python-dotenv
 setuptools
 pyarrow

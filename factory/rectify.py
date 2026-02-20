@@ -5,6 +5,8 @@ import re
 import asyncio
 from dotenv import load_dotenv
 
+
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 load_dotenv()
 
@@ -12,8 +14,10 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
 from itertools import chain
 from icecream import ic
+from tqdm import tqdm
 from datetime import datetime, timedelta
-from coffeemaker.pybeansack.models import *
+from pybeansack.models import *
+from pybeansack.database import *
 # from coffeemaker.pybeansack.mongosack import *
 # from coffeemaker.pybeansack.ducksack import *
 # from coffeemaker.orchestrators.fullstack import Orchestrator
@@ -216,11 +220,39 @@ def register_new_gist_files():
 
     db.close()
 
+def cleanup_bean_tags():
+    from pybeansack import create_client
+
+    db = create_client(db_type="postgres", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))
+
+    strip_non_alphanumeric = lambda text: re.sub(r'^\W+|\W+$', '', text)
+    clean_list = lambda items: list(set(filter(None, map(strip_non_alphanumeric, items)))) if items else items
+
+    conditions = ["gist IS NOT NULL", "embedding IS NOT NULL"]
+
+    # get total rows
+    total = db.count_rows(BEANS, conditions=conditions)
+    batch_size = 256
+    for offset in tqdm(range(0, total, batch_size), desc="Processing batches"):
+        beans = db.query_latest_beans(conditions=conditions, limit=batch_size, offset=offset, columns=[K_URL, K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS])
+
+        for bean in beans:
+            bean.categories = clean_list(bean.categories)
+            bean.sentiments = clean_list(bean.sentiments)
+            bean.entities = clean_list(bean.entities)
+            bean.regions = clean_list(bean.regions)
+        
+        db.update_beans(beans, columns=[K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS])
+
+    db.close()
+
+
 # adding data porting logic
 if __name__ == "__main__":
+    cleanup_bean_tags()
     # create_classification_data_files()
     # asyncio.run(prefill_publishers())
-    swap_gist_regions_entities()
+    # swap_gist_regions_entities()
     # rectify_parquets()
     # merge_to_classification()
     # create_composer_topics_locally()
