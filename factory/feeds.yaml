@@ -5853,6 +5853,8 @@ sources:
   - https://aws.amazon.com/blogs/hpc/feed/
   - https://www.pugetsystems.com/feed/
   - https://www.scientific-computing.com/feed/news.xml
+  - https://www.sec.gov/news/pressreleases.rss
+  - https://www.nasdaq.com/feed/rssoutbound
   reddit:
   - technology
   - tech
