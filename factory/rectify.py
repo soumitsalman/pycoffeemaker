@@ -233,19 +233,21 @@ def cleanup_bean_tags():
             bean.sentiments = clean_list(bean.sentiments)
             bean.entities = clean_list(bean.entities)
             bean.regions = clean_list(bean.regions)
+
         return beans
 
     CONDITION = ["gist IS NOT NULL", "embedding IS NOT NULL"]
 
     # get total rows
+    start = int(os.getenv("MIGRATE_OFFSET", 0))
     total = db.count_rows(BEANS, conditions=CONDITION)
-    batch_size = 256
-    offsets = list(range(int(os.getenv("MIGRATE_OFFSET", 0)), total, batch_size))
+    batch_size = 1024
+    offsets = list(range(start, total, batch_size))
 
-    with tqdm(total=total, desc="Updating batches") as pbar:
-        with ThreadPoolExecutor(thread_name_prefix="UPDATER") as executor:
+    with tqdm(total=total-start, desc="Updating batches") as pbar:
+        with ThreadPoolExecutor(max_workers=8, thread_name_prefix="UPDATER") as executor:
             for offset in offsets:
-                beans = cleanup_beans(db.query_latest_beans(conditions=CONDITION, limit=batch_size, offset=offset, columns=[K_URL, K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS]))
+                beans = cleanup_beans(db._fetch_all(table=BEANS, conditions=CONDITION, order="collected", limit=batch_size, offset=offset, columns=[K_URL, K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS]))
                 future = executor.submit(db.update_beans, beans, columns=[K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS])
                 future.add_done_callback(lambda f: pbar.update(f.result()))
             # executor waits for all submitted updates to finish before exiting
