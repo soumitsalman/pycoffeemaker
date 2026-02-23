@@ -227,23 +227,28 @@ def cleanup_bean_tags():
 
     strip_non_alphanumeric = lambda text: re.sub(r'^\W+|\W+$', '', text)
     clean_list = lambda items: list(set(filter(None, map(strip_non_alphanumeric, items)))) if items else items
-
-    conditions = ["gist IS NOT NULL", "embedding IS NOT NULL"]
-
-    # get total rows
-    total = db.count_rows(BEANS, conditions=conditions)
-    batch_size = 256
-    for offset in tqdm(range(int(os.getenv("MIGRATE_OFFSET", 0)), total, batch_size), desc="Processing batches"):
-        beans = db.query_latest_beans(conditions=conditions, limit=batch_size, offset=offset, columns=[K_URL, K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS])
-
+    def cleanup_beans(beans: list[Bean]) -> list[Bean]:
         for bean in beans:
             bean.categories = clean_list(bean.categories)
             bean.sentiments = clean_list(bean.sentiments)
             bean.entities = clean_list(bean.entities)
             bean.regions = clean_list(bean.regions)
-        
-        db.update_beans(beans, columns=[K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS])
+        return beans
 
+    CONDITION = ["gist IS NOT NULL", "embedding IS NOT NULL"]
+
+    # get total rows
+    total = db.count_rows(BEANS, conditions=CONDITION)
+    batch_size = 256
+    offsets = list(range(int(os.getenv("MIGRATE_OFFSET", 0)), total, batch_size))
+
+    with tqdm(total=total, desc="Updating batches") as pbar:
+        with ThreadPoolExecutor(thread_name_prefix="UPDATER") as executor:
+            for offset in offsets:
+                beans = cleanup_beans(db.query_latest_beans(conditions=CONDITION, limit=batch_size, offset=offset, columns=[K_URL, K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS]))
+                future = executor.submit(db.update_beans, beans, columns=[K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS])
+                future.add_done_callback(lambda f: pbar.update(f.result()))
+            # executor waits for all submitted updates to finish before exiting
     db.close()
 
 
