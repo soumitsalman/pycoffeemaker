@@ -1,3 +1,4 @@
+import logging
 import sys
 import json
 import os
@@ -5,22 +6,18 @@ import re
 import asyncio
 from dotenv import load_dotenv
 
-
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 load_dotenv()
 
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
-from itertools import chain
+from itertools import batched, chain
 from icecream import ic
 from tqdm import tqdm
 from datetime import datetime, timedelta
 from pybeansack.models import *
 from pybeansack.database import *
-# from coffeemaker.pybeansack.mongosack import *
-# from coffeemaker.pybeansack.ducksack import *
-# from coffeemaker.orchestrators.fullstack import Orchestrator
+from pybeansack import create_client
 
 K_RELATED = "related"
 LIMIT=40000
@@ -253,10 +250,16 @@ def cleanup_bean_tags():
             # executor waits for all submitted updates to finish before exiting
     db.close()
 
+def cluster_existing_beans():    
+    db = create_client("pg", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))       
+    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
+    db.refresh_clusters()
+    db.close()
 
 # adding data porting logic
 if __name__ == "__main__":
-    cleanup_bean_tags()
+    # cleanup_bean_tags()
+    cluster_existing_beans()
     # create_classification_data_files()
     # asyncio.run(prefill_publishers())
     # swap_gist_regions_entities()

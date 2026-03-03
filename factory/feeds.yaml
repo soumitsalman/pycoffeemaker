@@ -597,7 +597,7 @@ sources:
   - https://blog.ricksteves.com/cameron/feed
   - https://blog.ricksteves.com/feed/
   - https://blog.rubygems.org/atom.xml
-  - https://blog.run.claw.cloud/108/feed/
+  - https://blog.run.claw.cloud/feed/
   - https://blog.runbox.com/feed/
   - https://blog.runevision.com/feeds/posts/default?alt=rss
   - https://blog.runpod.io/rss/
@@ -2036,8 +2036,6 @@ sources:
   - https://mertbulan.com/feed.xml
   - https://metastable.org/index.xml
   - https://metro.co.uk/feed/
-  - https://metro.co.uk/lifestyle/feed/
-  - https://metro.co.uk/news/feed/
   - https://metsonet.co.uk/feed.xml
   - https://meupotencial.com/feed/
   - https://mexiconewsdaily.com/feed/
