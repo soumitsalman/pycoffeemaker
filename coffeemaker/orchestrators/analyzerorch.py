@@ -64,8 +64,8 @@ class Orchestrator:
         while beans := self.get_beans(filter, batch_size):
             yield beans
 
-    def embed_beans(self, beans: list[Bean], batch_size: int) -> list[Bean]|None:
-        if not beans: return beans
+    def embed_beans(self, beans: list[Bean], batch_size: int):
+        if not beans: return 0
         if not self.embedder_model: raise ValueError("embedder_model is not set")
         with embedders.from_path(self.embedder_model, self.embedder_context_len) as embedder:
             total = 0
@@ -80,8 +80,8 @@ class Orchestrator:
                     log.error(f"failed indexing - {e}", extra={"source": chunk[0].source, "num_items": len(chunk)})
         return total
     
-    def digest_beans(self, beans: list[Bean], batch_size: int) -> list[Bean]|None:
-        if not beans: return beans
+    def digest_beans(self, beans: list[Bean], batch_size: int):
+        if not beans: return 0
         if not self.digestor_model: raise ValueError("digestor_model is not set")
         with digestors.from_path(
             model_path=self.digestor_model, 
