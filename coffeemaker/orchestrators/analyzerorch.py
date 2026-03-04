@@ -77,7 +77,7 @@ class Orchestrator:
                     self._queue_update(self.db.update_embeddings, updates)
                     total += len(chunk)
                 except Exception as e:
-                    log.error(f"failed indexing - {e}", extra={"source": chunk[0].source, "num_items": len(chunk)})
+                    log.error("failed indexing", extra={"source": chunk[0].source, "num_items": len(chunk)}, exc_info=True, stack_info=True)
         return total
     
     def digest_beans(self, beans: list[Bean], batch_size: int):
@@ -98,7 +98,7 @@ class Orchestrator:
                     self._queue_update(self.db.update_beans, updates, columns=[K_GIST, K_REGIONS, K_ENTITIES])
                     total += len(chunk)
                 except Exception as e:
-                    log.error(f"failed indexing - {e}", extra={"source": chunk[0].source, "num_items": len(chunk)})        
+                    log.error("failed indexing", extra={"source": chunk[0].source, "num_items": len(chunk)}, exec_info=True, stack_info=True)        
         return total
          
     def _queue_update(self, update_func, beans, columns=None):

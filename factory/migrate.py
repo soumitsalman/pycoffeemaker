@@ -156,7 +156,7 @@ def db_instance(db_type: str) -> Beansack:
     else:
         raise ValueError(f"Unsupported db type: {db_type}")
 
-def migrate(from_db: str, to_db: str, batch_size: int, window: int, *items):
+def migrate(from_db: str, to_db: str, batch_size: int, window: int, *requested_items):
     from tqdm import tqdm
 
     from_db_instance = db_instance(from_db)
@@ -166,58 +166,60 @@ def migrate(from_db: str, to_db: str, batch_size: int, window: int, *items):
         "gist IS NOT NULL",
         "embedding IS NOT NULL"
     ]
-    
     PUBLISHER_CONDITIONS = ["""(
         rss_feed IS NOT NULL 
         OR favicon IS NOT NULL 
         OR site_name IS NOT NULL
     )"""]
+
+    CHATTER_CONDITIONS = []
+
     if window: 
         collected_expr = f"collected >= CURRENT_TIMESTAMP - interval '{window} days'"
         BEAN_CONDITIONS.append(collected_expr)
         PUBLISHER_CONDITIONS.append(collected_expr)
+        CHATTER_CONDITIONS.append(collected_expr)
 
-    _port_beans = lambda offset: to_db_instance.store_beans(
-        from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size)
-    )
-    _port_contents = lambda offset: to_db_instance.update_beans(
-        from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size, columns=[K_URL, K_CONTENT, K_CONTENT_LENGTH, K_GIST, K_SENTIMENTS]),
-        columns=[K_CONTENT, K_CONTENT_LENGTH, K_GIST, K_SENTIMENTS]
-    )   
-    _port_publishers = lambda offset: to_db_instance.store_publishers(
-        from_db_instance.query_publishers(conditions=PUBLISHER_CONDITIONS, offset=offset, limit=batch_size)
-    )
-    _port_chatters = lambda offset: to_db_instance.store_chatters(
-        from_db_instance.query_chatters(offset=offset, limit=batch_size)
-    )
-
-    if not items or "beans" in items:
-        total_beans = from_db_instance.count_rows(BEANS, conditions=BEAN_CONDITIONS)
-        with tqdm(total=total_beans, desc="Porting Beans", unit="beans") as pbar:
-            for offset in range(0, total_beans, batch_size):
-                _port_beans(offset)
-                pbar.update(batch_size)
-
-    if not items or "contents" in items:
-        total_beans = from_db_instance.count_rows(BEANS, conditions=BEAN_CONDITIONS)
-        with tqdm(total=total_beans, desc="Porting Contents", unit="beans") as pbar:
-            for offset in range(0, total_beans, batch_size):
-                _port_contents(offset)
-                pbar.update(batch_size)
-    
-    if not items or "publishers" in items:
-        total_publishers = from_db_instance.count_rows(PUBLISHERS, conditions=PUBLISHER_CONDITIONS)
-        with tqdm(total=total_publishers, desc="Porting Publishers", unit="publishers") as pbar:
-            for offset in range(0, total_publishers, batch_size):
-                _port_publishers(offset)
-                pbar.update(batch_size)
-
-    if not items or "chatters" in items:
-        total_chatters = from_db_instance.count_rows(CHATTERS)
-        with tqdm(total=total_chatters, desc="Porting Chatters", unit="chatters") as pbar:
-            for offset in range(0, total_chatters, batch_size):
-                _port_chatters(offset)
-                pbar.update(batch_size)
+    items_map = {
+        "beans": {
+            "count_table": BEANS,
+            "port_fn": lambda offset: to_db_instance.store_beans(
+                from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size)
+            ),
+            "conditions": BEAN_CONDITIONS,
+            "tqdm_desc": "Porting Beans"
+        },
+        "contents": {
+            "count_table": BEANS,
+            "port_fn": lambda offset: to_db_instance.update_beans(
+                from_db_instance.query_latest_beans(conditions=BEAN_CONDITIONS, offset=offset, limit=batch_size, columns=[K_URL, K_CONTENT, K_CONTENT_LENGTH, K_GIST, K_SENTIMENTS]),
+                columns=[K_CONTENT, K_CONTENT_LENGTH, K_GIST, K_SENTIMENTS]
+            ),
+            "conditions": BEAN_CONDITIONS,
+            "tqdm_desc": "Porting Contents"
+        },
+        "publishers": {
+            "count_table": PUBLISHERS,
+            "port_fn": lambda offset: to_db_instance.store_publishers(
+                from_db_instance.query_publishers(conditions=PUBLISHER_CONDITIONS, offset=offset, limit=batch_size)
+            ),
+            "conditions": PUBLISHER_CONDITIONS,            
+            "tqdm_desc": "Porting Publishers"
+        },
+        "chatters": {
+            "count_table": CHATTERS,
+            "port_fn": lambda offset: to_db_instance.store_chatters(
+                from_db_instance.query_chatters(conditions=CHATTER_CONDITIONS, offset=offset, limit=batch_size)
+            ),
+            "conditions": CHATTER_CONDITIONS,
+            "tqdm_desc": "Porting Chatters"
+        },
+    }
+    for name, cfg in items_map.items():
+        if not requested_items or name in set(requested_items):
+            total = from_db_instance.count_rows(cfg["count_table"], conditions=cfg["conditions"])
+            for offset in tqdm(range(0, total, batch_size), desc=cfg["tqdm_desc"], unit="batch"):
+                cfg["port_fn"](offset)
 
     from_db_instance.close()
     to_db_instance.close()    

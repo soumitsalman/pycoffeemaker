@@ -118,8 +118,8 @@ if __name__ == "__main__":
         orch = Orchestrator(
             db_kwargs=db_kwargs,
             backup_db_kwargs={
-                "DB_TYPE": "lancedb",
-                "LANCEDB_STORAGE": os.getenv("RAGDB_STORAGE")
+                "db_type": "lancedb",
+                "lancedb_storage": os.getenv("RAGDB_STORAGE")
             }
         )
         orch.run()
