@@ -52,8 +52,8 @@ parser = argparse.ArgumentParser(description='Run the coffee maker application')
 parser.add_argument('--batch_size', type=int, help='Batch size for processing')
 parser.add_argument('--embedder_batch_size', type=int, help='Batch size for processing')
 parser.add_argument('--digestor_batch_size', type=int, help='Batch size for processing')
-parser.add_argument('--mode', type=str, choices=['COLLECTOR', 'INDEXER', 'DIGESTOR', 'ANALYZER', 'COMPOSER', 'REFRESHER'], 
-                    help='Operation mode (COLLECTOR, INDEXER, DIGESTOR, COMPOSER, REFRESHER)')
+parser.add_argument('--mode', type=str, choices=['COLLECTOR', 'INDEXER', 'DIGESTOR', 'ANALYZER'], 
+                    help='Operation mode (COLLECTOR, INDEXER, DIGESTOR, ANALYZER)')
 parser.add_argument('--max_articles', type=int, help='Maximum number of articles to process')
 
 if __name__ == "__main__":    
@@ -113,17 +113,7 @@ if __name__ == "__main__":
             digestor_batch_size=int(args.digestor_batch_size or batch_size)
         )
         orch.close()   
-    elif mode == "REFRESHER":
-        from coffeemaker.orchestrators.refresherorch import Orchestrator
-        orch = Orchestrator(
-            db_kwargs=db_kwargs,
-            backup_db_kwargs={
-                "db_type": "lancedb",
-                "lancedb_storage": os.getenv("RAGDB_STORAGE")
-            }
-        )
-        orch.run()
-        orch.close()
+    
     else:
         raise ValueError("Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, COMPOSER, REFRESHER.")
  
