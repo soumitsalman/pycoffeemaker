@@ -1,3 +1,4 @@
+torch --index-url https://download.pytorch.org/whl/cpu
 retry
 requests
 beautifulsoup4
@@ -7,11 +8,6 @@ tldextract
 praw
 asyncpraw
 readability-lxml
-azure-storage-queue
-azure-storage-blob
-crawl4ai
-boto3
-persist-queue
 icecream
 tqdm
 python-dotenv
@@ -24,6 +20,6 @@ sentence-transformers
 onnxruntime
 onnx
 optimum[onnxruntime]
-dbcache
+zvec
 psycopg2-binary
 faker
