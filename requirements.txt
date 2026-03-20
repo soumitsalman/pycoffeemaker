@@ -3,6 +3,7 @@ transformers
 sentence-transformers
 openai
 llama-index
+gliner
 tiktoken
 retry
 requests

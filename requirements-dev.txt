@@ -19,6 +19,7 @@ setuptools
 pyarrow
 pandas
 hdbscan
+gliner
 transformers
 sentence-transformers
 onnxruntime
