@@ -1,26 +1,29 @@
-import asyncio
-import os
 import argparse
-from datetime import datetime as dt
+import asyncio
 import logging
+import os
+from datetime import datetime as dt
+
 from dotenv import load_dotenv
 
 EMBEDDER_CONTEXT_LEN = 512
+EXTRACTOR_CONTEXT_LEN = 4096
 DIGESTOR_CONTEXT_LEN = 4096
 COMPOSER_CONTEXT_LEN = 110760
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(CURR_DIR+"/.env")
+load_dotenv(CURR_DIR + "/.env")
 
 log_dir, log_file = os.getenv("LOG_DIR"), None
 if log_dir:
     os.makedirs(log_dir, exist_ok=True)
     log_file = f"{log_dir}/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log"
-    
+
 logging.basicConfig(
-    level=logging.WARNING, 
-    filename=log_file, 
-    format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s")
+    level=logging.WARNING,
+    filename=log_file,
+    format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s",
+)
 
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)
@@ -48,19 +51,26 @@ logging.getLogger("connectionpool").propagate = False
 # All UI clients can do their porting as they please
 
 # Set up argument parser
-parser = argparse.ArgumentParser(description='Run the coffee maker application')
-parser.add_argument('--batch_size', type=int, help='Batch size for processing')
-parser.add_argument('--embedder_batch_size', type=int, help='Batch size for processing')
-parser.add_argument('--digestor_batch_size', type=int, help='Batch size for processing')
-parser.add_argument('--mode', type=str, choices=['COLLECTOR', 'INDEXER', 'DIGESTOR', 'ANALYZER'], 
-                    help='Operation mode (COLLECTOR, INDEXER, DIGESTOR, ANALYZER)')
-parser.add_argument('--max_articles', type=int, help='Maximum number of articles to process')
+parser = argparse.ArgumentParser(description="Run the coffee maker application")
+parser.add_argument("--batch_size", type=int, help="Batch size for processing")
+parser.add_argument("--embedder_batch_size", type=int, help="Batch size for processing")
+parser.add_argument("--extractor_batch_size", type=int, help="Batch size for processing")
+parser.add_argument("--digestor_batch_size", type=int, help="Batch size for processing")
+parser.add_argument(
+    "--mode",
+    type=str,
+    choices=["COLLECTOR", "INDEXER", "DIGESTOR", "EXTRACTOR", "ANALYZER"],
+    help="Operation mode (COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER)",
+)
+parser.add_argument(
+    "--max_articles", type=int, help="Maximum number of articles to process"
+)
 
-if __name__ == "__main__":    
-    # Use command line args if provided, otherwise fall back to env vars  
-    args = parser.parse_args()  
+if __name__ == "__main__":
+    # Use command line args if provided, otherwise fall back to env vars
+    args = parser.parse_args()
     mode = args.mode or os.getenv("MODE")
-    batch_size = int(args.batch_size or os.getenv('BATCH_SIZE') or os.cpu_count())
+    batch_size = int(args.batch_size or os.getenv("BATCH_SIZE") or os.cpu_count())
     db_kwargs = {
         "db_type": os.getenv("DB_TYPE"),
         "mongo_connection_string": os.getenv("MONGO_CONNECTION_STRING"),
@@ -69,51 +79,83 @@ if __name__ == "__main__":
         "duckdb_storage": os.getenv("DUCKDB_STORAGE"),
         "lancedb_storage": os.getenv("LANCEDB_STORAGE"),
         "ducklake_catalog": os.getenv("DUCKLAKE_CATALOG"),
-        "ducklake_storage": os.getenv("DUCKLAKE_STORAGE")
+        "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
     }
-    
+
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
+
         orch = Orchestrator(db_kwargs=db_kwargs)
-        asyncio.run(orch.run_async(
-            os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
-            batch_size=batch_size
-        ))
+        asyncio.run(
+            orch.run_async(
+                os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
+                batch_size=batch_size,
+            )
+        )
         orch.close()
     elif mode == "INDEXER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
+
         orch = Orchestrator(
             db_kwargs=db_kwargs,
             embedder_path=os.getenv("EMBEDDER_PATH"),
-            embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN))
+            embedder_context_len=int(
+                os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
+            ),
         )
         orch.run_indexer(batch_size=batch_size)
         orch.close()
-    elif mode == "DIGESTOR":
+    elif mode == "EXTRACTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
+
         orch = Orchestrator(
             db_kwargs=db_kwargs,
-            digestor_path=os.getenv("DIGESTOR_PATH"), 
-            digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN))
+            extractor_path=os.getenv("EXTRACTOR_PATH"),
+            extractor_context_len=int(
+                os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
+            ),
+        )
+        orch.run_extractor(batch_size=batch_size)
+        orch.close()
+    elif mode == "DIGESTOR":
+        from coffeemaker.orchestrators.analyzerorch import Orchestrator
+
+        orch = Orchestrator(
+            db_kwargs=db_kwargs,
+            digestor_path=os.getenv("DIGESTOR_PATH"),
+            digestor_context_len=int(
+                os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
+            ),
         )
         orch.run_digestor(batch_size=batch_size)
         orch.close()
     # this combines both indexer and digestor
     elif mode == "ANALYZER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
+
         orch = Orchestrator(
             db_kwargs=db_kwargs,
             embedder_path=os.getenv("EMBEDDER_PATH"),
-            embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
-            digestor_path=os.getenv("DIGESTOR_PATH"), 
-            digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN))
+            embedder_context_len=int(
+                os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
+            ),
+            extractor_path=os.getenv("EXTRACTOR_PATH"),
+            extractor_context_len=int(
+                os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
+            ),
+            digestor_path=os.getenv("DIGESTOR_PATH"),
+            digestor_context_len=int(
+                os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
+            ),
         )
         orch.run(
-            embedder_batch_size=int(args.embedder_batch_size or batch_size), 
-            digestor_batch_size=int(args.digestor_batch_size or batch_size)
+            embedder_batch_size=int(args.embedder_batch_size or batch_size),
+            extractor_batch_size=int(args.extractor_batch_size or batch_size),
+            digestor_batch_size=int(args.digestor_batch_size or batch_size),
         )
-        orch.close()   
-    
+        orch.close()
+
     else:
-        raise ValueError("Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, COMPOSER, REFRESHER.")
- 
+        raise ValueError(
+            "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER."
+        )
