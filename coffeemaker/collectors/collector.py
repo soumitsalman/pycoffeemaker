@@ -72,7 +72,7 @@ def _extract_main_image(entry: feedparser.FeedParserDict) -> str:
         return next(item for item in entry.links if "image" in item.get('type', "")).get('href')
     if ('media_content' in entry) and entry.media_content:
         return entry.media_content[0].get('url')
-    elif ('media_thumbnail' in entry) and entry.media_thumbnail:
+    if ('media_thumbnail' in entry) and entry.media_thumbnail:
         return entry.media_thumbnail[0].get('url')
     
 def _get_source_url(*urls):
@@ -184,7 +184,7 @@ class APICollector:
         summary, content = _extract_body(entry)
         # if not entry.link.startswith("http"): 
         #     ic(source_url, entry.link, urljoin(source_url, entry.link))
-        entry_link = urljoin(source_url, entry.link)
+        entry_link = full_url(source_url, entry.link)
         source = extract_source(entry_link)
 
         if entry.get('wfw_commentrss') and entry.get('slash_comments'): chatter = Chatter(
@@ -205,7 +205,7 @@ class APICollector:
                 summary=summary,
                 content=content,
                 author=entry.get('author'),        
-                image_url=_extract_main_image(entry),
+                image_url=full_url(entry_link, _extract_main_image(entry)),
                 created=created_time,         
                 collected=current_time
             ),

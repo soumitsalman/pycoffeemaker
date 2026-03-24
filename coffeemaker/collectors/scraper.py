@@ -67,8 +67,8 @@ class WebScraperLite:
                     break
 
         if 'published_time' in metadata: metadata['published_time'] = parse_date(metadata['published_time'])
-        if 'favicon' in metadata: metadata['favicon'] = urljoin(url, metadata['favicon'])
-        if 'rss_feed' in metadata: metadata['rss_feed'] = urljoin(url, metadata['rss_feed'])
+        if 'favicon' in metadata: metadata['favicon'] = full_url(url, metadata['favicon'])
+        if 'rss_feed' in metadata: metadata['rss_feed'] = full_url(url, metadata['rss_feed'])
         return metadata
 
     @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
@@ -102,16 +102,17 @@ class WebScraperLite:
         bean.summary = bean.summary or result.get("description")
         bean.content = result.get("content")
         bean.restricted_content = True
-        bean.image_url = bean.image_url or result.get("top_image") 
+        bean.image_url = bean.image_url or full_url(bean.url, result.get("top_image"))
         bean.author = result.get("author") or bean.author
         bean.created = min(result.get("published_time") or bean.created, bean.collected)     
 
+        base_url = extract_base_url(bean.url)
         publisher = Publisher(
             source=bean.source,
-            base_url=extract_base_url(bean.url),
+            base_url=base_url,
             site_name=result.get('site_name'),
-            favicon=result.get('favicon'),
-            rss_feed=result.get("rss_feed")
+            favicon=full_url(base_url, result.get('favicon')),
+            rss_feed=full_url(base_url, result.get("rss_feed"))
         )
         return {
             "bean": bean,
@@ -356,9 +357,6 @@ class WebScraper:
             bean.author = result.get("author") or bean.author
             bean.created = min(result.get("published_time") or bean.created or bean.collected, current_time)
             bean.summary = bean.summary or result.get("description")
-            bean.site_rss_feed = result.get("rss_feed")
-            bean.site_name = result.get('site_name')
-            bean.site_favicon = result.get('favicon')
             bean.restricted_content = True
         return beans
 
@@ -423,8 +421,8 @@ class PublisherScraper:
                     metadata[key] = tag.get('content') or tag.get('href')
                     break
 
-        if K_FAVICON in metadata: metadata[K_FAVICON] = urljoin(url, metadata[K_FAVICON])
-        if K_RSS_FEED in metadata: metadata[K_RSS_FEED] = urljoin(url, metadata[K_RSS_FEED])
+        if K_FAVICON in metadata: metadata[K_FAVICON] = full_url(url, metadata[K_FAVICON])
+        if K_RSS_FEED in metadata: metadata[K_RSS_FEED] = full_url(url, metadata[K_RSS_FEED])
         return metadata
     
     @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
@@ -451,7 +449,9 @@ class PublisherScraper:
             html = await self._scrape_html(url)
             meta.update(self._get_metadata(url, html))
             meta[K_SITE_NAME] = meta.get(K_SITE_NAME) or meta.get('meta_title')
-            meta[K_FAVICON] = meta.get(K_FAVICON) or (await self._scrape_favicon(base_url))
+            if meta.get(K_FAVICON): meta[K_FAVICON] = full_url(base_url, meta.get(K_FAVICON))
+            else: meta[K_FAVICON] = await self._scrape_favicon(base_url)            
+            if meta.get(K_RSS_FEED): meta[K_RSS_FEED] = full_url(base_url, meta.get(K_RSS_FEED))
             return Publisher(**meta, collected=now())
         except Exception as e: 
             log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": base_url, "num_items": 1})

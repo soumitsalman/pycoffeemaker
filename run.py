@@ -32,6 +32,7 @@ logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INF
 logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.refresherorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.processingcache").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.agents").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
@@ -59,8 +60,8 @@ parser.add_argument("--digestor_batch_size", type=int, help="Batch size for proc
 parser.add_argument(
     "--mode",
     type=str,
-    choices=["COLLECTOR", "INDEXER", "DIGESTOR", "EXTRACTOR", "ANALYZER"],
-    help="Operation mode (COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER)",
+    choices=["COLLECTOR", "EMBEDDER", "DIGESTOR", "EXTRACTOR", "ANALYZER"],
+    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER)",
 )
 parser.add_argument(
     "--max_articles", type=int, help="Maximum number of articles to process"
@@ -93,7 +94,7 @@ if __name__ == "__main__":
             )
         )
         orch.close()
-    elif mode == "INDEXER":
+    elif mode == "EMBEDDER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
@@ -103,7 +104,7 @@ if __name__ == "__main__":
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
             ),
         )
-        orch.run_indexer(batch_size=batch_size)
+        orch.run_embedder(batch_size=batch_size)
         orch.close()
     elif mode == "EXTRACTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
@@ -129,7 +130,7 @@ if __name__ == "__main__":
         )
         orch.run_digestor(batch_size=batch_size)
         orch.close()
-    # this combines both indexer and digestor
+    # this combines both embedder, extractor, and digestor
     elif mode == "ANALYZER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 

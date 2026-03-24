@@ -4,7 +4,7 @@ import warnings
 import tldextract
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 from dateutil.parser import parse as date_parser
 from pybeansack.models import NEWS, POST, BLOG
 
@@ -63,6 +63,9 @@ def parse_int(val: str) -> int:
 
 def strip_html_tags(html):
     if html: return BeautifulSoup(html, "lxml").get_text(separator=" ", strip=True)
+
+def full_url(base_url: str, target_url: str) -> str:
+    return urljoin(base_url, target_url)
 
 extract_source = lambda url: (extract_domain(url) or extract_base_url(url)).strip().lower()
 now = lambda: datetime.now(timezone.utc)

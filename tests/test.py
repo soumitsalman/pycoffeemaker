@@ -235,7 +235,7 @@ def test_indexer_orch():
         embedder_path="avsolatorio/GIST-small-Embedding-v0",
         embedder_context_len=512
     )
-    orch.run_indexer(batch_size=32)
+    orch.run_embedder(batch_size=32)
 
 def test_digestor_orch():
     from coffeemaker.orchestrators.analyzerorch import Orchestrator

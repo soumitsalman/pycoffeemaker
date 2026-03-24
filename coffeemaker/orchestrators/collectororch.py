@@ -2,35 +2,36 @@ import asyncio
 import logging
 import os
 import random
-from concurrent.futures import ThreadPoolExecutor
+from surrealdb import AsyncEmbeddedSurrealConnection, AsyncSurreal, RecordID, Surreal
 
 from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
 from coffeemaker.collectors.scraper import PublisherScraper
+from coffeemaker.orchestrators.processingcache import AsyncProcessingCache
 from coffeemaker.orchestrators.utils import *
 from pybeansack import BEANS, Beansack, create_client
 from pybeansack.models import *
 
 FILTER_KINDS = [NEWS, BLOG]
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count()))
+BATCH_SIZE = int(
+    os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count())
+)
+WORDS_THRESHOLD_FOR_STORING = int(
+    os.getenv("WORDS_THRESHOLD_FOR_STORING", 160)
+)  # min words needed to not download the body
 
-_END_OF_STREAM = "END_OF_STREAM"
+is_storable = lambda bean: bean.content and count_words(bean.content) >= WORDS_THRESHOLD_FOR_STORING
+scrapables = lambda beans: [bean for bean in beans if not is_storable(bean)] if beans else beans
+storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans else beans
 
 log = logging.getLogger(__name__)
 
-is_scrapable = lambda bean: (
-    not above_threshold(bean.content, WORDS_THRESHOLD_FOR_SCRAPING)
-)
-scrapables = lambda beans: list(filter(is_scrapable, beans)) if beans else beans
-storables = lambda beans: [bean for bean in beans if not is_scrapable(bean)]
-# cores = lambda beans: [BeanCore(**bean.model_dump()) for bean in beans if bean and bean.title]
-
-
 class Orchestrator:
-    db: Beansack = None
+    db: Beansack
+    cache: AsyncProcessingCache
     run_total: int = 0
 
     def __init__(self, db_kwargs: dict):
-        self.db = create_client(**db_kwargs)
+        self.db = create_client(**db_kwargs)        
 
     async def _triage_collection_async(self, source: str, items: list[dict]):
         if not items:
@@ -43,7 +44,7 @@ class Orchestrator:
         chatters = [item["chatter"] for item in items if item and item.get("chatter")]
 
         if beans:
-            await asyncio.to_thread(self.store_beans, source, beans)
+            await self.cache_beans(source, beans)
         if publishers:
             await asyncio.to_thread(self.db.store_publishers, publishers)
         if chatters:
@@ -59,18 +60,17 @@ class Orchestrator:
 
         log.info("scraped", extra={"source": source, "num_items": len(beans)})
         if beans:
-            return await asyncio.to_thread(self.store_beans, source, beans)
+            return await self.cache_beans(source, beans)
         if publishers:
             return await asyncio.to_thread(self.db.store_publishers, publishers)
 
-    def store_beans(self, source: str, beans: list[Bean]):
-        beans = storables(beans)
-        if not beans:
+    async def cache_beans(self, source: str, beans: list[Bean]):
+        data = prepare_beans_for_store(storables(beans))
+        if not data:
             return
-        count = self.db.store_beans(beans)
-        log.info("stored", extra={"source": source, "num_items": count})
-        self.run_total += count
-        return beans
+        stored = await self.cache.store("collected_beans", data)
+        self.run_total += len(stored)
+        return stored
 
     # @log_runtime_async(logger=log)
     async def collect_beans_async(self, sources, batch_size):
@@ -111,6 +111,7 @@ class Orchestrator:
         async with (
             APICollector(batch_size) as apicollector,
             WebScraperLite(batch_size) as webscraper,
+            AsyncProcessingCache(db_name="beans", id_key=K_URL, model_cls=Bean) as self.cache,
         ):
             await asyncio.gather(
                 *[collect(source, func) for source, func in get_collection_tasks()]
@@ -144,6 +145,7 @@ class Orchestrator:
             "starting collector",
             extra={"source": self.run_id, "num_items": os.cpu_count()},
         )
+                    
         await asyncio.gather(
             *[
                 self.collect_beans_async(sources, batch_size=batch_size),
@@ -159,6 +161,7 @@ class Orchestrator:
     def close(self):
         # Close database connection
         self.db.close()
+        
 
     # def _get_collect_funcs(self, sources):
     #     tasks = []
