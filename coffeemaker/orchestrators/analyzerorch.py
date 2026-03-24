@@ -179,15 +179,36 @@ class Orchestrator:
         log.info("total embedded", extra={"source": run_id(), "num_items": total})
 
     @log_runtime(logger=log)
+    def run_classifier(self, batch_size: int = BATCH_SIZE):
+        # this runs both classifier and clustering
+        with ProcessingCache(db_name="beans", id_key=K_URL) as cache:
+            beans = cache.get(
+                "embedded_beans", 
+                notin_tables="clustered_beans", 
+                conditions=[K_EMBEDDING],
+                columns=[K_URL, K_EMBEDDING]
+            )
+            log.info("starting clustering", extra={"source": run_id(), "num_items": len(beans)})
+            clusters = {}
+            for bean in beans:
+                related = cache.get(
+                    "embedded_beans", 
+                    embedding=bean[K_EMBEDDING],
+                    distance_func="euclidean",
+                    distance=CLUSTER_EPS,
+                    conditions=[K_EMBEDDING], 
+                    columns=[K_URL]
+                )                
+                clusters[bean[K_URL]] = [r[K_URL] for r in related if r[K_URL] != bean[K_URL]]
+            ic(clusters)
+            cache.store("clustered_beans", [{"url": url, "related_urls": related} for url, related in clusters.items()])
+        log.info("total clustered", extra={"source": run_id(), "num_items": len(clusters)})
+
+    @log_runtime(logger=log)
     def run_extractor(self, batch_size: int = BATCH_SIZE):
         total = 0
         with ProcessingCache(db_name="beans", id_key=K_URL, model_cls=Bean) as cache:
-            beans = cache.get(
-                "collected_beans",
-                "extracted_beans",
-                conditions=ANALYZER_FILTER,
-                columns=[K_URL, K_SOURCE, K_CONTENT],
-            )
+            beans = cache.get("collected_beans", notin_tables="extracted_beans", conditions=ANALYZER_FILTER, columns=[K_URL, K_SOURCE, K_CONTENT])
             log.info("starting extractor", extra={"source": run_id(), "num_items": len(beans)})
             for batch in self.extract_beans(beans, batch_size):
                 stored = cache.store("extracted_beans", batch, columns=[K_URL, K_REGIONS, K_ENTITIES])
@@ -198,12 +219,7 @@ class Orchestrator:
     def run_digestor(self, batch_size: int = BATCH_SIZE):
         total = 0
         with ProcessingCache(db_name="beans", id_key=K_URL, model_cls=Bean) as cache:
-            beans = cache.get(
-                "collected_beans",
-                "digested_beans",
-                conditions=ANALYZER_FILTER,
-                columns=[K_URL, K_SOURCE, K_CONTENT],
-            )
+            beans = cache.get("collected_beans", notin_tables="digested_beans", conditions=ANALYZER_FILTER, columns=[K_URL, K_SOURCE, K_CONTENT])
             log.info("starting digestor", extra={"source": run_id(), "num_items": len(beans)})
             for batch in self.digest_beans(beans, batch_size):
                 stored = cache.store("digested_beans", batch, columns=[K_URL, K_GIST])

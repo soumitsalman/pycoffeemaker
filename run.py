@@ -60,8 +60,8 @@ parser.add_argument("--digestor_batch_size", type=int, help="Batch size for proc
 parser.add_argument(
     "--mode",
     type=str,
-    choices=["COLLECTOR", "EMBEDDER", "DIGESTOR", "EXTRACTOR", "ANALYZER", "PORTER"],
-    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, PORTER)",
+    choices=["COLLECTOR", "EMBEDDER", "DIGESTOR", "EXTRACTOR", "ANALYZER", "CLASSIFIER", "PORTER"],
+    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, PORTER)",
 )
 parser.add_argument(
     "--max_articles", type=int, help="Maximum number of articles to process"
@@ -105,6 +105,12 @@ if __name__ == "__main__":
             ),
         )
         orch.run_embedder(batch_size=batch_size)
+        orch.close()
+    elif mode == "CLASSIFIER":
+        from coffeemaker.orchestrators.analyzerorch import Orchestrator
+
+        orch = Orchestrator(db_kwargs=db_kwargs)
+        orch.run_classifier(batch_size=batch_size)
         orch.close()
     elif mode == "EXTRACTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
@@ -164,5 +170,5 @@ if __name__ == "__main__":
 
     else:
         raise ValueError(
-            "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER."
+            "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER."
         )

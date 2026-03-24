@@ -12,6 +12,7 @@ CACHE_DB = "default"
 
 ID = "id"
 TS = "ts"
+DIST_FUNC = "euclidean"
 
 log = logging.getLogger(__name__)
 
@@ -55,16 +56,16 @@ class ProcessingCache:
         log.info("cached", extra={"source": table, "num_items": len(stored)})
         return stored
         
-    def get(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, conditions: dict|list[str] = None, columns: list[str] = None, limit: int = 0, offset: int = 0) -> list:
-        expr, params = _to_sql(table, notin_tables, in_tables, conditions, columns, limit, offset)
+    def get(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, embedding: list[float] = None, distance_func: str = DIST_FUNC, distance: float = None, conditions: dict|list[str] = None, columns: list[str] = None, limit: int = 0, offset: int = 0) -> list:
+        expr, params = _to_sql(table, notin_tables, in_tables, embedding, distance_func, distance,conditions, columns, limit, offset)
         vals = self.db.query(expr, params)
         if self.model_cls and vals:
             return [self.model_cls(**v) for v in vals]
         return vals
     
-    def stream(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, conditions: dict|list[str] = None, columns: list[str] = None, batch_size: int = 0):
+    def stream(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, embedding: list[float] = None, distance_func: str = DIST_FUNC, distance: float = None, conditions: dict|list[str] = None, columns: list[str] = None, batch_size: int = 0):
         offset = 0
-        while batch := self.get(table, notin_tables, in_tables, conditions, columns, batch_size, offset=offset):            
+        while batch := self.get(table, notin_tables, in_tables, embedding, distance_func, distance, conditions, columns, batch_size, offset=offset):            
             yield batch
             offset += len(batch)
 
@@ -107,29 +108,35 @@ class AsyncProcessingCache:
         log.info("cached", extra={"source": table, "num_items": len(stored)})
         return stored
         
-    async def get(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, conditions: dict|list[str] = None, columns: list[str] = None, limit: int = 0, offset: int = 0) -> list:
-        expr, params = _to_sql(table, notin_tables, in_tables, conditions, columns, limit, offset)
+    async def get(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, embedding: list[float] = None, distance_func: str = DIST_FUNC, distance: float = None, conditions: dict|list[str] = None, columns: list[str] = None, limit: int = 0, offset: int = 0) -> list:
+        expr, params = _to_sql(table, notin_tables, in_tables, embedding, distance_func, distance, conditions, columns, limit, offset)
         vals = await self.db.query(expr, params)
         if self.model_cls and vals:
             return [self.model_cls(**v) for v in vals]
         return vals
     
-    async def stream(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, conditions: dict|list[str] = None, columns: list[str] = None, batch_size: int = 0):
+    async def stream(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, embedding: list[float] = None, distance_func: str = DIST_FUNC, distance: float = None, conditions: dict|list[str] = None, columns: list[str] = None, batch_size: int = 0):
         offset = 0
-        while batch := await self.get(table, notin_tables, in_tables, conditions, columns, batch_size, offset=offset):            
+        while batch := await self.get(table, notin_tables, in_tables, embedding, distance_func, distance, conditions, columns, batch_size, offset=offset):            
             yield batch
             offset += len(batch)
 
 def _create_data(items: list, columns=None, id_key=None):
-    data = [item.model_dump(exclude_none=True, exclude_unset=True, include=columns) for item in items]
     current_time = datetime.now(timezone.utc)
+    # default treat it as dict
+    data = items
+    id_func = lambda item: item[id_key]
+    # if it's not dict then try to convert using model_dump
+    if not isinstance(items[0], dict):
+        data = [item.model_dump(exclude_none=True, exclude_unset=True, include=columns) for item in items]
+        id_func = lambda item: getattr(item, id_key)
+    
     for d, item in zip(data, items):
         d[TS] = current_time
-        if id_key:
-            d[ID] = getattr(item, id_key, None) 
+        if id_key: d[ID] = id_func(item)
     return data
 
-def _to_sql(table: str, notin_tables: list[str], in_tables: list[str], conditions: dict|list = None, columns: list[str] = None, limit: int = 0, offset: int = 0):
+def _to_sql(table: str, notin_tables: list[str], in_tables: list[str], embedding: list[float] = None, distance_func: str = DIST_FUNC, distance: float = None, conditions: dict|list = None, columns: list[str] = None, limit: int = 0, offset: int = 0):
     field_clause = "*"
     if columns:
         field_clause = ", ".join(merge_lists([ID, TS], columns))
@@ -148,6 +155,18 @@ def _to_sql(table: str, notin_tables: list[str], in_tables: list[str], condition
         if isinstance(in_tables, str):
             in_tables = [in_tables]
         where_items.extend(f"record::id(id) INSIDE (SELECT VALUE record::id(id) FROM {frm})" for frm in in_tables)
+
+    if embedding:
+        # this filters by distance
+        if distance:
+            where_items.append(f"vector::distance::{distance_func}(embedding, $embedding) <= $distance")
+            params.update({"embedding": embedding, "distance": distance})
+        # if distance is not given then take knn
+        else:
+            if not limit: 
+                raise ValueError("limit must be provided when distance is not given for embedding search")
+            where_items.append(f"embedding <| {limit}, {limit*10} |> $embedding")
+            params["embedding"] = embedding
 
     if conditions:
         if isinstance(conditions, list):
@@ -170,4 +189,4 @@ def _to_sql(table: str, notin_tables: list[str], in_tables: list[str], condition
         expr += "\nSTART $offset"
         params["offset"] = offset
     
-    return ic(expr), params
+    return expr, params
