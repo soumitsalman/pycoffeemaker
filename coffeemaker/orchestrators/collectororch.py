@@ -68,6 +68,7 @@ class Orchestrator:
         data = prepare_beans_for_store(storables(beans))
         if not data:
             return
+        [print(bean.image_url) for bean in beans if bean.image_url]  # --- IGNORE ---
         stored = await self.cache.store("collected_beans", data)
         self.run_total += len(stored)
         return stored

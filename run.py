@@ -60,8 +60,8 @@ parser.add_argument("--digestor_batch_size", type=int, help="Batch size for proc
 parser.add_argument(
     "--mode",
     type=str,
-    choices=["COLLECTOR", "EMBEDDER", "DIGESTOR", "EXTRACTOR", "ANALYZER"],
-    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER)",
+    choices=["COLLECTOR", "EMBEDDER", "DIGESTOR", "EXTRACTOR", "ANALYZER", "PORTER"],
+    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, PORTER)",
 )
 parser.add_argument(
     "--max_articles", type=int, help="Maximum number of articles to process"
@@ -154,6 +154,12 @@ if __name__ == "__main__":
             extractor_batch_size=int(args.extractor_batch_size or batch_size),
             digestor_batch_size=int(args.digestor_batch_size or batch_size),
         )
+        orch.close()
+    elif mode == "PORTER":
+        from coffeemaker.orchestrators.porterorch import Orchestrator
+
+        orch = Orchestrator(db_kwargs=db_kwargs)
+        orch.run()
         orch.close()
 
     else:

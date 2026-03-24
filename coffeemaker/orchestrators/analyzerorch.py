@@ -1,7 +1,6 @@
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
-from itertools import batched, chain
+from itertools import batched
 from typing import Optional
 
 from .processingcache import ProcessingCache
@@ -56,10 +55,10 @@ DIGEST_FILTER = [
     f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_DIGESTING}",
     f"{K_KIND} != '{POST}'",
 ]
-ANALYZER_FILTER = [
-    f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_ANALYZING}",
-    f"{K_KIND} != '{POST}'",
-]
+ANALYZER_FILTER = {
+    "content_length >=": WORDS_THRESHOLD_FOR_ANALYZING,
+    "kind !=": POST,
+}
 
 index_storables = lambda beans: [bean for bean in beans if bean.embedding]
 digest_storables = lambda beans: [bean for bean in beans if bean.gist]
@@ -150,7 +149,7 @@ class Orchestrator:
                 try:
                     gists = self.digestor.run_batch([bean.content for bean in chunk])
                     updates = [
-                        Bean(url=b.url, source=b.source, gist=d.raw) if d and d.raw else Bean(url=b.url)
+                        Bean(url=b.url, gist=d.raw) if d and d.raw else Bean(url=b.url)
                         for b, d in zip(chunk, gists)
                     ]
                     log.info("digested", extra={"source": chunk[0].source, "num_items": len(updates)})
@@ -170,12 +169,12 @@ class Orchestrator:
             beans = cache.get(
                 "collected_beans", 
                 "embedded_beans", 
-                filters=ANALYZER_FILTER, 
+                conditions=ANALYZER_FILTER, 
                 columns=[K_URL, K_SOURCE, K_CONTENT]
             )
             log.info("starting embedder", extra={"source": run_id(), "num_items": len(beans)})
             for batch in self.embed_beans(beans, batch_size):
-                stored = cache.store("embedded_beans", batch, columns=[K_EMBEDDING])
+                stored = cache.store("embedded_beans", batch, columns=[K_URL, K_EMBEDDING])
                 total += len(stored)
         log.info("total embedded", extra={"source": run_id(), "num_items": total})
 
@@ -186,12 +185,12 @@ class Orchestrator:
             beans = cache.get(
                 "collected_beans",
                 "extracted_beans",
-                filters=ANALYZER_FILTER,
+                conditions=ANALYZER_FILTER,
                 columns=[K_URL, K_SOURCE, K_CONTENT],
             )
             log.info("starting extractor", extra={"source": run_id(), "num_items": len(beans)})
             for batch in self.extract_beans(beans, batch_size):
-                stored = cache.store("extracted_beans", batch, columns=[K_REGIONS, K_ENTITIES])
+                stored = cache.store("extracted_beans", batch, columns=[K_URL, K_REGIONS, K_ENTITIES])
                 total += len(stored)
         log.info("total extracted", extra={"source": run_id(), "num_items": total})
 
@@ -202,12 +201,12 @@ class Orchestrator:
             beans = cache.get(
                 "collected_beans",
                 "digested_beans",
-                filters=ANALYZER_FILTER,
+                conditions=ANALYZER_FILTER,
                 columns=[K_URL, K_SOURCE, K_CONTENT],
             )
             log.info("starting digestor", extra={"source": run_id(), "num_items": len(beans)})
             for batch in self.digest_beans(beans, batch_size):
-                stored = cache.store("digested_beans", batch, columns=[K_GIST])
+                stored = cache.store("digested_beans", batch, columns=[K_URL, K_GIST])
                 total += len(stored)
         log.info("total digested", extra={"source": run_id(), "num_items": total})
 

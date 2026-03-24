@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 import logging
 from datetime import datetime, timezone
@@ -14,6 +15,7 @@ TS = "ts"
 
 log = logging.getLogger(__name__)
 
+# TODO: setting up some kind of relationship may be helpful
 class ProcessingCache:
     db: BlockingEmbeddedSurrealConnection
     db_path: str
@@ -53,16 +55,16 @@ class ProcessingCache:
         log.info("cached", extra={"source": table, "num_items": len(stored)})
         return stored
         
-    def get(self, unprocessed_table: str, processed_table: str, filters: list[str] = None, columns: list[str] = None, limit: int = 0, offset: int = 0) -> list:
-        expr, params = _to_sql(unprocessed_table, processed_table, filters, columns, limit, offset)
+    def get(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, conditions: dict|list[str] = None, columns: list[str] = None, limit: int = 0, offset: int = 0) -> list:
+        expr, params = _to_sql(table, notin_tables, in_tables, conditions, columns, limit, offset)
         vals = self.db.query(expr, params)
-        if self.model_cls:
-            return [self.model_cls(**v) for v in vals] if vals else []
+        if self.model_cls and vals:
+            return [self.model_cls(**v) for v in vals]
         return vals
     
-    def stream(self, unprocessed_table: str, processed_table: str, filters: list[str] = None, columns: list[str] = None, batch_size: int = 0):
+    def stream(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, conditions: dict|list[str] = None, columns: list[str] = None, batch_size: int = 0):
         offset = 0
-        while batch := self.get(unprocessed_table, processed_table, filters, columns, limit=batch_size, offset=offset):            
+        while batch := self.get(table, notin_tables, in_tables, conditions, columns, batch_size, offset=offset):            
             yield batch
             offset += len(batch)
 
@@ -105,16 +107,16 @@ class AsyncProcessingCache:
         log.info("cached", extra={"source": table, "num_items": len(stored)})
         return stored
         
-    async def get(self, unprocessed_table: str, processed_table: str, filters: list[str] = None, columns: list[str] = None, limit: int = 0, offset: int = 0) -> list:
-        expr, params = _to_sql(unprocessed_table, processed_table, filters, columns, limit, offset)
+    async def get(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, conditions: dict|list[str] = None, columns: list[str] = None, limit: int = 0, offset: int = 0) -> list:
+        expr, params = _to_sql(table, notin_tables, in_tables, conditions, columns, limit, offset)
         vals = await self.db.query(expr, params)
-        if self.model_cls:
-            return [self.model_cls(**v) for v in vals] if vals else []
+        if self.model_cls and vals:
+            return [self.model_cls(**v) for v in vals]
         return vals
     
-    async def stream(self, unprocessed_table: str, processed_table: str, filters: list[str], columns: list[str], batch_size: int = 0):
+    async def stream(self, table: str, notin_tables: str|list[str] = None, in_tables: str|list[str] = None, conditions: dict|list[str] = None, columns: list[str] = None, batch_size: int = 0):
         offset = 0
-        while batch := await self.get(unprocessed_table, processed_table, filters, columns, limit=batch_size, offset=offset):            
+        while batch := await self.get(table, notin_tables, in_tables, conditions, columns, batch_size, offset=offset):            
             yield batch
             offset += len(batch)
 
@@ -127,25 +129,45 @@ def _create_data(items: list, columns=None, id_key=None):
             d[ID] = getattr(item, id_key, None) 
     return data
 
-def _to_sql(unprocessed_table, processed_table, filters, columns, limit, offset):
+def _to_sql(table: str, notin_tables: list[str], in_tables: list[str], conditions: dict|list = None, columns: list[str] = None, limit: int = 0, offset: int = 0):
+    field_clause = "*"
+    if columns:
+        field_clause = ", ".join(merge_lists([ID, TS], columns))
+
+    expr = f"SELECT {field_clause} FROM {table}"
     params = {}
-    if filters:
-        added_where_clause = "AND " + " AND ".join(filters)        
-    else:
-        added_where_clause = ""
+
+    where_items = []
+        
+    if notin_tables:
+        if isinstance(notin_tables, str):
+            notin_tables = [notin_tables]
+        where_items.extend(f"record::id(id) NOTINSIDE (SELECT VALUE record::id(id) FROM {frm})" for frm in notin_tables)
+
+    if in_tables:
+        if isinstance(in_tables, str):
+            in_tables = [in_tables]
+        where_items.extend(f"record::id(id) INSIDE (SELECT VALUE record::id(id) FROM {frm})" for frm in in_tables)
+
+    if conditions:
+        if isinstance(conditions, list):
+            where_items.extend(conditions)
+        if isinstance(conditions, dict):
+            make_param_key = lambda k: re.sub(r"\W+", "_", k.strip()).lower()
+            for k, v in conditions.items():
+                param_key = make_param_key(k)
+                where_items.append(f"{k} ${param_key}")
+                params[param_key] = v
+
+    if where_items:
+        expr += "\nWHERE " + " AND ".join(where_items)
+
     if limit:
-        limit_clause = f"LIMIT $limit"
+        expr += "\nLIMIT $limit"
         params["limit"] = limit
-    else:
-        limit_clause = ""
+    
     if offset:
-        offset_clause = f"START $offset"
+        expr += "\nSTART $offset"
         params["offset"] = offset
-    else:
-        offset_clause = ""
-    expr = f"""SELECT {", ".join(merge_lists([ID, TS], columns))} FROM {unprocessed_table}
-    WHERE record::id(id) NOTINSIDE (SELECT VALUE record::id(id) FROM {processed_table})
-        {added_where_clause}
-    {limit_clause} {offset_clause}
-    """
-    return expr, params
+    
+    return ic(expr), params

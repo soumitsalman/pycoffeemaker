@@ -100,11 +100,12 @@ class WebScraperLite:
         }
         bean.title = bean.title or result.get("meta_title") or result.get("title") # this sequence is important because result['title'] is often crap
         bean.summary = bean.summary or result.get("description")
-        bean.content = result.get("content")
-        bean.restricted_content = True
-        bean.image_url = bean.image_url or full_url(bean.url, result.get("top_image"))
+        bean.content = result.get("content")        
         bean.author = result.get("author") or bean.author
         bean.created = min(result.get("published_time") or bean.created, bean.collected)     
+        bean.restricted_content = True
+        image_url = result.get("top_image")
+        if image_url: bean.image_url = full_url(bean.url, image_url)
 
         base_url = extract_base_url(bean.url)
         publisher = Publisher(
@@ -352,12 +353,13 @@ class WebScraper:
         for bean, result in zip(beans, results):
             if not result: continue
             bean.content = result.get("markdown")
-            bean.title = bean.title or result.get("title") or result.get("meta_title") # this sequence is important because result['title'] is often crap
-            bean.image_url = result.get("top_image") or bean.image_url
+            bean.title = bean.title or result.get("title") or result.get("meta_title") # this sequence is important because result['title'] is often crap            
             bean.author = result.get("author") or bean.author
             bean.created = min(result.get("published_time") or bean.created or bean.collected, current_time)
             bean.summary = bean.summary or result.get("description")
             bean.restricted_content = True
+            image_url = result.get("top_image")
+            if image_url: bean.image_url = full_url(bean.url, image_url)
         return beans
 
     def _package_result(result) -> dict:   
@@ -449,9 +451,9 @@ class PublisherScraper:
             html = await self._scrape_html(url)
             meta.update(self._get_metadata(url, html))
             meta[K_SITE_NAME] = meta.get(K_SITE_NAME) or meta.get('meta_title')
-            if meta.get(K_FAVICON): meta[K_FAVICON] = full_url(base_url, meta.get(K_FAVICON))
+            if meta.get(K_FAVICON): meta[K_FAVICON] = full_url(base_url, meta[K_FAVICON])
             else: meta[K_FAVICON] = await self._scrape_favicon(base_url)            
-            if meta.get(K_RSS_FEED): meta[K_RSS_FEED] = full_url(base_url, meta.get(K_RSS_FEED))
+            if meta.get(K_RSS_FEED): meta[K_RSS_FEED] = full_url(base_url, meta[K_RSS_FEED])
             return Publisher(**meta, collected=now())
         except Exception as e: 
             log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": base_url, "num_items": 1})

@@ -195,6 +195,9 @@ class APICollector:
             comments=parse_int(entry.slash_comments)
         ) 
         else: chatter = None
+
+        image_url = _extract_main_image(entry)
+        if image_url: image_url = full_url(source_url, image_url)
         
         return {
             "bean": Bean(
@@ -205,7 +208,7 @@ class APICollector:
                 summary=summary,
                 content=content,
                 author=entry.get('author'),        
-                image_url=full_url(entry_link, _extract_main_image(entry)),
+                image_url=image_url,
                 created=created_time,         
                 collected=current_time
             ),
