@@ -26,11 +26,13 @@ storables = lambda beans: [bean for bean in beans if is_storable(bean)] if beans
 log = logging.getLogger(__name__)
 
 class Orchestrator:
+    cache_kwargs: dict
     db: Beansack
     cache: AsyncProcessingCache
     run_total: int = 0
 
-    def __init__(self, db_kwargs: dict):
+    def __init__(self, cache_kwargs: dict, db_kwargs: dict):
+        self.cache_kwargs = cache_kwargs
         self.db = create_client(**db_kwargs)        
 
     async def _triage_collection_async(self, source: str, items: list[dict]):

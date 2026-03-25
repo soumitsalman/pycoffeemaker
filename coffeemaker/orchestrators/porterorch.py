@@ -61,18 +61,20 @@ class Orchestrator:
     db: Beansack    
     run_total: int = 0
 
-    def __init__(self, db_kwargs: dict):
+    def __init__(self, cache_kwargs: dict, db_kwargs: dict):
+        self.cache_kwargs = cache_kwargs
+        
         self.db = create_client(**db_kwargs)
 
-    def _store(self, beans):
+    def _store(self, beans: list[dict]):
         if not beans:
             return
+        
         with open(f".test/{int(datetime.now().timestamp())}.json", "w") as f:
-            json.dump(beans, f, indent=4)
+            json.dump([Bean(**bean).model_dump(mode="json", exclude_none=True, exclude_unset=True) for bean in beans], f, indent=4)
 
     def run(self):
-        with ProcessingCache(db_name="beans", id_key=K_URL) as cache:
-            
+        with ProcessingCache(db_name="beans", id_key=K_URL, **self.cache_kwargs) as cache:            
             extracts = cache.get(
                 table="extracted_beans", 
                 notin_tables="ported_beans",
@@ -99,8 +101,8 @@ class Orchestrator:
                 in_tables=["extracted_beans"]
             )
             ic(len(contents))
-            beans = merge(K_URL, extracts, vectors, contents)
-            [self._store(bean) for bean in beans]
+            beans = merge(K_URL, extracts, vectors, classifications, contents)            
+            self._store(beans)
     
     def close(self):
         self.db.close()
@@ -108,9 +110,10 @@ class Orchestrator:
 
 def merge(key, *lists):
     merged = {}
-    for bean in (item for items in lists if items for item in items if item and key in item):        
-        if bean[key] not in merged:
-            merged[bean[key]] = bean
-        else:
-            merged[bean[key]].update(bean)
+    for items in lists:
+        for bean in items:
+            if bean[key] not in merged:
+                merged[bean[key]] = bean
+            else:                
+                merged[bean[key]].update(bean)    
     return list(merged.values())        
