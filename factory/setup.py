@@ -7,8 +7,9 @@ load_dotenv()
 
 from icecream import ic
 from pybeansack.models import *
+from coffeemaker.orchestrators.processingcache import PROCESSING_CACHE_DIR, ProcessingCache
 
-def create_classification_files():
+def create_classification_embeddings():
     import yaml
     import pandas as pd
     from nlp import embedders
@@ -22,20 +23,26 @@ def create_classification_files():
         categories = pd.DataFrame(
             {
                 "category": classifications[K_CATEGORIES],
-                K_EMBEDDING: embedder(["topic/domain: "+cat for cat in classifications[K_CATEGORIES]])
+                K_EMBEDDING: embedder([f"topic/category: {cat}" for cat in classifications[K_CATEGORIES]])
             }
         )
         ic(categories.sample(n=3))
-        categories.to_parquet(f"{dir_name}/categories.parquet", engine='pyarrow')
 
         sentiments = pd.DataFrame(
             {
                 "sentiment": classifications[K_SENTIMENTS],
-                K_EMBEDDING: embedder(["sentiment: "+s for s in classifications[K_SENTIMENTS]])
+                K_EMBEDDING: embedder([f"sentiment: {s}" for s in classifications[K_SENTIMENTS]])
             }
         )
         ic(sentiments.sample(n=3))
-        sentiments.to_parquet(f"{dir_name}/sentiments.parquet", engine='pyarrow')
+
+    return categories, sentiments
+
+def create_classification_files():
+    dir_name = os.path.dirname(__file__)
+    categories, sentiments = create_classification_embeddings()
+    categories.to_parquet(f"{dir_name}/categories.parquet", engine='pyarrow')
+    sentiments.to_parquet(f"{dir_name}/sentiments.parquet", engine='pyarrow')
 
 def update_db(db_type: str):
     from pybeansack import LanceDB
@@ -61,13 +68,26 @@ def create_db(db_type: str):
         print("Created new lakehouse at catalog:", os.getenv('DUCKLAKE_CATALOG'), " storage:", os.getenv('DUCKLAKE_STORAGE'))
     else:
         raise ValueError("unsupported db type")
+    
+def initialize_processingcache() -> ProcessingCache:
+    """Seed cache with classification embeddings"""
+    categories, sentiments = create_classification_embeddings()
+    with ProcessingCache(PROCESSING_CACHE_DIR, "beans", K_URL) as db:
+        # TODO: add some indexing?        
+        # TODO: move delete this to the cache
+        db.db.delete("fixed_categories")
+        db.db.delete("fixed_sentiments")
+        db.store("fixed_categories", categories.rename(columns={"category": K_URL}).to_dict("records"))
+        db.store("fixed_sentiments", sentiments.rename(columns={"sentiment": K_URL}).to_dict("records"))
 
 import argparse
 parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
 parser.add_argument('--create', type=str, help='Type of database to create')
 parser.add_argument('--update', type=str, help='Update the lancedb')
+parser.add_argument('--initcache', action="store_true", help='Initialize Processing Cache with Seed Value')
 
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.create: create_db(args.create)
     if args.update: update_db(args.update)
+    if args.initcache: initialize_processingcache()

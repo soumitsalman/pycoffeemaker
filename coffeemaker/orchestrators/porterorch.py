@@ -7,6 +7,8 @@ from .processingcache import ProcessingCache
 from .utils import *
 from pybeansack import Beansack, create_client
 from pybeansack.models import (
+    K_CATEGORIES,
+    K_SENTIMENTS,
     K_URL,
     K_KIND,
     K_SOURCE,
@@ -73,24 +75,28 @@ class Orchestrator:
             
             extracts = cache.get(
                 table="extracted_beans", 
-                notin_tables="ported_beans", 
-                conditions=["(entities OR regions)"]
+                notin_tables="ported_beans",
+                columns=[K_URL, K_ENTITIES, K_REGIONS]
             )
             ic(len(extracts))
             vectors = cache.get(
                 table="embedded_beans", 
                 notin_tables="ported_beans", 
                 in_tables=["extracted_beans"],
-                conditions=["embedding"]
+                columns=[K_URL, K_EMBEDDING]
             )
             ic(len(vectors))
+            classifications = cache.get(
+                table="classified_beans", 
+                notin_tables="ported_beans", 
+                in_tables=["extracted_beans"],
+                columns=[K_URL, K_CATEGORIES, K_SENTIMENTS]
+            )
+            ic(len(classifications))
             contents = cache.get(
                 table="collected_beans", 
                 notin_tables="ported_beans", 
-                in_tables=["extracted_beans", "embedded_beans"],
-                conditions={
-                    "content_length >=": 160, 
-                }
+                in_tables=["extracted_beans"]
             )
             ic(len(contents))
             beans = merge(K_URL, extracts, vectors, contents)

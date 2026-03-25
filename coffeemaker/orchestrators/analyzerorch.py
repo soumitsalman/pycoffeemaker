@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import logging
 import os
 from itertools import batched
@@ -8,6 +9,7 @@ from .utils import *
 from nlp import Digest, digestors, embedders
 from pybeansack import Beansack, create_client
 from pybeansack.models import (
+    K_CATEGORIES,
     K_COLLECTED,
     K_CONTENT,
     K_CONTENT_LENGTH,
@@ -17,6 +19,8 @@ from pybeansack.models import (
     K_GIST,
     K_KIND,
     K_REGIONS,
+    K_RELATED,
+    K_SENTIMENTS,
     K_SOURCE,
     K_URL,
     POST,
@@ -59,20 +63,23 @@ ANALYZER_FILTER = {
     "content_length >=": WORDS_THRESHOLD_FOR_ANALYZING,
     "kind !=": POST,
 }
+MAX_CLASSIFICATIONS = 2
 
 index_storables = lambda beans: [bean for bean in beans if bean.embedding]
 digest_storables = lambda beans: [bean for bean in beans if bean.gist]
 run_id = lambda: datetime.now().strftime("%A, %b-%d-%Y")
 
 class Orchestrator:
-    db: Beansack
+    # db: Beansack    
+    cache_kwargs: dict
     embedder: embedders.EmbedderBase
     extractor: digestors.NamedEntityExtractor
     digestor: digestors.DigestorBase
 
     def __init__(
         self,
-        db_kwargs: dict,
+        # db_kwargs: dict,
+        cache_kwargs: dict,
         embedder_path: Optional[str] = None,
         embedder_context_len: int = 0,
         extractor_path: Optional[str] = None,
@@ -80,7 +87,8 @@ class Orchestrator:
         digestor_path: Optional[str] = None,
         digestor_context_len: int = 0,
     ):
-        self.db = create_client(**db_kwargs)
+        self.cache_kwargs = cache_kwargs
+        self.cache_kwargs.update({"db_name": "beans", "id_key": K_URL})  # incase it is missing
         if embedder_path:
             self.embedder = embedders.from_path(
                 model_path=embedder_path, 
@@ -100,64 +108,73 @@ class Orchestrator:
                 output_parser=Digest.parse_compressed,
             )
 
-    def embed_beans(self, beans: list[Bean], batch_size: int):
+    def open_cache(self, **kwargs):
+        return ProcessingCache(**self.cache_kwargs)
+
+    def embed_beans(self, beans: list[dict], batch_size: int):
         with self.embedder:
             for chunk in batched(beans, batch_size):
                 try:
-                    vectors = self.embedder.embed_documents([bean.content for bean in chunk])
+                    vectors = self.embedder.embed_documents([bean[K_CONTENT] for bean in chunk])
                     updates = [
-                        Bean(url=b.url, embedding=vec) if len(vec) == VECTOR_LEN else Bean(url=b.url)
+                        {
+                            K_URL: b[K_URL], 
+                            K_EMBEDDING: vec
+                        } if len(vec) == VECTOR_LEN else {K_URL: b[K_URL]}
                         for b, vec in zip(chunk, vectors)
                     ]
-                    log.info("embedded", extra={"source": chunk[0].source, "num_items": len(updates)})
+                    log.info("embedded", extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)})
                     yield updates
                 except Exception as e:
                     log.error(
                         "failed embedding",
-                        extra={"source": chunk[0].source, "num_items": len(chunk)},
+                        extra={"source": chunk[0][K_SOURCE], "num_items": len(chunk)},
                         exc_info=True,
                         stack_info=True,
                     )
         
 
-    def extract_beans(self, beans: list[Bean], batch_size: int):        
+    def extract_beans(self, beans: list[dict], batch_size: int):        
         with self.extractor:
             for chunk in batched(beans, batch_size):
                 try:
-                    extractions = self.extractor.run_batch([b.content for b in chunk])
+                    extractions = self.extractor.run_batch([b[K_CONTENT] for b in chunk])
                     updates = [
-                        Bean(
-                            url=b.url,
-                            entities=merge_lists(ents.people, ents.organizations, ents.products, ents.stock_tickers),
-                            regions=ents.regions,
-                        ) if ents else Bean(url=b.url)
+                        {
+                            K_URL: b[K_URL],
+                            K_ENTITIES: merge_lists(ents.people, ents.organizations, ents.products, ents.stock_tickers),
+                            K_REGIONS: ents.regions,
+                        } if ents else {K_URL: b[K_URL]}
                         for b, ents in zip(chunk, extractions)
                     ]
-                    log.info("extracted", extra={"source": chunk[0].source, "num_items": len(extractions)})
+                    log.info("extracted", extra={"source": chunk[0][K_SOURCE], "num_items": len(extractions)})
                     yield updates
                 except Exception:
                     log.error(
                         "failed extracting",
-                        extra={"source": chunk[0].source, "num_items": len(chunk)},
+                        extra={"source": chunk[0][K_SOURCE], "num_items": len(chunk)},
                         exc_info=True,
                         stack_info=True,
                     )
 
-    def digest_beans(self, beans: list[Bean], batch_size: int):
+    def digest_beans(self, beans: list[dict], batch_size: int):
         with self.digestor:
             for chunk in batched(beans, batch_size):
                 try:
-                    gists = self.digestor.run_batch([bean.content for bean in chunk])
+                    gists = self.digestor.run_batch([bean[K_CONTENT] for bean in chunk])
                     updates = [
-                        Bean(url=b.url, gist=d.raw) if d and d.raw else Bean(url=b.url)
+                        {
+                            K_URL: b[K_URL], 
+                            K_GIST: d.raw
+                        } if d and d.raw else {K_URL: b[K_URL]}
                         for b, d in zip(chunk, gists)
                     ]
-                    log.info("digested", extra={"source": chunk[0].source, "num_items": len(updates)})
+                    log.info("digested", extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)})
                     yield updates
                 except Exception:
                     log.error(
                         "failed digesting",
-                        extra={"source": chunk[0].source, "num_items": len(chunk)},
+                        extra={"source": chunk[0][K_SOURCE], "num_items": len(chunk)},
                         exc_info=True,
                         stack_info=True,
                     )
@@ -165,31 +182,21 @@ class Orchestrator:
     @log_runtime(logger=log)
     def run_embedder(self, batch_size: int = BATCH_SIZE):
         total = 0
-        with ProcessingCache(db_name="beans", id_key=K_URL, model_cls=Bean) as cache:
-            beans = cache.get(
-                "collected_beans", 
-                "embedded_beans", 
-                conditions=ANALYZER_FILTER, 
-                columns=[K_URL, K_SOURCE, K_CONTENT]
-            )
+        with self.open_cache() as cache:
+            beans = cache.get("collected_beans", notin_tables="embedded_beans", conditions=ANALYZER_FILTER, columns=[K_URL, K_SOURCE, K_CONTENT])
             log.info("starting embedder", extra={"source": run_id(), "num_items": len(beans)})
-            for batch in self.embed_beans(beans, batch_size):
-                stored = cache.store("embedded_beans", batch, columns=[K_URL, K_EMBEDDING])
+            for updates in self.embed_beans(beans, batch_size):
+                stored = cache.store("embedded_beans", updates)
                 total += len(stored)
         log.info("total embedded", extra={"source": run_id(), "num_items": total})
 
     @log_runtime(logger=log)
     def run_classifier(self, batch_size: int = BATCH_SIZE):
         # this runs both classifier and clustering
-        with ProcessingCache(db_name="beans", id_key=K_URL) as cache:
-            beans = cache.get(
-                "embedded_beans", 
-                notin_tables="clustered_beans", 
-                conditions=[K_EMBEDDING],
-                columns=[K_URL, K_EMBEDDING]
-            )
-            log.info("starting clustering", extra={"source": run_id(), "num_items": len(beans)})
-            clusters = {}
+        with self.open_cache() as cache:
+            beans = cache.get("embedded_beans", notin_tables="classified_beans", conditions=[K_EMBEDDING], columns=[K_URL, K_EMBEDDING])
+            log.info("starting classifier", extra={"source": run_id(), "num_items": len(beans)})
+            classifications = {}
             for bean in beans:
                 related = cache.get(
                     "embedded_beans", 
@@ -198,31 +205,38 @@ class Orchestrator:
                     distance=CLUSTER_EPS,
                     conditions=[K_EMBEDDING], 
                     columns=[K_URL]
-                )                
-                clusters[bean[K_URL]] = [r[K_URL] for r in related if r[K_URL] != bean[K_URL]]
-            ic(clusters)
-            cache.store("clustered_beans", [{"url": url, "related_urls": related} for url, related in clusters.items()])
-        log.info("total clustered", extra={"source": run_id(), "num_items": len(clusters)})
+                )      
+                categories = cache.get("fixed_categories", embedding=bean[K_EMBEDDING], columns=[K_URL], limit=MAX_CLASSIFICATIONS)     
+                sentiments = cache.get("fixed_sentiments", embedding=bean[K_EMBEDDING], columns=[K_URL], limit=MAX_CLASSIFICATIONS)   
+
+                classifications[bean[K_URL]] = {
+                    K_URL: bean[K_URL],
+                    K_RELATED: [r[K_URL] for r in related if r[K_URL] != bean[K_URL]],
+                    K_CATEGORIES: [cat[K_URL] for cat in categories],
+                    K_SENTIMENTS: [sent[K_URL] for sent in sentiments]
+                }            
+            cache.store("classified_beans", ic(list(classifications.values())))
+        log.info("total classified", extra={"source": run_id(), "num_items": len(classifications)})
 
     @log_runtime(logger=log)
     def run_extractor(self, batch_size: int = BATCH_SIZE):
         total = 0
-        with ProcessingCache(db_name="beans", id_key=K_URL, model_cls=Bean) as cache:
+        with self.open_cache() as cache:
             beans = cache.get("collected_beans", notin_tables="extracted_beans", conditions=ANALYZER_FILTER, columns=[K_URL, K_SOURCE, K_CONTENT])
             log.info("starting extractor", extra={"source": run_id(), "num_items": len(beans)})
-            for batch in self.extract_beans(beans, batch_size):
-                stored = cache.store("extracted_beans", batch, columns=[K_URL, K_REGIONS, K_ENTITIES])
+            for updates in self.extract_beans(beans, batch_size):
+                stored = cache.store("extracted_beans", updates)
                 total += len(stored)
         log.info("total extracted", extra={"source": run_id(), "num_items": total})
 
     @log_runtime(logger=log)
     def run_digestor(self, batch_size: int = BATCH_SIZE):
         total = 0
-        with ProcessingCache(db_name="beans", id_key=K_URL, model_cls=Bean) as cache:
+        with self.open_cache() as cache:
             beans = cache.get("collected_beans", notin_tables="digested_beans", conditions=ANALYZER_FILTER, columns=[K_URL, K_SOURCE, K_CONTENT])
             log.info("starting digestor", extra={"source": run_id(), "num_items": len(beans)})
-            for batch in self.digest_beans(beans, batch_size):
-                stored = cache.store("digested_beans", batch, columns=[K_URL, K_GIST])
+            for updates in self.digest_beans(beans, batch_size):
+                stored = cache.store("digested_beans", updates)
                 total += len(stored)
         log.info("total digested", extra={"source": run_id(), "num_items": total})
 
@@ -238,6 +252,7 @@ class Orchestrator:
         self.run_digestor(batch_size=digestor_batch_size)
 
     def close(self):
+        pass
         # Close database connection
         # self.db.optimize()
-        self.db.close()
+        # self.db.close()

@@ -1,213 +1,141 @@
 categories:
-# Core AI and Computing
 - Artificial Intelligence and Machine Learning
 - AI Ethics and Governance
-- Artificial Life and Vision
-- Algorithm and Computation
-- Data Science and Analytics
-- Software Development and Programming
-- Cloud Computing
+- Natural Language Processing
+- Computer Vision and Pattern Recognition
+- Generative AI and Foundation Models
+- MLOps and Model Engineering
+- Cybersecurity and Threat Intelligence
+- Privacy Engineering and Data Protection
+- Network Security and Firewalls
+- Identity and Access Management
+- Digital Forensics and Incident Response
+- Software Engineering and Programming
+- Web Development and Internet Technologies
+- Mobile App Development
+- Cloud Computing and Distributed Systems
+- Databases and Data Engineering
+- DevOps and Site Reliability
+- Programming Languages and Compilers
+- Computer Hardware and Architecture
+- Semiconductor Design and Fabrication
+- Microprocessors and Chipsets
 - High Performance Computing
-- Cybersecurity and Privacy
-- Internet and Web Technologies
-- Digital and Social Media
-- Virtual and Augmented Reality
-- Product Development and Technology
-
-# Business and Economics
-- Marketing and Retail
-- Banking and Finance
+- Consumer Electronics and Gadgets
+- Wearable Technology
+- Internet of Things and Smart Devices
+- Embedded Systems and Firmware
+- Robotics and Autonomous Systems
+- Industrial Automation and Control Systems
+- Mechatronics and Motion Systems
+- Drones and Uncrewed Systems
+- Video Games and Game Development
+- Esports and Competitive Gaming
+- Virtual Reality and Mixed Reality
+- Interactive Entertainment and Streaming
 - Business and Management
+- Entrepreneurship and Startups
+- Marketing and Brand Strategy
+- Sales and Customer Growth
+- Banking and Finance
+- Investment and Capital Markets
+- Accounting and Auditing
+- Logistics and Supply Chain Management
+- Transportation and Mobility
+- Freight, Shipping, and Ports
+- Warehousing and Inventory Systems
+- Fleet Operations and Routing
+- Aviation and Air Transport
+- Aerospace Engineering
+- Aircraft Systems and Maintenance
+- Space Industry and Launch Systems
+- Satellite Systems and Space Operations
 - Employment and Workplace
-- Professional Development and Innovation
-- Insurance
-- Real Estate
-- Sports and Athletics
-
-# Science and Engineering
-- Physics
-- Chemistry
+- Career Development and Professional Skills
+- Talent Acquisition and Recruiting
+- Human Resources and Workforce Planning
+- Leadership and Organizational Development
+- Home and Lifestyle
+- Interior Design and Home Improvement
+- Housing and Real Estate
+- Architecture and Building Design
+- Construction and Infrastructure
+- Physics and Physical Sciences
+- Chemistry and Materials Science
 - Mathematics and Statistics
-- Engineering
-- Mechanical Systems
-- Nanotechnology
-- Energy Systems and Technologies
-- Air and Aviation
-- Space and Planetary Science
-- Space Industry and Technologies
-
-# Biology, Life Sciences, and Medicine
+- Engineering and Applied Systems
+- Nanotechnology and Nanomaterials
+- Scientific Research Methods
 - Human Biology and Physiology
-- Biotechnology
 - Genetics and Genomics
-- Paleontology and Evolution
-- Zoology and Animal Behavior
-- Veterinary Medicine and Animal Science
+- Biotechnology and Bioengineering
 - Medical Research and Healthcare Technology
 - Pharmaceuticals and Drug Development
-- Public Health
-- Occupational Health and Safety
-- Mental Health and Psychology
-- Physical Medicine and Rehabilitation
+- Public Health and Epidemiology
 - Infectious Diseases and Immunity
-
-# Health and Wellness
 - Nutrition, Food, and Supplements
 - Body and Health
 - Elder Care and Aging
 - Child and Family Care
 - Reproductive and Sexual Health
-
-# Earth and Environmental Sciences
 - Climate and Environmental Management
 - Conservation and Wildlife
-- Water Resources and Management
-- Ocean and Marine Science
 - Earth Sciences and Natural Resources
-- Disaster and Emergency Management
-- Urban and Rural Planning
-- Transportation and Mobility
-- Construction and Infrastructure
-- Agriculture and Land Use
-
-# Arts, Media, and Entertainment
+- Ocean and Marine Science
+- Water Resources and Management
+- Energy, Solar, and Renewable Systems
 - Art and Design
-- Animation and Animation Industry
-- Entertainment and Performing Arts
+- Animation and Visual Effects
 - Film and Cinema
 - Music and Music Industry
-- Books and Literature
 - Media and Journalism
-
-# Culture and Society
-- History
-- Archaeology and Ancient History
-- Anthropology
+- Internet Culture and Social Media
+- Digital Communities and Online Platforms
 - Languages and Linguistics
 - Philosophy, Religion, and Spirituality
-- Humanities and Cultural Studies
-- Fashion and Style
-- Home and Lifestyle
-
-# Government, Law, and Justice
+- Anthropology and Cultural Studies
+- History and Archaeology
 - Government and Politics
-- Political Science
-- Election and Voting
-- Public Administration and Policy
+- Public Policy and Administration
+- Elections and Voting
 - Legal System and Justice
 - Law Enforcement and Public Safety
-- Forensics and Crime Investigation
-
-# Social Issues and Demographics
-- Education and Youth Development
+- Human Rights and Civil Liberties
 - Diversity, Equity, and Inclusion
-- Gender Studies
+- Gender Studies and Identity
 - LGBTQ+ Issues
-- Human Rights and Social Justice
 - Family and Relationships
 - Migration and Immigration
-- Labor and Workforce
-- Community and Society
-- Social Sciences
-- Behavioral Science and Economics
-
-# Military, Security, and Conflict
 - Military and Defense
-- Weaponry and Military Technology
 - Homeland Security and Safety
+- Weaponry and Military Technology
 - Geopolitics and International Relations
-
-# Emerging Technologies and Industries
-- Blockchain and Cryptocurrency
-- Gaming and Esports
-- Robotics and Automation
-- Internet of Things and Smart Systems
-- 3D Printing and Additive Manufacturing
-- Autonomous Vehicles
-
-# Specialized and Niche Topics
+- Blockchain and Distributed Ledgers
+- Cryptocurrency and Digital Assets
+- Decentralized Finance and Web3
 - Academic Research
-- Accessibility
-- Alien and Extraterrestrial Life
+- Accessibility and Disability
 - Cannabis and Cannabinoids
 - Gambling and Betting
 - Alcohol and Beverages
-- Industry and Manufacturing
 sentiments:
-- bewildered
-- doubtful
-- empathetic
-- optimistic
-- humble
-- loyal
-- overwhelmed
-- proud
-- cruel
-- curious
-- joyful
-- trusting
-- generous
-- subtle
-- desperate
-- fair
-- refined
-- focused
-- moral
-- intrigued
-- frustrated
-- vulnerable
-- serene
-- productive
-- peaceful
-- perplexed
-- compassionate
-- love
-- disturbed
-- jealous
-- understanding
-- angry
-- thoughtful
-- amazed
-- confident
-- conflicted
-- inspiring
-- responsible
-- ambivalent
-- analytical
-- ashamed
-- passionate
 - negative
-- professional
-- friendly
-- intense
-- brave
-- investigative
-- cautious
-- innovative
-- bold
-- fearful
-- admiring
-- fascinated
-- artistic
-- resilient
-- critical
-- energetic
-- disciplined
-- grateful
-- surprised
-- harmonious
-- honest
-- enthusiastic
-- determined
-- competent
+- angry
 - anxious
-- dramatic
-- accepting
-- nostalgic
-- skeptical
+- ashamed
+- disturbed
+- doubtful
+- frustrated
 - neutral
+- analytical
+- cautious
 - contemplative
-- sad
-- respectful
-- assertive
-- reflective
+- measured
+- observant
+- positive
+- confident
+- enthusiastic
+- grateful
+- hopeful
+- joyful
+- serene

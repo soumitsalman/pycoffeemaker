@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 EMBEDDER_CONTEXT_LEN = 512
 EXTRACTOR_CONTEXT_LEN = 4096
 DIGESTOR_CONTEXT_LEN = 4096
-COMPOSER_CONTEXT_LEN = 110760
+PROCESSING_CACHE_DIR = "file://.cache"
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR + "/.env")
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         "ducklake_catalog": os.getenv("DUCKLAKE_CATALOG"),
         "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
     }
-
+    
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
 
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            db_kwargs=db_kwargs,
+            {"db_path": PROCESSING_CACHE_DIR},
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
@@ -108,15 +108,16 @@ if __name__ == "__main__":
         orch.close()
     elif mode == "CLASSIFIER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
-
-        orch = Orchestrator(db_kwargs=db_kwargs)
+        orch = Orchestrator(
+            {"db_path": PROCESSING_CACHE_DIR}
+        )
         orch.run_classifier(batch_size=batch_size)
         orch.close()
     elif mode == "EXTRACTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            db_kwargs=db_kwargs,
+            {"db_path": PROCESSING_CACHE_DIR},
             extractor_path=os.getenv("EXTRACTOR_PATH"),
             extractor_context_len=int(
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
@@ -128,7 +129,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            db_kwargs=db_kwargs,
+            {"db_path": PROCESSING_CACHE_DIR},
             digestor_path=os.getenv("DIGESTOR_PATH"),
             digestor_context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
@@ -141,7 +142,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            db_kwargs=db_kwargs,
+            {"db_path": PROCESSING_CACHE_DIR},
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)

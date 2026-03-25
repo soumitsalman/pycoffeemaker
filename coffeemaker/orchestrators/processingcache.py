@@ -165,7 +165,7 @@ def _to_sql(table: str, notin_tables: list[str], in_tables: list[str], embedding
         else:
             if not limit: 
                 raise ValueError("limit must be provided when distance is not given for embedding search")
-            where_items.append(f"embedding <| {limit}, {limit*10} |> $embedding")
+            where_items.append(f"embedding <| {limit}, {distance_func.upper()} |> $embedding")
             params["embedding"] = embedding
 
     if conditions:
