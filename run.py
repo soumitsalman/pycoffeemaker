@@ -9,7 +9,10 @@ from dotenv import load_dotenv
 EMBEDDER_CONTEXT_LEN = 512
 EXTRACTOR_CONTEXT_LEN = 4096
 DIGESTOR_CONTEXT_LEN = 4096
-PROCESSING_CACHE_DIR = "file://.cache"
+PROCESSING_CACHE_PATH = {
+    "classifier_cache": ".cache",
+    "statemachine_cache": "file://.cache"
+}
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR + "/.env")
@@ -32,7 +35,7 @@ logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INF
 logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.refresherorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.processingcache").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.statemachines").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.agents").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
@@ -87,7 +90,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.collectororch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs={"db_path": PROCESSING_CACHE_DIR},
+            cache_kwargs=PROCESSING_CACHE_PATH,
             db_kwargs=db_kwargs
         )
         asyncio.run(
@@ -101,7 +104,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs={"db_path": PROCESSING_CACHE_DIR},
+            cache_kwargs=PROCESSING_CACHE_PATH,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
@@ -112,7 +115,7 @@ if __name__ == "__main__":
     elif mode == "CLASSIFIER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
         orch = Orchestrator(
-            cache_kwargs={"db_path": PROCESSING_CACHE_DIR}
+            cache_kwargs=PROCESSING_CACHE_PATH
         )
         orch.run_classifier(batch_size=batch_size)
         orch.close()
@@ -120,7 +123,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs={"db_path": PROCESSING_CACHE_DIR},
+            cache_kwargs=PROCESSING_CACHE_PATH,
             extractor_path=os.getenv("EXTRACTOR_PATH"),
             extractor_context_len=int(
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
@@ -132,7 +135,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs={"db_path": PROCESSING_CACHE_DIR},
+            cache_kwargs=PROCESSING_CACHE_PATH,
             digestor_path=os.getenv("DIGESTOR_PATH"),
             digestor_context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
@@ -145,7 +148,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs={"db_path": PROCESSING_CACHE_DIR},
+            cache_kwargs=PROCESSING_CACHE_PATH,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
@@ -169,10 +172,10 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.porterorch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs={"db_path": PROCESSING_CACHE_DIR},
+            cache_kwargs=PROCESSING_CACHE_PATH,
             db_kwargs=db_kwargs
         )
-        orch.run()
+        asyncio.run(orch.run())
         orch.close()
 
     else:

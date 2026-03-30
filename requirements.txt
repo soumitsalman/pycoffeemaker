@@ -20,4 +20,6 @@ pydantic-ai
 pydantic-ai-slim[logfire]
 python-dotenv
 lancedb
+pyturso
 python-slugify
+stoolap-python

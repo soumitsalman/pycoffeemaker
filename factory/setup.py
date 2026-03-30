@@ -7,7 +7,7 @@ load_dotenv()
 
 from icecream import ic
 from pybeansack.models import *
-from coffeemaker.orchestrators.processingcache import PROCESSING_CACHE_DIR, ProcessingCache
+from pybeansack.simplevectordb import SimpleVectorDB
 
 def create_classification_embeddings():
     import yaml
@@ -69,25 +69,20 @@ def create_db(db_type: str):
     else:
         raise ValueError("unsupported db type")
     
-def initialize_processingcache() -> ProcessingCache:
+def create_classification_cache(db_path):
     """Seed cache with classification embeddings"""
+    
     categories, sentiments = create_classification_embeddings()
-    with ProcessingCache(PROCESSING_CACHE_DIR, "beans", K_URL) as db:
-        # TODO: add some indexing?        
-        # TODO: move delete this to the cache
-        db.db.delete("fixed_categories")
-        db.db.delete("fixed_sentiments")
-        db.store("fixed_categories", categories.rename(columns={"category": K_URL}).to_dict("records"))
-        db.store("fixed_sentiments", sentiments.rename(columns={"sentiment": K_URL}).to_dict("records"))
-
+    return SimpleVectorDB.create_db(db_path=db_path, table_id_keys={"beans": K_URL}, categories=categories, sentiments=sentiments)
+    
 import argparse
 parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
 parser.add_argument('--create', type=str, help='Type of database to create')
 parser.add_argument('--update', type=str, help='Update the lancedb')
-parser.add_argument('--initcache', action="store_true", help='Initialize Processing Cache with Seed Value')
+parser.add_argument('--initcache', type=str, help='Initialize Processing Cache with Seed Value')
 
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.create: create_db(args.create)
     if args.update: update_db(args.update)
-    if args.initcache: initialize_processingcache()
+    if args.initcache: create_classification_cache(args.initcache)

@@ -2,12 +2,11 @@ import asyncio
 import logging
 import os
 import random
-from surrealdb import AsyncEmbeddedSurrealConnection, AsyncSurreal, RecordID, Surreal
 
 from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
 from coffeemaker.collectors.scraper import PublisherScraper
-from coffeemaker.orchestrators.processingcache import AsyncProcessingCache
-from coffeemaker.orchestrators.utils import *
+from .statemachines import AsyncStateMachine
+from .utils import *
 from pybeansack import BEANS, Beansack, create_client
 from pybeansack.models import *
 
@@ -28,12 +27,13 @@ log = logging.getLogger(__name__)
 class Orchestrator:
     cache_kwargs: dict
     db: Beansack
-    cache: AsyncProcessingCache
+    states: AsyncStateMachine
+    publisher_states: AsyncStateMachine
     run_total: int = 0
 
     def __init__(self, cache_kwargs: dict, db_kwargs: dict):
-        self.cache_kwargs = cache_kwargs
         self.db = create_client(**db_kwargs)        
+        self.states = AsyncStateMachine(cache_kwargs["statemachine_cache"], object_id_keys={"beans": K_URL, "publishers": K_BASE_URL})
 
     async def _triage_collection_async(self, source: str, items: list[dict]):
         if not items:
@@ -46,7 +46,7 @@ class Orchestrator:
         chatters = [item["chatter"] for item in items if item and item.get("chatter")]
 
         if beans:
-            await self.cache_beans(source, beans)
+            await self.set_beans_as_collected(source, beans)
         if publishers:
             await asyncio.to_thread(self.db.store_publishers, publishers)
         if chatters:
@@ -62,18 +62,18 @@ class Orchestrator:
 
         log.info("scraped", extra={"source": source, "num_items": len(beans)})
         if beans:
-            return await self.cache_beans(source, beans)
+            await self.set_beans_as_collected(source, beans)
         if publishers:
-            return await asyncio.to_thread(self.db.store_publishers, publishers)
+            await asyncio.to_thread(self.db.store_publishers, publishers)
 
-    async def cache_beans(self, source: str, beans: list[Bean]):
+    async def set_beans_as_collected(self, source: str, beans: list[Bean]):
         data = prepare_beans_for_store(storables(beans))
         if not data:
             return
-        [print(bean.image_url) for bean in beans if bean.image_url]  # --- IGNORE ---
-        stored = await self.cache.store("collected_beans", data)
-        self.run_total += len(stored)
-        return stored
+        count = await self.states.set("beans", "collected", beans)
+        log.info("collected", extra={"source": source, "num_items": count})
+        self.run_total += count
+        return count        
 
     # @log_runtime_async(logger=log)
     async def collect_beans_async(self, sources, batch_size):
@@ -114,7 +114,7 @@ class Orchestrator:
         async with (
             APICollector(batch_size) as apicollector,
             WebScraperLite(batch_size) as webscraper,
-            AsyncProcessingCache(db_name="beans", id_key=K_URL, model_cls=Bean) as self.cache,
+            self.states
         ):
             await asyncio.gather(
                 *[collect(source, func) for source, func in get_collection_tasks()]
