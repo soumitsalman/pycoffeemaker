@@ -130,11 +130,12 @@ class Orchestrator:
                     )
 
     def classify_beans(self, beans: list[dict], batch_size: int):
+        map_key = lambda items, key: [item[key] for item in items]
         search = lambda bean: {
             K_URL: bean[K_URL],
-            K_RELATED: [r[K_URL] for r in self.classifier_cache.search("beans", embedding=bean[K_EMBEDDING], distance=CLUSTER_EPS, columns=[K_URL]) if r[K_URL] != bean[K_URL]],
-            K_CATEGORIES:  self.classifier_cache.search("categories", embedding=bean[K_EMBEDDING], distance_func="cosine", columns=["category"], limit=MAX_CLASSIFICATIONS),
-            K_SENTIMENTS:  self.classifier_cache.search("sentiments", embedding=bean[K_EMBEDDING], distance_func="cosine", columns=["sentiment"], limit=MAX_CLASSIFICATIONS)
+            K_RELATED: list(filter(lambda x: x != bean[K_URL], map_key(self.classifier_cache.search("beans", embedding=bean[K_EMBEDDING], distance=CLUSTER_EPS, columns=[K_URL]), K_URL))),
+            K_CATEGORIES:  map_key(self.classifier_cache.search("categories", embedding=bean[K_EMBEDDING], distance_func="cosine", columns=["category"], limit=MAX_CLASSIFICATIONS), "category"),
+            K_SENTIMENTS:  map_key(self.classifier_cache.search("sentiments", embedding=bean[K_EMBEDDING], distance_func="cosine", columns=["sentiment"], limit=MAX_CLASSIFICATIONS), "sentiment")
         }          
 
         self.classifier_cache.store("beans", beans)

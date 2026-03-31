@@ -175,7 +175,7 @@ if __name__ == "__main__":
             cache_kwargs=PROCESSING_CACHE_PATH,
             db_kwargs=db_kwargs
         )
-        asyncio.run(orch.run())
+        orch.run()
         orch.close()
 
     else:

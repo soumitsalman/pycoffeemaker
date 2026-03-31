@@ -34,11 +34,10 @@ class StateMachine:
         )
         return len(inserted)
 
-    def get(self, object_type: str, states: str|list[str], exclude_states: str|list[str] = None, conditions: dict[str, Any]|list[str] = None, columns: list[str] = None, limit: int = 0, offset: int = 0):
-        query_expr, params = create_query_expr(object_type, self.id_keys.get(object_type), states, exclude_states, conditions, columns, limit, offset)
+    def get(self, object_type: str, states: str|list[str], exclude_states: str|list[str] = None, conditions: dict[str, Any]|list[str] = None, limit: int = 0, offset: int = 0, columns: list[str] = None):
+        query_expr, params = create_query_expr(object_type, self.id_keys.get(object_type), states, exclude_states, conditions, limit, offset, columns)
         result = self.db.query(query_expr, params)
         return [r[DATA] for r in result]
-
 
 class AsyncStateMachine:
     def __init__(self, db_path: str, object_id_keys: dict[str, Optional[str]]):
@@ -58,8 +57,8 @@ class AsyncStateMachine:
         )
         return len(inserted)
 
-    async def get(self, object_type: str, states: str|list[str], exclude_states: str|list[str] = None, conditions: dict[str, Any]|list[str] = None, columns: list[str] = None, limit: int = 0, offset: int = 0):
-        query_expr, params = create_query_expr(object_type, self.id_keys.get(object_type), states, exclude_states, conditions, columns, limit, offset)
+    async def get(self, object_type: str, states: str|list[str], exclude_states: str|list[str] = None, conditions: dict[str, Any]|list[str] = None, limit: int = 0, offset: int = 0, columns: list[str] = None):
+        query_expr, params = create_query_expr(object_type, self.id_keys.get(object_type), states, exclude_states, conditions, limit, offset, columns)
         result = await self.db.query(query_expr, params)
         return [r[DATA] for r in result]
 
@@ -83,27 +82,60 @@ def create_table_expr(table: str, id_key: Optional[str]):
         """
     return expr
 
-
-def create_query_expr(table: str, id_key: str, states: list[str], exclude_states: list[str], conditions: dict|list = None, columns: list[str] = None, limit: int = 0, offset: int = 0):
-    expr = f"""SELECT {"*" if not columns else ", ".join(["data."+col for col in columns])} FROM {table}"""
+def _create_multi_state_query_expr(table: str, id_key: str, states: list[str], exclude_states: list[str], conditions: dict|list = None, columns: list[str] = None):
+    """
+    SELECT data FROM (
+        SELECT url, array::group(state) as states, array::group(data) as data FROM table
+        WHERE conditions...
+        GROUP BY url
+    ) 
+    WHERE state CONTAINSALL $states
+        AND state CONTAINSNONE $exclude_states
+    """
     params = {}
+    inner_where_items, outer_where_items = [], []
+    if states:
+        outer_where_items.append("states CONTAINSALL $states")
+        params["states"] = states
+    if exclude_states:
+        outer_where_items.append("states CONTAINSNONE $exclude_states")
+        params["exclude_states"] = exclude_states    
+    if conditions:
+        if isinstance(conditions, list):
+            inner_where_items.extend([f"{DATA}.{cond}" for cond in conditions])
+        if isinstance(conditions, dict):
+            make_param_key = lambda k: re.sub(r"\W+", "_", k.strip()).lower()
+            for k, v in conditions.items():
+                param_key = make_param_key(k)
+                inner_where_items.append(f"{DATA}.{k} ${param_key}")
+                params[param_key] = v
 
-    where_items = []
+    fields_expr = "data" if not columns else "{" + ",\n".join([f"{col}: data.{col}" for col in columns]) + "}"
+    expr = f"""SELECT data FROM (
+        SELECT {id_key}, array::group(state) as states, array::group({fields_expr}) as data FROM {table}
+        {"WHERE "+ " AND ".join(inner_where_items) if inner_where_items else ""}
+        GROUP BY {id_key}
+    )"""
+    if outer_where_items:
+        expr += "\nWHERE " + "\nAND ".join(outer_where_items)
+
+    return expr, params
     
-    if isinstance(states, list) or isinstance(exclude_states, list):
-        # TODO: group by may be a better way to do this instead of subqueries, need to test performance on larger datasets
-        # else:
-        #     where_items.extend(f"(SELECT VALUE {id_key} FROM {table} WHERE {id_key} = $parent.{id_key} AND state = '{st}')" for st in states)
-        pass
-    else:
-        if states:
-            where_items.append("state = $states")
-            params["states"] = states
-        if exclude_states:        
-            # where_items.append(f"{id_key} NOTINSIDE (SELECT VALUE {id_key} FROM {table} WHERE state IN $exlude_states)")
-            where_items.append(f"!(SELECT VALUE 1 FROM {table} WHERE {id_key} = $parent.{id_key} AND state = $exlude_states)")
-            params["exlude_states"] = exclude_states
-
+def _create_single_state_query_expr(table: str, id_key: str, states: str, exclude_states: str, conditions: dict|list = None, columns: list[str] = None):
+    """
+    SELECT data.field1, data.field2 FROM beans
+    WHERE state = $states
+        AND !(SELECT VALUE 1 FROM beans WHERE url = $parent.url AND state = $exclude_states)
+        AND conditions...
+    """
+    params = {}
+    where_items = []
+    if states:
+        where_items.append("state = $states")
+        params["states"] = states if isinstance(states, str) else states[0]
+    if exclude_states:
+        where_items.append(f"!(SELECT VALUE 1 FROM {table} WHERE {id_key} = $parent.{id_key} AND state = $exlude_states)")
+        params["exlude_states"] = exclude_states if isinstance(exclude_states, str) else exclude_states[0]
     if conditions:
         if isinstance(conditions, list):
             where_items.extend([f"{DATA}.{cond}" for cond in conditions])
@@ -114,19 +146,32 @@ def create_query_expr(table: str, id_key: str, states: list[str], exclude_states
                 where_items.append(f"{DATA}.{k} ${param_key}")
                 params[param_key] = v
 
+    expr = f"""SELECT {"*" if not columns else ", ".join(["data."+col for col in columns])} FROM {table}"""
     if where_items:
-        expr += "\nWHERE " + " AND ".join(where_items)
+        expr += "\nWHERE " + "\nAND ".join(where_items)
 
+    return expr, params
+
+def create_query_expr(table: str, id_key: str, states: str|list[str], exclude_states: str|list[str], conditions: dict|list = None, limit: int = 0, offset: int = 0, columns: list[str] = None):
+    if (isinstance(states, list) and len(states) > 1) or (isinstance(exclude_states, list) and len(exclude_states) > 1):
+        # if there is more than 1 state to include or exclude, we need to use a group by for faster/easier querying
+        if isinstance(states, str): states = [states]
+        if isinstance(exclude_states, str): exclude_states = [exclude_states]
+        expr, params = _create_multi_state_query_expr(table, id_key, states, exclude_states, conditions, columns)
+       
+    else:
+        if isinstance(states, list): states = states[0]
+        if isinstance(exclude_states, list): exclude_states = exclude_states[0]
+        expr, params = _create_single_state_query_expr(table, id_key, states, exclude_states, conditions, columns)
+    
     if limit:
         expr += "\nLIMIT $limit"
-        params["limit"] = limit
-    
+        params["limit"] = limit    
     if offset:
         expr += "\nSTART $offset"
         params["offset"] = offset
     
-    return ic(expr), params
-
+    return expr, params
 
 def create_data_to_store(items: list[dict[str, Any]]|list[BaseModel], state: str, id_key: str):        
     data_items = items
