@@ -55,7 +55,7 @@ def update_db(db_type: str):
 def create_db(db_type: str):
     from pybeansack import create_db
     if db_type in ["lancedb", "lancesack", "lance"]:
-        db = create_db(db_type=db_type, lancedb_store=os.getenv('LANCEDB_STORAGE'), catalogs_dir=os.getenv('FACTORY_DIR'))
+        db = create_db(db_type=db_type, lancedb_storage=os.getenv('LANCEDB_STORAGE'), catalogs_dir=os.getenv('FACTORY_DIR'))
         print("Created new lancesack at", db.db.uri)
     elif db_type in ["pg", "postgres", "postgresql"]:
         db = create_db(db_type=db_type, pg_connection_string=os.getenv('PG_CONNECTION_STRING'), catalogs_dir=os.getenv('FACTORY_DIR'))

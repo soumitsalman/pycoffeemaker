@@ -38,6 +38,16 @@ class StateMachine:
         query_expr, params = create_query_expr(object_type, self.id_keys.get(object_type), states, exclude_states, conditions, limit, offset, columns)
         result = self.db.query(query_expr, params)
         return [r[DATA] for r in result]
+    
+    def deduplicate(self, object_type: str, state: str, items: list):
+        if not items:
+            return items
+        
+        expr, params, id_key, id_func = create_deduplicate_query_expr(self.id_keys, object_type, state, items)
+        result = self.db.query(expr, params)
+        result = set(r[id_key] for r in result)
+        # ic("duplicate", len(items)-len(result))
+        return [item for item in items if id_func(item) in result]
 
 class AsyncStateMachine:
     def __init__(self, db_path: str, object_id_keys: dict[str, Optional[str]]):
@@ -62,6 +72,16 @@ class AsyncStateMachine:
         result = await self.db.query(query_expr, params)
         return [r[DATA] for r in result]
 
+    async def deduplicate(self, object_type: str, state: str, items: list):
+        if not items:
+            return items
+
+        expr, params, id_key, id_func = create_deduplicate_query_expr(self.id_keys, object_type, state, items)
+        result = await self.db.query(expr, params)
+        result = set(r[id_key] for r in result)
+        # ic("duplicate", len(items)-len(result))
+        return [item for item in items if id_func(item) in result]
+
     async def __aexit__(self, exc_type, exc, tb):
         await self.db.query(create_optimize_expr(self.id_keys))
         await self.db.__aexit__(exc_type, exc, tb)
@@ -81,6 +101,20 @@ def create_table_expr(table: str, id_key: Optional[str]):
         DEFINE INDEX IF NOT EXISTS {table}_{id_key}_idx ON {table} FIELDS {id_key};
         """
     return expr
+
+def create_deduplicate_query_expr(id_keys: dict, table: str, state: str, items: list):
+    id_key = id_keys[table]
+    id_func = lambda item: getattr(item, id_key) if isinstance(item, BaseModel) else item[id_key]
+
+    expr = f"""
+    SELECT {id_key} FROM $data
+    WHERE !(SELECT VALUE 1 FROM {table} WHERE state = $state AND {id_key} = $parent.{id_key})
+    """
+    params = {
+        "data": [{id_key: id_func(d)} for d in items],
+        "state": state
+    }
+    return expr, params, id_key, id_func
 
 def _create_multi_state_query_expr(table: str, id_key: str, states: list[str], exclude_states: list[str], conditions: dict|list = None, columns: list[str] = None):
     """

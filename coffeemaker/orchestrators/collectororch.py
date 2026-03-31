@@ -3,10 +3,11 @@ import logging
 import os
 import random
 
-from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
-from coffeemaker.collectors.scraper import PublisherScraper
+from ..collectors import APICollector, WebScraperLite, parse_sources
+from ..collectors.scraper import PublisherScraper
 from .statemachines import AsyncStateMachine
 from .utils import *
+from icecream import ic
 from pybeansack import BEANS, Beansack, create_client
 from pybeansack.models import *
 
@@ -28,7 +29,6 @@ class Orchestrator:
     cache_kwargs: dict
     db: Beansack
     states: AsyncStateMachine
-    publisher_states: AsyncStateMachine
     run_total: int = 0
 
     def __init__(self, cache_kwargs: dict, db_kwargs: dict):
@@ -40,39 +40,39 @@ class Orchestrator:
             return
 
         beans = [item["bean"] for item in items if item and item.get("bean")]
-        publishers = [
-            item["publisher"] for item in items if item and item.get("publisher")
-        ]
+        publishers = [item["publisher"] for item in items if item and item.get("publisher")]
         chatters = [item["chatter"] for item in items if item and item.get("chatter")]
 
         if beans:
-            await self.set_beans_as_collected(source, beans)
+            # get the beans that are storable and mark them as collected
+            # send the rest to the deduplicated ones to scraper
+            await self.set_beans_as_collected(source, storables(beans))
         if publishers:
+            # get the publishers that are storable and mark them as collected
+            #send the deduplicated ones to scraper
             await asyncio.to_thread(self.db.store_publishers, publishers)
-        if chatters:
+        if chatters:            
             await asyncio.to_thread(self.db.store_chatters, chatters)
 
-        return await asyncio.to_thread(self.db.deduplicate, BEANS, scrapables(beans))
+        return await self.states.deduplicate("beans", "collected", scrapables(beans))
 
     async def _triage_scrape_async(self, source: str, items: list[dict]):
         beans = storables([item["bean"] for item in items if item and item.get("bean")])
-        publishers = [
-            item["publisher"] for item in items if item and item.get("publisher")
-        ]
-
-        log.info("scraped", extra={"source": source, "num_items": len(beans)})
+        publishers = [item["publisher"] for item in items if item and item.get("publisher")]
+       
         if beans:
+            log.info("scraped", extra={"source": source, "num_items": len(beans)})
             await self.set_beans_as_collected(source, beans)
         if publishers:
             await asyncio.to_thread(self.db.store_publishers, publishers)
 
-    async def set_beans_as_collected(self, source: str, beans: list[Bean]):
-        data = prepare_beans_for_store(storables(beans))
-        if not data:
-            return
-        count = await self.states.set("beans", "collected", beans)
-        log.info("collected", extra={"source": source, "num_items": count})
+    async def set_beans_as_collected(self, source: str, beans: list[Bean]):        
+        if not beans:
+            return 0
+        
+        count = await self.states.set("beans", "collected", prepare_beans_for_store(beans))
         self.run_total += count
+        log.info("collected", extra={"source": source, "num_items": count})
         return count        
 
     # @log_runtime_async(logger=log)

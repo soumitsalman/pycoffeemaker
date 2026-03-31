@@ -40,8 +40,8 @@ EMBEDDER_CONTEXT_LEN=512
 import json, re, random
 import asyncio
 from datetime import datetime
-from coffeemaker.pybeansack.warehouse import *
-from coffeemaker.pybeansack.models import *
+from pybeansack import *
+from pybeansack.models import *
 from coffeemaker.collectors import collector
 from coffeemaker.orchestrators.utils import log_runtime
 from concurrent.futures import ThreadPoolExecutor
@@ -198,7 +198,13 @@ def test_static_db():
 
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Orchestrator
-    orch = Orchestrator(db_kwargs=("lancedb:.beansack/lancesack_v2",))
+    orch = Orchestrator(
+        cache_kwargs={"statemachine_cache": "file://.cache"}, 
+        db_kwargs={
+            "db_type": "lancedb",
+            "lancedb_storage": ".beansack/lancesack_v2",
+        }
+    )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
     # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
     sources = """
@@ -225,7 +231,7 @@ def test_collector_orch():
             - CryptoNews
             - energyStocks
     """
-    asyncio.run(orch.run_async(sources, batch_size=128))
+    asyncio.run(orch.run_async(sources, batch_size=16))
     # orch.run(sources)
 
 def test_indexer_orch():
