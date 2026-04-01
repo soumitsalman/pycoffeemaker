@@ -173,9 +173,14 @@ if __name__ == "__main__":
 
         orch = Orchestrator(
             cache_kwargs=PROCESSING_CACHE_PATH,
-            db_kwargs=db_kwargs
+            db_kwargs=db_kwargs,
+            cdn_kwargs={
+                "bucket": os.getenv("CDN_BUCKET"),
+                "public_access_url_template": os.getenv("CDN_PUBLIC_ACCESS_URL_TEMPLATE"),
+                "max_concurrency": 100
+            }
         )
-        orch.run()
+        asyncio.run(orch.run_cdn_porter())
         orch.close()
 
     else:
