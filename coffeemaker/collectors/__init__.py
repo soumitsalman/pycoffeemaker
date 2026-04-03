@@ -6,4 +6,4 @@
 from .collector import *
 from .scraper import *
 
-__all__ = ['extract_base_url', 'extract_domain', 'parse_date', 'parse_sources', 'cleanup_beans', 'cleanup_chatters', 'cleanup_sources', 'APICollector', 'APICollectorAsync', 'WebScraper', 'WebScraperLite', 'PublisherScraper', 'REDDIT', 'HACKERNEWS']  # Specify modules to be exported
+__all__ = ['extract_base_url', 'extract_domain', 'parse_date', 'parse_sources', 'cleanup_item', 'APICollector', 'APICollectorAsync', 'WebCrawler', 'WebScraper', 'REDDIT', 'HACKERNEWS']  # Specify modules to be exported

@@ -16,6 +16,7 @@ RATELIMIT_WAIT = 600 # 600 seconds / 10 minutes
 POST = "post"
 BLOG = "blog"
 NEWS = "news"
+SITE = "site"
 CONTRACT = "contract"
 FINANCIAL_REPORT = "financial_report"
 EARNINGS_REPORT = "earnings_report"
@@ -25,6 +26,7 @@ SEC_FILING = "sec_filing"
 URL = "url"
 KIND = "kind"
 SOURCE = "source"
+PLATFORM = "platform"
 TITLE = "title"
 SUMMARY = "summary"
 CONTENT = "content"
@@ -43,6 +45,8 @@ COMMENTS = "comments"
 FORUM = "forum"
 RESTRICTED_CONTENT = "restricted_content"
 LANGUAGE = "language"
+ARTICLE_LANGUAGE = "article_language"
+SITE_LANGUAGE = "site_language"
 TAGS = "tags"
 AUTHOR_EMAIL = "author_email"
 
@@ -151,102 +155,51 @@ cleanup_author = lambda author: cleanup_text(author) if author and author.lower(
 def _distinct_by_key(items, key):
     return list({item.get(key): item for item in items if item and item.get(key)}.values())
 
-def validate_bean_item(item: dict) -> bool:
-    if not item: return False
-    return bool(item.get(TITLE) and item.get(COLLECTED) and item.get(CREATED) and item.get(SOURCE) and item.get(KIND))
 
-def validate_chatter_item(item: dict) -> bool:
-    if not item: return False
-    return bool(item.get(CHATTER_URL) and item.get(URL) and (item.get(LIKES) or item.get(COMMENTS) or item.get("subscribers")))
-
-def validate_source_item(item: dict) -> bool:
-    if not item: return False
-    return bool(item.get(SOURCE) and item.get(BASE_URL))
-
-# def cleanup_beans(items: list[dict]) -> list[dict]:
-#     if not items: return items
-
-#     for item in items:
-#         cleanup_bean_item(item)
-
-#     items = _distinct_by_key(items, URL)
-#     return list(filter(validate_bean_item, items))
-
-# def cleanup_sources(items: list[dict]) -> list[dict]:
-#     if not items: return items
-
-#     for item in items:
-#         cleanup_source_item(item)
-
-#     items = _distinct_by_key(items, SOURCE)
-#     return list(filter(validate_source_item, items))
-
-# def cleanup_chatters(items: list[dict]) -> list[dict]:
-#     if not items: return items
-
-#     for item in items:
-#         cleanup_chatter_item(item)
-
-#     return list(filter(validate_chatter_item, items))
-
-
-def cleanup_bean_item(item: dict) -> dict:
-    """Clean up a single bean item in-place."""
+def cleanup_item(item: dict) -> dict:
+    """Clean up a merged collection item in-place."""
     if not item:
         return item
 
-    item[URL] = cleanup_text(item.get(URL))
-    item[KIND] = cleanup_text(item.get(KIND))
-    item[SOURCE] = cleanup_text(item.get(SOURCE))
-    item[TITLE] = cleanup_text(item.get(TITLE))
-    item["title_length"] = count_words(item.get(TITLE))
-    item[SUMMARY] = cleanup_text(item.get(SUMMARY))
-    item["summary_length"] = count_words(item.get(SUMMARY))
-    item[CONTENT] = cleanup_text(item.get(CONTENT))
-    item["content_length"] = count_words(item.get(CONTENT))
-    item[AUTHOR] = cleanup_text(item.get(AUTHOR))
-    item[IMAGEURL] = cleanup_text(item.get(IMAGEURL))
+    for field in (
+        URL,
+        KIND,
+        SOURCE,
+        PLATFORM,
+        TITLE,
+        SUMMARY,
+        CONTENT,
+        AUTHOR,
+        IMAGEURL,
+        CHATTER_URL,
+        BASE_URL,
+        SITE_NAME,
+        DESCRIPTION,
+        FAVICON,
+        RSS_FEED,
+        LANGUAGE,
+        ARTICLE_LANGUAGE,
+        SITE_LANGUAGE,
+        AUTHOR_EMAIL,
+        FORUM,
+    ):
+        if field in item:
+            item[field] = cleanup_text(item.get(field))
+
+    item[AUTHOR] = cleanup_author(item.get(AUTHOR))
     item[CREATED] = item.get(CREATED) or now()
     item[COLLECTED] = item.get(COLLECTED) or now()
-    item[AUTHOR] = cleanup_author(item.get(AUTHOR))
-    item[LANGUAGE] = cleanup_text(item.get(LANGUAGE))
     item[TAGS] = list(set(item.get(TAGS) or []))
-    item[AUTHOR_EMAIL] = cleanup_text(item.get(AUTHOR_EMAIL))
-    # enrich BASE_URL from URL if missing
+    item["title_length"] = count_words(item.get(TITLE))
+    item["summary_length"] = count_words(item.get(SUMMARY))
+    item["content_length"] = count_words(item.get(CONTENT))
+
     if not item.get(BASE_URL) and item.get(URL):
         item[BASE_URL] = extract_base_url(item[URL])
     item[BASE_URL] = cleanup_text(item.get(BASE_URL))
+
     created = item.get(CREATED)
     if created and not getattr(created, "tzinfo", None):
         item[CREATED] = created.replace(tzinfo=timezone.utc)
-
-    return item
-
-
-def cleanup_chatter_item(item: dict) -> dict:
-    """Clean up a single chatter item in-place."""
-    if not item:
-        return item
-
-    item[CHATTER_URL] = cleanup_text(item.get(CHATTER_URL))
-    item[URL] = cleanup_text(item.get(URL))
-    item[FORUM] = cleanup_text(item.get(FORUM))
-    item[SOURCE] = cleanup_text(item.get(SOURCE))
-
-    return item
-
-
-def cleanup_source_item(item: dict) -> dict:
-    """Clean up a single source item in-place."""
-    if not item:
-        return item
-
-    item[SOURCE] = cleanup_text(item.get(SOURCE))
-    item[BASE_URL] = cleanup_text(item.get(BASE_URL))
-    item[FAVICON] = cleanup_text(item.get(FAVICON))
-    item[RSS_FEED] = cleanup_text(item.get(RSS_FEED))
-    item[DESCRIPTION] = cleanup_text(item.get(DESCRIPTION))
-    item[SITE_NAME] = cleanup_text(item.get(SITE_NAME))
-    item[COLLECTED] = item.get(COLLECTED) or now()
 
     return item

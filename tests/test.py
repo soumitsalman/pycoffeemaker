@@ -84,7 +84,7 @@ def test_collector_and_scraper():
     [coll.collect_rssfeed(f) for f in feeds]
 
 def test_scraper():
-    from coffeemaker.collectors import WebScraperLite
+    from coffeemaker.collectors import WebScraper
     urls = [
         "https://financebuzz.com/retirees-should-buy-at-bjs-4",
         "https://financebuzz.com/southern-lake-towns-afford-social-security",
@@ -96,14 +96,14 @@ def test_scraper():
     ]
 
     async def run():
-        async with WebScraperLite() as scraper:
+        async with WebScraper() as scraper:
             for url in urls:
-                ic(await scraper.scrape_url(url, False))
+                ic(await scraper.scrape_page(url, False))
     
     asyncio.run(run())
 
 def test_publisher_scraper():
-    from coffeemaker.collectors import PublisherScraper
+    from coffeemaker.collectors import WebScraper
     from coffeemaker.pybeansack import models, warehouse
     urls = [
         "https://financebuzz.com/retirees-should-buy-at-bjs-4",
@@ -125,8 +125,8 @@ def test_publisher_scraper():
     )   
 
     async def run():
-        async with PublisherScraper() as scraper:
-            ic(await scraper.scrape_urls(urls))
+        async with WebScraper() as scraper:
+            ic(await scraper.scrape_sites(urls))
             pubs = db.query_publishers(conditions=["rss_feed IS NULL", "favicon IS NULL", "site_name IS NULL"], limit=5)
             ic(await scraper.scrape_publishers(pubs))            
     

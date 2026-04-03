@@ -35,7 +35,7 @@ _HTML_REQUEST_HEADERS = {
     'Accept': "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5,application/signed-exchange;v=b3;q=0.9"
 }
 
-class WebScraperLite:
+class WebScraper:
     session: aiohttp.ClientSession = None
     throttle: asyncio.Semaphore = None
 
@@ -67,78 +67,147 @@ class WebScraperLite:
                     metadata[key] = tag.get('content') or tag.get('href')
                     break
 
-        if 'published_time' in metadata: metadata['published_time'] = parse_date(metadata['published_time'])
-        if 'favicon' in metadata: metadata['favicon'] = full_url(url, metadata['favicon'])
-        if 'rss_feed' in metadata: metadata['rss_feed'] = full_url(url, metadata['rss_feed'])
+        if 'published_time' in metadata: metadata[CREATED] = parse_date(metadata['published_time'])
+        if 'favicon' in metadata: metadata[FAVICON] = full_url(url, metadata['favicon'])
+        if 'rss_feed' in metadata: metadata[RSS_FEED] = full_url(url, metadata['rss_feed'])
         return metadata
 
     @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
-    async def _scrape(self, url: str) -> str:
+    async def _scrape_html(self, url: str) -> str:
         async with self.throttle, self.session.get(url) as response:
             html = await response.text()
         return html
 
-    async def scrape_url(self, url: str, collect_metadata=True): 
+    @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
+    async def _scrape_favicon(self, base_url: str):
+        async with self.throttle, self.session.get("https://www.google.com/s2/favicons?domain="+base_url) as response:
+            if response.status == 200: return response.headers.get('Content-Location')
+
+    async def _scrape_page(self, url: str):
+        """Scrape a single page for both bean and publisher data."""
         from readability import Document
-        if excluded_url(url): return 
+        if excluded_url(url): return None
         try:    
-            html = await self._scrape(url)
+            html = await self._scrape_html(url)
             doc = Document(html)
             body = {
-                'title': doc.short_title() or doc.title(),
-                'author': doc.author(), 
-                'content': strip_html_tags(doc.summary(html_partial=True))
+                TITLE: doc.short_title() or doc.title(),
+                AUTHOR: doc.author(), 
+                CONTENT: strip_html_tags(doc.summary(html_partial=True))
             }
-            if collect_metadata: body.update(self._get_metadata(url, html))
+            body.update(self._get_metadata(url, html))
             return body
         except Exception as e: 
             log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": url, "num_items": 1})
+            return None
 
-    def _prep_result(self, bean: dict, result) -> dict:
-        if not result: 
-            return {
-                "bean": None,
-                "publisher": None
-            }
-        bean[TITLE] = bean.get(TITLE) or result.get("meta_title") or result.get("title") # this sequence is important because result['title'] is often crap
-        bean[SUMMARY] = bean.get(SUMMARY) or result.get("description")
-        bean[CONTENT] = result.get("content")        
-        bean[AUTHOR] = result.get("author") or bean.get(AUTHOR)
-        bean[LANGUAGE] = result.get('language')
-        bean[TAGS] = [tag.strip() for tag in result.get('keywords', '').split(',')] if result.get('keywords') else None
-        bean[AUTHOR_EMAIL] = None
-        bean[CREATED] = min(result.get("published_time") or bean.get(CREATED), bean.get(COLLECTED))     
-        bean[RESTRICTED_CONTENT] = True
-        image_url = result.get("top_image")
-        if image_url: bean[IMAGEURL] = full_url(bean.get(URL), image_url)
+    async def _scrape_site(self, base_url: str):
+        """Scrape a single site for publisher data."""
+        if not base_url:
+            return None
+        if not base_url.startswith("http"): url = "https://"+base_url
+        else: url = base_url
 
-        base_url = extract_base_url(bean.get(URL))
-        publisher = {
-            SOURCE: bean.get(SOURCE),
+        meta = {
             BASE_URL: base_url,
+            SOURCE: extract_domain(url)
+        } 
+        
+        try:                  
+            html = await self._scrape_html(url)
+            meta.update(self._get_metadata(url, html))
+            meta[SITE_NAME] = meta.get(SITE_NAME) or meta.get('meta_title')
+            meta[DESCRIPTION] = meta.get(DESCRIPTION)
+            meta[SITE_LANGUAGE] = meta.get(LANGUAGE)
+            meta.pop(LANGUAGE, None)
+            if meta.get(FAVICON): meta[FAVICON] = full_url(base_url, meta[FAVICON])
+            else: meta[FAVICON] = await self._scrape_favicon(base_url)            
+            if meta.get(RSS_FEED): meta[RSS_FEED] = full_url(base_url, meta[RSS_FEED])
+            meta[COLLECTED] = now()
+            return meta
+        except Exception as e: 
+            log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": base_url, "num_items": 1})
+            return None
+
+    def _prep_page_result(self, bean: dict, result) -> dict:
+        """Prepare result for page scraping (bean and publisher)."""
+        if not result:
+            return None
+
+        item = {
+            **bean,
+            KIND: bean.get(KIND) or result.get(KIND),
+            TITLE: bean.get(TITLE) or result.get("meta_title") or result.get(TITLE),
+            SUMMARY: bean.get(SUMMARY) or result.get("description"),
+            CONTENT: result.get(CONTENT),
+            AUTHOR: result.get(AUTHOR) or bean.get(AUTHOR),
+            ARTICLE_LANGUAGE: result.get(LANGUAGE),
+            SITE_LANGUAGE: result.get(LANGUAGE),
+            TAGS: [tag.strip() for tag in result.get('keywords', '').split(',')] if result.get('keywords') else None,
+            AUTHOR_EMAIL: None,
+            CREATED: min(result.get(CREATED) or bean.get(CREATED), bean.get(COLLECTED)),
+            RESTRICTED_CONTENT: True,
             SITE_NAME: result.get('site_name'),
             DESCRIPTION: result.get('description'),
-            FAVICON: full_url(base_url, result.get('favicon')),
-            RSS_FEED: full_url(base_url, result.get("rss_feed")),
-            LANGUAGE: result.get('language')
+            FAVICON: full_url(extract_base_url(bean.get(URL)), result.get('favicon')) if result.get('favicon') else None,
+            RSS_FEED: full_url(extract_base_url(bean.get(URL)), result.get("rss_feed")) if result.get("rss_feed") else None,
+            IMAGEURL: full_url(bean.get(URL), result.get("top_image")) if result.get("top_image") else bean.get(IMAGEURL),
         }
 
-        # Apply per-item cleanup and validation
-        bean = cleanup_bean_item(bean)
-        publisher = cleanup_source_item(publisher)
-        
-        return {
-            "bean": bean if validate_bean_item(bean) else None,
-            "publisher": publisher if validate_source_item(publisher) else None,
-        }      
+        created = result.get(CREATED) or bean.get(CREATED) or bean.get(COLLECTED)
+        item[CREATED] = min(created, bean.get(COLLECTED)) if created and bean.get(COLLECTED) else created
 
-    async def scrape_urls(self, urls: list[str], collect_metadata=True):
-        results = await asyncio.gather(*[self.scrape_url(url, collect_metadata) for url in urls])
-        return results
+        if not item.get(KIND):
+            item[KIND] = guess_article_type(item)
+
+        return cleanup_item(item)
+
+    async def scrape_page(self, url: str, collect_metadata: bool = True):
+        """Scrape a single URL for both bean and publisher data."""
+        result = await self._scrape_page(url)
+        if not result:
+            return None
+
+        return self._prep_page_result({
+            URL: url,
+            SOURCE: extract_source(url),
+            COLLECTED: now()
+        }, result)
+
+    async def scrape_pages(self, urls: list[str], collect_metadata: bool = True):
+        """Scrape multiple URLs in parallel for bean and publisher data."""
+        results = await asyncio.gather(*[self._scrape_page(url) for url in urls])
+        return [
+            self._prep_page_result({
+                URL: url,
+                SOURCE: extract_source(url),
+                COLLECTED: now()
+            }, result) for url, result in zip(urls, results)
+        ]
     
-    async def scrape_beans(self, beans: list[dict], collect_metadata=True):
-        results = await self.scrape_urls([bean.get(URL) for bean in beans], collect_metadata)
-        return [self._prep_result(bean, result) for bean, result in zip(beans, results)]
+    async def scrape_beans(self, beans: list[dict], collect_metadata: bool = True):
+        """Augment existing beans with scraped data."""
+        results = await asyncio.gather(*[self._scrape_page(bean.get(URL)) for bean in beans])
+        return [self._prep_page_result(bean, result) for bean, result in zip(beans, results)]
+
+    async def scrape_site(self, url: str):
+        """Scrape a site for publisher data."""
+        base_url = extract_base_url(url)
+        publisher = await self._scrape_site(base_url)
+        return cleanup_item(publisher) if publisher else None
+
+    async def scrape_sites(self, urls: list[str]):
+        """Scrape multiple sites for publisher data, deduplicating by base_url."""
+        base_urls = {url: extract_base_url(url) for url in urls}
+        publishers = await asyncio.gather(*[self._scrape_site(base_url) for base_url in list(set(base_urls.values()))])
+        publishers = {publisher.get(BASE_URL): publisher for publisher in publishers if publisher}
+        return [cleanup_item(publishers.get(base_urls[url])) if publishers.get(base_urls[url]) else None for url in urls]
+    
+    async def scrape_publishers(self, publishers: list[dict]):
+        """Augment existing publishers with scraped data."""
+        base_urls = [publisher.get(BASE_URL) for publisher in publishers]
+        scraped = await asyncio.gather(*[self._scrape_site(base_url) for base_url in base_urls])
+        return [cleanup_item(scraped[i]) if scraped[i] else None for i in range(len(publishers))]
 
 # GENERIC URL COLLECTOR CONFIG
 _BASE_EXCLUDED_TAGS = ["script", "style", "nav", "footer", "navbar", "comment", "contact",
@@ -223,7 +292,7 @@ def _clean_markdown(markdown: str) -> str:
             return "\n".join(lines[i+1:])
     return markdown
 
-class WebScraper:        
+class WebCrawler:        
     browser_config = None
     batch_size = None
     remote_crawler = None
@@ -353,12 +422,12 @@ class WebScraper:
         """Collects the body of the url as a markdown"""
         if excluded_url(url): return
         results = await self._scrape([url], collect_metadata)
-        return WebScraper._package_result(results[url])
+        return WebCrawler._package_result(results[url])
 
     async def scrape_urls(self, urls: list[str], collect_metadata: bool) -> list[dict]:
         """Collects the bodies of the urls as markdowns"""
         results = await self._scrape(urls, collect_metadata)
-        return [WebScraper._package_result(results[url]) for url in urls]    
+        return [WebCrawler._package_result(results[url]) for url in urls]    
 
     async def scrape_beans(self, beans: list[dict], collect_metadata: bool = False) -> list[dict]:
         """Collects the bodies of the beans as markdowns"""
@@ -397,102 +466,6 @@ class WebScraper:
             ret.update(metadata)
         return ret
     
-# <meta property="og:site_name" content="Digital Seams"/>
-# <meta property="og:title" content="Digital Seams"/>
-# <meta property="og:url" content="https://digitalseams.com"/>
-# <meta property="og:type" content="website"/>
-# <meta property="og:description" content="A blog about the connections in our often-online existence, written by Bobbie Chen."/>
-# <meta itemprop="name" content="Digital Seams"/>
-# <meta itemprop="url" content="https://digitalseams.com"/>
-# <meta itemprop="description" content="A blog about the connections in our often-online existence, written by Bobbie Chen."/>
-# <link rel="icon" type="image/x-icon" href="https://images.squarespace-cdn.com/content/v1/598a2436f7e0ab837d08f4c6/5ba8778d-1fd1-45e3-a8cb-346b861097fe/favicon.ico?format=100w"/>
-# <link rel="alternate" type="application/rss+xml" title="RSS Feed" href="https://digitalseams.com/blog?format=rss" />
-
-class PublisherScraper:
-    session: aiohttp.ClientSession = None
-    throttle: asyncio.Semaphore = None
-
-    def __init__(self, batch_size: int = BATCH_SIZE):
-        self.throttle = asyncio.Semaphore(batch_size)
-        
-    async def __aenter__(self):
-        """Async context manager enter"""
-        self.session = aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit=BATCH_SIZE, limit_per_host=os.cpu_count()),
-            headers=_HTML_REQUEST_HEADERS, 
-            timeout=aiohttp.ClientTimeout(total=TIMEOUT),
-            raise_for_status=True
-        )
-        return self
-        
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit"""
-        if self.session:
-            await self.session.close()
-            self.session = None
-
-    def _get_metadata(self, url: str, html: str):
-        soup = BeautifulSoup(html, 'lxml')
-        metadata = {}
-        for key, selector in _METADATA_SELECTORS.items():
-            for sel in selector.split(", "):                
-                if tag := soup.select_one(sel):
-                    metadata[key] = tag.get('content') or tag.get('href')
-                    break
-
-        if FAVICON in metadata: metadata[FAVICON] = full_url(url, metadata[FAVICON])
-        if RSS_FEED in metadata: metadata[RSS_FEED] = full_url(url, metadata[RSS_FEED])
-        return metadata
-    
-    @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
-    async def _scrape_favicon(self, base_url: str):
-        async with self.throttle, self.session.get("https://www.google.com/s2/favicons?domain="+base_url) as response:
-            if response.status == 200: return response.headers.get('Content-Location')
-
-    @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
-    async def _scrape_html(self, url: str) -> str:
-        async with self.throttle, self.session.get(url) as response:
-            html = await response.text()
-        return html
-
-    async def _scrape_base_url(self, base_url: str) -> dict:
-        if not base_url.startswith("http"): url = "https://"+base_url
-        else: url = base_url
-
-        meta = {
-            BASE_URL: base_url,
-            SOURCE: extract_domain(url)
-        } 
-        
-        try:                  
-            html = await self._scrape_html(url)
-            meta.update(self._get_metadata(url, html))
-            meta[SITE_NAME] = meta.get(SITE_NAME) or meta.get('meta_title')
-            meta[DESCRIPTION] = meta.get('description')
-            meta[LANGUAGE] = meta.get('language')
-            if meta.get(FAVICON): meta[FAVICON] = full_url(base_url, meta[FAVICON])
-            else: meta[FAVICON] = await self._scrape_favicon(base_url)            
-            if meta.get(RSS_FEED): meta[RSS_FEED] = full_url(base_url, meta[RSS_FEED])
-            meta[COLLECTED] = now()
-            return {"publisher": meta}
-        except Exception as e: 
-            log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": base_url, "num_items": 1})
-
-    async def scrape_url(self, url: str) -> dict:
-        return await self._scrape_base_url(extract_base_url(url))
-
-    async def scrape_urls(self, urls: list[str]) -> list[dict]:
-        base_urls = {url: extract_base_url(url) for url in urls}
-        publishers = await asyncio.gather(*[self._scrape_base_url(base_url) for base_url in list(set(base_urls.values()))])
-        publishers = {publisher.get(BASE_URL): publisher for publisher in publishers if publisher}
-        return [publishers.get(base_urls[url]) for url in urls]
-    
-    async def scrape_beans(self, beans: list[dict]) -> list[dict]:
-        return await self.scrape_urls([bean.get(URL) for bean in beans])
-    
-    async def scrape_publishers(self, publishers: list[dict]) -> list[dict]:
-        return await asyncio.gather(*[self._scrape_base_url(publisher.get(BASE_URL)) for publisher in publishers])
-
 # import asyncio
 # from typing import List
 

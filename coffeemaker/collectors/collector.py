@@ -46,12 +46,10 @@ HACKERNEWS_ASK_STORIES = "https://hacker-news.firebaseio.com/v0/askstories.json"
 HACKERNEWS_SHOW_STORIES = "https://hacker-news.firebaseio.com/v0/showstories.json"
 HACKERNEWS_STORIES_URLS = [HACKERNEWS_TOP_STORIES, HACKERNEWS_NEW_STORIES, HACKERNEWS_ASK_STORIES, HACKERNEWS_SHOW_STORIES]
 
-
 from_timestamp = lambda timestamp: min(now(), datetime.fromtimestamp(timestamp, timezone.utc)) if timestamp else now()
 reddit_submission_permalink = lambda permalink: f"https://www.reddit.com{permalink}"
 hackernews_story_metadata = lambda id: f"https://hacker-news.firebaseio.com/v0/item/{id}.json"
 hackernews_story_permalink = lambda id: f"https://news.ycombinator.com/item?id={id}"
-
 
 def _batch_run(func: Callable, sources: list):
     results = None
@@ -85,7 +83,7 @@ def _extract_feed_metadata(feed, feed_url) -> dict:
         # DESCRIPTION: feed.get('subtitle') or feed.get('description'),
         # FAVICON: full_url(feed.get('link'), feed.get('icon')) if feed.get('icon') else full_url(feed.get('link'), feed.get('image', {}).get('href')) if feed.get('image') else None,
         # RSS_FEED: feed_url,
-        LANGUAGE: feed.get('language')
+        SITE_LANGUAGE: feed.get('language')
     }
 
 def _extract_main_image(entry: feedparser.FeedParserDict) -> str:
@@ -134,7 +132,7 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
     source = extract_source(entry_link)
     base_url = extract_base_url(entry_link)
 
-    bean = {
+    item = {
         URL: entry_link,
         BASE_URL: base_url,
         SOURCE: source,
@@ -142,7 +140,8 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
         SUMMARY: summary,
         CONTENT: content,
         AUTHOR: entry.get('author'),
-        LANGUAGE: language,
+        ARTICLE_LANGUAGE: language,
+        SITE_LANGUAGE: feed.get('language'),
         TAGS: [tag.lower() for tag in (tags or []) if isinstance(tag, str) and tag.strip()],
         AUTHOR_EMAIL: author_email,
         IMAGEURL: None,
@@ -152,39 +151,29 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
 
     image_url = _extract_main_image(entry)
     if image_url:
-        bean[IMAGEURL] = full_url(site_url, image_url)
+        item[IMAGEURL] = full_url(site_url, image_url)
 
-    bean[KIND] = guess_article_type(bean) or default_kind
+    item[KIND] = guess_article_type(item) or default_kind
 
     comments_url = entry.get('wfw_commentrss')
     comments_count = parse_int(entry.get('slash_comments') or entry.get('comments') or 0)
-    chatter = None
     if comments_url or comments_count > 0:
-        chatter = {
+        item.update({
             CHATTER_URL: comments_url,
             URL: entry_link,
-            SOURCE: source,
+            PLATFORM: source,
             COLLECTED: current_time,
             COMMENTS: comments_count,
-        }
+        })
 
-    publisher = {
+    item.update({
         SOURCE: source,
         BASE_URL: base_url,
         COLLECTED: current_time,
         **_extract_feed_metadata(feed, feed_url),
-    }
+    })
 
-    # Apply per-item cleanup and validation
-    bean = cleanup_bean_item(bean)
-    chatter = cleanup_chatter_item(chatter) if chatter else None
-    publisher = cleanup_source_item(publisher)
-        
-    return {
-        "bean": bean if validate_bean_item(bean) else None,
-        "chatter": chatter if validate_chatter_item(chatter) else None,
-        "publisher": publisher if validate_source_item(publisher) else None,
-    }
+    return cleanup_item(item)
 
 def _build_reddit_item(post, subreddit_name, default_kind: str):
     subreddit = f"r/{subreddit_name}"
@@ -200,7 +189,7 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
         source = extract_source(post.url)
         if source:
             url = post.url
-            bean = {
+            kind = guess_article_type({
                 URL: url,
                 BASE_URL: extract_base_url(url),
                 SOURCE: source,
@@ -210,8 +199,7 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
                 CREATED: created_time,
                 COLLECTED: current_time,
                 TAGS: [],
-            }
-            kind = guess_article_type(bean) or default_kind
+            }) or default_kind
         else:
             url = reddit_submission_permalink(post.url)
             kind = POST
@@ -219,7 +207,7 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
 
     base_url = extract_base_url(url)
 
-    bean = {
+    item = {
         URL: url,
         KIND: kind,
         TITLE: post.title,
@@ -230,34 +218,14 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
         CREATED: created_time,
         COLLECTED: current_time,
         TAGS: [],
-    }
-
-    chatter = {
+        PLATFORM: REDDIT,
         CHATTER_URL: chatter_link,
-        URL: url,
-        SOURCE: REDDIT,
         FORUM: subreddit,
-        COLLECTED: current_time,
         LIKES: post.score,
         COMMENTS: post.num_comments,
     }
 
-    publisher = {
-        SOURCE: source,
-        BASE_URL: base_url,
-        COLLECTED: current_time,
-    }
-
-    # Apply per-item cleanup and validation
-    bean = cleanup_bean_item(bean)
-    chatter = cleanup_chatter_item(chatter)
-    publisher = cleanup_source_item(publisher)
-        
-    return {
-        "bean": bean if validate_bean_item(bean) else None,
-        "chatter": chatter if validate_chatter_item(chatter) else None,
-        "publisher": publisher if validate_source_item(publisher) else None,
-    }
+    return cleanup_item(item)
 
 def _build_hackernews_item(story: dict, default_kind: str):
     current_time = now()
@@ -268,7 +236,7 @@ def _build_hackernews_item(story: dict, default_kind: str):
         url = story['url']
         source = extract_source(url)
         tags = []
-        kind = guess_article_type({'URL': url, 'SOURCE': source}) or default_kind
+        kind = guess_article_type({'URL': url, 'SOURCE': source}) or (SITE if "show hn" in story.get('title', '').lower() else default_kind)
     else:
         url = hackernews_story_permalink(story_id)
         source = HACKERNEWS
@@ -277,7 +245,7 @@ def _build_hackernews_item(story: dict, default_kind: str):
 
     base_url = extract_base_url(url)
 
-    bean = {
+    item = {
         URL: url,
         KIND: kind,
         TITLE: story.get('title'),
@@ -288,34 +256,14 @@ def _build_hackernews_item(story: dict, default_kind: str):
         CREATED: created_time,
         COLLECTED: current_time,
         TAGS: tags,
-    }
-
-    chatter = {
+        PLATFORM: HACKERNEWS,
         CHATTER_URL: hackernews_story_permalink(story_id),
-        URL: url,
-        SOURCE: HACKERNEWS,
         FORUM: str(story_id),
-        COLLECTED: current_time,
         LIKES: story.get('score'),
         COMMENTS: len(story.get('kids', [])),
     }
 
-    publisher = {
-        SOURCE: source,
-        BASE_URL: base_url,
-        COLLECTED: current_time,
-    }
-
-    # Apply per-item cleanup and validation
-    bean = cleanup_bean_item(bean)
-    chatter = cleanup_chatter_item(chatter)
-    publisher = cleanup_source_item(publisher)
-        
-    return {
-        "bean": bean if validate_bean_item(bean) else None,
-        "chatter": chatter if validate_chatter_item(chatter) else None,
-        "publisher": publisher if validate_source_item(publisher) else None,
-    }
+    return cleanup_item(item)
 
 
 class APICollector:

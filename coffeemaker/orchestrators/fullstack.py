@@ -4,6 +4,7 @@ import logging
 import asyncio
 
 from asyncio import Queue
+from deprecated import deprecated
 from azure.storage.blob import BlobClient
 from typing import Awaitable
 from pymongo import UpdateOne
@@ -48,6 +49,7 @@ async def _enqueue_beans(queue: Queue, source: str, beans: list[Bean]):
     if not beans: return
     await asyncio.gather(*[queue.put((source, beans[i:i+BATCH_SIZE])) for i in range(0, len(beans), BATCH_SIZE)])
 
+@deprecated(reason="This orchestrator is deprecated in favor of worker orchestration from `run.py`")
 class Orchestrator:
     run_id: str = None
     download_queue: Queue = None
