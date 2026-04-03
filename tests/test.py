@@ -231,7 +231,7 @@ def test_collector_orch():
             - CryptoNews
             - energyStocks
     """
-    asyncio.run(orch.run_async(sources, batch_size=16))
+    asyncio.run(orch.run(sources, batch_size=16))
     # orch.run(sources)
 
 def test_indexer_orch():
@@ -317,7 +317,7 @@ def test_refresher_orch():
 def test_warehouse():
     from coffeemaker.pybeansack.warehouse import Beansack, DIGEST_COLUMNS
     from coffeemaker.pybeansack.models import K_URL, K_CREATED, K_CONTENT, Bean
-    from coffeemaker.collectors.collector import APICollector, parse_sources
+    from coffeemaker.collectors.collector import APICollectorAsync, parse_sources
     from coffeemaker.orchestrators.composerorch import parse_topics
     from coffeemaker.nlp.src import embedders, agents
     from tqdm import tqdm
@@ -327,14 +327,14 @@ def test_warehouse():
         storagedb=".test/beansack/storage",
         factory_dir="factory"
     )
-    col = APICollector(batch_size=128)
+    col = APICollectorAsync(batch_size=128)
     sources = parse_sources(f"{os.path.dirname(__file__)}/sources-2.yaml")
     embedder = embedders.from_path(os.getenv('EMBEDDER_PATH'), EMBEDDER_CONTEXT_LEN)
     
     async def run_collector():
         async with col:
             for rss in sources['rss'][:5]:
-                beans = await col.collect_rssfeed_async(rss)
+                beans = await col.collect_rssfeed(rss)
                 ic(db.store_beans(beans))
     if False: asyncio.run(run_collector())
 

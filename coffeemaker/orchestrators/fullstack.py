@@ -12,7 +12,7 @@ from coffeemaker.nlp import Digest, DIGEST_SYSTEM_PROMPT
 from coffeemaker.pybeansack.ducksack import Beansack as DuckSack
 from coffeemaker.pybeansack.mongosack import Beansack
 from coffeemaker.pybeansack.models import *
-from coffeemaker.collectors import APICollector, WebScraperLite, parse_sources
+from coffeemaker.collectors import APICollectorAsync, WebScraperLite, parse_sources
 from coffeemaker.nlp.src import agents, embedders, utils
 from coffeemaker.orchestrators.utils import *
 
@@ -75,7 +75,7 @@ class Orchestrator:
         digestor_context_len: int = int(os.getenv("DIGESTOR_CONTEXT_LEN", 4096)),
         clus_eps: float = float(os.getenv("CLUSTER_EPS", 3))
     ): 
-        self.apicollector = APICollector()   
+        self.apicollector = APICollectorAsync()   
         self.scraper = WebScraperLite()
         self.embedder = embedders.from_path(embedder_path, embedder_context_len)
         self.digestor = agents.text2text_agent_from_path(
@@ -257,8 +257,8 @@ class Orchestrator:
             # awaiting on each group so that os is not overwhelmed by sockets
             log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
             if source_type == 'ychackernews': await self.triage_collection(self.apicollector.collect_ychackernews(source_paths))
-            elif source_type == 'reddit': await self.triage_collection(self.apicollector.collect_subreddits(source_paths))
-            elif source_type == 'rss': await self.triage_collection(self.apicollector.collected_rssfeeds(source_paths))
+            elif source_type == 'reddit': await self.triage_collection(asyncio.gather(*[self.apicollector.collect_subreddit(source) for source in source_paths]))
+            elif source_type == 'rss': await self.triage_collection(asyncio.gather(*[self.apicollector.collect_rssfeed(source) for source in source_paths]))
 
     async def triage_collection(self, collection: list[tuple[Bean, Chatter]]|Awaitable[list[tuple[Bean, Chatter]]]):
         if isinstance(collection, Awaitable): collection = await collection
@@ -360,7 +360,7 @@ class Orchestrator:
         # 5. wait for the downloading to finish and then put the end of stream for indexing
         # 6. wait for indexing to finish
 
-        with self.apicollector, self.scraper:
+        async with self.apicollector, self.scraper:
             await self.run_collections_async(sources)
             await self.download_queue.put(END_OF_STREAM)
             # self.cleanup()

@@ -8,7 +8,6 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from retry import retry
 from .utils import *
-from pybeansack.models import *
 from icecream import ic
 
 log = logging.getLogger(__name__)
@@ -26,7 +25,9 @@ _METADATA_SELECTORS = {
     'kind': "meta[property='og:type']",
     'author': "meta[name='author'], meta[name='dc.creator']",    
     'favicon': "link[rel='shortcut icon'], link[rel='icon']",
-    'rss_feed': "link[type='application/rss+xml']"
+    'rss_feed': "link[type='application/rss+xml']",
+    'language': "meta[http-equiv='content-language'], meta[name='language'], html[lang]",
+    'keywords': "meta[name='keywords']"
 }
 _HTML_REQUEST_HEADERS = {
     "User-Agent": USER_AGENT,
@@ -93,39 +94,50 @@ class WebScraperLite:
         except Exception as e: 
             log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": url, "num_items": 1})
 
-    def _prep_result(self, bean: Bean, result) -> dict:
-        if not result: return {
-            "bean": bean,
-            "publisher": None
-        }
-        bean.title = bean.title or result.get("meta_title") or result.get("title") # this sequence is important because result['title'] is often crap
-        bean.summary = bean.summary or result.get("description")
-        bean.content = result.get("content")        
-        bean.author = result.get("author") or bean.author
-        bean.created = min(result.get("published_time") or bean.created, bean.collected)     
-        bean.restricted_content = True
+    def _prep_result(self, bean: dict, result) -> dict:
+        if not result: 
+            return {
+                "bean": None,
+                "publisher": None
+            }
+        bean[TITLE] = bean.get(TITLE) or result.get("meta_title") or result.get("title") # this sequence is important because result['title'] is often crap
+        bean[SUMMARY] = bean.get(SUMMARY) or result.get("description")
+        bean[CONTENT] = result.get("content")        
+        bean[AUTHOR] = result.get("author") or bean.get(AUTHOR)
+        bean[LANGUAGE] = result.get('language')
+        bean[TAGS] = [tag.strip() for tag in result.get('keywords', '').split(',')] if result.get('keywords') else None
+        bean[AUTHOR_EMAIL] = None
+        bean[CREATED] = min(result.get("published_time") or bean.get(CREATED), bean.get(COLLECTED))     
+        bean[RESTRICTED_CONTENT] = True
         image_url = result.get("top_image")
-        if image_url: bean.image_url = full_url(bean.url, image_url)
+        if image_url: bean[IMAGEURL] = full_url(bean.get(URL), image_url)
 
-        base_url = extract_base_url(bean.url)
-        publisher = Publisher(
-            source=bean.source,
-            base_url=base_url,
-            site_name=result.get('site_name'),
-            favicon=full_url(base_url, result.get('favicon')),
-            rss_feed=full_url(base_url, result.get("rss_feed"))
-        )
+        base_url = extract_base_url(bean.get(URL))
+        publisher = {
+            SOURCE: bean.get(SOURCE),
+            BASE_URL: base_url,
+            SITE_NAME: result.get('site_name'),
+            DESCRIPTION: result.get('description'),
+            FAVICON: full_url(base_url, result.get('favicon')),
+            RSS_FEED: full_url(base_url, result.get("rss_feed")),
+            LANGUAGE: result.get('language')
+        }
+
+        # Apply per-item cleanup and validation
+        bean = cleanup_bean_item(bean)
+        publisher = cleanup_source_item(publisher)
+        
         return {
-            "bean": bean,
-            "publisher": publisher
+            "bean": bean if validate_bean_item(bean) else None,
+            "publisher": publisher if validate_source_item(publisher) else None,
         }      
 
     async def scrape_urls(self, urls: list[str], collect_metadata=True):
         results = await asyncio.gather(*[self.scrape_url(url, collect_metadata) for url in urls])
         return results
     
-    async def scrape_beans(self, beans: list[Bean], collect_metadata=True):
-        results = await self.scrape_urls([bean.url for bean in beans], collect_metadata)
+    async def scrape_beans(self, beans: list[dict], collect_metadata=True):
+        results = await self.scrape_urls([bean.get(URL) for bean in beans], collect_metadata)
         return [self._prep_result(bean, result) for bean, result in zip(beans, results)]
 
 # GENERIC URL COLLECTOR CONFIG
@@ -150,6 +162,8 @@ _METADATA_SELECTORS_SCHEMA = {
         # all link selectors
         {"name": "favicon", "type": "attribute", "selector": "link[rel='shortcut icon'][type='image/png'], link[rel='icon']", "attribute": "href"},
         {"name": "rss_feed", "type": "attribute", "selector": "link[type='application/rss+xml']", "attribute": "href"},
+        {"name": "language", "type": "attribute", "selector": "meta[http-equiv='content-language'], meta[name='language'], html", "attribute": "lang"},
+        {"name": "keywords", "type": "attribute", "selector": "meta[name='keywords']", "attribute": "content"},
     ]
 }
 _MARKDOWN_SELECTORS = ", ".join([
@@ -346,20 +360,23 @@ class WebScraper:
         results = await self._scrape(urls, collect_metadata)
         return [WebScraper._package_result(results[url]) for url in urls]    
 
-    async def scrape_beans(self, beans: list[Bean], collect_metadata: bool = False) -> list[Bean]:
+    async def scrape_beans(self, beans: list[dict], collect_metadata: bool = False) -> list[dict]:
         """Collects the bodies of the beans as markdowns"""
-        results = await self.scrape_urls([bean.url for bean in beans], collect_metadata)
+        results = await self.scrape_urls([bean.get(URL) for bean in beans], collect_metadata)
         current_time = now()
         for bean, result in zip(beans, results):
             if not result: continue
-            bean.content = result.get("markdown")
-            bean.title = bean.title or result.get("title") or result.get("meta_title") # this sequence is important because result['title'] is often crap            
-            bean.author = result.get("author") or bean.author
-            bean.created = min(result.get("published_time") or bean.created or bean.collected, current_time)
-            bean.summary = bean.summary or result.get("description")
-            bean.restricted_content = True
+            bean[CONTENT] = result.get("markdown")
+            bean[TITLE] = bean.get(TITLE) or result.get("title") or result.get("meta_title") # this sequence is important because result['title'] is often crap            
+            bean[AUTHOR] = result.get("author") or bean.get(AUTHOR)
+            bean[CREATED] = min(result.get("published_time") or bean.get(CREATED) or bean.get(COLLECTED), current_time)
+            bean[SUMMARY] = bean.get(SUMMARY) or result.get("description")
+            bean[LANGUAGE] = result.get("language")
+            bean[TAGS] = [tag.strip() for tag in result.get('keywords', '').split(',')] if result.get('keywords') else None
+            bean[AUTHOR_EMAIL] = None
+            bean[RESTRICTED_CONTENT] = True
             image_url = result.get("top_image")
-            if image_url: bean.image_url = full_url(bean.url, image_url)
+            if image_url: bean[IMAGEURL] = full_url(bean.get(URL), image_url)
         return beans
 
     def _package_result(result) -> dict:   
@@ -423,8 +440,8 @@ class PublisherScraper:
                     metadata[key] = tag.get('content') or tag.get('href')
                     break
 
-        if K_FAVICON in metadata: metadata[K_FAVICON] = full_url(url, metadata[K_FAVICON])
-        if K_RSS_FEED in metadata: metadata[K_RSS_FEED] = full_url(url, metadata[K_RSS_FEED])
+        if FAVICON in metadata: metadata[FAVICON] = full_url(url, metadata[FAVICON])
+        if RSS_FEED in metadata: metadata[RSS_FEED] = full_url(url, metadata[RSS_FEED])
         return metadata
     
     @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
@@ -438,37 +455,84 @@ class PublisherScraper:
             html = await response.text()
         return html
 
-    async def _scrape_base_url(self, base_url: str) -> Publisher:
+    async def _scrape_base_url(self, base_url: str) -> dict:
         if not base_url.startswith("http"): url = "https://"+base_url
         else: url = base_url
 
         meta = {
-            K_BASE_URL: base_url,
-            K_SOURCE: extract_domain(url)
+            BASE_URL: base_url,
+            SOURCE: extract_domain(url)
         } 
         
         try:                  
             html = await self._scrape_html(url)
             meta.update(self._get_metadata(url, html))
-            meta[K_SITE_NAME] = meta.get(K_SITE_NAME) or meta.get('meta_title')
-            if meta.get(K_FAVICON): meta[K_FAVICON] = full_url(base_url, meta[K_FAVICON])
-            else: meta[K_FAVICON] = await self._scrape_favicon(base_url)            
-            if meta.get(K_RSS_FEED): meta[K_RSS_FEED] = full_url(base_url, meta[K_RSS_FEED])
-            return Publisher(**meta, collected=now())
+            meta[SITE_NAME] = meta.get(SITE_NAME) or meta.get('meta_title')
+            meta[DESCRIPTION] = meta.get('description')
+            meta[LANGUAGE] = meta.get('language')
+            if meta.get(FAVICON): meta[FAVICON] = full_url(base_url, meta[FAVICON])
+            else: meta[FAVICON] = await self._scrape_favicon(base_url)            
+            if meta.get(RSS_FEED): meta[RSS_FEED] = full_url(base_url, meta[RSS_FEED])
+            meta[COLLECTED] = now()
+            return {"publisher": meta}
         except Exception as e: 
             log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": base_url, "num_items": 1})
 
-    async def scrape_url(self, url: str) -> Publisher:
+    async def scrape_url(self, url: str) -> dict:
         return await self._scrape_base_url(extract_base_url(url))
 
-    async def scrape_urls(self, urls: list[str]) -> list[Publisher]:
+    async def scrape_urls(self, urls: list[str]) -> list[dict]:
         base_urls = {url: extract_base_url(url) for url in urls}
         publishers = await asyncio.gather(*[self._scrape_base_url(base_url) for base_url in list(set(base_urls.values()))])
-        publishers = {publisher.base_url: publisher for publisher in publishers if publisher}
+        publishers = {publisher.get(BASE_URL): publisher for publisher in publishers if publisher}
         return [publishers.get(base_urls[url]) for url in urls]
     
-    async def scrape_beans(self, beans: list[Bean]) -> list[Publisher]:
-        return await self.scrape_urls([bean.url for bean in beans])
+    async def scrape_beans(self, beans: list[dict]) -> list[dict]:
+        return await self.scrape_urls([bean.get(URL) for bean in beans])
     
-    async def scrape_publishers(self, publishers: list[Publisher]) -> list[Publisher]:
-        return await asyncio.gather(*[self._scrape_base_url(publisher.base_url) for publisher in publishers])
+    async def scrape_publishers(self, publishers: list[dict]) -> list[dict]:
+        return await asyncio.gather(*[self._scrape_base_url(publisher.get(BASE_URL)) for publisher in publishers])
+
+# import asyncio
+# from typing import List
+
+# import aiohttp
+# from docling.datamodel.base_models import InputFormat
+# from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions, AcceleratorOptions
+# from docling.document_converter import DocumentConverter
+# from docling.datamodel.settings import settings
+
+# class PDFScraper:
+#     _converter = None
+
+#     def __init__(self):
+#         if self._converter is None:
+#             opts = ThreadedPdfPipelineOptions(
+#                 do_ocr=False,
+#                 do_table_structure=True,
+#                 do_image_extraction=False,
+#                 generate_page_images=False,
+#                 generate_picture_images=False,
+#                 layout_batch_size=1,
+#                 table_batch_size=1,
+#             )
+#             opts.accelerator_options = AcceleratorOptions(num_threads=1, device="cpu")
+#             self.__class__._converter = DocumentConverter(format_options={InputFormat.PDF: opts})
+#         self.converter = self._converter
+#         self._sem = asyncio.Semaphore(2)   # 1-2 vCPU limit, no lock needed
+
+#     async def scrape_urls(self, urls: List[str]) -> List[str]:
+#         async with aiohttp.ClientSession(
+#             connector=aiohttp.TCPConnector(limit=2),
+#             timeout=aiohttp.ClientTimeout(total=90)
+#         ) as session:
+#             tasks = [self._convert_one(session, url) for url in urls]
+#             return await asyncio.gather(*tasks, return_exceptions=True)
+
+#     async def _convert_one(self, session: aiohttp.ClientSession, url: str) -> str:
+#         async with self._sem:
+#             async with session.get(url) as resp:
+#                 resp.raise_for_status()
+#                 pdf_bytes = await resp.read()
+#             result = await asyncio.to_thread(self.converter.convert, pdf_bytes, filetype="pdf")
+#             return result.document.export_to_markdown()

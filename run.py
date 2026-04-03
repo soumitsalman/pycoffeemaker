@@ -94,7 +94,7 @@ if __name__ == "__main__":
             db_kwargs=db_kwargs
         )
         asyncio.run(
-            orch.run_async(
+            orch.run(
                 os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
                 batch_size=batch_size,
             )

@@ -27,6 +27,8 @@ class StateMachine:
         self.db.close()
 
     def set(self, object_type: str, state: str, items: list[dict[str, Any]]|list[BaseModel]):
+        if not items:
+            return 0
         id_key = self.id_keys.get(object_type)
         inserted = self.db.query(
             f"INSERT IGNORE INTO {object_type} $data RETURN VALUE id",
@@ -43,11 +45,9 @@ class StateMachine:
         if not items:
             return items
         
-        expr, params, id_key, id_func = create_deduplicate_query_expr(self.id_keys, object_type, state, items)
+        expr, params, id_key, id_func = create_exists_query_expr(self.id_keys, object_type, state, items)
         result = self.db.query(expr, params)
-        result = set(r[id_key] for r in result)
-        # ic("duplicate", len(items)-len(result))
-        return [item for item in items if id_func(item) in result]
+        return [item for item in items if id_func(item) not in result]
 
 class AsyncStateMachine:
     def __init__(self, db_path: str, object_id_keys: dict[str, Optional[str]]):
@@ -60,6 +60,9 @@ class AsyncStateMachine:
         await asyncio.gather(*[self.db.query(create_table_expr(table, id_key)) for table, id_key in self.id_keys.items()])
 
     async def set(self, object_type: str, state: str, items: list[dict[str, Any]]|list[BaseModel]):
+        if not items:
+            return 0
+        
         id_key = self.id_keys.get(object_type)
         inserted = await self.db.query(
             f"INSERT IGNORE INTO {object_type} $data RETURN VALUE id",
@@ -76,11 +79,9 @@ class AsyncStateMachine:
         if not items:
             return items
 
-        expr, params, id_key, id_func = create_deduplicate_query_expr(self.id_keys, object_type, state, items)
+        expr, params, id_key, id_func = create_exists_query_expr(self.id_keys, object_type, state, items)
         result = await self.db.query(expr, params)
-        result = set(r[id_key] for r in result)
-        # ic("duplicate", len(items)-len(result))
-        return [item for item in items if id_func(item) in result]
+        return [item for item in items if id_func(item) not in result]
 
     async def __aexit__(self, exc_type, exc, tb):
         await self.db.query(create_optimize_expr(self.id_keys))
@@ -102,16 +103,13 @@ def create_table_expr(table: str, id_key: Optional[str]):
         """
     return expr
 
-def create_deduplicate_query_expr(id_keys: dict, table: str, state: str, items: list):
+def create_exists_query_expr(id_keys: dict, table: str, state: str, items: list):
     id_key = id_keys[table]
     id_func = lambda item: getattr(item, id_key) if isinstance(item, BaseModel) else item[id_key]
 
-    expr = f"""
-    SELECT {id_key} FROM $data
-    WHERE !(SELECT VALUE 1 FROM {table} WHERE state = $state AND {id_key} = $parent.{id_key})
-    """
+    expr = f"""SELECT VALUE {id_key} FROM {table} WHERE state = $state AND {id_key} INSIDE $data;"""
     params = {
-        "data": [{id_key: id_func(d)} for d in items],
+        "data": [id_func(d) for d in items],
         "state": state
     }
     return expr, params, id_key, id_func
