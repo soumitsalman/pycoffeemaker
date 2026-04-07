@@ -33,35 +33,60 @@ from ..collectors.utils import (
     TITLE,
     URL,
 )
-from .statemachines import AsyncStateMachine
+from .statemachines_pg import StateMachine
 from .utils import *
 from pybeansack import Beansack, create_client
 from pybeansack.models import *
 from icecream import ic
 
-BATCH_SIZE = int(
-    os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count())
-)
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count()))
 WORDS_THRESHOLD_FOR_STORING = int(
     os.getenv("WORDS_THRESHOLD_FOR_STORING", 160)
 )  # min words needed to not download the body
 
-is_bean_storable = lambda bean: bean and bean.get("content") and count_words(bean.get("content")) >= WORDS_THRESHOLD_FOR_STORING
-scrapable_beans = lambda beans: [bean for bean in beans if not is_bean_storable(bean)] if beans else beans
+is_bean_storable = (
+    lambda bean: bean
+    and bean.get("content")
+    and count_words(bean.get("content")) >= WORDS_THRESHOLD_FOR_STORING
+)
+scrapable_beans = (
+    lambda beans: [bean for bean in beans if not is_bean_storable(bean)]
+    if beans
+    else beans
+)
 storable_beans = lambda beans: list(filter(is_bean_storable, beans)) if beans else beans
-is_publisher_storable = lambda publisher: publisher and (publisher.get("site_name") or publisher.get("rss_feed") or publisher.get("description"))
-storable_publishers = lambda publishers: list(filter(is_publisher_storable, publishers)) if publishers else publishers
+is_publisher_storable = lambda publisher: publisher and (
+    publisher.get("site_name")
+    or publisher.get("rss_feed")
+    or publisher.get("description")
+)
+storable_publishers = (
+    lambda publishers: list(filter(is_publisher_storable, publishers))
+    if publishers
+    else publishers
+)
+
 
 def validate_bean_item(item: dict) -> bool:
     if not item:
         return False
-    return bool(item.get(TITLE) and item.get(COLLECTED) and item.get(CREATED) and item.get(SOURCE) and item.get(KIND))
+    return bool(
+        item.get(TITLE)
+        and item.get(COLLECTED)
+        and item.get(CREATED)
+        and item.get(SOURCE)
+        and item.get(KIND)
+    )
 
 
 def validate_chatter_item(item: dict) -> bool:
     if not item:
         return False
-    return bool(item.get(CHATTER_URL) and item.get(URL) and (item.get(LIKES) or item.get(COMMENTS) or item.get("subscribers")))
+    return bool(
+        item.get(CHATTER_URL)
+        and item.get(URL)
+        and (item.get(LIKES) or item.get(COMMENTS) or item.get("subscribers"))
+    )
 
 
 def validate_source_item(item: dict) -> bool:
@@ -69,21 +94,22 @@ def validate_source_item(item: dict) -> bool:
         return False
     return bool(item.get(SOURCE) and item.get(BASE_URL))
 
+
 log = logging.getLogger(__name__)
 
+
 class Orchestrator:
-    cache_kwargs: dict
     db: Beansack
-    states: AsyncStateMachine
+    state_store: StateMachine
     apicollector: APICollectorAsync
     webscraper: WebScraper
     run_id: str
     beans_collected: int
     publishers_collected: int
 
-    def __init__(self, cache_kwargs: dict, db_kwargs: dict):
-        self.db = create_client(**db_kwargs)        
-        self.states = AsyncStateMachine(cache_kwargs["statemachine_cache"], object_id_keys={"beans": K_URL, "publishers": K_BASE_URL})
+    def __init__(self, state_store, db):
+        self.db = db   
+        self.state_store = state_store
 
     def _split_item(self, item: dict):
         if not item:
@@ -133,39 +159,41 @@ class Orchestrator:
             COLLECTED: item.get(COLLECTED),
             LANGUAGE: item.get(SITE_LANGUAGE) or item.get(LANGUAGE),
         }
-        publisher = {key: value for key, value in publisher.items() if value is not None}
+        publisher = {
+            key: value for key, value in publisher.items() if value is not None
+        }
 
-        return \
-            bean if validate_bean_item(bean) else None, \
-            chatter if validate_chatter_item(chatter) else None, \
-            publisher if validate_source_item(publisher) else None
+        return (
+            bean if validate_bean_item(bean) else None,
+            chatter if validate_chatter_item(chatter) else None,
+            publisher if validate_source_item(publisher) else None,
+        )
 
-    def _split_items(self, items: list[dict]):        
+    def _split_items(self, items: list[dict]):
         beans, chatters, publishers = [], [], []
 
         for item in items or []:
             bean, chatter, publisher = self._split_item(item)
-            if bean: beans.append(bean)
-            if chatter: chatters.append(chatter)
-            if publisher: publishers.append(publisher)
+            if bean:
+                beans.append(bean)
+            if chatter:
+                chatters.append(chatter)
+            if publisher:
+                publishers.append(publisher)
 
         return beans, chatters, publishers
-
-    async def _collect(self, collect_func, *args, **kwargs):
-        try:
-            await self._triage(
-                await collect_func(*args, **kwargs),
-                scrape_on_fail=True
-            )
-        except Exception as e:
-            log.warning(f"{collect_func.__name__}{args} failed", extra={"source": e, "num_items": 1})
 
     async def _triage(self, items: list[dict], scrape_on_fail: bool):
         """Store storable collection results and persist the rest for scraping."""
         if not items:
             return
 
-        beans, chatters, publishers = self._split_items(items)
+        try:
+            beans, chatters, publishers = self._split_items(items)
+        except Exception as e:
+            ic("WTF", e)
+            return
+
         chatters = [Chatter(**item) for item in chatters]
 
         async with asyncio.TaskGroup() as tg:
@@ -180,47 +208,72 @@ class Orchestrator:
                     tg.create_task(self._scrape_beans(to_scrape))
             if publishers:
                 to_store = storable_publishers(publishers)
-                to_scrape = [pub for pub in publishers if not is_publisher_storable(pub)]
+                to_scrape = [
+                    pub for pub in publishers if not is_publisher_storable(pub)
+                ]
                 if to_store:
                     tg.create_task(self._cache_publishers(to_store))
                 if scrape_on_fail and to_scrape:
                     tg.create_task(self._scrape_publishers(to_scrape))
 
-
     async def _cache_beans(self, beans: list[dict]):
-        count = await self.states.set("beans", "collected", beans)
+        count = await asyncio.to_thread(self.state_store.set, "beans", "collected", beans)
         self.beans_collected += count
         # source is a heuristic
-        if count: log.info("collected beans", extra={"source": beans[0]["source"], "num_items": count})
-        return count 
-
-    async def _cache_publishers(self, publishers: list[dict]):                
-        count = await self.states.set("publishers", "collected", publishers)
-        self.publishers_collected += count
-        # source is a heuristic
-        if count: log.info("collected publishers", extra={"source": publishers[0]["source"], "num_items": count})
+        if count:
+            log.info(
+                "collected beans",
+                extra={"source": beans[0]["source"], "num_items": count},
+            )
         return count
 
+    async def _cache_publishers(self, publishers: list[dict]):
+        try:
+            count = await asyncio.to_thread(
+                self.state_store.set, "publishers", "collected", publishers
+            )
+            self.publishers_collected += count
+            # source is a heuristic
+            if count:
+                log.info(
+                    "collected publishers",
+                    extra={"source": publishers[0]["source"], "num_items": count},
+                )
+            return count
+        except Exception as e:
+            ic(e)
+
     async def _scrape_beans(self, beans: list[dict]):
-        to_scrape = await self.states.deduplicate("beans", "collected", beans)
+        to_scrape = await asyncio.to_thread(
+            self.state_store.deduplicate, "beans", "collected", beans
+        )
+        # ic(to_scrape)
         if to_scrape:
             await self._triage(
-                await self.webscraper.scrape_beans(to_scrape),
-                scrape_on_fail=False
+                await self.webscraper.scrape_beans(to_scrape), scrape_on_fail=False
             )
 
     async def _scrape_publishers(self, publishers: list[dict]):
-        to_scrape = await self.states.deduplicate("publishers", "collected", publishers)
+        to_scrape = await asyncio.to_thread(
+            self.state_store.deduplicate, "publishers", "collected", publishers
+        )
+        # ic(to_scrape)
         if to_scrape:
             await self._triage(
-                await self.webscraper.scrape_publishers(to_scrape),
-                scrape_on_fail=False
+                await self.webscraper.scrape_publishers(to_scrape), scrape_on_fail=False
             )
+
+    async def _collect(self, collect_func, *args, **kwargs):
+        try: await self._triage(await collect_func(*args, **kwargs), scrape_on_fail=True)
+        except Exception as e: log.warning(f"{collect_func.__name__}{args} failed", extra={"source": e.__class__.__name__, "num_items": 1})
 
     def _create_collection_funcs(self, sources):
         funcs = []
         for source_type, source_paths in parse_sources(sources).items():
-            log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
+            log.info(
+                "collecting",
+                extra={"source": source_type, "num_items": len(source_paths)},
+            )
             if source_type == "ychackernews":
                 func = self.apicollector.collect_ychackernews
             elif source_type == "reddit":
@@ -238,21 +291,33 @@ class Orchestrator:
         """Main entry point for collector orchestrator. Runs the complete bean collection pipeline and refreshes chatter data."""
 
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.beans_collected, self.publishers_collected = 0, 0       
+        self.beans_collected, self.publishers_collected = 0, 0
 
-        log.info("starting collectors", extra={"source": self.run_id, "num_items": batch_size})
-        async with self.states, \
-            APICollectorAsync(batch_size) as self.apicollector, \
-            WebScraper(batch_size) as self.webscraper:
-            await asyncio.gather(*(self._collect(func, source) for func, source in self._create_collection_funcs(sources)))
-        
-        log.info("total beans collected", extra={"source": self.run_id, "num_items": self.beans_collected})
-        log.info("total publishers collected", extra={"source": self.run_id, "num_items": self.publishers_collected})
+        log.info(
+            "starting collectors",
+            extra={"source": self.run_id, "num_items": batch_size},
+        )
+        async with (
+            APICollectorAsync(batch_size) as self.apicollector,
+            WebScraper(batch_size) as self.webscraper,
+        ):
+            await asyncio.gather(
+                *(
+                    self._collect(func, source)
+                    for func, source in self._create_collection_funcs(sources)
+                )
+            )
+
+        log.info(
+            "total beans collected",
+            extra={"source": self.run_id, "num_items": self.beans_collected},
+        )
+        log.info(
+            "total publishers collected",
+            extra={"source": self.run_id, "num_items": self.publishers_collected},
+        )
         self.db.refresh_chatters()
-        
 
     def close(self):
         # Close database connection
         self.db.close()
-
-

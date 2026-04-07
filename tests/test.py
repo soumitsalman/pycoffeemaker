@@ -199,7 +199,7 @@ def test_static_db():
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Orchestrator
     orch = Orchestrator(
-        cache_kwargs={"statemachine_cache": "file://.cache"}, 
+        cache_kwargs={"statemachine_cache": ".cache/statestore.db"}, 
         db_kwargs={
             "db_type": "lancedb",
             "lancedb_storage": ".beansack/lancesack_v2",
@@ -220,18 +220,21 @@ def test_collector_orch():
             - https://investorplace.com/content-feed/
         ychackernews:
             - https://hacker-news.firebaseio.com/v0/newstories.json
-        reddit:
-            - news
-            - worldnews
-            - InternationalNews
-            - GlobalNews
-            - GlobalMarketNews
-            - FinanceNews
-            - StockNews
-            - CryptoNews
-            - energyStocks
+
     """
+            # reddit:
+            # - news
+            # - worldnews
+            # - InternationalNews
+            # - GlobalNews
+            # - GlobalMarketNews
+            # - FinanceNews
+            # - StockNews
+            # - CryptoNews
+            # - energyStocks
+            
     asyncio.run(orch.run(sources, batch_size=16))
+    orch.close()
     # orch.run(sources)
 
 def test_indexer_orch():

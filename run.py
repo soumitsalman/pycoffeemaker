@@ -9,10 +9,6 @@ from dotenv import load_dotenv
 EMBEDDER_CONTEXT_LEN = 512
 EXTRACTOR_CONTEXT_LEN = 4096
 DIGESTOR_CONTEXT_LEN = 4096
-PROCESSING_CACHE_PATH = {
-    "classifier_cache": ".cache",
-    "statemachine_cache": "file://.cache"
-}
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR + "/.env")
@@ -35,7 +31,7 @@ logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INF
 logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.refresherorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.statemachines").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.statemachines_pg").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.agents").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
@@ -58,17 +54,28 @@ logging.getLogger("connectionpool").propagate = False
 parser = argparse.ArgumentParser(description="Run the coffee maker application")
 parser.add_argument("--batch_size", type=int, help="Batch size for processing")
 parser.add_argument("--embedder_batch_size", type=int, help="Batch size for processing")
-parser.add_argument("--extractor_batch_size", type=int, help="Batch size for processing")
+parser.add_argument(
+    "--extractor_batch_size", type=int, help="Batch size for processing"
+)
 parser.add_argument("--digestor_batch_size", type=int, help="Batch size for processing")
 parser.add_argument(
     "--mode",
     type=str,
-    choices=["COLLECTOR", "EMBEDDER", "DIGESTOR", "EXTRACTOR", "ANALYZER", "CLASSIFIER", "PORTER"],
+    choices=[
+        "COLLECTOR",
+        "EMBEDDER",
+        "DIGESTOR",
+        "EXTRACTOR",
+        "ANALYZER",
+        "CLASSIFIER",
+        "PORTER",
+    ],
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, PORTER)",
 )
-parser.add_argument(
-    "--max_articles", type=int, help="Maximum number of articles to process"
-)
+
+from coffeemaker.orchestrators.statemachines_pg import StateMachine
+from pybeansack import create_client
+from pybeansack.simplevectordb import SimpleVectorDB
 
 if __name__ == "__main__":
     # Use command line args if provided, otherwise fall back to env vars
@@ -85,14 +92,14 @@ if __name__ == "__main__":
         "ducklake_catalog": os.getenv("DUCKLAKE_CATALOG"),
         "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
     }
-    
+    db = create_client(**db_kwargs)
+    classification_store = SimpleVectorDB(os.getenv("CLASSIFIER_STORAGE"), {"beans": "url"})  # Set via CLASSIFIER_STORAGE env var
+    state_store = StateMachine(os.getenv("STATEMACHINE_STORAGE"), object_id_keys={"beans": "url", "publishers": "base_url"})
+
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
 
-        orch = Orchestrator(
-            cache_kwargs=PROCESSING_CACHE_PATH,
-            db_kwargs=db_kwargs
-        )
+        orch = Orchestrator(state_store=state_store, db=db)
         asyncio.run(
             orch.run(
                 os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
@@ -104,7 +111,8 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs=PROCESSING_CACHE_PATH,
+            state_store=state_store,
+            classification_store=classification_store,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
@@ -114,16 +122,16 @@ if __name__ == "__main__":
         orch.close()
     elif mode == "CLASSIFIER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
-        orch = Orchestrator(
-            cache_kwargs=PROCESSING_CACHE_PATH
-        )
+
+        orch = Orchestrator(state_store=state_store, classification_store=classification_store)
         orch.run_classifier(batch_size=batch_size)
         orch.close()
     elif mode == "EXTRACTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs=PROCESSING_CACHE_PATH,
+            state_store=state_store,
+            classification_store=classification_store,
             extractor_path=os.getenv("EXTRACTOR_PATH"),
             extractor_context_len=int(
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
@@ -135,7 +143,8 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs=PROCESSING_CACHE_PATH,
+            state_store=state_store,
+            classification_store=classification_store,
             digestor_path=os.getenv("DIGESTOR_PATH"),
             digestor_context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
@@ -148,7 +157,8 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs=PROCESSING_CACHE_PATH,
+            state_store=state_store,
+            classification_store=classification_store,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
@@ -172,13 +182,16 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.porterorch import Orchestrator
 
         orch = Orchestrator(
-            cache_kwargs=PROCESSING_CACHE_PATH,
-            db_kwargs=db_kwargs,
+            state_store=state_store,
+            classification_store=classification_store,
+            db=db,
             cdn_kwargs={
                 "bucket": os.getenv("CDN_BUCKET"),
-                "public_access_url_template": os.getenv("CDN_PUBLIC_ACCESS_URL_TEMPLATE"),
-                "max_concurrency": 100
-            }
+                "public_access_url_template": os.getenv(
+                    "CDN_PUBLIC_ACCESS_URL_TEMPLATE"
+                ),
+                "max_concurrency": 100,
+            },
         )
         asyncio.run(orch.run_cdn_porter())
         orch.close()

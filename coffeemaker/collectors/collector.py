@@ -357,12 +357,13 @@ class APICollectorAsync:
         async with self.throttle, self.session.get(url, headers=_RSS_REQUEST_HEADERS) as resp:
             feed = feedparser.parse(await resp.text())
 
-        if feed.entries:
-            source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].link)
-            return _return_collected(
-                extract_source(source_url),
-                [_build_rss_item(feed=feed, feed_url=url, site_url=source_url, entry=entry, default_kind=default_kind) for entry in feed.entries]
-            )
+        if not feed.entries: return
+
+        source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].link)
+        return _return_collected(
+            extract_source(source_url),
+            [_build_rss_item(feed=feed, feed_url=url, site_url=source_url, entry=entry, default_kind=default_kind) for entry in feed.entries]
+        )
 
     async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[dict]:
         @retry(tries=2, delay=10, jitter=(5, 10))

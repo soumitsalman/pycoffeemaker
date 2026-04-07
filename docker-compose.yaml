@@ -95,7 +95,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=eatabagofdicks
-      - POSTGRES_DB=test_db0
+      - POSTGRES_DB=statestore
     networks:
       - coffeemaker-bridge
     cpus: 1
