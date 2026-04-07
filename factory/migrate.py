@@ -117,15 +117,12 @@ def migrate(from_db: str, to_db: str, batch_size: int, window: int, *requested_i
     to_db_instance.close()
 
 
-def hydrate(from_db, states_cache, classifier_cache, batch_size):
+def hydrate(from_db, states_cache, batch_size):
     import os
-    from coffeemaker.orchestrators.statemachines_pg import StateMachine
-    from pybeansack import SimpleVectorDB
+    from coffeemaker.orchestrators.statemachines_sqlite import StateMachine
 
     db = db_instance(from_db)
-    conn_str = states_cache or os.getenv("PG_CONNECTION_STRING")
-    states = StateMachine(conn_str, {"beans": K_URL, "publishers": K_BASE_URL})
-    classifications = SimpleVectorDB(classifier_cache, {"beans": K_URL})
+    states = StateMachine(states_cache, {"beans": K_URL, "publishers": K_BASE_URL})
 
     if True:
         offset = 0
@@ -162,7 +159,6 @@ def hydrate(from_db, states_cache, classifier_cache, batch_size):
                     )
                 offset += len(beans)
                 pbar.update(len(beans))
-        classifications.optimize()
 
 
 import argparse
@@ -193,8 +189,6 @@ parser.add_argument(
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.hydrate:
-        hydrate(args.from_db, args.states_cache, args.classifier_cache, args.batch_size)
+        hydrate(args.from_db, args.states_cache, args.batch_size)
     else:
-        migrate(
-            args.from_db, args.to_db, args.batch_size, args.window, *(args.items or [])
-        )
+        migrate(args.from_db, args.to_db, args.batch_size, args.window, *(args.items or []))

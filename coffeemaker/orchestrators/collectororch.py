@@ -217,47 +217,35 @@ class Orchestrator:
                     tg.create_task(self._scrape_publishers(to_scrape))
 
     async def _cache_beans(self, beans: list[dict]):
-        count = await asyncio.to_thread(self.state_store.set, "beans", "collected", beans)
-        self.beans_collected += count
-        # source is a heuristic
-        if count:
-            log.info(
-                "collected beans",
-                extra={"source": beans[0]["source"], "num_items": count},
-            )
-        return count
+        try:
+            count = await asyncio.to_thread(self.state_store.set, "beans", "collected", beans)
+            self.beans_collected += count
+            # source is a heuristic
+            if count: log.info("collected beans", extra={"source": beans[0]["source"], "num_items": count})
+            return count
+        except Exception as e:
+            ic(e.__class__.__name__, e)
 
     async def _cache_publishers(self, publishers: list[dict]):
         try:
-            count = await asyncio.to_thread(
-                self.state_store.set, "publishers", "collected", publishers
-            )
+            count = await asyncio.to_thread(self.state_store.set, "publishers", "collected", publishers)
             self.publishers_collected += count
             # source is a heuristic
-            if count:
-                log.info(
-                    "collected publishers",
-                    extra={"source": publishers[0]["source"], "num_items": count},
-                )
+            if count: log.info("collected publishers", extra={"source": publishers[0]["source"], "num_items": count})
             return count
         except Exception as e:
-            ic(e)
+            ic(e.__class__.__name__, e)
 
     async def _scrape_beans(self, beans: list[dict]):
-        to_scrape = await asyncio.to_thread(
-            self.state_store.deduplicate, "beans", "collected", beans
-        )
-        # ic(to_scrape)
+        to_scrape = await asyncio.to_thread(self.state_store.deduplicate, "beans", "collected", beans)
         if to_scrape:
             await self._triage(
-                await self.webscraper.scrape_beans(to_scrape), scrape_on_fail=False
+                await self.webscraper.scrape_beans(to_scrape), 
+                scrape_on_fail=False
             )
 
     async def _scrape_publishers(self, publishers: list[dict]):
-        to_scrape = await asyncio.to_thread(
-            self.state_store.deduplicate, "publishers", "collected", publishers
-        )
-        # ic(to_scrape)
+        to_scrape = await asyncio.to_thread(self.state_store.deduplicate, "publishers", "collected", publishers)
         if to_scrape:
             await self._triage(
                 await self.webscraper.scrape_publishers(to_scrape), scrape_on_fail=False
@@ -265,7 +253,7 @@ class Orchestrator:
 
     async def _collect(self, collect_func, *args, **kwargs):
         try: await self._triage(await collect_func(*args, **kwargs), scrape_on_fail=True)
-        except Exception as e: log.warning(f"{collect_func.__name__}{args} failed", extra={"source": e.__class__.__name__, "num_items": 1})
+        except Exception as e: log.warning(f"{collect_func.__name__}{args} failed", extra={"source": f"{e.__class__.__name__}: {e}", "num_items": 1})
 
     def _create_collection_funcs(self, sources):
         funcs = []

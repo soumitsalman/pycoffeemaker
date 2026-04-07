@@ -73,7 +73,7 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, PORTER)",
 )
 
-from coffeemaker.orchestrators.statemachines_pg import StateMachine
+from coffeemaker.orchestrators.statemachines_sqlite import StateMachine
 from pybeansack import create_client
 from pybeansack.simplevectordb import SimpleVectorDB
 
@@ -183,7 +183,6 @@ if __name__ == "__main__":
 
         orch = Orchestrator(
             state_store=state_store,
-            classification_store=classification_store,
             db=db,
             cdn_kwargs={
                 "bucket": os.getenv("CDN_BUCKET"),
@@ -193,7 +192,8 @@ if __name__ == "__main__":
                 "max_concurrency": 100,
             },
         )
-        asyncio.run(orch.run_cdn_porter())
+        # asyncio.run(orch.run_cdn_porter())
+        orch.run()
         orch.close()
 
     else:

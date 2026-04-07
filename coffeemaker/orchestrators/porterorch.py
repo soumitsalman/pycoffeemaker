@@ -4,7 +4,6 @@ import os
 from typing import Any
 
 from pybeansack.cdnstore import AsyncCDNStore
-from .statemachines_sur import AsyncStateMachine
 from slugify import slugify
 from datetime import datetime
 from .utils import *
@@ -67,21 +66,12 @@ cdn_path = lambda bean: _CDN_PATH_TEMPLATE.format(
 
 class Orchestrator:
     db: Beansack
-    states: AsyncStateMachine
     cdn: AsyncCDNStore
     run_total: int = 0
 
-    def __init__(self, cache_kwargs: dict, db_kwargs: dict, cdn_kwargs: dict):
-        from .statemachines_pg import AsyncStateMachine
-
-        conn_str = cache_kwargs.get("statemachine_cache") or os.getenv(
-            "PG_CONNECTION_STRING"
-        )
-        self.states = AsyncStateMachine(
-            conn_str, object_id_keys={"beans": K_URL, "publishers": K_BASE_URL}
-        )
-        self.db = create_client(**db_kwargs)
-        self.cdn = AsyncCDNStore(**cdn_kwargs)
+    def __init__(self, state_store, db: Beansack, cdn_kwargs: dict):
+        self.state_store = state_store
+        self.db = db
 
     async def run_cdn_porter(self):
         async with self.states:
@@ -134,12 +124,10 @@ class Orchestrator:
             )
 
     def run(self):
-        beans = self.states.get(
+        beans = self.state_store.get(
             "beans",
             states=["collected", "embedded", "classified"],
-            exclude_states="ported",
-            # limit=10,
-            # columns=[K_URL, K_EMBEDDING, K_CONTENT, K_REGIONS, K_ENTITIES, K_CATEGORIES, K_SENTIMENTS, "related"]
+            exclude_states="ported"
         )
         beans = merge(K_URL, beans)
         self._store(beans)
@@ -150,11 +138,10 @@ class Orchestrator:
 
 def merge(key, items: list[dict[str, Any]]):
     merged = {}
-    for group in items:
-        for data in group:
-            if data[key] not in merged:
-                merged[data[key]] = data
-            else:
-                # NOTE: it is imported to update only the keys for which there is a value
-                merged[data[key]].update({k: v for k, v in data.items() if v})
+    for data in items:
+        update = {k: v for k, v in data.items() if v}
+        if data[key] not in merged: merged[data[key]] = update
+        else: merged[data[key]].update(update)
+        # NOTE: it is important to update only the keys for which there is a value
+            
     return list(merged.values())
