@@ -132,10 +132,6 @@ class Orchestrator:
         beans = merge(K_URL, beans)
         self._store(beans)
 
-    def close(self):
-        self.db.close()
-
-
 def merge(key, items: list[dict[str, Any]]):
     merged = {}
     for data in items:

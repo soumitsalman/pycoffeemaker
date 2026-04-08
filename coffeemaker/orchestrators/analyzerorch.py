@@ -1,12 +1,10 @@
-from contextlib import contextmanager
 import logging
 import os
 from itertools import batched
 from typing import Optional
 
-from pybeansack.simplevectordb import ITEMS, SimpleVectorDB
-
-from .statemachines_pg import StateMachine
+from pybeansack.simplevectordb import SimpleVectorDB
+from .statemachines_sqlite import StateMachine
 from .utils import *
 from nlp import Digest, digestors, embedders
 from pybeansack.models import (
@@ -134,49 +132,27 @@ class Orchestrator:
                         stack_info=True,
                     )
 
-    def classify_beans(self, beans: list[dict], batch_size: int):
+    def _create_classification(self, bean: dict):
+        embedding = bean[K_EMBEDDING]
+        related = self.classification_store.search("beans", embedding=embedding, distance=CLUSTER_EPS, columns=[K_URL])
+        categories = self.classification_store.search("categories", embedding=embedding, distance_func="cosine", columns=["category"], limit=MAX_CLASSIFICATIONS)
+        sentiments = self.classification_store.search("sentiments", embedding=embedding, distance_func="cosine", columns=["sentiment"], limit=MAX_CLASSIFICATIONS)
+
         map_key = lambda items, key: [item[key] for item in items]
-        search = lambda bean: {
+        return {
             K_URL: bean[K_URL],
-            K_RELATED: list(
-                filter(
-                    lambda x: x != bean[K_URL],
-                    map_key(
-                        self.classification_store.search(
-                            "beans",
-                            embedding=bean[K_EMBEDDING],
-                            distance=CLUSTER_EPS,
-                            columns=[K_URL],
-                        ),
-                        K_URL,
-                    ),
-                )
-            ),
-            K_CATEGORIES: map_key(
-                self.classification_store.search(
-                    "categories",
-                    embedding=bean[K_EMBEDDING],
-                    distance_func="cosine",
-                    columns=["category"],
-                    limit=MAX_CLASSIFICATIONS,
-                ),
-                "category",
-            ),
-            K_SENTIMENTS: map_key(
-                self.classification_store.search(
-                    "sentiments",
-                    embedding=bean[K_EMBEDDING],
-                    distance_func="cosine",
-                    columns=["sentiment"],
-                    limit=MAX_CLASSIFICATIONS,
-                ),
-                "sentiment",
-            ),
+            K_RELATED: list(filter(lambda x: x != bean[K_URL], map_key(related, K_URL))),
+            K_CATEGORIES: map_key(categories, "category"),
+            K_SENTIMENTS: map_key(sentiments, "sentiment"),
         }
 
-        self.classification_store.store("beans", beans)
+    def classify_beans(self, beans: list[dict], batch_size: int):
+        # store the items first
         for chunk in batched(beans, batch_size):
-            updates = [search(bean) for bean in chunk]
+            self.classification_store.store("beans", [{k: v for k, v in b.items() if k in [K_URL, K_EMBEDDING]} for b in chunk])
+
+        for chunk in batched(beans, batch_size):            
+            updates = [self._create_classification(bean) for bean in chunk]
             log.info(
                 "classified",
                 extra={"source": chunk[0][K_URL], "num_items": len(updates)},
@@ -304,9 +280,3 @@ class Orchestrator:
         self.run_embedder(batch_size=embedder_batch_size)
         self.run_extractor(batch_size=extractor_batch_size)
         self.run_digestor(batch_size=digestor_batch_size)
-
-    def close(self):
-        self.classification_store.close()
-        # Close database connection
-        # self.db.optimize()
-        # self.db.close()

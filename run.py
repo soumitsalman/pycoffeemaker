@@ -73,7 +73,7 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, PORTER)",
 )
 
-from coffeemaker.orchestrators.statemachines_sqlite import StateMachine
+from coffeemaker.orchestrators.statemachines_sqlite import StateMachine, AsyncStateMachine
 from pybeansack import create_client
 from pybeansack.simplevectordb import SimpleVectorDB
 
@@ -95,11 +95,12 @@ if __name__ == "__main__":
     db = create_client(**db_kwargs)
     classification_store = SimpleVectorDB(os.getenv("CLASSIFIER_STORAGE"), {"beans": "url"})  # Set via CLASSIFIER_STORAGE env var
     state_store = StateMachine(os.getenv("STATEMACHINE_STORAGE"), object_id_keys={"beans": "url", "publishers": "base_url"})
+    async_state_store = AsyncStateMachine(os.getenv("STATEMACHINE_STORAGE"), object_id_keys={"beans": "url", "publishers": "base_url"})
 
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Orchestrator
 
-        orch = Orchestrator(state_store=state_store, db=db)
+        orch = Orchestrator(state_store=async_state_store, db=db)
         asyncio.run(
             orch.run(
                 os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
@@ -119,13 +120,13 @@ if __name__ == "__main__":
             ),
         )
         orch.run_embedder(batch_size=batch_size)
-        orch.close()
+
     elif mode == "CLASSIFIER":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(state_store=state_store, classification_store=classification_store)
         orch.run_classifier(batch_size=batch_size)
-        orch.close()
+
     elif mode == "EXTRACTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
@@ -138,7 +139,7 @@ if __name__ == "__main__":
             ),
         )
         orch.run_extractor(batch_size=batch_size)
-        orch.close()
+
     elif mode == "DIGESTOR":
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
@@ -151,9 +152,9 @@ if __name__ == "__main__":
             ),
         )
         orch.run_digestor(batch_size=batch_size)
-        orch.close()
-    # this combines both embedder, extractor, and digestor
+    
     elif mode == "ANALYZER":
+        # this combines both embedder, extractor, and digestor
         from coffeemaker.orchestrators.analyzerorch import Orchestrator
 
         orch = Orchestrator(
@@ -177,7 +178,7 @@ if __name__ == "__main__":
             extractor_batch_size=int(args.extractor_batch_size or batch_size),
             digestor_batch_size=int(args.digestor_batch_size or batch_size),
         )
-        orch.close()
+        
     elif mode == "PORTER":
         from coffeemaker.orchestrators.porterorch import Orchestrator
 
@@ -194,9 +195,12 @@ if __name__ == "__main__":
         )
         # asyncio.run(orch.run_cdn_porter())
         orch.run()
-        orch.close()
 
     else:
         raise ValueError(
             "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER."
         )
+    
+    state_store.close()
+    classification_store.close()
+    db.close()    

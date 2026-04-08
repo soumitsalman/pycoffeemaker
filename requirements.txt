@@ -15,6 +15,7 @@ praw
 asyncpraw
 readability-lxml
 icecream
+aiosqlite
 python-dotenv
 python-slugify
 deprecated

@@ -33,7 +33,7 @@ from ..collectors.utils import (
     TITLE,
     URL,
 )
-from .statemachines_pg import StateMachine
+from .statemachines_sqlite import AsyncStateMachine
 from .utils import *
 from pybeansack import Beansack, create_client
 from pybeansack.models import *
@@ -100,7 +100,7 @@ log = logging.getLogger(__name__)
 
 class Orchestrator:
     db: Beansack
-    state_store: StateMachine
+    state_store: AsyncStateMachine
     apicollector: APICollectorAsync
     webscraper: WebScraper
     run_id: str
@@ -188,12 +188,7 @@ class Orchestrator:
         if not items:
             return
 
-        try:
-            beans, chatters, publishers = self._split_items(items)
-        except Exception as e:
-            ic("WTF", e)
-            return
-
+        beans, chatters, publishers = self._split_items(items)
         chatters = [Chatter(**item) for item in chatters]
 
         async with asyncio.TaskGroup() as tg:
@@ -218,7 +213,7 @@ class Orchestrator:
 
     async def _cache_beans(self, beans: list[dict]):
         try:
-            count = await asyncio.to_thread(self.state_store.set, "beans", "collected", beans)
+            count = await self.state_store.set("beans", "collected", beans)
             self.beans_collected += count
             # source is a heuristic
             if count: log.info("collected beans", extra={"source": beans[0]["source"], "num_items": count})
@@ -228,7 +223,7 @@ class Orchestrator:
 
     async def _cache_publishers(self, publishers: list[dict]):
         try:
-            count = await asyncio.to_thread(self.state_store.set, "publishers", "collected", publishers)
+            count = await self.state_store.set("publishers", "collected", publishers)
             self.publishers_collected += count
             # source is a heuristic
             if count: log.info("collected publishers", extra={"source": publishers[0]["source"], "num_items": count})
@@ -237,7 +232,7 @@ class Orchestrator:
             ic(e.__class__.__name__, e)
 
     async def _scrape_beans(self, beans: list[dict]):
-        to_scrape = await asyncio.to_thread(self.state_store.deduplicate, "beans", "collected", beans)
+        to_scrape = await self.state_store.deduplicate("beans", "collected", beans)
         if to_scrape:
             await self._triage(
                 await self.webscraper.scrape_beans(to_scrape), 
@@ -245,7 +240,7 @@ class Orchestrator:
             )
 
     async def _scrape_publishers(self, publishers: list[dict]):
-        to_scrape = await asyncio.to_thread(self.state_store.deduplicate, "publishers", "collected", publishers)
+        to_scrape = await self.state_store.deduplicate("publishers", "collected", publishers)
         if to_scrape:
             await self._triage(
                 await self.webscraper.scrape_publishers(to_scrape), scrape_on_fail=False
@@ -286,6 +281,7 @@ class Orchestrator:
             extra={"source": self.run_id, "num_items": batch_size},
         )
         async with (
+            self.state_store,
             APICollectorAsync(batch_size) as self.apicollector,
             WebScraper(batch_size) as self.webscraper,
         ):

@@ -1,20 +1,15 @@
+from contextlib import contextmanager, asynccontextmanager
 import logging
-import os
 from datetime import datetime, timezone
 import threading
 from typing import Any
-from functools import cached_property
-from icecream import contextmanager
-import msgpack
 from pydantic import BaseModel
 from retry import retry
 import sqlite3
+import asyncio
+import aiosqlite
+from .utils import encode_data, decode_data
 from icecream import ic
-
-# ID = "id"
-# STATE = "state"
-# TS = "ts"
-# DATA = "data"
 
 DB_JITTER = (1, 5)
 
@@ -22,7 +17,7 @@ _INIT_SQL = """
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA temp_store=MEMORY;
-PRAGMA cache_size=-64000;
+PRAGMA cache_size=64000;
 PRAGMA busy_timeout=300000;
 PRAGMA mmap_size=268435456;
 """
@@ -39,6 +34,7 @@ CREATE INDEX IF NOT EXISTS {table}_id_idx ON {table}(id);
 CREATE INDEX IF NOT EXISTS {table}_state_idx ON {table}(state);
 """
 
+
 class StateMachine:
     id_keys: dict[str, str]
     db_path: str
@@ -46,71 +42,197 @@ class StateMachine:
 
     def __init__(self, db_path: str, object_id_keys: dict[str, str]):
         self.id_keys = object_id_keys.copy()
-        self.db_path = db_path
+        self.db_path = db_path        
         self.write_lock = threading.Lock()
-        self._conn = sqlite3.connect(
-            self.db_path, 
-            timeout=300,
-            check_same_thread=False,
-            isolation_level=None
-        )
-        self._conn.executescript(_INIT_SQL)
-        with self._write_connection() as conn:
-            conn.executescript("\n".join([_CREATE_TABLE_SQL.format(table=table) for table in self.id_keys.keys()]))
+        self._conn = None
 
-    @contextmanager
-    def _write_connection(self):
-        with self.write_lock:
-            try:
-                cur = self._conn.cursor()
-                cur.execute("BEGIN IMMEDIATE;")
-                yield cur
-                self._conn.commit()
-            except Exception as e:
-                ic(e.__class__.__name__, e)
-                self._conn.rollback()
-                raise e
-            finally:
-                cur.close()    
-    
-    def _read(self, expr: str, params = None):
-        cur = self._conn.cursor()
+    @property
+    def conn(self):
+        if not self._conn:
+            self._conn = sqlite3.connect(self.db_path, timeout=300, check_same_thread=False, isolation_level=None)
+            self._conn.executescript(_INIT_SQL)
+            self._conn.executescript(create_table_expr(self.id_keys))
+        return self._conn
+       
+    # @contextmanager
+    # def _write_connection(self):
+    #     try:
+    #         cur = self.conn.cursor()
+    #         cur.execute("BEGIN IMMEDIATE;")
+    #         yield cur
+    #         self.conn.commit()
+    #     except Exception as e:
+    #         # TODO: just log and rollback
+    #         ic(e.__class__.__name__, e)
+    #         self.conn.rollback()
+    #         raise e
+    #     finally:
+    #         cur.close()
+
+    def _read(self, expr: str, params=None):
+        cur = self.conn.cursor()
         result = cur.execute(expr, params).fetchall()
         cur.close()
         return result
-    
-    @retry(tries=3, jitter=DB_JITTER, logger=logging.getLogger("app")) 
-    def set(self, object_type: str, state: str, items: list[dict[str, Any]] | list[BaseModel]):
-        if not items: return 0
 
-        with self._write_connection() as conn:
-            rowcount = conn.executemany(
-                f"INSERT OR IGNORE INTO {object_type} (id, state, ts, data) VALUES (?, ?, ?, ?)",
-                _create_rows(self.id_keys[object_type], state, items)
+    @retry(exceptions=sqlite3.OperationalError, tries=3, jitter=DB_JITTER)
+    def set(
+        self,
+        object_type: str,
+        state: str,
+        items: list[dict[str, Any]] | list[BaseModel],
+    ):
+        if not items:
+            return 0
+
+        with self.write_lock:
+            cur = self.conn.cursor()
+            cur.execute("BEGIN IMMEDIATE;")
+            rowcount = cur.executemany(
+                insert_expr(object_type),
+                create_rows(self.id_keys[object_type], state, items),
             ).rowcount
+            self.conn.commit()
+            cur.close()
+
+        # with self._write_connection() as conn:
+        #     rowcount = conn.executemany(
+        #         insert_expr(object_type),
+        #         create_rows(self.id_keys[object_type], state, items),
+        #     ).rowcount
         return rowcount
 
-    def get(self, object_type: str, states: str | list[str], exclude_states: str | list[str], limit: int = 0, offset: int = 0):
-        expr, params = create_query_expr(object_type, states, exclude_states, limit, offset)
+    def get(
+        self,
+        object_type: str,
+        states: str | list[str],
+        exclude_states: str | list[str],
+        limit: int = 0,
+        offset: int = 0,
+    ):
+        expr, params = query_expr(
+            object_type, states, exclude_states, limit, offset
+        )
         result = self._read(expr, params)
         return [decode_data(r[0]) for r in result]
 
     def deduplicate(self, object_type: str, state: str, items: list):
-        if not items: return items
+        if not items:
+            return items
 
         ids = get_ids(items, self.id_keys[object_type])
-        placeholders = ",".join(["?"] * len(ids))
         result = self._read(
-            f"SELECT id FROM {object_type} WHERE state = ? AND id IN ({placeholders})", 
-            [state] + ids
+            exists_expr(object_type, ids),
+            [state] + ids,
+        )
+        existing_ids = {r[0] for r in result}
+
+        return [item for id, item in zip(ids, items) if id not in existing_ids]
+
+    def close(self):
+        if self._conn:
+            self._conn.close()
+            self._conn = None
+
+
+class AsyncStateMachine:
+    id_keys: dict[str, str]
+    db_path: str
+    write_lock: asyncio.Lock
+    conn: aiosqlite.Connection | None
+
+    def __init__(self, db_path: str, object_id_keys: dict[str, str]):
+        self.id_keys = object_id_keys.copy()
+        self.db_path = db_path
+        self.write_lock = asyncio.Lock()
+        self.conn = None
+
+    async def __aenter__(self):
+        self.conn = await aiosqlite.connect(self.db_path, timeout=300, check_same_thread=False, isolation_level=None)
+        await self.conn.executescript(_INIT_SQL)
+        await self.conn.executescript(create_table_expr(self.id_keys))
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.conn:
+            await self.conn.close()
+            self.conn = None
+
+    # @asynccontextmanager
+    # async def _write_transaction(self):
+    #     if not self.conn:
+    #         raise RuntimeError(
+    #             "AsyncStateMachine not initialized. Use 'async with' context manager."
+    #         )
+    #     async with self.write_lock:
+    #         try:
+    #             cur = await self.conn.cursor()
+    #             # await cur.execute("BEGIN IMMEDIATE;")
+    #             yield cur                
+    #             await self.conn.commit()
+    #         except Exception as e:
+    #             ic(e.__class__.__name__, e)
+    #             # await self.conn.rollback()
+    #             raise e
+    #         finally:
+    #             await cur.close()
+
+    async def _read(self, expr: str, params=None):
+        cur = await self.conn.execute(expr, params)
+        result = await cur.fetchall()
+        await cur.close()
+        return result
+
+    @retry(exceptions=aiosqlite.OperationalError, tries=3, jitter=DB_JITTER)
+    async def set(
+        self,
+        object_type: str,
+        state: str,
+        items: list[dict[str, Any]] | list[BaseModel],
+    ):
+        if not items:
+            return 0
+
+        async with self.write_lock:
+            cur = await self.conn.cursor()
+            await cur.execute("BEGIN IMMEDIATE;")
+            result = await cur.executemany(
+                insert_expr(object_type),
+                create_rows(self.id_keys[object_type], state, items),
+            )
+            rowcount = result.rowcount
+            await self.conn.commit()
+            await cur.close()
+        return rowcount
+
+    async def get(
+        self,
+        object_type: str,
+        states: str | list[str],
+        exclude_states: str | list[str],
+        limit: int = 0,
+        offset: int = 0,
+    ):
+        expr, params = query_expr(
+            object_type, states, exclude_states, limit, offset
+        )
+        result = await self._read(expr, params)
+        return [decode_data(r[0]) for r in result]
+
+    async def deduplicate(self, object_type: str, state: str, items: list):
+        if not items:
+            return items
+
+        ids = get_ids(items, self.id_keys[object_type])
+        result = await self._read(
+            exists_expr(object_type, ids),
+            [state] + ids,
         )
         existing_ids = {r[0] for r in result}
 
         return [item for id, item in zip(ids, items) if id not in existing_ids]
 
 
-encode_data = lambda data: msgpack.packb(data, datetime=True)
-decode_data = lambda data: msgpack.unpackb(data, timestamp=3)
 get_id = (
     lambda item, id_key: getattr(item, id_key)
     if isinstance(item, BaseModel)
@@ -118,7 +240,10 @@ get_id = (
 )
 get_ids = lambda items, id_key: [get_id(item, id_key) for item in items]
 
-def _create_rows(id_key: str, state: str, items: list[dict[str, Any]] | list[BaseModel]):
+
+def create_rows(
+    id_key: str, state: str, items: list[dict[str, Any]] | list[BaseModel]
+):
     ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     return [
         (
@@ -130,7 +255,8 @@ def _create_rows(id_key: str, state: str, items: list[dict[str, Any]] | list[Bas
         for id, data in zip(get_ids(items, id_key), items)
     ]
 
-def _create_single_state_query_expr(table: str, include_state: str, exclude_state: str):
+
+def _single_state_query_expr(table: str, include_state: str, exclude_state: str):
     expr = f"""SELECT data FROM {table} 
     WHERE state = ?
     AND NOT EXISTS (
@@ -140,7 +266,7 @@ def _create_single_state_query_expr(table: str, include_state: str, exclude_stat
     return expr, [include_state, exclude_state]
 
 
-def _create_multi_state_query_expr(
+def _multi_state_query_expr(
     table: str, include_states: list[str], exclude_states: list[str]
 ):
     include_placeholders = ",".join(["?"] * len(include_states))
@@ -158,7 +284,7 @@ def _create_multi_state_query_expr(
     return expr, params
 
 
-def create_query_expr(
+def query_expr(
     table: str,
     states: str | list[str],
     exclude_states: str | list[str],
@@ -172,13 +298,13 @@ def create_query_expr(
             states = [states]
         if isinstance(exclude_states, str):
             exclude_states = [exclude_states]
-        expr, params = _create_multi_state_query_expr(table, states, exclude_states)
+        expr, params = _multi_state_query_expr(table, states, exclude_states)
     else:
         if isinstance(states, list):
             states = states[0]
         if isinstance(exclude_states, list):
             exclude_states = exclude_states[0]
-        expr, params = _create_single_state_query_expr(table, states, exclude_states)
+        expr, params = _single_state_query_expr(table, states, exclude_states)
 
     if limit:
         expr = f"{expr} LIMIT ?"
@@ -188,3 +314,8 @@ def create_query_expr(
         params.append(offset)
 
     return expr, params
+
+
+insert_expr = lambda table: f"INSERT OR IGNORE INTO {table} (id, state, ts, data) VALUES (?, ?, ?, ?)"
+exists_expr = lambda table, ids: f"SELECT id FROM {table} WHERE state = ? AND id IN ({','.join(['?'] * len(ids))})"
+create_table_expr = lambda id_keys: "\n".join([_CREATE_TABLE_SQL.format(table=table) for table in id_keys.keys()])

@@ -1,12 +1,20 @@
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 from logging import Logger
+import msgpack
+
+# log = logging.getLogger(__name__)
 
 merge_lists = lambda *lists: [item for sublist in lists if sublist for item in sublist]
 
-log = logging.getLogger(__name__)
+def encode_data(data):
+    assign_timezone = lambda obj: obj.replace(tzinfo=timezone.utc) if (isinstance(obj, datetime) and not obj.tzinfo) else obj
+    return msgpack.packb(data, datetime=True, default=assign_timezone)
+
+def decode_data(data):
+    return msgpack.unpackb(data, timestamp=3)
 
 def log_runtime(logger: Logger):
     def decorator(func):
