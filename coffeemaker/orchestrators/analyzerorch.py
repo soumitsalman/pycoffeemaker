@@ -3,16 +3,13 @@ import os
 from itertools import batched
 from typing import Optional
 
-from pybeansack.simplevectordb import SimpleVectorDB
-from .statemachines_sqlite import StateMachine
+from ..processingcache.base import StateStoreBase
 from .utils import *
 from nlp import Digest, digestors, embedders
 from pybeansack.models import (
     K_CATEGORIES,
-    K_COLLECTED,
     K_CONTENT,
     K_CONTENT_LENGTH,
-    K_CREATED,
     K_EMBEDDING,
     K_ENTITIES,
     K_GIST,
@@ -23,7 +20,6 @@ from pybeansack.models import (
     K_SOURCE,
     K_URL,
     POST,
-    Bean,
 )
 from pybeansack.utils import *
 from icecream import ic
@@ -70,14 +66,14 @@ run_id = lambda: datetime.now().strftime("%A, %b-%d-%Y")
 
 
 class Orchestrator:
-    state_store: StateMachine
+    state_store: StateStoreBase
     embedder: embedders.EmbedderBase
     extractor: digestors.NamedEntityExtractor
     digestor: digestors.DigestorBase
 
     def __init__(
         self,
-        state_store,
+        state_store: StateStoreBase,
         classification_store,
         embedder_path: Optional[str] = None,
         embedder_context_len: int = 0,

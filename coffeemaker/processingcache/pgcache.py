@@ -1,20 +1,12 @@
-import asyncio
 import logging
-import re
 import os
 from datetime import datetime, timezone
-from typing import Any, Optional
-from icecream import contextmanager
+from typing import Any
 from psycopg import sql
 from psycopg_pool import ConnectionPool
-import msgpack
 from pydantic import BaseModel
+from .base import *
 from icecream import ic
-
-ID = "id"
-STATE = "state"
-TS = "ts"
-DATA = "data"
 
 TIMEOUT = 600
 
@@ -32,7 +24,7 @@ CREATE INDEX IF NOT EXISTS {table}_state_idx ON {table}(state);
 
 log = logging.getLogger(__name__)
 
-class StateMachine:
+class StateMachine(StateStoreBase):
     id_keys: dict[str, str]
     conn_str: str
     pool: ConnectionPool
@@ -126,16 +118,6 @@ class StateMachine:
         existing_ids = {r[0] for r in result}
 
         return [item for id, item in zip(ids, items) if id not in existing_ids]
-
-
-encode_data = lambda data: msgpack.packb(data, datetime=True)
-decode_data = lambda data: msgpack.unpackb(data, timestamp=3)
-get_id = (
-    lambda item, id_key: getattr(item, id_key)
-    if isinstance(item, BaseModel)
-    else item[id_key]
-)
-get_ids = lambda items, id_key: [get_id(item, id_key) for item in items]
 
 
 def _create_single_state_query_expr(table: str, include_state: str, exclude_state: str):

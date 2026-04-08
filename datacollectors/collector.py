@@ -113,13 +113,6 @@ def _return_collected(source, collected: list|None):
 
 merge_lists = lambda results: list(chain(*(r for r in results if r))) 
 
-def parse_sources(sources: str) -> dict:
-    if os.path.exists(sources):
-        with open(sources, 'r') as file:
-            data = yaml.safe_load(file)
-    else: data = yaml.safe_load(sources)
-    return data['sources']
-
 def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedParserDict, default_kind: str):
     current_time = now()
     published_time = entry.get("published_parsed") or entry.get("updated_parsed")

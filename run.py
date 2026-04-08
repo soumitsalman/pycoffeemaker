@@ -73,9 +73,8 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, PORTER)",
 )
 
-from coffeemaker.orchestrators.statemachines_sqlite import StateMachine, AsyncStateMachine
-from pybeansack import create_client
-from pybeansack.simplevectordb import SimpleVectorDB
+from coffeemaker.processingcache.sqlitecache import StateMachine, AsyncStateMachine
+from pybeansack import create_client, SimpleVectorDB
 
 if __name__ == "__main__":
     # Use command line args if provided, otherwise fall back to env vars

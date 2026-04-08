@@ -1,5 +1,3 @@
-from contextlib import contextmanager, asynccontextmanager
-import logging
 from datetime import datetime, timezone
 import threading
 from typing import Any
@@ -8,7 +6,7 @@ from retry import retry
 import sqlite3
 import asyncio
 import aiosqlite
-from .utils import encode_data, decode_data
+from .base import *
 from icecream import ic
 
 DB_JITTER = (1, 5)
@@ -35,7 +33,7 @@ CREATE INDEX IF NOT EXISTS {table}_state_idx ON {table}(state);
 """
 
 
-class StateMachine:
+class StateMachine(StateStoreBase):
     id_keys: dict[str, str]
     db_path: str
     write_lock: threading.Lock
@@ -53,21 +51,6 @@ class StateMachine:
             self._conn.executescript(_INIT_SQL)
             self._conn.executescript(create_table_expr(self.id_keys))
         return self._conn
-       
-    # @contextmanager
-    # def _write_connection(self):
-    #     try:
-    #         cur = self.conn.cursor()
-    #         cur.execute("BEGIN IMMEDIATE;")
-    #         yield cur
-    #         self.conn.commit()
-    #     except Exception as e:
-    #         # TODO: just log and rollback
-    #         ic(e.__class__.__name__, e)
-    #         self.conn.rollback()
-    #         raise e
-    #     finally:
-    #         cur.close()
 
     def _read(self, expr: str, params=None):
         cur = self.conn.cursor()
@@ -95,11 +78,6 @@ class StateMachine:
             self.conn.commit()
             cur.close()
 
-        # with self._write_connection() as conn:
-        #     rowcount = conn.executemany(
-        #         insert_expr(object_type),
-        #         create_rows(self.id_keys[object_type], state, items),
-        #     ).rowcount
         return rowcount
 
     def get(
@@ -135,7 +113,7 @@ class StateMachine:
             self._conn = None
 
 
-class AsyncStateMachine:
+class AsyncStateMachine(AsyncStateStoreBase):
     id_keys: dict[str, str]
     db_path: str
     write_lock: asyncio.Lock
@@ -244,7 +222,7 @@ get_ids = lambda items, id_key: [get_id(item, id_key) for item in items]
 def create_rows(
     id_key: str, state: str, items: list[dict[str, Any]] | list[BaseModel]
 ):
-    ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    ts = datetime.now(tz=timezone.utc)
     return [
         (
             id,

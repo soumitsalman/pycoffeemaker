@@ -8,8 +8,8 @@ from urllib.parse import urljoin, urlparse
 from dateutil.parser import parse as date_parser
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
-USER_AGENT = "Cafecito-Coffeemaker/v0.4.0+https://github.com/soumitsalman/pycoffeemaker"
-TIMEOUT =  int(os.getenv('TIMEOUT', 60)) # 1 minute
+USER_AGENT = "Cafecito-Coffeemaker/v0..0+https://github.com/soumitsalman/pycoffeemaker"
+TIMEOUT =  60 # 1 minute
 RATELIMIT_WAIT = 600 # 600 seconds / 10 minutes
 
 # content types
@@ -17,6 +17,7 @@ POST = "post"
 BLOG = "blog"
 NEWS = "news"
 SITE = "site"
+PODCAST = "podcast"
 CONTRACT = "contract"
 FINANCIAL_REPORT = "financial_report"
 EARNINGS_REPORT = "earnings_report"
@@ -57,6 +58,8 @@ BLOG_SITENAMES = {"blog", "magazine", "newsletter", "weekly"}
 NEWS_SITENAMES = {"daily", "wire", "times", "today",  "news", "the "}
 NEWS_TAGS = {"news", "headline", "press release", "announcement"}
 BLOG_TAGS = {"blog", "newsletter", "analysis", "opinion", "review"}
+PODCAST_SITENAMES = {"podcast", "show", "episode"}
+PODCAST_TAGS = {"podcast", "episode", "show"}
 
 # heuristic url patterns to exclude from collection
 EXCLUDED_URL_PATTERNS = [

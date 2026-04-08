@@ -4,7 +4,6 @@ import random
 import re
 from typing import Any, Optional
 from pydantic import BaseModel
-from surrealdb import BlockingEmbeddedSurrealConnection, AsyncEmbeddedSurrealConnection
 from icecream import ic
 
 NS = "__coffeemaker__"
@@ -16,6 +15,7 @@ DATA = "data"
 
 class StateMachine:
     def __init__(self, db_path: str, object_id_keys: dict[str, Optional[str]]):
+        from surrealdb import BlockingEmbeddedSurrealConnection
         self.id_keys = object_id_keys.copy()
         self.db = BlockingEmbeddedSurrealConnection(db_path)
         self.db.connect()
@@ -51,6 +51,7 @@ class StateMachine:
 
 class AsyncStateMachine:
     def __init__(self, db_path: str, object_id_keys: dict[str, Optional[str]]):
+        from surrealdb import AsyncEmbeddedSurrealConnection
         self.id_keys = object_id_keys.copy()
         self.db = AsyncEmbeddedSurrealConnection(db_path)
 

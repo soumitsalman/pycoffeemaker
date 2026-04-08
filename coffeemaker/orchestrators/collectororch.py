@@ -1,11 +1,12 @@
 import asyncio
-from itertools import batched
 import logging
 import os
 import random
+import yaml
 from datetime import datetime
-from ..collectors import APICollectorAsync, WebScraper, parse_sources
-from ..collectors.utils import (
+from datacollectors import (
+    APICollectorAsync,
+    AsyncWebScraper,
     ARTICLE_LANGUAGE,
     AUTHOR,
     AUTHOR_EMAIL,
@@ -33,21 +34,17 @@ from ..collectors.utils import (
     TITLE,
     URL,
 )
-from .statemachines_sqlite import AsyncStateMachine
+from pybeansack import Beansack, Chatter
+from ..processingcache.base import AsyncStateStoreBase
 from .utils import *
-from pybeansack import Beansack, create_client
-from pybeansack.models import *
 from icecream import ic
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count()))
-WORDS_THRESHOLD_FOR_STORING = int(
-    os.getenv("WORDS_THRESHOLD_FOR_STORING", 160)
-)  # min words needed to not download the body
+WORDS_THRESHOLD_FOR_STORING = int(os.getenv("WORDS_THRESHOLD_FOR_STORING", 160))  # min words needed to not download the body
 
 is_bean_storable = (
     lambda bean: bean
-    and bean.get("content")
-    and count_words(bean.get("content")) >= WORDS_THRESHOLD_FOR_STORING
+    and bean.get("content_length", 0) >= WORDS_THRESHOLD_FOR_STORING
 )
 scrapable_beans = (
     lambda beans: [bean for bean in beans if not is_bean_storable(bean)]
@@ -66,7 +63,6 @@ storable_publishers = (
     else publishers
 )
 
-
 def validate_bean_item(item: dict) -> bool:
     if not item:
         return False
@@ -78,7 +74,6 @@ def validate_bean_item(item: dict) -> bool:
         and item.get(KIND)
     )
 
-
 def validate_chatter_item(item: dict) -> bool:
     if not item:
         return False
@@ -88,26 +83,30 @@ def validate_chatter_item(item: dict) -> bool:
         and (item.get(LIKES) or item.get(COMMENTS) or item.get("subscribers"))
     )
 
-
 def validate_source_item(item: dict) -> bool:
     if not item:
         return False
     return bool(item.get(SOURCE) and item.get(BASE_URL))
 
+def parse_sources(sources: str) -> dict:
+    if os.path.exists(sources):
+        with open(sources, 'r') as file:
+            data = yaml.safe_load(file)
+    else: data = yaml.safe_load(sources)
+    return data['sources']
 
 log = logging.getLogger(__name__)
 
-
 class Orchestrator:
     db: Beansack
-    state_store: AsyncStateMachine
+    state_store: AsyncStateStoreBase
     apicollector: APICollectorAsync
-    webscraper: WebScraper
+    webscraper: AsyncWebScraper
     run_id: str
     beans_collected: int
     publishers_collected: int
 
-    def __init__(self, state_store, db):
+    def __init__(self, state_store: AsyncStateStoreBase, db: Beansack):
         self.db = db   
         self.state_store = state_store
 
@@ -283,7 +282,7 @@ class Orchestrator:
         async with (
             self.state_store,
             APICollectorAsync(batch_size) as self.apicollector,
-            WebScraper(batch_size) as self.webscraper,
+            AsyncWebScraper(batch_size) as self.webscraper,
         ):
             await asyncio.gather(
                 *(
@@ -301,7 +300,3 @@ class Orchestrator:
             extra={"source": self.run_id, "num_items": self.publishers_collected},
         )
         self.db.refresh_chatters()
-
-    def close(self):
-        # Close database connection
-        self.db.close()

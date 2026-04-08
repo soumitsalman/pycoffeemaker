@@ -9,13 +9,6 @@ import msgpack
 
 merge_lists = lambda *lists: [item for sublist in lists if sublist for item in sublist]
 
-def encode_data(data):
-    assign_timezone = lambda obj: obj.replace(tzinfo=timezone.utc) if (isinstance(obj, datetime) and not obj.tzinfo) else obj
-    return msgpack.packb(data, datetime=True, default=assign_timezone)
-
-def decode_data(data):
-    return msgpack.unpackb(data, timestamp=3)
-
 def log_runtime(logger: Logger):
     def decorator(func):
         @wraps(func)

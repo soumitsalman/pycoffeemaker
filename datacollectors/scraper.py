@@ -35,7 +35,7 @@ _HTML_REQUEST_HEADERS = {
     'Accept': "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5,application/signed-exchange;v=b3;q=0.9"
 }
 
-class WebScraper:
+class AsyncWebScraper:
     session: aiohttp.ClientSession = None
     throttle: asyncio.Semaphore = None
 

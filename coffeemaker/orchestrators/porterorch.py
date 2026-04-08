@@ -3,11 +3,11 @@ import logging
 import os
 from typing import Any
 
-from pybeansack.cdnstore import AsyncCDNStore
+from pybeansack import AsyncCDNStore
 from slugify import slugify
 from datetime import datetime
 from .utils import *
-from pybeansack import Beansack, create_client
+from pybeansack import Beansack, Bean
 from pybeansack.models import (
     K_BASE_URL,
     K_CATEGORIES,
@@ -29,7 +29,6 @@ from pybeansack.models import (
     K_EMBEDDING,
     K_ENTITIES,
     K_REGIONS,
-    Bean,
 )
 from pybeansack.utils import *
 from icecream import ic
@@ -62,7 +61,6 @@ _CDN_PATH_TEMPLATE = "beansack/contents/{date}/{slugurl}"
 cdn_path = lambda bean: _CDN_PATH_TEMPLATE.format(
     date=bean[K_CREATED].strftime("%Y/%m/%d"), slugurl=slugify(bean[K_URL])
 )
-
 
 class Orchestrator:
     db: Beansack
