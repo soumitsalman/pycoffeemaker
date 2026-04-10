@@ -329,55 +329,52 @@ def hydrate_processing_cache(cache_dir, batch_size):
     
     db = create_client(db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
     state_store = StateMachine(cache_dir, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
+    logging.basicConfig(
+        level=logging.INFO,
+        filename="rectify.log",
+    )
     
     
     if False:
         offset = 0
-        with tqdm(desc="Hydrating State Caches", unit=PUBLISHERS) as pbar:
-            while pubs := db.query_publishers(
-                conditions=[
-                    "(favicon IS NOT NULL) OR (site_name IS NOT NULL) OR (description IS NOT NULL)"
-                ],
-                limit=batch_size,
-                offset=offset,
-                columns=[K_BASE_URL, K_SOURCE],
-            ):
-                publisher_states = [pub.model_dump(exclude_none=True, exclude_unset=True) for pub in pubs]
-                list(map(lambda state: state_store.set(PUBLISHERS, state, publisher_states),  ["collected", "beansacked"]))
-                offset += len(pubs)
-                pbar.update(len(pubs))
+        while pubs := db.query_publishers(
+            conditions=[
+                "(favicon IS NOT NULL) OR (site_name IS NOT NULL) OR (description IS NOT NULL)"
+            ],
+            limit=batch_size,
+            offset=offset,
+            columns=[K_BASE_URL, K_SOURCE],
+        ):
+            publisher_states = [pub.model_dump(exclude_none=True, exclude_unset=True) for pub in pubs]
+            list(map(lambda state: state_store.set(PUBLISHERS, state, publisher_states),  ["collected", "beansacked"]))
+            offset += len(pubs)
+            logging.info("hydrated", extra={"source": "publishers", "num_items": offset})
 
     if False:
         offset = 0
-        with tqdm(desc="Hydrating State Caches", unit=BEANS) as pbar:
-            while beans := db.query_latest_beans(
-                conditions=["gist IS NULL", "embedding IS NULL"],
-                limit=batch_size,
-                offset=offset
-            ):
-                
-                bean_states = [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans]
-                state_store.set(BEANS, "collected", bean_states)
-                offset += len(beans)
-                pbar.update(len(beans))
+        while beans := db.query_latest_beans(
+            conditions=["gist IS NULL", "embedding IS NULL"],
+            limit=batch_size,
+            offset=offset
+        ):
+            
+            bean_states = [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans]
+            state_store.set(BEANS, "collected", bean_states)
+            offset += len(beans)
+            logging.info(f"hydrated || unprocessed beans || {offset}")
 
-    if True:
-        cls_store = ClassificationStore(cache_dir, {BEANS: K_URL})
-        offset = 32768+36864+212992
-        with tqdm(desc="Hydrating State Caches", unit=BEANS) as pbar:
-            while beans := db.query_latest_beans(
-                conditions=["gist IS NOT NULL", "embedding IS NOT NULL"],
-                limit=batch_size,
-                offset=offset,
-                columns=[K_URL, K_EMBEDDING],
-            ):
-                
-                bean_states = [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans]
-                list(map(lambda state: state_store.set(BEANS, state, bean_states), ["collected", "embedded", "extracted", "digested", "cdned", "beansacked"]))
-                # cls_store.store(BEANS, bean_states)
-                offset += len(beans)
-                pbar.update(len(beans))
-        # cls_store.close()
+    if True:        
+        offset = 0
+        while beans := db.query_latest_beans(
+            conditions=["gist IS NOT NULL", "embedding IS NOT NULL"],
+            limit=batch_size,
+            offset=offset,
+            columns=[K_URL, K_EMBEDDING],
+        ):                
+            bean_states = [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans]
+            list(map(lambda state: state_store.set(BEANS, state, bean_states), ["collected", "embedded", "extracted", "digested", "cdned", "beansacked"]))
+            offset += len(beans)
+            logging.info(f"hydrated || processed beans || {offset}")
     
     state_store.close()
     db.close()
