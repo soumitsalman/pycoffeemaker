@@ -7,9 +7,9 @@ from typing import Optional
 
 from slugify import slugify
 
-from coffeemaker.processingcache.base import StateStoreBase
+from coffeemaker.processingcache.base import StateStoreBase, ClassificationStore
 from nlp import Digest, digestors, embedders
-from pybeansack import CDNStore, SimpleVectorDB
+from pybeansack import CDNStore
 from pybeansack.models import (
     K_CATEGORIES,
     K_CONTENT,
@@ -89,7 +89,7 @@ class Indexer:
         extractor_context_len: int = 0,
         digestor_path: Optional[str] = None,
         digestor_context_len: int = 0,
-        classification_store: SimpleVectorDB = None,
+        classification_store: ClassificationStore = None,
         cdn: Optional[CDNStore] = None,
     ):
         self.state_store = state_store

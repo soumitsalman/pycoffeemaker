@@ -53,7 +53,7 @@ class Porter:
         # TODO: increase this to collected, embedded, classified, extracted, digested, cdned
         beans = self.state_store.get(
             "beans",
-            states=["collected", "embedded", "classified", "extracted", "cdned"],
+            states=["collected", "embedded", "classified", "extracted", "cdned", "digested"],
             exclude_states="beansacked",
         )
         beans = prep_bean_items_for_beansack(beans)
