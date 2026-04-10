@@ -82,7 +82,7 @@ def _extract_feed_metadata(feed, feed_url) -> dict:
         # SITE_NAME: feed.get('title'),
         # DESCRIPTION: feed.get('subtitle') or feed.get('description'),
         # FAVICON: full_url(feed.get('link'), feed.get('icon')) if feed.get('icon') else full_url(feed.get('link'), feed.get('image', {}).get('href')) if feed.get('image') else None,
-        # RSS_FEED: feed_url,
+        RSS_FEED: feed_url,
         SITE_LANGUAGE: feed.get('language')
     }
 

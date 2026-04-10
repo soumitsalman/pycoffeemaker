@@ -3,8 +3,10 @@ from typing import Any
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 import msgpack
-
+from pybeansack import SimpleVectorDB
 NOT_IMPLEMENTED = NotImplementedError("Method not implemented")
+
+ClassificationStore = SimpleVectorDB
 
 class StateStoreBase(ABC):
     @abstractmethod

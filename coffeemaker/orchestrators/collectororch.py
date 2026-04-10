@@ -52,11 +52,7 @@ scrapable_beans = (
     else beans
 )
 storable_beans = lambda beans: list(filter(is_bean_storable, beans)) if beans else beans
-is_publisher_storable = lambda publisher: publisher and (
-    publisher.get("site_name")
-    or publisher.get("rss_feed")
-    or publisher.get("description")
-)
+is_publisher_storable = lambda publisher: publisher and any(field in publisher for field in [SITE_NAME, FAVICON, DESCRIPTION])
 storable_publishers = (
     lambda publishers: list(filter(is_publisher_storable, publishers))
     if publishers

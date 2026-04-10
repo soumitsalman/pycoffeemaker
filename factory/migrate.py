@@ -117,49 +117,6 @@ def migrate(from_db: str, to_db: str, batch_size: int, window: int, *requested_i
     to_db_instance.close()
 
 
-def hydrate(from_db, states_cache, batch_size):
-    import os
-    from coffeemaker.orchestrators.statemachines_sqlite import StateMachine
-
-    db = db_instance(from_db)
-    states = StateMachine(states_cache, {"beans": K_URL, "publishers": K_BASE_URL})
-
-    if True:
-        offset = 0
-        with tqdm(desc="Hydrating State Caches", unit="publishers") as pbar:
-            while pubs := db.query_publishers(
-                conditions=[
-                    "(rss_feed IS NOT NULL) OR (favicon IS NOT NULL) OR (site_name IS NOT NULL) OR (description IS NOT NULL)"
-                ],
-                limit=batch_size,
-                offset=offset,
-            ):
-                publisher_states = [pub.model_dump(exclude_none=True) for pub in pubs]
-                for state in ["collected"]:
-                    states.set("publishers", state, publisher_states)
-                offset += len(pubs)
-                pbar.update(len(pubs))
-
-    if True:
-        offset = 0
-        with tqdm(desc="Hydrating State Caches", unit="beans") as pbar:
-            while beans := db.query_latest_beans(
-                conditions=["gist IS NOT NULL", "embedding IS NOT NULL"],
-                limit=batch_size,
-                offset=offset,
-            ):
-                with ThreadPoolExecutor() as executor:
-                    bean_states = [
-                        bean.model_dump(exclude_none=True, exclude_unset=True)
-                        for bean in beans
-                    ]
-                    executor.map(
-                        lambda state: states.set("beans", state, bean_states),
-                        ["collected", "embedded", "extracted", "digested"],
-                    )
-                offset += len(beans)
-                pbar.update(len(beans))
-
 
 import argparse
 
@@ -171,13 +128,7 @@ parser.add_argument(
 )
 parser.add_argument("--from_db", type=str, help="Type of database to create")
 parser.add_argument("--to_db", type=str, help="Update the lancedb")
-parser.add_argument("--states_cache", type=str, help="State cache path for hydration")
-parser.add_argument(
-    "--classifier_cache", type=str, help="Classifier cache path for hydration"
-)
-parser.add_argument(
-    "--batch_size", type=int, default=2048, help="Batch size for migration"
-)
+parser.add_argument("--batch_size", type=int, default=2048, help="Batch size for migration")
 parser.add_argument("--window", type=int, default=0, help="Window size for migration")
 parser.add_argument(
     "--items",
@@ -188,7 +139,4 @@ parser.add_argument(
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    if args.hydrate:
-        hydrate(args.from_db, args.states_cache, args.batch_size)
-    else:
-        migrate(args.from_db, args.to_db, args.batch_size, args.window, *(args.items or []))
+    migrate(args.from_db, args.to_db, args.batch_size, args.window, *(args.items or []))

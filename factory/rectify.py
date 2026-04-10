@@ -314,11 +314,76 @@ def cluster_existing_beans():
     db.refresh_clusters()
     db.close()
 
+def hydrate_processing_cache(cache_dir, batch_size):
+    """Hydrates local processing cache with beans and publishers from production/backup db
+    
+    Loading Publishers: processed publishers that already has either site_name, favicon or description as `collected` and `beansacked`
+    Loading Beans: 
+    - processed beans that already has both gist and embedding as `collected`, `embedded`, `extracted`, `digested` (since we don't want to repeat any of those steps for existing beans). Query only the `url` and `embedding`. Store the embedding in classification cache
+    - unprocessed beans that do not have `gist`. Store those in `collected` state in processing cache so they can be picked up by the pipeline and processed as usual.  
+    """
+    import os
+    from coffeemaker.processingcache.sqlitecache import StateMachine
+    from coffeemaker.processingcache.base import ClassificationStore
+    from pybeansack import K_URL, K_EMBEDDING, K_BASE_URL, BEANS, PUBLISHERS, RELATED_BEANS, create_client
+    
+    db = create_client(db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
+    state_store = StateMachine(cache_dir, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
+    cls_store = ClassificationStore(cache_dir, {BEANS: K_URL})
+    
+    if True:
+        offset = 0
+        with tqdm(desc="Hydrating State Caches", unit=PUBLISHERS) as pbar:
+            while pubs := db.query_publishers(
+                conditions=[
+                    "(favicon IS NOT NULL) OR (site_name IS NOT NULL) OR (description IS NOT NULL)"
+                ],
+                limit=batch_size,
+                offset=offset,
+                columns=[K_BASE_URL, K_SOURCE],
+            ):
+                publisher_states = [pub.model_dump(exclude_none=True, exclude_unset=True) for pub in pubs]
+                list(map(lambda state: state_store.set(PUBLISHERS, state, publisher_states),  ["collected", "beansacked"]))
+                offset += len(pubs)
+                pbar.update(len(pubs))
+
+    if True:
+        offset = 0
+        with tqdm(desc="Hydrating State Caches", unit=BEANS) as pbar:
+            while beans := db.query_latest_beans(
+                conditions=["gist IS NOT NULL", "embedding IS NOT NULL"],
+                limit=batch_size,
+                offset=offset,
+                columns=[K_URL, K_EMBEDDING],
+            ):
+                
+                bean_states = [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans]
+                list(map(lambda state: state_store.set(BEANS, state, bean_states), ["collected", "embedded", "extracted", "digested", "beansacked"]))
+                cls_store.store(BEANS, bean_states)
+                offset += len(beans)
+                pbar.update(len(beans))
+
+    if True:
+        offset = 0
+        with tqdm(desc="Hydrating State Caches", unit=BEANS) as pbar:
+            while beans := db.query_latest_beans(
+                conditions=["gist IS NULL", "embedding IS NULL"],
+                limit=batch_size,
+                offset=offset
+            ):
+                
+                bean_states = [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans]
+                state_store.set(BEANS, "collected", bean_states)
+                offset += len(beans)
+                pbar.update(len(beans))
+
 
 # adding data porting logic
 if __name__ == "__main__":
+    hydrate_processing_cache(os.getenv("CACHE_DIR"), batch_size=4096)
     # cleanup_bean_tags()
-    cluster_existing_beans()
+    # cluster_existing_beans()
+
     # create_classification_data_files()
     # asyncio.run(prefill_publishers())
     # swap_gist_regions_entities()
