@@ -30,7 +30,7 @@ logging.getLogger("coffeemaker.orchestrators.collectororch").setLevel(logging.IN
 logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.refresherorch").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
+logging.getLogger("coffeemaker.orchestrators.porterorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.statemachines_pg").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.agents").propagate = False
@@ -68,13 +68,14 @@ parser.add_argument(
         "EXTRACTOR",
         "ANALYZER",
         "CLASSIFIER",
+        "CDN",
         "PORTER",
     ],
-    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, PORTER)",
+    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CDN, PORTER)",
 )
 
-from coffeemaker.processingcache.sqlitecache import StateMachine, AsyncStateMachine
-from pybeansack import create_client, SimpleVectorDB
+from coffeemaker.processingcache.sqlitecache import AsyncStateMachine, StateMachine
+from pybeansack import SimpleVectorDB, create_client, CDNStore
 
 if __name__ == "__main__":
     # Use command line args if provided, otherwise fall back to env vars
@@ -92,14 +93,23 @@ if __name__ == "__main__":
         "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
     }
     db = create_client(**db_kwargs)
-    classification_store = SimpleVectorDB(os.getenv("CLASSIFIER_STORAGE"), {"beans": "url"})  # Set via CLASSIFIER_STORAGE env var
-    state_store = StateMachine(os.getenv("STATEMACHINE_STORAGE"), object_id_keys={"beans": "url", "publishers": "base_url"})
-    async_state_store = AsyncStateMachine(os.getenv("STATEMACHINE_STORAGE"), object_id_keys={"beans": "url", "publishers": "base_url"})
+    classification_store = SimpleVectorDB(
+        os.getenv("CLASSIFIER_STORAGE"), 
+        table_id_keys={"beans": "url"}
+    )
+    state_store = StateMachine(
+        os.getenv("STATEMACHINE_STORAGE"),
+        object_id_keys={"beans": "url", "publishers": "base_url"},
+    )
+    async_state_store = AsyncStateMachine(
+        os.getenv("STATEMACHINE_STORAGE"),
+        object_id_keys={"beans": "url", "publishers": "base_url"},
+    )
 
     if mode == "COLLECTOR":
-        from coffeemaker.orchestrators.collectororch import Orchestrator
+        from coffeemaker.orchestrators.collectororch import Collector
 
-        orch = Orchestrator(state_store=async_state_store, db=db)
+        orch = Collector(state_store=async_state_store, db=db)
         asyncio.run(
             orch.run(
                 os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
@@ -108,11 +118,10 @@ if __name__ == "__main__":
         )
         orch.close()
     elif mode == "EMBEDDER":
-        from coffeemaker.orchestrators.analyzerorch import Orchestrator
+        from coffeemaker.orchestrators.analyzerorch import Indexer
 
-        orch = Orchestrator(
+        orch = Indexer(
             state_store=state_store,
-            classification_store=classification_store,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
@@ -121,17 +130,19 @@ if __name__ == "__main__":
         orch.run_embedder(batch_size=batch_size)
 
     elif mode == "CLASSIFIER":
-        from coffeemaker.orchestrators.analyzerorch import Orchestrator
+        from coffeemaker.orchestrators.analyzerorch import Indexer
 
-        orch = Orchestrator(state_store=state_store, classification_store=classification_store)
+        orch = Indexer(
+            state_store=state_store, 
+            classification_store=classification_store
+        )
         orch.run_classifier(batch_size=batch_size)
 
     elif mode == "EXTRACTOR":
-        from coffeemaker.orchestrators.analyzerorch import Orchestrator
+        from coffeemaker.orchestrators.analyzerorch import Indexer
 
-        orch = Orchestrator(
+        orch = Indexer(
             state_store=state_store,
-            classification_store=classification_store,
             extractor_path=os.getenv("EXTRACTOR_PATH"),
             extractor_context_len=int(
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
@@ -140,25 +151,24 @@ if __name__ == "__main__":
         orch.run_extractor(batch_size=batch_size)
 
     elif mode == "DIGESTOR":
-        from coffeemaker.orchestrators.analyzerorch import Orchestrator
+        from coffeemaker.orchestrators.analyzerorch import Indexer
 
-        orch = Orchestrator(
+        orch = Indexer(
             state_store=state_store,
-            classification_store=classification_store,
             digestor_path=os.getenv("DIGESTOR_PATH"),
             digestor_context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
         )
         orch.run_digestor(batch_size=batch_size)
-    
+
+    # TODO: better naming
     elif mode == "ANALYZER":
         # this combines both embedder, extractor, and digestor
-        from coffeemaker.orchestrators.analyzerorch import Orchestrator
+        from coffeemaker.orchestrators.analyzerorch import Indexer
 
-        orch = Orchestrator(
+        orch = Indexer(
             state_store=state_store,
-            classification_store=classification_store,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
@@ -177,29 +187,28 @@ if __name__ == "__main__":
             extractor_batch_size=int(args.extractor_batch_size or batch_size),
             digestor_batch_size=int(args.digestor_batch_size or batch_size),
         )
-        
-    elif mode == "PORTER":
-        from coffeemaker.orchestrators.porterorch import Orchestrator
 
-        orch = Orchestrator(
+    elif mode == "CDN":
+        from coffeemaker.orchestrators.analyzerorch import Indexer
+
+        orch = Indexer(
             state_store=state_store,
-            db=db,
-            cdn_kwargs={
-                "bucket": os.getenv("CDN_BUCKET"),
-                "public_access_url_template": os.getenv(
-                    "CDN_PUBLIC_ACCESS_URL_TEMPLATE"
-                ),
-                "max_concurrency": 100,
-            },
+            cdn=CDNStore(os.getenv("CDN_BUCKET"), os.getenv("CDN_PUBLIC_ACCESS_URL_TEMPLATE")),
         )
-        # asyncio.run(orch.run_cdn_porter())
-        orch.run()
+        orch.run_cdn(batch_size=batch_size)
+
+    elif mode == "PORTER":
+        from coffeemaker.orchestrators.porterorch import Porter
+
+        orch = Porter(state_store=state_store)
+        # add a backup db to store 
+        orch.hydrate_beansacks(dbs=[db])
 
     else:
         raise ValueError(
             "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER."
         )
-    
+
     state_store.close()
     classification_store.close()
-    db.close()    
+    db.close()

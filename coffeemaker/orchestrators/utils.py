@@ -3,11 +3,14 @@ import os
 from datetime import datetime, timezone
 from functools import wraps
 from logging import Logger
+
 import msgpack
+from icecream import ic
 
 # log = logging.getLogger(__name__)
 
 merge_lists = lambda *lists: [item for sublist in lists if sublist for item in sublist]
+
 
 def log_runtime(logger: Logger):
     def decorator(func):

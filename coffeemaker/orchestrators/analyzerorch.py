@@ -1,15 +1,20 @@
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from itertools import batched
 from typing import Optional
 
-from ..processingcache.base import StateStoreBase
-from .utils import *
+from slugify import slugify
+
+from coffeemaker.processingcache.base import StateStoreBase
 from nlp import Digest, digestors, embedders
+from pybeansack import CDNStore, SimpleVectorDB
 from pybeansack.models import (
     K_CATEGORIES,
     K_CONTENT,
     K_CONTENT_LENGTH,
+    K_CREATED,
     K_EMBEDDING,
     K_ENTITIES,
     K_GIST,
@@ -19,68 +24,73 @@ from pybeansack.models import (
     K_SENTIMENTS,
     K_SOURCE,
     K_URL,
-    POST,
+    # POST,
 )
-from pybeansack.utils import *
-from icecream import ic
+
+from .utils import *
 
 log = logging.getLogger(__name__)
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
-MAX_ANALYZE_NDAYS = int(os.getenv("MAX_ANALYZE_NDAYS", 2))
-END_OF_QUEUE = "__END_OF_QUEUE__"  # Sentinel value to signal end of queue
-WORDS_THRESHOLD_FOR_INDEXING = int(
-    os.getenv("WORDS_THRESHOLD_FOR_INDEXING", 160)
-)  # mininum words needed to put it through indexing
-WORDS_THRESHOLD_FOR_EXTRACTING = int(
-    os.getenv("WORDS_THRESHOLD_FOR_EXTRACTING", 160)
-)  # min words needed to use the generated summary
-WORDS_THRESHOLD_FOR_DIGESTING = int(
-    os.getenv("WORDS_THRESHOLD_FOR_DIGESTING", 160)
-)  # min words needed to use the generated summary
-WORDS_THRESHOLD_FOR_ANALYZING = int(
-    os.getenv("WORDS_THRESHOLD_FOR_ANALYZING", 160)
-)  # min words needed to use the generated summary
+# MAX_ANALYZE_NDAYS = int(os.getenv("MAX_ANALYZE_NDAYS", 2))
 
-EMBED_FILTER = [
-    f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_INDEXING}",
-    f"{K_KIND} != '{POST}'",
-]
-EXTRACT_FILTER = [
-    f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_EXTRACTING}",
-    f"{K_KIND} != '{POST}'",
-]
-DIGEST_FILTER = [
-    f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_DIGESTING}",
-    f"{K_KIND} != '{POST}'",
-]
-ANALYZER_FILTER = {
-    "content_length >=": WORDS_THRESHOLD_FOR_ANALYZING,
-    "kind !=": POST,
-}
-MAX_CLASSIFICATIONS = 2
+# WORDS_THRESHOLD_FOR_INDEXING = int(
+#     os.getenv("WORDS_THRESHOLD_FOR_INDEXING", 160)
+# )  # mininum words needed to put it through indexing
+# WORDS_THRESHOLD_FOR_EXTRACTING = int(
+#     os.getenv("WORDS_THRESHOLD_FOR_EXTRACTING", 160)
+# )  # min words needed to use the generated summary
+# WORDS_THRESHOLD_FOR_DIGESTING = int(
+#     os.getenv("WORDS_THRESHOLD_FOR_DIGESTING", 160)
+# )  # min words needed to use the generated summary
+# WORDS_THRESHOLD_FOR_ANALYZING = int(
+#     os.getenv("WORDS_THRESHOLD_FOR_ANALYZING", 160)
+# )  # min words needed to use the generated summary
+
+# EMBED_FILTER = [
+#     f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_INDEXING}",
+#     f"{K_KIND} != '{POST}'",
+# ]
+# EXTRACT_FILTER = [
+#     f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_EXTRACTING}",
+#     f"{K_KIND} != '{POST}'",
+# ]
+# DIGEST_FILTER = [
+#     f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_DIGESTING}",
+#     f"{K_KIND} != '{POST}'",
+# ]
+# ANALYZER_FILTER = {
+#     "content_length >=": WORDS_THRESHOLD_FOR_ANALYZING,
+#     "kind !=": POST,
+# }
+MAX_CLASSIFICATIONS = int(os.getenv("MAX_CLASSIFICATIONS", 2))
+CLUSTER_EPS = float(os.getenv("CLUSTER_EPS", 0.4))
+VECTOR_LEN = int(os.getenv("VECTOR_LEN", 384))
 
 index_storables = lambda beans: [bean for bean in beans if bean.embedding]
 digest_storables = lambda beans: [bean for bean in beans if bean.gist]
 run_id = lambda: datetime.now().strftime("%A, %b-%d-%Y")
 
 
-class Orchestrator:
+# TODO: convert this into indexer
+class Indexer:
     state_store: StateStoreBase
     embedder: embedders.EmbedderBase
     extractor: digestors.NamedEntityExtractor
     digestor: digestors.DigestorBase
+    cdn: CDNStore
 
     def __init__(
         self,
-        state_store: StateStoreBase,
-        classification_store,
+        state_store: StateStoreBase,        
         embedder_path: Optional[str] = None,
         embedder_context_len: int = 0,
         extractor_path: Optional[str] = None,
         extractor_context_len: int = 0,
         digestor_path: Optional[str] = None,
         digestor_context_len: int = 0,
+        classification_store: SimpleVectorDB = None,
+        cdn: Optional[CDNStore] = None,
     ):
         self.state_store = state_store
         self.classification_store = classification_store
@@ -101,6 +111,7 @@ class Orchestrator:
                 max_output_tokens=384,
                 output_parser=Digest.parse_compressed,
             )
+        self.cdn = cdn
 
     def embed_beans(self, beans: list[dict], batch_size: int):
         with self.embedder:
@@ -130,14 +141,30 @@ class Orchestrator:
 
     def _create_classification(self, bean: dict):
         embedding = bean[K_EMBEDDING]
-        related = self.classification_store.search("beans", embedding=embedding, distance=CLUSTER_EPS, columns=[K_URL])
-        categories = self.classification_store.search("categories", embedding=embedding, distance_func="cosine", columns=["category"], limit=MAX_CLASSIFICATIONS)
-        sentiments = self.classification_store.search("sentiments", embedding=embedding, distance_func="cosine", columns=["sentiment"], limit=MAX_CLASSIFICATIONS)
+        related = self.classification_store.search(
+            "beans", embedding=embedding, distance=CLUSTER_EPS, columns=[K_URL]
+        )
+        categories = self.classification_store.search(
+            "categories",
+            embedding=embedding,
+            distance_func="cosine",
+            columns=["category"],
+            limit=MAX_CLASSIFICATIONS,
+        )
+        sentiments = self.classification_store.search(
+            "sentiments",
+            embedding=embedding,
+            distance_func="cosine",
+            columns=["sentiment"],
+            limit=MAX_CLASSIFICATIONS,
+        )
 
         map_key = lambda items, key: [item[key] for item in items]
         return {
             K_URL: bean[K_URL],
-            K_RELATED: list(filter(lambda x: x != bean[K_URL], map_key(related, K_URL))),
+            K_RELATED: list(
+                filter(lambda x: x != bean[K_URL], map_key(related, K_URL))
+            ),
             K_CATEGORIES: map_key(categories, "category"),
             K_SENTIMENTS: map_key(sentiments, "sentiment"),
         }
@@ -145,9 +172,15 @@ class Orchestrator:
     def classify_beans(self, beans: list[dict], batch_size: int):
         # store the items first
         for chunk in batched(beans, batch_size):
-            self.classification_store.store("beans", [{k: v for k, v in b.items() if k in [K_URL, K_EMBEDDING]} for b in chunk])
+            self.classification_store.store(
+                "beans",
+                [
+                    {k: v for k, v in b.items() if k in [K_URL, K_EMBEDDING]}
+                    for b in chunk
+                ],
+            )
 
-        for chunk in batched(beans, batch_size):            
+        for chunk in batched(beans, batch_size):
             updates = [self._create_classification(bean) for bean in chunk]
             log.info(
                 "classified",
@@ -219,11 +252,13 @@ class Orchestrator:
 
     @log_runtime(logger=log)
     def run_embedder(self, batch_size: int = BATCH_SIZE):
-        total = 0
-        beans = self.state_store.get("beans", states="collected", exclude_states="embedded")
+        beans = self.state_store.get(
+            "beans", states="collected", exclude_states="embedded"
+        )
         log.info(
             "starting embedder", extra={"source": run_id(), "num_items": len(beans)}
         )
+        total = 0
         for updates in self.embed_beans(beans, batch_size):
             stored = self.state_store.set("beans", "embedded", updates)
             total += stored
@@ -231,12 +266,14 @@ class Orchestrator:
 
     @log_runtime(logger=log)
     def run_classifier(self, batch_size: int = BATCH_SIZE):
-        # this runs both classifier and clustering
-        total = 0
-        beans = self.state_store.get("beans", states="embedded", exclude_states="classified")
+        # NOTE: this runs both classifier and clustering
+        beans = self.state_store.get(
+            "beans", states="embedded", exclude_states="classified"
+        )
         log.info(
             "starting classifier", extra={"source": run_id(), "num_items": len(beans)}
         )
+        total = 0
         for updates in self.classify_beans(beans, batch_size):
             stored = self.state_store.set("beans", "classified", updates)
             total += stored
@@ -244,11 +281,13 @@ class Orchestrator:
 
     @log_runtime(logger=log)
     def run_extractor(self, batch_size: int = BATCH_SIZE):
-        total = 0
-        beans = self.state_store.get("beans", states="collected", exclude_states="extracted")
+        beans = self.state_store.get(
+            "beans", states="collected", exclude_states="extracted"
+        )
         log.info(
             "starting extractor", extra={"source": run_id(), "num_items": len(beans)}
         )
+        total = 0
         for updates in self.extract_beans(beans, batch_size):
             stored = self.state_store.set("beans", "extracted", updates)
             total += stored
@@ -256,15 +295,48 @@ class Orchestrator:
 
     @log_runtime(logger=log)
     def run_digestor(self, batch_size: int = BATCH_SIZE):
-        total = 0
-        beans = self.state_store.get("beans", states="collected", exclude_states="digested")
+        beans = self.state_store.get(
+            "beans", states="collected", exclude_states="digested"
+        )
         log.info(
             "starting digestor", extra={"source": run_id(), "num_items": len(beans)}
         )
+        total = 0
         for updates in self.digest_beans(beans, batch_size):
             stored = self.state_store.set("beans", "digested", updates)
             total += stored
         log.info("total digested", extra={"source": run_id(), "num_items": total})
+
+    @log_runtime(logger=log)
+    def run_cdn(self, batch_size: int = BATCH_SIZE):
+        """Put bean contents in CDN"""
+        CDN_PATH_TEMPLATE = "beansack/contents/{date}/{slugurl}.md"
+        create_cdn_path = lambda bean: CDN_PATH_TEMPLATE.format(
+            date=bean[K_CREATED].strftime("%Y/%m/%d"), slugurl=slugify(bean[K_URL])
+        )
+
+        beans = self.state_store.get(
+            "beans", states="collected", exclude_states="cdned"
+        )
+        log.info(
+            "starting cdn",
+            extra={"num_items": len(beans), "source": run_id()},
+        )
+        with ThreadPoolExecutor(max_workers=batch_size) as exec:
+            cdn_urls = exec.map(
+                lambda bean: self.cdn.upload_text(
+                    path=create_cdn_path(bean),
+                    content=bean[K_CONTENT],
+                ),
+                beans,
+            )
+
+        updates = [
+            {K_URL: bean[K_URL], "content_url": cdn_url}
+            for bean, cdn_url in zip(beans, cdn_urls)
+        ]
+        self.state_store.set("beans", "cdned", updates)
+        log.info("total cdned", extra={"source": run_id(), "num_items": len(updates)})
 
     @log_runtime(logger=log)
     def run(

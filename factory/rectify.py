@@ -1,138 +1,155 @@
-import logging
-import sys
+import asyncio
 import json
+import logging
 import os
 import re
-import asyncio
+import sys
+
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 load_dotenv()
 
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urljoin, urlparse
+from datetime import datetime, timedelta
 from itertools import batched, chain
+from urllib.parse import urljoin, urlparse
+
 from icecream import ic
 from tqdm import tqdm
-from datetime import datetime, timedelta
-from pybeansack.models import *
-from pybeansack.database import *
+
 from pybeansack import create_client
+from pybeansack.database import *
+from pybeansack.models import *
 
 K_RELATED = "related"
-LIMIT=40000
+LIMIT = 40000
 
-ndays_ago = lambda n: (datetime.now() - timedelta(days=n))
-make_id = lambda text: re.sub(r'[^a-zA-Z0-9]', '-', text.lower())
+ndays_ago = lambda n: datetime.now() - timedelta(days=n)
+make_id = lambda text: re.sub(r"[^a-zA-Z0-9]", "-", text.lower())
 create_orch = lambda: Orchestrator(
     os.getenv("DB_REMOTE"),
     os.getenv("DB_LOCAL"),
     os.getenv("DB_NAME"),
-    embedder_path = os.getenv("EMBEDDER_PATH"),    
-    digestor_path = os.getenv("DIGESTOR_PATH")
+    embedder_path=os.getenv("EMBEDDER_PATH"),
+    digestor_path=os.getenv("DIGESTOR_PATH"),
 )
 
 
 def merge_feeds():
-    from coffeemaker.orchestrators.collectororch import Orchestrator
-    from coffeemaker.collectors.collector import parse_sources
     import yaml
+    from coffeemaker.collectors.collector import parse_sources
 
-    local = Orchestrator(
-        mongodb_conn_str="mongodb://localhost:27017/",
-        db_name="test3"
-    )
-    
+    from coffeemaker.orchestrators.collectororch import Collector
+
+    local = Collector(mongodb_conn_str="mongodb://localhost:27017/", db_name="test3")
+
     # SCRAPE FOR DETAILS
-    rss_feeds = local.db.sourcestore.distinct("rss_feed", filter = {"rss_feed": {"$nin": to_ignore}})
-    
-    existing = parse_sources("/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml")
-    existing['rss'] = list(set(existing['rss']+rss_feeds))
+    rss_feeds = local.db.sourcestore.distinct(
+        "rss_feed", filter={"rss_feed": {"$nin": to_ignore}}
+    )
+
+    existing = parse_sources(
+        "/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"
+    )
+    existing["rss"] = list(set(existing["rss"] + rss_feeds))
     existing = {"sources": existing}
-    
-    with open("/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml", "w") as file:
+
+    with open(
+        "/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml", "w"
+    ) as file:
         yaml.dump(existing, file)
 
+
 def remove_non_functional_feeds():
-    import csv, yaml
+    import csv
+
+    import yaml
+
     csv_path = "/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/non-functional-rss.csv"
     yaml_path = "/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"
 
     # Read non-functional RSS feeds from CSV (handling quoted values)
-    with open(csv_path, newline='') as csvfile:
+    with open(csv_path, newline="") as csvfile:
         reader = csv.reader(csvfile)
-        non_functional = [row[0].strip().strip('"') for row in reader if row and row[0].strip()]
+        non_functional = [
+            row[0].strip().strip('"') for row in reader if row and row[0].strip()
+        ]
 
     ic(len(non_functional))
     # Load YAML feeds
-    with open(yaml_path, 'r') as file:
+    with open(yaml_path, "r") as file:
         feeds_data = yaml.safe_load(file)
 
     # Remove non-functional feeds from the rss list
-    if 'sources' in feeds_data and 'rss' in feeds_data['sources']:
-        original_count = len(feeds_data['sources']['rss'])
-        feeds_data['sources']['rss'] = sorted([
-            feed for feed in feeds_data['sources']['rss'] if feed not in non_functional
-        ])
+    if "sources" in feeds_data and "rss" in feeds_data["sources"]:
+        original_count = len(feeds_data["sources"]["rss"])
+        feeds_data["sources"]["rss"] = sorted(
+            [
+                feed
+                for feed in feeds_data["sources"]["rss"]
+                if feed not in non_functional
+            ]
+        )
         print(f"Removed {original_count - len(feeds_data['sources']['rss'])} feeds.")
 
-
     # Save the updated YAML
-    with open(yaml_path, 'w') as file:
+    with open(yaml_path, "w") as file:
         yaml.dump(feeds_data, file)
 
+
 def port_pages_locally():
-    from coffeemaker.orchestrators.analyzerorch import Orchestrator
-    orch = Orchestrator(
-        os.getenv('DB_REMOTE'),
-        "beansackV2",
-        os.getenv('QUEUE_PATH_TEST'),
-        "test"
+    from coffeemaker.orchestrators.analyzerorch import Indexer
+
+    orch = Indexer(
+        os.getenv("DB_REMOTE"), "beansackV2", os.getenv("QUEUE_PATH_TEST"), "test"
     )
-    local_orch = Orchestrator(
-        os.getenv('DB_REMOTE_TEST'),
-        "test",
-        os.getenv('QUEUE_PATH_TEST'),
-        "test"
+    local_orch = Indexer(
+        os.getenv("DB_REMOTE_TEST"), "test", os.getenv("QUEUE_PATH_TEST"), "test"
     )
 
-    pages = list(orch.db.db['baristas'].find({}))
+    pages = list(orch.db.db["baristas"].find({}))
     for page in pages:
         if K_EMBEDDING in page:
-            page[K_EMBEDDING] = local_orch.embedder.embed("category/classification/domain: "+page[K_DESCRIPTION])
-    local_orch.db.db['pages'].insert_many(pages)
+            page[K_EMBEDDING] = local_orch.embedder.embed(
+                "category/classification/domain: " + page[K_DESCRIPTION]
+            )
+    local_orch.db.db["pages"].insert_many(pages)
 
     print(datetime.now(), "ported pages|%d", len(pages))
 
-def create_composer_topics_locally():  
-    import yaml, json
+
+def create_composer_topics_locally():
+    import json
+
     import pandas as pd
+    import yaml
     from coffeemaker.nlp import embedders
-    
-    with open("/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.yaml", "r") as file:
+
+    with open(
+        "/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.yaml", "r"
+    ) as file:
         topics = yaml.safe_load(file)
 
-    embedder = embedders.from_path(os.getenv('EMBEDDER_PATH'), 512)
-    vecs = embedder(["topic: "+topics[key][K_DESCRIPTION] for key in topics.keys()])
+    embedder = embedders.from_path(os.getenv("EMBEDDER_PATH"), 512)
+    vecs = embedder(["topic: " + topics[key][K_DESCRIPTION] for key in topics.keys()])
     for key, vec in zip(topics.keys(), vecs):
         topics[key][K_EMBEDDING] = vec
 
-    with open("/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.json", "w") as file:
+    with open(
+        "/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.json", "w"
+    ) as file:
         json.dump(topics, file, indent=2)
 
-def migrate_users(from_db, to_db):
-    from coffeemaker.orchestrators.collectororch import Orchestrator
 
-    old_prod = Orchestrator(
-        os.getenv('MONGODB_CONN_STR'),
-        from_db
-    )
-    new_prod = Orchestrator(
-        os.getenv('MONGODB_CONN_STR'),
-        to_db
-    )
-    
+def migrate_users(from_db, to_db):
+    from coffeemaker.orchestrators.collectororch import Collector
+
+    old_prod = Collector(os.getenv("MONGODB_CONN_STR"), from_db)
+    new_prod = Collector(os.getenv("MONGODB_CONN_STR"), to_db)
+
     new_prod.db.userstore.insert_many(old_prod.db.userstore.find({}), ordered=False)
+
 
 def swap_gist_regions_entities(batch_size: int = 256):
     """Query all rows from warehouse.bean_gists, swap the `entities` and
@@ -143,10 +160,7 @@ def swap_gist_regions_entities(batch_size: int = 256):
     """
     from coffeemaker.pybeansack.warehouse import Beansack
 
-    db = Beansack(
-        os.getenv('PG_CONNECTION_STRING'),
-        os.getenv('CACHE_DIR')
-    )
+    db = Beansack(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR"))
 
     # Fetch all gists with their entities/regions
     query_expr = "SELECT url, gist, entities, regions FROM warehouse.bean_gists"
@@ -155,19 +169,24 @@ def swap_gist_regions_entities(batch_size: int = 256):
     print(datetime.now(), f"fetched bean_gists|{total}")
 
     for item in rows:
-        temp = item.get('entities')
-        item['entities'] = item.get('regions')
-        item['regions'] = temp
+        temp = item.get("entities")
+        item["entities"] = item.get("regions")
+        item["regions"] = temp
 
     import pandas as pd
-    pd.DataFrame(rows).to_parquet(os.getenv("CACHE_DIR") + "/main/bean_gists/bean-gists-rectified.parquet")
+
+    pd.DataFrame(rows).to_parquet(
+        os.getenv("CACHE_DIR") + "/main/bean_gists/bean-gists-rectified.parquet"
+    )
     db.close()
 
 
-def split_parquet_into_chunks(src_path: str = "/home/soumitsr/.beansack/main/bean_gists/bean-gists-rectified.parquet",
-                              chunk_size: int = 1024,
-                              dest_dir: str | None = None,
-                              prefix: str = "bean-gists-chunk") -> list[str]:
+def split_parquet_into_chunks(
+    src_path: str = "/home/soumitsr/.beansack/main/bean_gists/bean-gists-rectified.parquet",
+    chunk_size: int = 1024,
+    dest_dir: str | None = None,
+    prefix: str = "bean-gists-chunk",
+) -> list[str]:
     """Read a Parquet file, split it into chunks of `chunk_size` rows and
     write each chunk as a separate Parquet file.
 
@@ -203,27 +222,41 @@ def split_parquet_into_chunks(src_path: str = "/home/soumitsr/.beansack/main/bea
     ic(f"wrote_total_chunks|{len(written)}")
     return written
 
+
 def register_new_gist_files():
-    from coffeemaker.pybeansack.warehouse import Beansack, SQL_INSERT_PARQUET
-    db = Beansack(
-        os.getenv('PG_CONNECTION_STRING'),
-        os.getenv('STORAGE_DATAPATH')
-    )
+    from coffeemaker.pybeansack.warehouse import SQL_INSERT_PARQUET, Beansack
+
+    db = Beansack(os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH"))
 
     import glob
-    files = glob.glob(os.getenv("STORAGE_DATAPATH") + "/main/bean_gists/bean-gists-chunk-*.parquet")
+
+    files = glob.glob(
+        os.getenv("STORAGE_DATAPATH") + "/main/bean_gists/bean-gists-chunk-*.parquet"
+    )
     for f in files:
-        db.execute(SQL_INSERT_PARQUET, ('bean_gists', f,))
+        db.execute(
+            SQL_INSERT_PARQUET,
+            (
+                "bean_gists",
+                f,
+            ),
+        )
 
     db.close()
+
 
 def cleanup_bean_tags():
     from pybeansack import create_client
 
-    db = create_client(db_type="postgres", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))
+    db = create_client(
+        db_type="postgres", pg_connection_string=os.getenv("PG_CONNECTION_STRING")
+    )
 
-    strip_non_alphanumeric = lambda text: re.sub(r'^\W+|\W+$', '', text)
-    clean_list = lambda items: list(set(filter(None, map(strip_non_alphanumeric, items)))) if items else items
+    strip_non_alphanumeric = lambda text: re.sub(r"^\W+|\W+$", "", text)
+    clean_list = lambda items: (
+        list(set(filter(None, map(strip_non_alphanumeric, items)))) if items else items
+    )
+
     def cleanup_beans(beans: list[Bean]) -> list[Bean]:
         for bean in beans:
             bean.categories = clean_list(bean.categories)
@@ -241,20 +274,46 @@ def cleanup_bean_tags():
     batch_size = 1024
     offsets = list(range(start, total, batch_size))
 
-    with tqdm(total=total-start, desc="Updating batches") as pbar:
-        with ThreadPoolExecutor(max_workers=8, thread_name_prefix="UPDATER") as executor:
+    with tqdm(total=total - start, desc="Updating batches") as pbar:
+        with ThreadPoolExecutor(
+            max_workers=8, thread_name_prefix="UPDATER"
+        ) as executor:
             for offset in offsets:
-                beans = cleanup_beans(db._fetch_all(table=BEANS, conditions=CONDITION, order="collected", limit=batch_size, offset=offset, columns=[K_URL, K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS]))
-                future = executor.submit(db.update_beans, beans, columns=[K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS])
+                beans = cleanup_beans(
+                    db._fetch_all(
+                        table=BEANS,
+                        conditions=CONDITION,
+                        order="collected",
+                        limit=batch_size,
+                        offset=offset,
+                        columns=[
+                            K_URL,
+                            K_CATEGORIES,
+                            K_SENTIMENTS,
+                            K_ENTITIES,
+                            K_REGIONS,
+                        ],
+                    )
+                )
+                future = executor.submit(
+                    db.update_beans,
+                    beans,
+                    columns=[K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS],
+                )
                 future.add_done_callback(lambda f: pbar.update(f.result()))
             # executor waits for all submitted updates to finish before exiting
     db.close()
 
-def cluster_existing_beans():    
-    db = create_client("pg", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))       
-    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s")
+
+def cluster_existing_beans():
+    db = create_client("pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s",
+    )
     db.refresh_clusters()
     db.close()
+
 
 # adding data porting logic
 if __name__ == "__main__":

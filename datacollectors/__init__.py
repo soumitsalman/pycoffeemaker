@@ -1,5 +1,5 @@
-from .collector import APICollector, APICollectorAsync
-from .scraper import WebCrawler, AsyncWebScraper
+from .apicollectors import APICollector, APICollectorAsync
+from .scrapers import WebCrawler, AsyncWebScraper
 from .utils import (
     POST,
     BLOG,

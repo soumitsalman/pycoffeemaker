@@ -35,7 +35,7 @@ from datacollectors import (
     URL,
 )
 from pybeansack import Beansack, Chatter
-from ..processingcache.base import AsyncStateStoreBase
+from coffeemaker.processingcache.base import AsyncStateStoreBase
 from .utils import *
 from icecream import ic
 
@@ -97,7 +97,7 @@ def parse_sources(sources: str) -> dict:
 
 log = logging.getLogger(__name__)
 
-class Orchestrator:
+class Collector:
     db: Beansack
     state_store: AsyncStateStoreBase
     apicollector: APICollectorAsync
