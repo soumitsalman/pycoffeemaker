@@ -74,8 +74,8 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CDN, PORTER)",
 )
 
-from coffeemaker.processingcache.sqlitecache import AsyncStateMachine, StateMachine
-from pybeansack import SimpleVectorDB, create_client, CDNStore
+from coffeemaker.processingcache.sqlitecache import AsyncStateMachine, StateMachine, ClassificationStore
+from pybeansack import create_client, CDNStore, BEANS, PUBLISHERS, K_URL, K_BASE_URL
 
 if __name__ == "__main__":
     # Use command line args if provided, otherwise fall back to env vars
@@ -93,17 +93,17 @@ if __name__ == "__main__":
         "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
     }
     db = create_client(**db_kwargs)
-    classification_store = SimpleVectorDB(
-        os.getenv("CLASSIFIER_STORAGE"), 
-        table_id_keys={"beans": "url"}
+    classification_store = ClassificationStore(
+        os.getenv("CACHE_DIR"), 
+        table_id_keys={BEANS: K_URL}
     )
     state_store = StateMachine(
-        os.getenv("STATEMACHINE_STORAGE"),
-        object_id_keys={"beans": "url", "publishers": "base_url"},
+        os.getenv("CACHE_DIR"),
+        object_id_keys={BEANS: K_URL, PUBLISHERS: K_BASE_URL},
     )
     async_state_store = AsyncStateMachine(
-        os.getenv("STATEMACHINE_STORAGE"),
-        object_id_keys={"beans": "url", "publishers": "base_url"},
+        os.getenv("CACHE_DIR"),
+        object_id_keys={BEANS: K_URL, PUBLISHERS: K_BASE_URL},
     )
 
     if mode == "COLLECTOR":

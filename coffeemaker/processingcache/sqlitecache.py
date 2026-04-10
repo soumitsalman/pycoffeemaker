@@ -35,6 +35,16 @@ CREATE INDEX IF NOT EXISTS {table}_id_idx ON {table}(id);
 CREATE INDEX IF NOT EXISTS {table}_state_idx ON {table}(state);
 """
 
+def _rectify_path(db_path: str) -> str:
+    path = Path(db_path)
+    if path.is_dir() or (not path.exists() and not path.suffix):
+        # If it's a directory or doesn't exist and has no suffix, treat as directory
+        path = path / DEFAULT_DB_PATH
+        path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        # Ensure parent directory exists
+        path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)
 
 class StateMachine(StateStoreBase):
     id_keys: dict[str, str]
@@ -42,19 +52,8 @@ class StateMachine(StateStoreBase):
     write_lock: threading.Lock
 
     def __init__(self, db_path: str, object_id_keys: dict[str, str]):
-        # Process db_path
-        path = Path(db_path)
-        if path.is_dir() or (not path.exists() and not path.suffix):
-            # If it's a directory or doesn't exist and has no suffix, treat as directory
-            path = path / DEFAULT_DB_PATH
-            path.parent.mkdir(parents=True, exist_ok=True)
-        else:
-            # Ensure parent directory exists
-            path.parent.mkdir(parents=True, exist_ok=True)
-
-        self.db_path = str(path)
+        self.db_path = _rectify_path(db_path)
         self.id_keys = object_id_keys.copy()
-        self.db_path = path        
         self.write_lock = threading.Lock()
         self._conn = None
 
@@ -134,8 +133,8 @@ class AsyncStateMachine(AsyncStateStoreBase):
     conn: aiosqlite.Connection | None
 
     def __init__(self, db_path: str, object_id_keys: dict[str, str]):
+        self.db_path = _rectify_path(db_path)
         self.id_keys = object_id_keys.copy()
-        self.db_path = db_path
         self.write_lock = asyncio.Lock()
         self.conn = None
 

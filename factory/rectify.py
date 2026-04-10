@@ -377,6 +377,9 @@ def hydrate_processing_cache(cache_dir, batch_size):
                 offset += len(beans)
                 pbar.update(len(beans))
 
+    cls_store.close()
+    state_store.close()
+    db.close()
 
 # adding data porting logic
 if __name__ == "__main__":
