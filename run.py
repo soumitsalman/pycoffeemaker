@@ -54,9 +54,7 @@ logging.getLogger("connectionpool").propagate = False
 parser = argparse.ArgumentParser(description="Run the coffee maker application")
 parser.add_argument("--batch_size", type=int, help="Batch size for processing")
 parser.add_argument("--embedder_batch_size", type=int, help="Batch size for processing")
-parser.add_argument(
-    "--extractor_batch_size", type=int, help="Batch size for processing"
-)
+parser.add_argument("--extractor_batch_size", type=int, help="Batch size for processing")
 parser.add_argument("--digestor_batch_size", type=int, help="Batch size for processing")
 parser.add_argument(
     "--mode",
@@ -193,7 +191,7 @@ if __name__ == "__main__":
 
         orch = Indexer(
             state_store=state_store,
-            cdn=CDNStore(os.getenv("CDN_BUCKET"), os.getenv("CDN_PUBLIC_ACCESS_URL_TEMPLATE")),
+            cdn=CDNStore(os.getenv("CDN_BUCKET"), os.getenv("CDN_PUBLIC_ACCESS_URL")),
         )
         orch.run_cdn(batch_size=batch_size)
 

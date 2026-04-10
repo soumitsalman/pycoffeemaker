@@ -329,9 +329,9 @@ def hydrate_processing_cache(cache_dir, batch_size):
     
     db = create_client(db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
     state_store = StateMachine(cache_dir, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
-    cls_store = ClassificationStore(cache_dir, {BEANS: K_URL})
     
-    if True:
+    
+    if False:
         offset = 0
         with tqdm(desc="Hydrating State Caches", unit=PUBLISHERS) as pbar:
             while pubs := db.query_publishers(
@@ -347,23 +347,7 @@ def hydrate_processing_cache(cache_dir, batch_size):
                 offset += len(pubs)
                 pbar.update(len(pubs))
 
-    if True:
-        offset = 0
-        with tqdm(desc="Hydrating State Caches", unit=BEANS) as pbar:
-            while beans := db.query_latest_beans(
-                conditions=["gist IS NOT NULL", "embedding IS NOT NULL"],
-                limit=batch_size,
-                offset=offset,
-                columns=[K_URL, K_EMBEDDING],
-            ):
-                
-                bean_states = [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans]
-                list(map(lambda state: state_store.set(BEANS, state, bean_states), ["collected", "embedded", "extracted", "digested", "beansacked"]))
-                cls_store.store(BEANS, bean_states)
-                offset += len(beans)
-                pbar.update(len(beans))
-
-    if True:
+    if False:
         offset = 0
         with tqdm(desc="Hydrating State Caches", unit=BEANS) as pbar:
             while beans := db.query_latest_beans(
@@ -377,7 +361,24 @@ def hydrate_processing_cache(cache_dir, batch_size):
                 offset += len(beans)
                 pbar.update(len(beans))
 
-    cls_store.close()
+    if True:
+        cls_store = ClassificationStore(cache_dir, {BEANS: K_URL})
+        offset = 32768+36864
+        with tqdm(desc="Hydrating State Caches", unit=BEANS) as pbar:
+            while beans := db.query_latest_beans(
+                conditions=["gist IS NOT NULL", "embedding IS NOT NULL"],
+                limit=batch_size,
+                offset=offset,
+                columns=[K_URL, K_EMBEDDING],
+            ):
+                
+                bean_states = [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans]
+                list(map(lambda state: state_store.set(BEANS, state, bean_states), ["collected", "embedded", "extracted", "digested", "beansacked"]))
+                # cls_store.store(BEANS, bean_states)
+                offset += len(beans)
+                pbar.update(len(beans))
+        # cls_store.close()
+    
     state_store.close()
     db.close()
 
