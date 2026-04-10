@@ -363,7 +363,7 @@ def hydrate_processing_cache(cache_dir, batch_size):
 
     if True:
         cls_store = ClassificationStore(cache_dir, {BEANS: K_URL})
-        offset = 32768+36864
+        offset = 32768+36864+212992
         with tqdm(desc="Hydrating State Caches", unit=BEANS) as pbar:
             while beans := db.query_latest_beans(
                 conditions=["gist IS NOT NULL", "embedding IS NOT NULL"],
@@ -373,7 +373,7 @@ def hydrate_processing_cache(cache_dir, batch_size):
             ):
                 
                 bean_states = [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans]
-                list(map(lambda state: state_store.set(BEANS, state, bean_states), ["collected", "embedded", "extracted", "digested", "beansacked"]))
+                list(map(lambda state: state_store.set(BEANS, state, bean_states), ["collected", "embedded", "extracted", "digested", "cdned", "beansacked"]))
                 # cls_store.store(BEANS, bean_states)
                 offset += len(beans)
                 pbar.update(len(beans))
