@@ -174,7 +174,7 @@ class AsyncStateMachine(AsyncStateStoreBase):
         await cur.close()
         return result
 
-    @retry(exceptions=aiosqlite.OperationalError, tries=3, jitter=DB_JITTER)
+    @retry(exceptions=aiosqlite.OperationalError, tries=10, jitter=DB_JITTER)
     async def set(
         self,
         object_type: str,

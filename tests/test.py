@@ -49,8 +49,6 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from coffeemaker.collectors import collector
-
 from coffeemaker.orchestrators.utils import log_runtime
 from pybeansack import *
 from pybeansack.models import *
@@ -94,19 +92,19 @@ def save_models(items: list[Bean | Chatter], file_name: str = None):
                 ],
                 file,
             )
-        return ic(len(items))
+        return ic(items)
 
 
-def test_collector_and_scraper():
-    from coffeemaker.collectors import APICollector
+def test_collector():
+    from datacollectors import APICollectorAsync
 
-    coll = APICollector()
-    feeds = [
-        "https://newsfeed.zeit.de/index",
-        "https://newsletter.canopy.is/feed",
-        "https://www.cio.com/feed/",
-    ]
-    [coll.collect_rssfeed(f) for f in feeds]
+    async def run():
+        async with APICollectorAsync(batch_size=128) as col:
+            items = await col.collect_subreddit("InfoSecNews")
+            ic(items)
+            items = await col.collect_ychackernews("https://hacker-news.firebaseio.com/v0/showstories.json")
+            ic(len(items))
+    asyncio.run(run())
 
 
 def test_scraper():
@@ -246,18 +244,24 @@ def test_static_db():
 
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Collector
+    from coffeemaker.processingcache.sqlitecache import AsyncStateMachine
+    from pybeansack import create_client
 
     orch = Collector(
-        cache_kwargs={"statemachine_cache": ".cache/statestore.db"},
-        db_kwargs={
-            "db_type": "lancedb",
-            "lancedb_storage": ".beansack/lancesack_v2",
-        },
+        AsyncStateMachine(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL}),
+        create_client("lancedb", lancedb_storage=".test/lancesack")
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
     # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
     sources = """
     sources:
+        reddit:
+            - HelionEnergy
+            - SolarMax
+            - SolarDIY
+            - EnergyAndPower
+            - EmporiaEnergy
+            - renewableenergystocks
         rss:
             - https://newatlas.com/index.rss
             - https://www.channele2e.com/feed/topic/latest
@@ -307,71 +311,6 @@ def test_digestor_orch():
         digestor_context_len=4096,
     )
     orch.run_digestor(batch_size=2)
-
-
-def test_composer_orch():
-    from coffeemaker.orchestrators.composerorch import Orchestrator, parse_topics
-    from coffeemaker.pybeansack import lancesack as ls
-    from coffeemaker.pybeansack.models import Bean, Mug, Sip
-
-    orch = Orchestrator(
-        # db_conn=(
-        #     os.getenv("PG_CONNECTION_STRING"),
-        #     os.getenv("STORAGE_DATAPATH")
-        # ),
-        db_kwargs=("lancedb:.beansack/lancesack_v2",),
-        embedder_model="avsolatorio/GIST-small-Embedding-v0",
-        analyst_model="openai/gpt-oss-20b",
-        writer_model="openai/gpt-oss-120b",
-        composer_conn=(os.getenv("COMPOSER_BASE_URL"), os.getenv("COMPOSER_API_KEY")),
-        cupboard_conn_str=os.getenv("RAGDB_STORAGE_DATAPATH"),
-    )
-    articles = asyncio.run(
-        orch.run_async(os.path.dirname(__file__) + "/composer-topics.json")
-    )
-    if not articles:
-        raise Exception("No articles composed")
-    [print(a[K_CONTENT], "\n======================\n") for a in articles]
-
-    # domains = parse_topics(os.path.dirname(__file__) + "/composer-topics.json")
-    # domains = orch._create_topic_embeddings(domains)
-    # cupboard = ls.Beansack(".beansack/lancesack")
-
-    # # sips = cupboard.allsips.search().limit(5).to_pydantic(ls._Sip)
-    # # ic([(sip.title, sip.embedding[:5]) for sip in sips])
-
-    # async def run():
-    #     for domain in domains:
-    #         print("============ DOMAIN:", domain["_id"], "=============")
-    #         beans = cupboard.allbeans \
-    #             .search(domain[K_EMBEDDING], query_type="vector", vector_column_name=K_EMBEDDING, ordering_field_name=K_CREATED) \
-    #             .distance_type("cosine") \
-    #             .distance_range(upper_bound=0.3) \
-    #             .where(f"created >= date '{ndays_ago_str(2)}'") \
-    #             .limit(10) \
-    #             .to_pydantic(ls._Bean)
-    #         for bean in beans:
-    #             sips = cupboard.allsips \
-    #                 .search(bean.embedding, query_type="vector", vector_column_name=K_EMBEDDING, ordering_field_name=K_CREATED) \
-    #                 .distance_type("cosine") \
-    #                 .distance_range(upper_bound=0.15) \
-    #                 .limit(5) \
-    #                 .to_pydantic(ls._Sip)
-    #             if sips: ic(bean.title, [sip.title for sip in sips])
-
-    # asyncio.run(run())
-
-
-def test_refresher_orch():
-    from coffeemaker.orchestrators.refresherorch import Orchestrator
-
-    orch = Orchestrator(
-        db_kwargs=(os.getenv("PG_CONNECTION_STRING"), ".beansack/prod/storage"),
-        # espressodb_conn_str=("mongodb://localhost:27017", "replica1")
-        espressodb_conn_str=(None),
-        backup_db_conn_str=".beansack/lancesack/",
-    )
-    orch.run()
 
 
 def test_warehouse():
@@ -626,7 +565,7 @@ def main():
     # if args.test_trend_analysis:
     #     test_trend_analysis()
     if args.collect:
-        test_collector_and_scraper()
+        test_collector()
     if args.scrape:
         test_scraper()
     if args.scrapepubs:

@@ -295,4 +295,3 @@ class Collector:
             "total publishers collected",
             extra={"source": self.run_id, "num_items": self.publishers_collected},
         )
-        self.db.refresh_chatters()

@@ -114,7 +114,7 @@ if __name__ == "__main__":
                 batch_size=batch_size,
             )
         )
-        orch.close()
+
     elif mode == "EMBEDDER":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
