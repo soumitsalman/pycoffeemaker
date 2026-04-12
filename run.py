@@ -125,7 +125,9 @@ if __name__ == "__main__":
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
             ),
         )
-        orch.run_embedder(batch_size=batch_size)
+        while orch.run_embedder(batch_size=batch_size):
+            # keep running it while there is something to process
+            pass
 
     elif mode == "CLASSIFIER":
         from coffeemaker.orchestrators.analyzerorch import Indexer
@@ -134,7 +136,9 @@ if __name__ == "__main__":
             state_store=state_store, 
             classification_store=classification_store
         )
-        orch.run_classifier(batch_size=batch_size)
+        while orch.run_classifier(batch_size=batch_size):
+            # keep running it while there is something to process
+            pass
 
     elif mode == "EXTRACTOR":
         from coffeemaker.orchestrators.analyzerorch import Indexer
@@ -146,7 +150,9 @@ if __name__ == "__main__":
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
             ),
         )
-        orch.run_extractor(batch_size=batch_size)
+        while orch.run_extractor(batch_size=batch_size):
+            # keep running it while there is something to process
+            pass
 
     elif mode == "DIGESTOR":
         from coffeemaker.orchestrators.analyzerorch import Indexer
@@ -158,7 +164,9 @@ if __name__ == "__main__":
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
         )
-        orch.run_digestor(batch_size=batch_size)
+        while orch.run_digestor(batch_size=batch_size):
+            # keep running it while there is something to process
+            pass
 
     # TODO: better naming
     elif mode == "ANALYZER":
@@ -180,11 +188,13 @@ if __name__ == "__main__":
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
         )
-        orch.run(
+        while orch.run(
             embedder_batch_size=int(args.embedder_batch_size or batch_size),
             extractor_batch_size=int(args.extractor_batch_size or batch_size),
             digestor_batch_size=int(args.digestor_batch_size or batch_size),
-        )
+        ):
+            # keep running it while there is something to process
+            pass
 
     elif mode == "CDN":
         from coffeemaker.orchestrators.analyzerorch import Indexer
@@ -193,14 +203,18 @@ if __name__ == "__main__":
             state_store=state_store,
             cdn=CDNStore(os.getenv("CDN_BUCKET"), os.getenv("CDN_PUBLIC_ACCESS_URL")),
         )
-        orch.run_cdn(batch_size=batch_size)
+        while orch.run_cdn(batch_size=batch_size):
+            # keep running it while there is something to cdn
+            pass
 
     elif mode == "PORTER":
         from coffeemaker.orchestrators.porterorch import Porter
 
         orch = Porter(state_store=state_store)
         # add a backup db to store 
-        orch.hydrate_beansacks(dbs=[db])
+        while orch.hydrate_beansacks(db):
+            # keep running it while there is something
+            pass
 
     else:
         raise ValueError(

@@ -263,6 +263,7 @@ class Indexer:
             stored = self.state_store.set("beans", "embedded", updates)
             total += stored
         log.info("total embedded", extra={"source": run_id(), "num_items": total})
+        return total
 
     @log_runtime(logger=log)
     def run_classifier(self, batch_size: int = BATCH_SIZE):
@@ -278,6 +279,7 @@ class Indexer:
             stored = self.state_store.set("beans", "classified", updates)
             total += stored
         log.info("total classified", extra={"source": run_id(), "num_items": total})
+        return total
 
     @log_runtime(logger=log)
     def run_extractor(self, batch_size: int = BATCH_SIZE):
@@ -292,6 +294,7 @@ class Indexer:
             stored = self.state_store.set("beans", "extracted", updates)
             total += stored
         log.info("total extracted", extra={"source": run_id(), "num_items": total})
+        return total
 
     @log_runtime(logger=log)
     def run_digestor(self, batch_size: int = BATCH_SIZE):
@@ -306,6 +309,7 @@ class Indexer:
             stored = self.state_store.set("beans", "digested", updates)
             total += stored
         log.info("total digested", extra={"source": run_id(), "num_items": total})
+        return total
 
     @log_runtime(logger=log)
     def run_cdn(self, batch_size: int = BATCH_SIZE):
@@ -324,10 +328,7 @@ class Indexer:
         )
         with ThreadPoolExecutor(max_workers=batch_size) as exec:
             cdn_urls = exec.map(
-                lambda bean: self.cdn.upload_text(
-                    path=create_cdn_path(bean),
-                    content=bean[K_CONTENT],
-                ),
+                lambda bean: self.cdn.upload_text(path=create_cdn_path(bean), content=bean[K_CONTENT]),
                 beans,
             )
 
@@ -337,7 +338,8 @@ class Indexer:
         ]
         self.state_store.set("beans", "cdned", updates)
         log.info("total cdned", extra={"source": run_id(), "num_items": len(updates)})
-
+        return len(updates)
+    
     @log_runtime(logger=log)
     def run(
         self,
@@ -345,6 +347,8 @@ class Indexer:
         extractor_batch_size: int = BATCH_SIZE,
         digestor_batch_size: int = BATCH_SIZE,
     ):
-        self.run_embedder(batch_size=embedder_batch_size)
-        self.run_extractor(batch_size=extractor_batch_size)
-        self.run_digestor(batch_size=digestor_batch_size)
+        total = 0
+        total += self.run_embedder(batch_size=embedder_batch_size)
+        total += self.run_extractor(batch_size=extractor_batch_size)
+        total += self.run_digestor(batch_size=digestor_batch_size)
+        return total
