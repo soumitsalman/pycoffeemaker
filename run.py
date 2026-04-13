@@ -26,11 +26,9 @@ logging.basicConfig(
 
 log = logging.getLogger("app")
 log.setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.collectororch").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.refresherorch").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.porterorch").setLevel(logging.INFO)
+logging.getLogger("collectorworker").setLevel(logging.INFO)
+logging.getLogger("analyzerworker").setLevel(logging.INFO)
+logging.getLogger("porterworker").setLevel(logging.INFO)
 logging.getLogger("processingcache").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.agents").propagate = False

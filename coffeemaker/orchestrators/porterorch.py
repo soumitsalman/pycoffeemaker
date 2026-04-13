@@ -9,7 +9,7 @@ from pybeansack import Beansack, Bean, Publisher, now
 from pybeansack.models import K_BASE_URL, K_CONTENT, K_URL
 from icecream import ic
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("porterworker")
 
 BATCH_SIZE = 2048
 
@@ -56,12 +56,13 @@ class Porter:
         total_ported = 0
 
         # move the bean bodies
+        # offset = 0
         if beans := self.state_store.get(
             "beans",
             states=["collected", "embedded", "classified", "extracted", "digested", "cdned"],
-            exclude_states="beansacked",
-            # limit=BATCH_SIZE
-        ):        
+            exclude_states=["beansacked"],
+        ):      
+            # ic(len([Bean(**b) for b in prep_bean_items_for_beansack(beans)]))
             count = db.store_beans([Bean(**b) for b in prep_bean_items_for_beansack(beans)])
             total_ported += count
             log.info(
@@ -95,9 +96,9 @@ class Porter:
             self.state_store.set("publishers", "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
         
         # now optimize
-        with ThreadPoolExecutor() as exec:
-            exec.submit(db.optimize)
-            exec.submit(self.state_store.optimize)
+        # with ThreadPoolExecutor() as exec:
+        #     exec.submit(db.optimize)
+        #     exec.submit(self.state_store.optimize)
         
         log.info(
             "hydration complete", 

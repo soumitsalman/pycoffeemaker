@@ -29,7 +29,7 @@ from pybeansack.models import (
 
 from .utils import *
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("analyzerworker")
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
 # MAX_ANALYZE_NDAYS = int(os.getenv("MAX_ANALYZE_NDAYS", 2))

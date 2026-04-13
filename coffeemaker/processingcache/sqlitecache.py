@@ -16,7 +16,7 @@ DB_JITTER = (1, 5)
 
 _INIT_SQL = """
 PRAGMA journal_mode=WAL;
-PRAGMA synchronous=OFF;
+PRAGMA synchronous=NORMAL;
 PRAGMA temp_store=MEMORY;
 PRAGMA cache_size=64000;
 PRAGMA busy_timeout=300000;
@@ -284,27 +284,36 @@ def _single_state_query_expr(table: str, include_state: str, exclude_state: str)
     expr = f"""SELECT data FROM {table} 
     WHERE state = ?
     AND NOT EXISTS (
-        SELECT 1 FROM {table} t2 WHERE t2.id = {table}.id AND t2.state = ?
+        SELECT 1 FROM {table} t2 
+        WHERE t2.id = {table}.id AND t2.state = ?
     )
     """
     return expr, [include_state, exclude_state]
 
+_MULTI_STATE_SQL = """
+WITH filtered AS (
+    SELECT id FROM {table} incl
+    WHERE state IN ({include_placeholders})
+        AND NOT EXISTS (
+            SELECT 1 FROM {table} excl 
+            WHERE excl.id = incl.id AND excl.state IN ({exclude_placeholders})
+        )
+    GROUP BY id
+    HAVING COUNT(DISTINCT state) >= ?
+)
+SELECT data FROM {table}
+WHERE EXISTS (
+    SELECT 1 FROM filtered WHERE filtered.id = {table}.id
+)
+"""
 
 def _multi_state_query_expr(
     table: str, include_states: list[str], exclude_states: list[str]
 ):
     include_placeholders = ",".join(["?"] * len(include_states))
     exclude_placeholders = ",".join(["?"] * len(exclude_states))
-    expr = f"""WITH filtered AS (
-        SELECT id FROM {table}
-        WHERE state NOT IN ({exclude_placeholders})
-        GROUP BY id
-        HAVING COUNT(DISTINCT CASE WHEN state IN ({include_placeholders}) THEN state END) >= ?
-    )
-    SELECT data FROM {table}
-    WHERE EXISTS (SELECT 1 FROM filtered WHERE filtered.id = {table}.id)
-    """
-    params = exclude_states + include_states + [len(include_states)]
+    expr = _MULTI_STATE_SQL.format(table=table, include_placeholders=include_placeholders, exclude_placeholders=exclude_placeholders)
+    params = include_states + exclude_states +[len(include_states)]
     return expr, params
 
 
@@ -331,10 +340,10 @@ def query_expr(
         expr, params = _single_state_query_expr(table, states, exclude_states)
 
     if limit:
-        expr = f"{expr} LIMIT ?"
+        expr = f"{expr}\nLIMIT ?"
         params.append(limit)
     if offset:
-        expr = f"{expr} OFFSET ?"
+        expr = f"{expr}\nOFFSET ?"
         params.append(offset)
 
     return expr, params

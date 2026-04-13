@@ -91,7 +91,7 @@ def parse_sources(sources: str) -> dict:
     else: data = yaml.safe_load(sources)
     return data['sources']
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("collectorworker")
 
 class Collector:
     db: Beansack
