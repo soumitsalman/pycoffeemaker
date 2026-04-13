@@ -40,10 +40,8 @@ def prep_bean_items_for_beansack(beans: list[dict]):
     """Merges beans, replaces content with cdn url"""
     beans = merge(K_URL, beans)
     for b in beans:
-        if not b.get("content_url"): ic(list(b.keys()))
+        if not b.get("content_url"): print("--- PORTING ERROR ---", list(b.keys()))
         else: b[K_CONTENT] = b["content_url"]
-    with open(f".cache/{now().strftime('%Y%m%d-%H%M%S')}.json", "w") as f:
-        json.dump(random.sample(beans, min(5, len(beans))), f, indent=2, default=str)
     return beans
 
 

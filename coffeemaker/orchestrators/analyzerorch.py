@@ -150,7 +150,8 @@ class Indexer:
             )
 
         for chunk in batched(beans, batch_size):
-            updates = [self._create_classification(bean) for bean in chunk]
+            updates = list(ThreadPoolExecutor(max_workers=batch_size).map(self._create_classification, chunk))
+            # updates = [self._create_classification(bean) for bean in chunk]
             log.info(
                 "classified",
                 extra={"source": chunk[0][K_URL], "num_items": len(updates)},
