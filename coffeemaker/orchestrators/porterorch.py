@@ -56,11 +56,11 @@ class Porter:
         total_ported = 0
 
         # move the bean bodies
-        while beans := self.state_store.get(
+        if beans := self.state_store.get(
             "beans",
             states=["collected", "embedded", "classified", "extracted", "digested", "cdned"],
             exclude_states="beansacked",
-            limit=BATCH_SIZE
+            # limit=BATCH_SIZE
         ):        
             count = db.store_beans([Bean(**b) for b in prep_bean_items_for_beansack(beans)])
             total_ported += count
@@ -71,8 +71,8 @@ class Porter:
             self.state_store.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
 
         # related beans go to a separate table
-        while related_beans := self.state_store.get(
-            "beans", states="classified", exclude_states="related_beansacked", limit=BATCH_SIZE
+        if related_beans := self.state_store.get(
+            "beans", states="classified", exclude_states="related_beansacked"
         ):
             count = db.store_related(unpack_related(related_beans))
             total_ported += count
@@ -83,8 +83,8 @@ class Porter:
             self.state_store.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
 
         # move the publishers
-        while publishers := self.state_store.get(
-            "publishers", states="collected", exclude_states="beansacked", limit=BATCH_SIZE
+        if publishers := self.state_store.get(
+            "publishers", states="collected", exclude_states="beansacked"
         ):
             count = db.store_publishers([Publisher(**pub) for pub in publishers])
             total_ported += count
@@ -95,8 +95,9 @@ class Porter:
             self.state_store.set("publishers", "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
         
         # now optimize
-        db.optimize()
-        self.state_store.optimize()
+        with ThreadPoolExecutor() as exec:
+            exec.submit(db.optimize)
+            exec.submit(self.state_store.optimize)
         
         log.info(
             "hydration complete", 

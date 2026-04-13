@@ -211,7 +211,9 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.porterorch import Porter
 
         orch = Porter(state_store=state_store)
-        orch.hydrate_beansacks(db)
+        while orch.hydrate_beansacks(db):
+            # keep running it while there is something to port
+            pass
 
     else:
         raise ValueError(
