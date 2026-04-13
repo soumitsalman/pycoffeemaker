@@ -207,33 +207,34 @@ class Collector:
                     tg.create_task(self._scrape_publishers(to_scrape))
 
     async def _cache_beans(self, beans: list[dict]):
-        try:
-            count = await self.state_store.set("beans", "collected", beans)
-            self.beans_collected += count
-            # source is a heuristic
-            if count: log.info("collected beans", extra={"source": beans[0]["source"], "num_items": count})
-            return count
-        except Exception as e:
-            ic(e.__class__.__name__, e)
-
+        await self.state_store.set("beans", "collected", beans)
+        log.info("caching beans", extra={"source": beans[0]["source"], "num_items": len(beans)})
+        
     async def _cache_publishers(self, publishers: list[dict]):
+        await self.state_store.set("publishers", "collected", publishers)
         log.info("caching publishers", extra={"source": publishers[0]["source"], "num_items": len(publishers)})
-        await self.state_store.set("publishers", "collected", publishers)        
 
     async def _scrape_beans(self, beans: list[dict]):
         to_scrape = await self.state_store.deduplicate("beans", "collected", beans)
-        if to_scrape:
-            await self._triage(
-                await self.webscraper.scrape_beans(to_scrape), 
-                scrape_on_fail=False
-            )
+        if not to_scrape: return
+
+        to_triage = await self.webscraper.scrape_beans(to_scrape)
+        if not to_triage: return 
+        
+        log.info("scraped beans", extra={"source": to_scrape[0]["source"], "num_items": len(to_triage)})
+        await self._triage(to_triage, scrape_on_fail=False)
+        
 
     async def _scrape_publishers(self, publishers: list[dict]):
         to_scrape = await self.state_store.deduplicate("publishers", "collected", publishers)
-        if to_scrape:
-            await self._triage(
-                await self.webscraper.scrape_publishers(to_scrape), scrape_on_fail=False
-            )
+        if not to_scrape: return
+
+        to_triage = await self.webscraper.scrape_publishers(to_scrape)
+        if not to_triage: return
+
+        log.info("scraped publishers", extra={"source": to_scrape[0]["source"], "num_items": len(to_triage)})
+        await self._triage(to_triage, scrape_on_fail=False)
+
 
     async def _collect(self, collect_func, *args, **kwargs):
         try: await self._triage(await collect_func(*args, **kwargs), scrape_on_fail=True)

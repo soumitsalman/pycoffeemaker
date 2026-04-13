@@ -322,7 +322,7 @@ def hydrate_processing_cache(cache_dir, batch_size):
     db = create_client(db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
     state_store = StateMachine(cache_dir, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
     
-    if True:
+    if False:
         offset = 0
         while pubs := db.query_publishers(
             conditions=[
@@ -337,7 +337,7 @@ def hydrate_processing_cache(cache_dir, batch_size):
             offset += len(pubs)
             logging.info("hydrated", extra={"source": "publishers", "num_items": offset})
 
-    if True:        
+    if False:        
         offset = 0
         with ThreadPoolExecutor() as exec:
             while beans := db.query_latest_beans(
@@ -363,6 +363,7 @@ def hydrate_processing_cache(cache_dir, batch_size):
             offset += len(beans)        
             count = cls_cache.store(BEANS, [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans])
             logging.info("hydrated:cls_cache", extra={"source": offset, "num_items": count})
+        cls_cache.close()
     
     state_store.close()
     db.close()

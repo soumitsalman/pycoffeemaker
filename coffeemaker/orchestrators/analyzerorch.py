@@ -337,7 +337,7 @@ class Indexer:
             ]
             self.state_store.set("beans", "cdned", updates)
             total += len(updates)
-            log.info("cdned", extra={"source": run_id(), "num_items": len(updates)})
+            # log.info("cdned", extra={"source": run_id(), "num_items": len(updates)})
 
         log.info("total cdned", extra={"source": run_id(), "num_items": total})
         return total

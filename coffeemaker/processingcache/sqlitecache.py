@@ -143,9 +143,10 @@ class StateMachine(StateStoreBase):
             self.write_queue.put_nowait((f"UPDATE {table} SET data = NULL WHERE ts < ?", datetime.now() - timedelta(days=cleanup_older_than)))        
 
     def close(self):
-        if self._conn and self.writer_thread.is_alive():
-            self.write_queue.put(None)
+        if self.writer_thread.is_alive():
+            [self.write_queue.put_nowait(None) for _ in range(5)]
             self.writer_thread.join()
+        if self._conn:
             self._conn.close()
             self._conn = None
 
@@ -170,7 +171,7 @@ class AsyncStateMachine(AsyncStateStoreBase):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.write_queue.put(None)
+        [self.write_queue.put_nowait(None) for _ in range(5)]  # Signal the write task to exit
         await self.write_task
         if self.conn:
             await self.conn.close()
@@ -202,6 +203,7 @@ class AsyncStateMachine(AsyncStateStoreBase):
 
             await self.conn.commit()
             await cur.close()
+            return total
             
         while True:
             items = await self.write_queue.get()
