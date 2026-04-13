@@ -79,7 +79,7 @@ class StateMachine(StateStoreBase):
     ):
         if not items: return
         
-        self.write_queue.put_nowait((insert_expr(object_type), create_rows(self.id_keys[object_type], state, items)))
+        self.write_queue.put_nowait((_INSERT_SQL.format(table=object_type), create_rows(self.id_keys[object_type], state, items)))
     
     def _run_write(self):
         @retry(exceptions=sqlite3.OperationalError, tries=20, jitter=DB_JITTER)
@@ -222,7 +222,7 @@ class AsyncStateMachine(AsyncStateStoreBase):
     ):
         if not items: return
 
-        self.write_queue.put_nowait((insert_expr(object_type), create_rows(self.id_keys[object_type], state, items)))
+        self.write_queue.put_nowait((_INSERT_SQL.format(table=object_type), create_rows(self.id_keys[object_type], state, items)))
 
     async def get(
         self,
@@ -300,7 +300,7 @@ WITH filtered AS (
             WHERE excl.id = incl.id AND excl.state IN ({exclude_placeholders})
         )
     GROUP BY id
-    HAVING COUNT(DISTINCT state) >= ?
+    HAVING COUNT(*) >= ?
 )
 SELECT data FROM {table}
 WHERE EXISTS (
@@ -350,6 +350,6 @@ def query_expr(
     return expr, params
 
 
-insert_expr = lambda table: f"INSERT OR IGNORE INTO {table} (id, state, ts, data) VALUES (?, ?, ?, ?)"
+_INSERT_SQL = "INSERT OR IGNORE INTO {table} (id, state, ts, data) VALUES (?, ?, ?, ?)"
 exists_expr = lambda table, ids: f"SELECT id FROM {table} WHERE state = ? AND id IN ({','.join(['?'] * len(ids))})"
 create_table_expr = lambda id_keys: "\n".join([_CREATE_TABLE_SQL.format(table=table) for table in id_keys.keys()])

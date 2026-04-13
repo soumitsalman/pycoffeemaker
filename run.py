@@ -70,7 +70,7 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CDN, PORTER)",
 )
 
-from coffeemaker.processingcache.sqlitecache import AsyncStateMachine, StateMachine, ClassificationStore
+from coffeemaker.processingcache.pgcache import AsyncStateMachine, StateMachine, ClassificationStore
 from pybeansack import create_client, CDNStore, BEANS, PUBLISHERS, K_URL, K_BASE_URL
 
 if __name__ == "__main__":
@@ -89,18 +89,10 @@ if __name__ == "__main__":
         "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
     }
     db = create_client(**db_kwargs)
-    classification_store = ClassificationStore(
-        os.getenv("CACHE_DIR"), 
-        table_id_keys={BEANS: K_URL}
-    )
-    state_store = StateMachine(
-        os.getenv("CACHE_DIR"),
-        object_id_keys={BEANS: K_URL, PUBLISHERS: K_BASE_URL},
-    )
-    async_state_store = AsyncStateMachine(
-        os.getenv("CACHE_DIR"),
-        object_id_keys={BEANS: K_URL, PUBLISHERS: K_BASE_URL},
-    )
+    classification_store = ClassificationStore(os.getenv("CLASSIFIER_CACHE"), table_id_keys={BEANS: K_URL})
+    state_store_path = os.getenv("STATE_CACHE")
+    state_store = StateMachine(state_store_path, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
+    async_state_store = AsyncStateMachine(state_store_path, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
 
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Collector

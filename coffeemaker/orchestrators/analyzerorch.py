@@ -287,13 +287,10 @@ class Indexer:
         create_cdn_path = lambda bean: CDN_PATH_TEMPLATE.format(
             date=bean[K_CREATED].strftime("%Y/%m/%d"), slugurl=slugify(bean[K_URL])
         )
-        log.info(
-            "starting cdn",
-            extra={"num_items": 1, "source": run_id()},
-        )
-
+        
         total = 0
         if beans := self.state_store.get("beans", states="collected", exclude_states="cdned"):
+            log.info("starting cdn", extra={"num_items": len(beans), "source": run_id()})
             with ThreadPoolExecutor(max_workers=batch_size) as exec:
                 cdn_urls = exec.map(
                     lambda bean: self.cdn.upload_text(path=create_cdn_path(bean), content=bean[K_CONTENT]),
@@ -306,7 +303,6 @@ class Indexer:
             ]
             self.state_store.set("beans", "cdned", updates)
             total += len(updates)
-            # log.info("cdned", extra={"source": run_id(), "num_items": len(updates)})
 
         log.info("total cdned", extra={"source": run_id(), "num_items": total})
         return total

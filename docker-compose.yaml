@@ -1,6 +1,21 @@
 version: '3.8'
 
 services:
+  pgcache:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=local
+      - POSTGRES_DB=statestore
+    networks:
+      - coffeemaker-bridge
+    cpus: 2
+    mem_limit: 16g
+    volumes:
+      - ./.cache/pgcache:/var/lib/postgresql/data
+
   localcollector:
     image: soumitsr/coffeemaker:06-25
     depends_on:

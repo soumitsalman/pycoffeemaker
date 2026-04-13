@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import random
+from itertools import batched
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 from coffeemaker.processingcache.base import StateStoreBase
@@ -12,6 +13,7 @@ from icecream import ic
 log = logging.getLogger("porterworker")
 
 BATCH_SIZE = 2048
+MAX_WORKERS = os.cpu_count()*os.cpu_count()
 
 def unpack_related(beans: list[dict]):
     items = {}
@@ -55,19 +57,21 @@ class Porter:
         """Ports beans, publishers and related beans to 1 or more Beansacks"""
         total_ported = 0
 
-        # move the bean bodies
-        # offset = 0
+        # move beans
         if beans := self.state_store.get(
             "beans",
             states=["collected", "embedded", "classified", "extracted", "digested", "cdned"],
             exclude_states=["beansacked"],
-        ):      
-            # ic(len([Bean(**b) for b in prep_bean_items_for_beansack(beans)]))
-            count = db.store_beans([Bean(**b) for b in prep_bean_items_for_beansack(beans)])
-            total_ported += count
+        ):  
+            ic(len(beans))
+            beans = prep_bean_items_for_beansack(beans)
+            ic(len(beans))
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
+                counts = exec.map(db.store_beans, batched([Bean(**b) for b in beans], 64))
+            total_ported += ic(sum(counts))
             log.info(
                 "ported",
-                extra={"source": "beansack:beans", "num_items": count},
+                extra={"source": "beansack:beans", "num_items": sum(counts)},
             )                
             self.state_store.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
 
@@ -75,11 +79,12 @@ class Porter:
         if related_beans := self.state_store.get(
             "beans", states="classified", exclude_states="related_beansacked"
         ):
-            count = db.store_related(unpack_related(related_beans))
-            total_ported += count
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
+                counts = exec.map(db.store_related, batched(unpack_related(related_beans), 256))
+            total_ported += ic(sum(counts))
             log.info(
                 "ported",
-                extra={"source": "beansack:related_beans", "num_items": count},
+                extra={"source": "beansack:related_beans", "num_items": sum(counts)},
             )
             self.state_store.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
 
@@ -87,11 +92,12 @@ class Porter:
         if publishers := self.state_store.get(
             "publishers", states="collected", exclude_states="beansacked"
         ):
-            count = db.store_publishers([Publisher(**pub) for pub in publishers])
-            total_ported += count
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
+                counts = exec.map(db.store_publishers, batched([Publisher(**pub) for pub in publishers], 64))
+            total_ported += ic(sum(counts))
             log.info(
                 "ported",
-                extra={"source": "beansack:publishers", "num_items": count},
+                extra={"source": "beansack:publishers", "num_items": sum(counts)},
             )
             self.state_store.set("publishers", "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
         
