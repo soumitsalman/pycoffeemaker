@@ -32,37 +32,6 @@ from .utils import *
 log = logging.getLogger("analyzerworker")
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
-# MAX_ANALYZE_NDAYS = int(os.getenv("MAX_ANALYZE_NDAYS", 2))
-
-# WORDS_THRESHOLD_FOR_INDEXING = int(
-#     os.getenv("WORDS_THRESHOLD_FOR_INDEXING", 160)
-# )  # mininum words needed to put it through indexing
-# WORDS_THRESHOLD_FOR_EXTRACTING = int(
-#     os.getenv("WORDS_THRESHOLD_FOR_EXTRACTING", 160)
-# )  # min words needed to use the generated summary
-# WORDS_THRESHOLD_FOR_DIGESTING = int(
-#     os.getenv("WORDS_THRESHOLD_FOR_DIGESTING", 160)
-# )  # min words needed to use the generated summary
-# WORDS_THRESHOLD_FOR_ANALYZING = int(
-#     os.getenv("WORDS_THRESHOLD_FOR_ANALYZING", 160)
-# )  # min words needed to use the generated summary
-
-# EMBED_FILTER = [
-#     f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_INDEXING}",
-#     f"{K_KIND} != '{POST}'",
-# ]
-# EXTRACT_FILTER = [
-#     f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_EXTRACTING}",
-#     f"{K_KIND} != '{POST}'",
-# ]
-# DIGEST_FILTER = [
-#     f"{K_CONTENT_LENGTH} >= {WORDS_THRESHOLD_FOR_DIGESTING}",
-#     f"{K_KIND} != '{POST}'",
-# ]
-# ANALYZER_FILTER = {
-#     "content_length >=": WORDS_THRESHOLD_FOR_ANALYZING,
-#     "kind !=": POST,
-# }
 MAX_CLASSIFICATIONS = int(os.getenv("MAX_CLASSIFICATIONS", 2))
 CLUSTER_EPS = float(os.getenv("CLUSTER_EPS", 0.4))
 VECTOR_LEN = int(os.getenv("VECTOR_LEN", 384))
