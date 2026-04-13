@@ -316,6 +316,7 @@ def hydrate_processing_cache(cache_dir, batch_size):
     """
     import os
     from coffeemaker.processingcache.sqlitecache import StateMachine
+    from coffeemaker.processingcache.base import ClassificationStore
     from pybeansack import K_URL, K_EMBEDDING, K_BASE_URL, BEANS, PUBLISHERS, RELATED_BEANS, create_client
     
     db = create_client(db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
@@ -347,12 +348,21 @@ def hydrate_processing_cache(cache_dir, batch_size):
             ):                  
                 basic_vals = [{K_URL: bean.url} for bean in beans]
                 exec.map(lambda state: state_store.set(BEANS, state, basic_vals), ["collected", "extracted", "digested", "cdned", "classified", "embedded", "beansacked"])
-
-                # emb_vals = [{K_URL: bean.url, K_EMBEDDING: bean.embedding} for bean in beans]
-                # exec.submit(state_store.set, BEANS, "embedded", emb_vals)
-
                 offset += len(beans)
                 logging.info("hydrated", extra={"source": "processed beans", "num_items": offset})
+
+    if True:        
+        offset = 0
+        cls_cache = ClassificationStore(cache_dir, {BEANS: K_URL})
+        while beans := db.query_latest_beans(
+            conditions=["embedding IS NOT NULL"],
+            limit=batch_size,
+            offset=offset,
+            columns=[K_URL, K_EMBEDDING],
+        ):          
+            offset += len(beans)        
+            count = cls_cache.store(BEANS, [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans])
+            logging.info("hydrated:cls_cache", extra={"source": offset, "num_items": count})
     
     state_store.close()
     db.close()
