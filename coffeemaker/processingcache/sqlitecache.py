@@ -16,7 +16,7 @@ DB_JITTER = (1, 5)
 
 _INIT_SQL = """
 PRAGMA journal_mode=WAL;
-PRAGMA synchronous=NORMAL;
+PRAGMA synchronous=OFF;
 PRAGMA temp_store=MEMORY;
 PRAGMA cache_size=64000;
 PRAGMA busy_timeout=300000;
@@ -81,9 +81,9 @@ class StateMachine(StateStoreBase):
         state: str,
         items: list[dict[str, Any]] | list[BaseModel],
     ):
-        if not items: return 0
+        if not items: return
         
-        self.write_queue.put((insert_expr(object_type), create_rows(self.id_keys[object_type], state, items)))
+        self.write_queue.put_nowait((insert_expr(object_type), create_rows(self.id_keys[object_type], state, items)))
     
     def _run_write(self):
         @retry(exceptions=sqlite3.OperationalError, tries=20, jitter=DB_JITTER)
@@ -91,10 +91,11 @@ class StateMachine(StateStoreBase):
             total = 0
             expr, rows = items
             cur = self.conn.cursor()
-            cur.execute("BEGIN IMMEDIATE;")
+            # cur.execute("BEGIN IMMEDIATE;")
+            cur.execute("BEGIN;")
             total += cur.executemany(expr, rows).rowcount
             while not self.write_queue.empty():
-                items = self.write_queue.get()
+                items = self.write_queue.get_nowait()
                 if items is None:
                     break
                 expr, rows = items
@@ -139,7 +140,7 @@ class StateMachine(StateStoreBase):
     
     def optimize(self, cleanup_older_than: int = 7):
         for table in self.id_keys.keys():
-            self.write_queue.put((f"UPDATE {table} SET data = NULL WHERE ts < ?", datetime.now() - timedelta(days=cleanup_older_than)))        
+            self.write_queue.put_nowait((f"UPDATE {table} SET data = NULL WHERE ts < ?", datetime.now() - timedelta(days=cleanup_older_than)))        
 
     def close(self):
         if self._conn and self.writer_thread.is_alive():
@@ -179,7 +180,7 @@ class AsyncStateMachine(AsyncStateStoreBase):
         cur = await self.conn.execute(expr, params)
         result = await cur.fetchall()
         await cur.close()
-        return result
+        return result    
 
     async def _run_write(self):
         @retry(exceptions=aiosqlite.OperationalError, tries=20, jitter=DB_JITTER)
@@ -187,7 +188,8 @@ class AsyncStateMachine(AsyncStateStoreBase):
             total = 0
             expr, rows = items
             cur = await self.conn.cursor()
-            await cur.execute("BEGIN IMMEDIATE;")
+            # await cur.execute("BEGIN IMMEDIATE;")
+            await cur.execute("BEGIN;")
             await cur.executemany(expr, rows)
             total += cur.rowcount
             while not self.write_queue.empty():
@@ -215,10 +217,9 @@ class AsyncStateMachine(AsyncStateStoreBase):
         state: str,
         items: list[dict[str, Any]] | list[BaseModel],
     ):
-        if not items:
-            return 0
-        
-        await self.write_queue.put((insert_expr(object_type), create_rows(self.id_keys[object_type], state, items)))
+        if not items: return
+
+        self.write_queue.put_nowait((insert_expr(object_type), create_rows(self.id_keys[object_type], state, items)))
 
     async def get(
         self,
@@ -248,14 +249,11 @@ class AsyncStateMachine(AsyncStateStoreBase):
         return [item for id, item in zip(ids, items) if id not in existing_ids]
     
     async def optimize(self, cleanup_older_than: int = 7):
-        await asyncio.gather(*(
-            self.write_queue.put((
+        for table in self.id_keys.keys():
+            self.write_queue.put_nowait((
                 f"UPDATE {table} SET data = NULL WHERE ts < ?", 
                 [datetime.now() - timedelta(days=cleanup_older_than)]
             )) 
-            for table in self.id_keys.keys()
-        ))
-
 
 get_id = (
     lambda item, id_key: getattr(item, id_key)
