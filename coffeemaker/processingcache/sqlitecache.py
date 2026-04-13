@@ -54,26 +54,22 @@ class StateMachine(StateStoreBase):
 
     def __init__(self, db_path: str, object_id_keys: dict[str, str]):
         self.db_path = _rectify_path(db_path)
-        self.id_keys = object_id_keys.copy()
-        self.write_queue = queue.Queue()
-        self._conn = None
+        self.id_keys = object_id_keys.copy()        
+        self.read_conn = sqlite3.connect(self.db_path, timeout=300)
+        self.write_queue = queue.Queue()        
         self.writer_thread = threading.Thread(target=self._run_write)
         self.writer_thread.start()
-
-    @property
-    def conn(self):
-        if not self._conn:
-            self._conn = sqlite3.connect(self.db_path, timeout=300, check_same_thread=False, isolation_level=None)
-            self._conn.executescript(_INIT_SQL)
-            self._conn.executescript(create_table_expr(self.id_keys))
-        return self._conn
+        self._init_db()
+    
+    def _init_db(self):        
+        self.write_queue.put_nowait((_INIT_SQL, None))
+        self.write_queue.put_nowait((create_table_expr(self.id_keys), None))
 
     def _read(self, expr: str, params=None):
-        cur = self.conn.cursor()
+        cur = self.read_conn.cursor()
         result = cur.execute(expr, params).fetchall()
         cur.close()
         return result
-
     
     def set(
         self,
@@ -88,20 +84,23 @@ class StateMachine(StateStoreBase):
     def _run_write(self):
         @retry(exceptions=sqlite3.OperationalError, tries=20, jitter=DB_JITTER)
         def start_write(items):
-            total = 0
             expr, rows = items
-            cur = self.conn.cursor()
-            # cur.execute("BEGIN IMMEDIATE;")
-            cur.execute("BEGIN;")
-            total += cur.executemany(expr, rows).rowcount
+
+            writer_conn = sqlite3.connect(self.db_path, timeout=300, check_same_thread=False, isolation_level=None)
+            execute = lambda expr, rows: writer_conn.executemany(expr, rows) if rows else writer_conn.executescript(expr)
+            writer_conn.execute("BEGIN IMMEDIATE;")
+            execute(expr, rows)
             while not self.write_queue.empty():
                 items = self.write_queue.get_nowait()
-                if items is None:
+                if not items:
                     break
                 expr, rows = items
-                total += cur.executemany(expr, rows).rowcount
-            self.conn.commit()
-            cur.close()
+                execute(expr, rows)
+
+            writer_conn.commit()
+            total = writer_conn.total_changes
+            writer_conn.close()
+
             return total
 
         while True:
@@ -146,39 +145,42 @@ class StateMachine(StateStoreBase):
         if self.writer_thread.is_alive():
             [self.write_queue.put_nowait(None) for _ in range(5)]
             self.writer_thread.join()
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        if self.read_conn:
+            self.read_conn.close()
+            self.read_conn = None
 
 
 class AsyncStateMachine(AsyncStateStoreBase):
     id_keys: dict[str, str]
     db_path: str
     write_queue: asyncio.Queue
-    conn: aiosqlite.Connection | None
+    read_conn: aiosqlite.Connection | None
 
     def __init__(self, db_path: str, object_id_keys: dict[str, str]):
         self.db_path = _rectify_path(db_path)
         self.id_keys = object_id_keys.copy()
+        
         self.write_queue = asyncio.Queue()
-        self.conn = None
+        self._init_db()
+
+    def _init_db(self):        
+        self.write_queue.put_nowait((_INIT_SQL, None))
+        self.write_queue.put_nowait((create_table_expr(self.id_keys), None))   
 
     async def __aenter__(self):
-        self.conn = await aiosqlite.connect(self.db_path, timeout=300, check_same_thread=False, isolation_level=None)
-        await self.conn.executescript(_INIT_SQL)
-        await self.conn.executescript(create_table_expr(self.id_keys))
+        self.read_conn = await aiosqlite.connect(self.db_path, timeout=300)
         self.write_task = asyncio.create_task(self._run_write())
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         [self.write_queue.put_nowait(None) for _ in range(5)]  # Signal the write task to exit
         await self.write_task
-        if self.conn:
-            await self.conn.close()
-            self.conn = None
+        if self.read_conn:
+            await self.read_conn.close()
+            self.read_conn = None
 
     async def _read(self, expr: str, params=None):
-        cur = await self.conn.execute(expr, params)
+        cur = await self.read_conn.execute(expr, params)
         result = await cur.fetchall()
         await cur.close()
         return result    
@@ -186,23 +188,22 @@ class AsyncStateMachine(AsyncStateStoreBase):
     async def _run_write(self):
         @retry(exceptions=aiosqlite.OperationalError, tries=20, jitter=DB_JITTER)
         async def start_write(items):
-            total = 0
             expr, rows = items
-            cur = await self.conn.cursor()
-            # await cur.execute("BEGIN IMMEDIATE;")
-            await cur.execute("BEGIN;")
-            await cur.executemany(expr, rows)
-            total += cur.rowcount
-            while not self.write_queue.empty():
-                items = self.write_queue.get_nowait()
-                if items is None:
-                    break
-                expr, rows = items
-                await cur.executemany(expr, rows)
-                total += cur.rowcount
 
-            await self.conn.commit()
-            await cur.close()
+            async with aiosqlite.connect(self.db_path, timeout=300, check_same_thread=False, isolation_level=None) as write_conn:                
+                execute = lambda expr, rows: write_conn.executemany(expr, rows) if rows else write_conn.executescript(expr)
+                await write_conn.execute("BEGIN IMMEDIATE;")
+                await execute(expr, rows)
+                while not self.write_queue.empty():
+                    items = self.write_queue.get_nowait()
+                    if not items:
+                        break
+                    expr, rows = items
+                    await execute(expr, rows)
+
+                await write_conn.commit()
+                total = write_conn.total_changes
+
             return total
             
         while True:
