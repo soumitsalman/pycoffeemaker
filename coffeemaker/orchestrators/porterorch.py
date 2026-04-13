@@ -96,6 +96,7 @@ class Porter:
         
         # now optimize
         db.optimize()
+        self.state_store.optimize()
         
         log.info(
             "hydration complete", 

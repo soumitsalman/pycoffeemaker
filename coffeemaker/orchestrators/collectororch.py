@@ -217,14 +217,8 @@ class Collector:
             ic(e.__class__.__name__, e)
 
     async def _cache_publishers(self, publishers: list[dict]):
-        try:
-            count = await self.state_store.set("publishers", "collected", publishers)
-            self.publishers_collected += count
-            # source is a heuristic
-            if count: log.info("collected publishers", extra={"source": publishers[0]["source"], "num_items": count})
-            return count
-        except Exception as e:
-            ic(e.__class__.__name__, e)
+        log.info("caching publishers", extra={"source": publishers[0]["source"], "num_items": len(publishers)})
+        await self.state_store.set("publishers", "collected", publishers)        
 
     async def _scrape_beans(self, beans: list[dict]):
         to_scrape = await self.state_store.deduplicate("beans", "collected", beans)
@@ -286,12 +280,3 @@ class Collector:
                     for func, source in self._create_collection_funcs(sources)
                 )
             )
-
-        log.info(
-            "total beans collected",
-            extra={"source": self.run_id, "num_items": self.beans_collected},
-        )
-        log.info(
-            "total publishers collected",
-            extra={"source": self.run_id, "num_items": self.publishers_collected},
-        )

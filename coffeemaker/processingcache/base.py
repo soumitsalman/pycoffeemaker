@@ -4,9 +4,13 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 import msgpack
 from pybeansack import SimpleVectorDB
-NOT_IMPLEMENTED = NotImplementedError("Method not implemented")
+import logging
 
+NOT_IMPLEMENTED = NotImplementedError("Method not implemented")
 ClassificationStore = SimpleVectorDB
+
+log = logging.getLogger("processingcache")
+logset = lambda total: log.info("state set", extra={"num_items": total, "source": "__default__"})
 
 class StateStoreBase(ABC):
     @abstractmethod

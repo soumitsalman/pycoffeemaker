@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import queue
 import threading
 from typing import Any
 from pydantic import BaseModel
@@ -8,7 +9,6 @@ import asyncio
 import aiosqlite
 from .base import *
 from icecream import ic
-import os
 from pathlib import Path
 
 DEFAULT_DB_PATH = "statestore.db"
@@ -49,13 +49,16 @@ def _rectify_path(db_path: str) -> str:
 class StateMachine(StateStoreBase):
     id_keys: dict[str, str]
     db_path: str
-    write_lock: threading.Lock
+    # write_lock: threading.Lock
+    write_queue: queue.Queue
 
     def __init__(self, db_path: str, object_id_keys: dict[str, str]):
         self.db_path = _rectify_path(db_path)
         self.id_keys = object_id_keys.copy()
-        self.write_lock = threading.Lock()
+        self.write_queue = queue.Queue()
         self._conn = None
+        self.writer_thread = threading.Thread(target=self._run_write)
+        self.writer_thread.start()
 
     @property
     def conn(self):
@@ -71,27 +74,41 @@ class StateMachine(StateStoreBase):
         cur.close()
         return result
 
-    @retry(exceptions=sqlite3.OperationalError, tries=3, jitter=DB_JITTER)
+    
     def set(
         self,
         object_type: str,
         state: str,
         items: list[dict[str, Any]] | list[BaseModel],
     ):
-        if not items:
-            return 0
-
-        with self.write_lock:
+        if not items: return 0
+        
+        self.write_queue.put((insert_expr(object_type), create_rows(self.id_keys[object_type], state, items)))
+    
+    def _run_write(self):
+        @retry(exceptions=sqlite3.OperationalError, tries=20, jitter=DB_JITTER)
+        def start_write(items):
+            total = 0
+            expr, rows = items
             cur = self.conn.cursor()
             cur.execute("BEGIN IMMEDIATE;")
-            rowcount = cur.executemany(
-                insert_expr(object_type),
-                create_rows(self.id_keys[object_type], state, items),
-            ).rowcount
+            total += cur.executemany(expr, rows).rowcount
+            while not self.write_queue.empty():
+                items = self.write_queue.get()
+                if items is None:
+                    break
+                expr, rows = items
+                total += cur.executemany(expr, rows).rowcount
             self.conn.commit()
             cur.close()
+            return total
 
-        return rowcount
+        while True:
+            items = self.write_queue.get()
+            if not items:
+                break
+            res = start_write(items)
+            logset(res)
 
     def get(
         self,
@@ -119,9 +136,15 @@ class StateMachine(StateStoreBase):
         existing_ids = {r[0] for r in result}
 
         return [item for id, item in zip(ids, items) if id not in existing_ids]
+    
+    def optimize(self, cleanup_older_than: int = 7):
+        for table in self.id_keys.keys():
+            self.write_queue.put((f"UPDATE {table} SET data = NULL WHERE ts < ?", datetime.now() - timedelta(days=cleanup_older_than)))        
 
     def close(self):
-        if self._conn:
+        if self._conn and self.writer_thread.is_alive():
+            self.write_queue.put(None)
+            self.writer_thread.join()
             self._conn.close()
             self._conn = None
 
@@ -129,44 +152,28 @@ class StateMachine(StateStoreBase):
 class AsyncStateMachine(AsyncStateStoreBase):
     id_keys: dict[str, str]
     db_path: str
-    write_lock: asyncio.Lock
+    write_queue: asyncio.Queue
     conn: aiosqlite.Connection | None
 
     def __init__(self, db_path: str, object_id_keys: dict[str, str]):
         self.db_path = _rectify_path(db_path)
         self.id_keys = object_id_keys.copy()
-        self.write_lock = asyncio.Lock()
+        self.write_queue = asyncio.Queue()
         self.conn = None
 
     async def __aenter__(self):
         self.conn = await aiosqlite.connect(self.db_path, timeout=300, check_same_thread=False, isolation_level=None)
         await self.conn.executescript(_INIT_SQL)
         await self.conn.executescript(create_table_expr(self.id_keys))
+        self.write_task = asyncio.create_task(self._run_write())
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.write_queue.put(None)
+        await self.write_task
         if self.conn:
             await self.conn.close()
             self.conn = None
-
-    # @asynccontextmanager
-    # async def _write_transaction(self):
-    #     if not self.conn:
-    #         raise RuntimeError(
-    #             "AsyncStateMachine not initialized. Use 'async with' context manager."
-    #         )
-    #     async with self.write_lock:
-    #         try:
-    #             cur = await self.conn.cursor()
-    #             # await cur.execute("BEGIN IMMEDIATE;")
-    #             yield cur                
-    #             await self.conn.commit()
-    #         except Exception as e:
-    #             ic(e.__class__.__name__, e)
-    #             # await self.conn.rollback()
-    #             raise e
-    #         finally:
-    #             await cur.close()
 
     async def _read(self, expr: str, params=None):
         cur = await self.conn.execute(expr, params)
@@ -174,7 +181,34 @@ class AsyncStateMachine(AsyncStateStoreBase):
         await cur.close()
         return result
 
-    @retry(exceptions=aiosqlite.OperationalError, tries=10, jitter=DB_JITTER)
+    async def _run_write(self):
+        @retry(exceptions=aiosqlite.OperationalError, tries=20, jitter=DB_JITTER)
+        async def start_write(items):
+            total = 0
+            expr, rows = items
+            cur = await self.conn.cursor()
+            await cur.execute("BEGIN IMMEDIATE;")
+            await cur.executemany(expr, rows)
+            total += cur.rowcount
+            while not self.write_queue.empty():
+                items = self.write_queue.get_nowait()
+                if items is None:
+                    break
+                expr, rows = items
+                await cur.executemany(expr, rows)
+                total += cur.rowcount
+
+            await self.conn.commit()
+            await cur.close()
+            
+        while True:
+            items = await self.write_queue.get()
+            if not items:
+                break
+            res = await start_write(items)
+            logset(res)
+
+
     async def set(
         self,
         object_type: str,
@@ -183,18 +217,8 @@ class AsyncStateMachine(AsyncStateStoreBase):
     ):
         if not items:
             return 0
-
-        async with self.write_lock:
-            cur = await self.conn.cursor()
-            await cur.execute("BEGIN IMMEDIATE;")
-            result = await cur.executemany(
-                insert_expr(object_type),
-                create_rows(self.id_keys[object_type], state, items),
-            )
-            rowcount = result.rowcount
-            await self.conn.commit()
-            await cur.close()
-        return rowcount
+        
+        await self.write_queue.put((insert_expr(object_type), create_rows(self.id_keys[object_type], state, items)))
 
     async def get(
         self,
@@ -222,6 +246,15 @@ class AsyncStateMachine(AsyncStateStoreBase):
         existing_ids = {r[0] for r in result}
 
         return [item for id, item in zip(ids, items) if id not in existing_ids]
+    
+    async def optimize(self, cleanup_older_than: int = 7):
+        await asyncio.gather(*(
+            self.write_queue.put((
+                f"UPDATE {table} SET data = NULL WHERE ts < ?", 
+                [datetime.now() - timedelta(days=cleanup_older_than)]
+            )) 
+            for table in self.id_keys.keys()
+        ))
 
 
 get_id = (

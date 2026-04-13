@@ -31,7 +31,7 @@ logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INF
 logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.refresherorch").setLevel(logging.INFO)
 logging.getLogger("coffeemaker.orchestrators.porterorch").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.statemachines_pg").setLevel(logging.INFO)
+logging.getLogger("processingcache").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.agents").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
@@ -211,7 +211,6 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.porterorch import Porter
 
         orch = Porter(state_store=state_store)
-        # add a backup db to store 
         orch.hydrate_beansacks(db)
 
     else:

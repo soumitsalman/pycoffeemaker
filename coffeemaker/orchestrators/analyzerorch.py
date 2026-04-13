@@ -260,8 +260,8 @@ class Indexer:
         )
         total = 0
         for updates in self.embed_beans(beans, batch_size):
-            stored = self.state_store.set("beans", "embedded", updates)
-            total += stored
+            self.state_store.set("beans", "embedded", updates)
+            total += len(updates)
         log.info("total embedded", extra={"source": run_id(), "num_items": total})
         return total
 
@@ -276,8 +276,8 @@ class Indexer:
         )
         total = 0
         for updates in self.classify_beans(beans, batch_size):
-            stored = self.state_store.set("beans", "classified", updates)
-            total += stored
+            self.state_store.set("beans", "classified", updates)
+            total += len(updates)
         log.info("total classified", extra={"source": run_id(), "num_items": total})
         return total
 
@@ -291,8 +291,8 @@ class Indexer:
         )
         total = 0
         for updates in self.extract_beans(beans, batch_size):
-            stored = self.state_store.set("beans", "extracted", updates)
-            total += stored
+            self.state_store.set("beans", "extracted", updates)
+            total += len(updates)
         log.info("total extracted", extra={"source": run_id(), "num_items": total})
         return total
 
@@ -306,8 +306,8 @@ class Indexer:
         )
         total = 0
         for updates in self.digest_beans(beans, batch_size):
-            stored = self.state_store.set("beans", "digested", updates)
-            total += stored
+            self.state_store.set("beans", "digested", updates)
+            total += len(updates)
         log.info("total digested", extra={"source": run_id(), "num_items": total})
         return total
 
@@ -324,9 +324,7 @@ class Indexer:
         )
 
         total = 0
-        while beans := self.state_store.get(
-            "beans", states="collected", exclude_states="cdned", limit=batch_size
-        ):
+        if beans := self.state_store.get("beans", states="collected", exclude_states="cdned"):
             with ThreadPoolExecutor(max_workers=batch_size) as exec:
                 cdn_urls = exec.map(
                     lambda bean: self.cdn.upload_text(path=create_cdn_path(bean), content=bean[K_CONTENT]),

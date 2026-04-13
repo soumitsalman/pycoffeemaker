@@ -25,15 +25,16 @@ from pybeansack.models import *
 K_RELATED = "related"
 LIMIT = 40000
 
+
+log_dir, log_file = os.getenv("LOG_DIR"), None
+if log_dir:
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = f"{log_dir}/rectify-{now().strftime('%Y-%m-%d-%H')}.log"
+
+logging.basicConfig(level=logging.INFO, filename=log_file, format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s") 
+
 ndays_ago = lambda n: datetime.now() - timedelta(days=n)
 make_id = lambda text: re.sub(r"[^a-zA-Z0-9]", "-", text.lower())
-create_orch = lambda: Orchestrator(
-    os.getenv("DB_REMOTE"),
-    os.getenv("DB_LOCAL"),
-    os.getenv("DB_NAME"),
-    embedder_path=os.getenv("EMBEDDER_PATH"),
-    digestor_path=os.getenv("DIGESTOR_PATH"),
-)
 
 
 def merge_feeds():
@@ -305,15 +306,6 @@ def cleanup_bean_tags():
     db.close()
 
 
-def cluster_existing_beans():
-    db = create_client("pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s",
-    )
-    db.refresh_clusters()
-    db.close()
-
 def hydrate_processing_cache(cache_dir, batch_size):
     """Hydrates local processing cache with beans and publishers from production/backup db
     
@@ -328,7 +320,6 @@ def hydrate_processing_cache(cache_dir, batch_size):
     
     db = create_client(db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
     state_store = StateMachine(cache_dir, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
-    logging.basicConfig(level=logging.INFO, filename=f".logs/rectify-{now().strftime('%Y-%m-%d-%H-%M')}.log", format="%(asctime)s || %(message)s")    
     
     if False:
         offset = 0
@@ -360,16 +351,21 @@ def hydrate_processing_cache(cache_dir, batch_size):
 
     if True:        
         offset = 0
-        while beans := db.query_latest_beans(
-            conditions=["gist IS NOT NULL", "embedding IS NOT NULL"],
-            limit=batch_size,
-            offset=offset,
-            columns=[K_URL, K_EMBEDDING],
-        ):                
-            bean_states = [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans]
-            list(map(lambda state: state_store.set(BEANS, state, bean_states), ["collected", "embedded", "extracted", "digested", "cdned", "beansacked"]))
-            offset += len(beans)
-            logging.info(f"hydrated || processed beans || {offset}")
+        with ThreadPoolExecutor() as exec:
+            while beans := db.query_latest_beans(
+                conditions=["gist IS NOT NULL", "embedding IS NOT NULL"],
+                limit=batch_size,
+                offset=offset,
+                columns=[K_URL],
+            ):                  
+                basic_vals = [{K_URL: bean.url} for bean in beans]
+                exec.map(lambda state: state_store.set(BEANS, state, basic_vals), ["collected", "extracted", "digested", "cdned", "classified", "embedded", "beansacked"])
+
+                # emb_vals = [{K_URL: bean.url, K_EMBEDDING: bean.embedding} for bean in beans]
+                # exec.submit(state_store.set, BEANS, "embedded", emb_vals)
+
+                offset += len(beans)
+                logging.info("hydrated", extra={"source": "processed beans", "num_items": offset})
     
     state_store.close()
     db.close()
