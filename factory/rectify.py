@@ -324,16 +324,11 @@ def hydrate_processing_cache(cache_dir, batch_size):
     """
     import os
     from coffeemaker.processingcache.sqlitecache import StateMachine
-    from coffeemaker.processingcache.base import ClassificationStore
     from pybeansack import K_URL, K_EMBEDDING, K_BASE_URL, BEANS, PUBLISHERS, RELATED_BEANS, create_client
     
     db = create_client(db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
     state_store = StateMachine(cache_dir, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
-    logging.basicConfig(
-        level=logging.INFO,
-        filename="rectify.log",
-    )
-    
+    logging.basicConfig(level=logging.INFO, filename=f".logs/rectify-{now().strftime('%Y-%m-%d-%H-%M')}.log", format="%(asctime)s || %(message)s")    
     
     if False:
         offset = 0

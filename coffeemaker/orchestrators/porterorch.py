@@ -11,6 +11,8 @@ from icecream import ic
 
 log = logging.getLogger(__name__)
 
+BATCH_SIZE = 2048
+
 def unpack_related(beans: list[dict]):
     items = {}
     for bean in beans:
@@ -36,7 +38,8 @@ def prep_bean_items_for_beansack(beans: list[dict]):
     """Merges beans, replaces content with cdn url"""
     beans = merge(K_URL, beans)
     for b in beans:
-        b[K_CONTENT] = b["content_url"]
+        if not b.get("content_url"): ic(list(b.keys()))
+        else: b[K_CONTENT] = b["content_url"]
     with open(f".cache/{now().strftime('%Y%m%d-%H%M%S')}.json", "w") as f:
         json.dump(random.sample(beans, min(5, len(beans))), f, indent=2, default=str)
     return beans
@@ -53,12 +56,12 @@ class Porter:
         total_ported = 0
 
         # move the bean bodies
-        beans = self.state_store.get(
+        while beans := self.state_store.get(
             "beans",
             states=["collected", "embedded", "classified", "extracted", "digested", "cdned"],
             exclude_states="beansacked",
-        )
-        if beans:
+            limit=BATCH_SIZE
+        ):        
             count = db.store_beans([Bean(**b) for b in prep_bean_items_for_beansack(beans)])
             total_ported += count
             log.info(
@@ -68,10 +71,9 @@ class Porter:
             self.state_store.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
 
         # related beans go to a separate table
-        related_beans = self.state_store.get(
-            "beans", states="classified", exclude_states="related_beansacked",
-        )
-        if related_beans:
+        while related_beans := self.state_store.get(
+            "beans", states="classified", exclude_states="related_beansacked", limit=BATCH_SIZE
+        ):
             count = db.store_related(unpack_related(related_beans))
             total_ported += count
             log.info(
@@ -81,10 +83,9 @@ class Porter:
             self.state_store.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
 
         # move the publishers
-        publishers = self.state_store.get(
-            "publishers", states="collected", exclude_states="beansacked"
-        )
-        if publishers:                
+        while publishers := self.state_store.get(
+            "publishers", states="collected", exclude_states="beansacked", limit=BATCH_SIZE
+        ):
             count = db.store_publishers([Publisher(**pub) for pub in publishers])
             total_ported += count
             log.info(

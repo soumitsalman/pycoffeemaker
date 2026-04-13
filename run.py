@@ -212,9 +212,7 @@ if __name__ == "__main__":
 
         orch = Porter(state_store=state_store)
         # add a backup db to store 
-        while orch.hydrate_beansacks(db):
-            # keep running it while there is something
-            pass
+        orch.hydrate_beansacks(db)
 
     else:
         raise ValueError(
