@@ -1,18 +1,17 @@
+import pandas as pd
 from pydantic import BaseModel
 from typing import Any
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 import msgpack
-from pybeansack import SimpleVectorDB
 import logging
 
 NOT_IMPLEMENTED = NotImplementedError("Method not implemented")
-ClassificationStore = SimpleVectorDB
 
 log = logging.getLogger("processingcache")
 logset = lambda total: log.info("state set", extra={"num_items": total, "source": "__default__"})
 
-class StateStoreBase(ABC):
+class ProcessingCacheBase(ABC):
     @abstractmethod
     def set(self, object_type: str, state: str, items: list[dict[str, Any]] | list[BaseModel],):
         raise NOT_IMPLEMENTED
@@ -20,7 +19,7 @@ class StateStoreBase(ABC):
     @abstractmethod
     def get(self, object_type: str, states: str | list[str], exclude_states: str | list[str], limit: int = 0, offset: int = 0):
         raise NOT_IMPLEMENTED
-
+    
     @abstractmethod
     def deduplicate(self, object_type: str, state: str, items: list):
         raise NOT_IMPLEMENTED
@@ -28,7 +27,7 @@ class StateStoreBase(ABC):
     def close(self):
         pass
 
-class AsyncStateStoreBase(ABC):
+class AsyncProcessingCacheBase(ABC):
     @abstractmethod
     async def set(self, object_type: str, state: str, items: list[dict[str, Any]] | list[BaseModel],):
         raise NOT_IMPLEMENTED
@@ -51,9 +50,9 @@ def encode_data(data):
 def decode_data(data):
     return msgpack.unpackb(data, timestamp=3)
 
-get_id = (
+get_field_val = (
     lambda item, id_key: getattr(item, id_key)
     if isinstance(item, BaseModel)
     else item[id_key]
 )
-get_ids = lambda items, id_key: [get_id(item, id_key) for item in items]
+get_field_vals = lambda items, id_key: [get_field_val(item, id_key) for item in items]

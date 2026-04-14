@@ -315,12 +315,12 @@ def hydrate_processing_cache(cache_dir, batch_size):
     - unprocessed beans that do not have `gist`. Store those in `collected` state in processing cache so they can be picked up by the pipeline and processed as usual.  
     """
     import os
-    from coffeemaker.processingcache.sqlitecache import StateMachine
+    from coffeemaker.processingcache.sqlitecache import ProcessingCache
     from coffeemaker.processingcache.base import ClassificationStore
     from pybeansack import K_URL, K_EMBEDDING, K_BASE_URL, BEANS, PUBLISHERS, RELATED_BEANS, create_client
     
     db = create_client(db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
-    state_store = StateMachine(cache_dir, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
+    state_store = ProcessingCache(cache_dir, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
     
     if False:
         offset = 0

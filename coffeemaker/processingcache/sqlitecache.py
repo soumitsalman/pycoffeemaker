@@ -46,10 +46,9 @@ def _rectify_path(db_path: str) -> str:
         path.parent.mkdir(parents=True, exist_ok=True)
     return str(path)
 
-class StateMachine(StateStoreBase):
+class ProcessingCache(ProcessingCacheBase):
     id_keys: dict[str, str]
     db_path: str
-    # write_lock: threading.Lock
     write_queue: queue.Queue
 
     def __init__(self, db_path: str, object_id_keys: dict[str, str]):
@@ -128,7 +127,7 @@ class StateMachine(StateStoreBase):
         if not items:
             return items
 
-        ids = get_ids(items, self.id_keys[object_type])
+        ids = get_field_vals(items, self.id_keys[object_type])
         result = self._read(
             exists_expr(object_type, ids),
             [state] + ids,
@@ -150,7 +149,7 @@ class StateMachine(StateStoreBase):
             self.read_conn = None
 
 
-class AsyncStateMachine(AsyncStateStoreBase):
+class AsyncProcessingCache(AsyncProcessingCacheBase):
     id_keys: dict[str, str]
     db_path: str
     write_queue: asyncio.Queue
@@ -242,7 +241,7 @@ class AsyncStateMachine(AsyncStateStoreBase):
         if not items:
             return items
 
-        ids = get_ids(items, self.id_keys[object_type])
+        ids = get_field_vals(items, self.id_keys[object_type])
         result = await self._read(
             exists_expr(object_type, ids),
             [state] + ids,
@@ -258,12 +257,12 @@ class AsyncStateMachine(AsyncStateStoreBase):
                 [datetime.now() - timedelta(days=cleanup_older_than)]
             )) 
 
-get_id = (
+get_field_val = (
     lambda item, id_key: getattr(item, id_key)
     if isinstance(item, BaseModel)
     else item[id_key]
 )
-get_ids = lambda items, id_key: [get_id(item, id_key) for item in items]
+get_field_vals = lambda items, id_key: [get_field_val(item, id_key) for item in items]
 
 
 def create_rows(
@@ -277,7 +276,7 @@ def create_rows(
             ts,
             encode_data(data),
         )
-        for id, data in zip(get_ids(items, id_key), items)
+        for id, data in zip(get_field_vals(items, id_key), items)
     ]
 
 

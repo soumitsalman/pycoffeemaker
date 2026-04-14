@@ -18,5 +18,4 @@ icecream
 aiosqlite
 python-dotenv
 python-slugify
-deprecated
 msgpack

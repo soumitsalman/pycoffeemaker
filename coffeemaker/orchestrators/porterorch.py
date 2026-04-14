@@ -5,7 +5,7 @@ import random
 from itertools import batched
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
-from coffeemaker.processingcache.base import StateStoreBase
+from coffeemaker.processingcache.base import ProcessingCacheBase
 from pybeansack import Beansack, Bean, Publisher, now
 from pybeansack.models import K_BASE_URL, K_CONTENT, K_URL
 from icecream import ic
@@ -46,17 +46,17 @@ def prep_bean_items_for_beansack(beans: list[dict]):
 
 
 class Porter:
-    state_store: StateStoreBase
+    cache: ProcessingCacheBase
 
-    def __init__(self, state_store: StateStoreBase):
-        self.state_store = state_store
+    def __init__(self, cache: ProcessingCacheBase):
+        self.cache = cache
 
     def hydrate_beansacks(self, db: Beansack):
         """Ports beans, publishers and related beans to 1 or more Beansacks"""
         total_ported = 0
 
         # move beans
-        if beans := self.state_store.get(
+        if beans := self.cache.get(
             "beans",
             states=["collected", "embedded", "classified", "extracted", "digested", "cdned"],
             exclude_states=["beansacked"],
@@ -71,10 +71,10 @@ class Porter:
                 "ported",
                 extra={"source": "beansack:beans", "num_items": sum(counts)},
             )                
-            self.state_store.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
+            self.cache.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
 
         # related beans go to a separate table
-        if related_beans := self.state_store.get(
+        if related_beans := self.cache.get(
             "beans", states="classified", exclude_states="related_beansacked"
         ):
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
@@ -84,10 +84,10 @@ class Porter:
                 "ported",
                 extra={"source": "beansack:related_beans", "num_items": sum(counts)},
             )
-            self.state_store.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
+            self.cache.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
 
         # move the publishers
-        if publishers := self.state_store.get(
+        if publishers := self.cache.get(
             "publishers", states="collected", exclude_states="beansacked"
         ):
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
@@ -97,7 +97,7 @@ class Porter:
                 "ported",
                 extra={"source": "beansack:publishers", "num_items": sum(counts)},
             )
-            self.state_store.set("publishers", "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
+            self.cache.set("publishers", "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
         
         # now optimize
         # with ThreadPoolExecutor() as exec:

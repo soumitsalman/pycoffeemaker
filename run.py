@@ -70,7 +70,7 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CDN, PORTER)",
 )
 
-from coffeemaker.processingcache.pgcache import AsyncStateMachine, StateMachine, ClassificationStore
+from coffeemaker.processingcache.pgcache import AsyncProcessingCache, ProcessingCache, ClassificationCache
 from pybeansack import create_client, CDNStore, BEANS, PUBLISHERS, K_URL, K_BASE_URL
 
 if __name__ == "__main__":
@@ -89,15 +89,26 @@ if __name__ == "__main__":
         "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
     }
     db = create_client(**db_kwargs)
-    classification_store = ClassificationStore(os.getenv("CLASSIFIER_CACHE"), table_id_keys={BEANS: K_URL})
-    state_store_path = os.getenv("STATE_CACHE")
-    state_store = StateMachine(state_store_path, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
-    async_state_store = AsyncStateMachine(state_store_path, {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
+    cache_path = os.getenv("PROCESSING_CACHE")
+    cache_settings = table_settings = {
+        BEANS: {"id_key": K_URL},
+        PUBLISHERS: {"id_key": K_BASE_URL},
+    }
+    cache_store = ProcessingCache(cache_path+"/statestore", cache_settings)
+    async_cache_store = AsyncProcessingCache(cache_path+"/statestore", cache_settings)
+    cls_cache = ClassificationCache(
+        cache_path+"/clsstore", 
+        table_settings={
+            BEANS: {"id_key": K_URL},
+            "categories": {"id_key": "category"},
+            "sentiments": {"id_key": "sentiment"}
+        }
+    )
 
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Collector
 
-        orch = Collector(state_store=async_state_store, db=db)
+        orch = Collector(cache=async_cache_store, db=db)
         asyncio.run(
             orch.run(
                 os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
@@ -109,7 +120,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
         orch = Indexer(
-            state_store=state_store,
+            cache=cache_store,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
@@ -122,10 +133,7 @@ if __name__ == "__main__":
     elif mode == "CLASSIFIER":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
-        orch = Indexer(
-            state_store=state_store, 
-            classification_store=classification_store
-        )
+        orch = Indexer(cache=cache_store, cls_cache=cls_cache)
         while orch.run_classifier(batch_size=batch_size):
             # keep running it while there is something to process
             pass
@@ -134,7 +142,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
         orch = Indexer(
-            state_store=state_store,
+            cache=cache_store,
             extractor_path=os.getenv("EXTRACTOR_PATH"),
             extractor_context_len=int(
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
@@ -148,7 +156,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
         orch = Indexer(
-            state_store=state_store,
+            cache=cache_store,
             digestor_path=os.getenv("DIGESTOR_PATH"),
             digestor_context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
@@ -164,7 +172,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
         orch = Indexer(
-            state_store=state_store,
+            cache=cache_store,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
@@ -190,7 +198,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
         orch = Indexer(
-            state_store=state_store,
+            cache=cache_store,
             cdn=CDNStore(os.getenv("CDN_BUCKET"), os.getenv("CDN_PUBLIC_ACCESS_URL")),
         )
         while orch.run_cdn(batch_size=batch_size):
@@ -200,7 +208,7 @@ if __name__ == "__main__":
     elif mode == "PORTER":
         from coffeemaker.orchestrators.porterorch import Porter
 
-        orch = Porter(state_store=state_store)
+        orch = Porter(cache=cache_store)
         while orch.hydrate_beansacks(db):
             # keep running it while there is something to port
             pass
@@ -210,6 +218,5 @@ if __name__ == "__main__":
             "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER."
         )
 
-    state_store.close()
-    classification_store.close()
+    cache_store.close()
     db.close()

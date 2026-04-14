@@ -7,9 +7,10 @@ from typing import Optional
 
 from slugify import slugify
 
-from coffeemaker.processingcache.base import StateStoreBase, ClassificationStore
+from coffeemaker.processingcache.base import ProcessingCacheBase
+from coffeemaker.processingcache.pgcache import ClassificationCache
 from nlp import Digest, digestors, embedders
-from pybeansack import CDNStore
+from pybeansack import CDNStore, BEANS
 from pybeansack.models import (
     K_CATEGORIES,
     K_CONTENT,
@@ -40,10 +41,8 @@ index_storables = lambda beans: [bean for bean in beans if bean.embedding]
 digest_storables = lambda beans: [bean for bean in beans if bean.gist]
 run_id = lambda: datetime.now().strftime("%A, %b-%d-%Y")
 
-
-# TODO: convert this into indexer
 class Indexer:
-    state_store: StateStoreBase
+    cache: ProcessingCacheBase
     embedder: embedders.EmbedderBase
     extractor: digestors.NamedEntityExtractor
     digestor: digestors.DigestorBase
@@ -51,18 +50,17 @@ class Indexer:
 
     def __init__(
         self,
-        state_store: StateStoreBase,        
+        cache: ProcessingCacheBase,        
         embedder_path: Optional[str] = None,
         embedder_context_len: int = 0,
         extractor_path: Optional[str] = None,
         extractor_context_len: int = 0,
         digestor_path: Optional[str] = None,
         digestor_context_len: int = 0,
-        classification_store: ClassificationStore = None,
+        cls_cache: Optional[ClassificationCache] = None,
         cdn: Optional[CDNStore] = None,
     ):
-        self.state_store = state_store
-        self.classification_store = classification_store
+        self.cache = cache
         if embedder_path:
             self.embedder = embedders.from_path(
                 model_path=embedder_path, context_len=embedder_context_len
@@ -80,6 +78,7 @@ class Indexer:
                 max_output_tokens=384,
                 output_parser=Digest.parse_compressed,
             )
+        self.cls_cache = cls_cache
         self.cdn = cdn
 
     def embed_beans(self, beans: list[dict], batch_size: int):
@@ -108,49 +107,36 @@ class Indexer:
                         stack_info=True,
                     )
 
-    def _create_classification(self, bean: dict):
+    def _search_classification(self, bean: dict):
         embedding = bean[K_EMBEDDING]
-        related = self.classification_store.search(
-            "beans", embedding=embedding, distance=CLUSTER_EPS, columns=[K_URL]
-        )
-        categories = self.classification_store.search(
+        related = self.cls_cache.search("beans", embedding=embedding, distance=CLUSTER_EPS)
+        categories = self.cls_cache.search(
             "categories",
             embedding=embedding,
             distance_func="cosine",
-            columns=["category"],
-            limit=MAX_CLASSIFICATIONS,
+            top_n=MAX_CLASSIFICATIONS,            
         )
-        sentiments = self.classification_store.search(
+        sentiments = self.cls_cache.search(
             "sentiments",
             embedding=embedding,
             distance_func="cosine",
-            columns=["sentiment"],
-            limit=MAX_CLASSIFICATIONS,
+            top_n=MAX_CLASSIFICATIONS,
         )
-
-        map_key = lambda items, key: [item[key] for item in items]
+        
         return {
             K_URL: bean[K_URL],
             K_RELATED: list(
-                filter(lambda x: x != bean[K_URL], map_key(related, K_URL))
+                filter(lambda x: x != bean[K_URL], related)
             ),
-            K_CATEGORIES: map_key(categories, "category"),
-            K_SENTIMENTS: map_key(sentiments, "sentiment"),
+            K_CATEGORIES: categories,
+            K_SENTIMENTS: sentiments,
         }
 
     def classify_beans(self, beans: list[dict], batch_size: int):
         # store the items first
         for chunk in batched(beans, batch_size):
-            self.classification_store.store(
-                "beans",
-                [
-                    {k: v for k, v in b.items() if k in [K_URL, K_EMBEDDING]}
-                    for b in chunk
-                ],
-            )
-
-        for chunk in batched(beans, batch_size):
-            updates = list(ThreadPoolExecutor(max_workers=batch_size).map(self._create_classification, chunk))
+            self.cls_cache.store(BEANS, chunk)
+            updates = list(ThreadPoolExecutor(max_workers=batch_size).map(self._search_classification, chunk))
             # updates = list(map(self._create_classification, chunk))
             log.info(
                 "classified",
@@ -222,7 +208,7 @@ class Indexer:
 
     @log_runtime(logger=log)
     def run_embedder(self, batch_size: int = BATCH_SIZE):
-        beans = self.state_store.get(
+        beans = self.cache.get(
             "beans", states="collected", exclude_states="embedded"
         )
         log.info(
@@ -230,7 +216,7 @@ class Indexer:
         )
         total = 0
         for updates in self.embed_beans(beans, batch_size):
-            self.state_store.set("beans", "embedded", updates)
+            self.cache.set("beans", "embedded", updates)
             total += len(updates)
         log.info("total embedded", extra={"source": run_id(), "num_items": total})
         return total
@@ -238,22 +224,22 @@ class Indexer:
     @log_runtime(logger=log)
     def run_classifier(self, batch_size: int = BATCH_SIZE):
         # NOTE: this runs both classifier and clustering
-        beans = self.state_store.get(
+        beans = self.cache.get(
             "beans", states="embedded", exclude_states="classified"
         )
         log.info(
             "starting classifier", extra={"source": run_id(), "num_items": len(beans)}
         )
-        total = 0
+        total = 0        
         for updates in self.classify_beans(beans, batch_size):
-            self.state_store.set("beans", "classified", updates)
+            self.cache.set("beans", "classified", updates)
             total += len(updates)
         log.info("total classified", extra={"source": run_id(), "num_items": total})
         return total
 
     @log_runtime(logger=log)
     def run_extractor(self, batch_size: int = BATCH_SIZE):
-        beans = self.state_store.get(
+        beans = self.cache.get(
             "beans", states="collected", exclude_states="extracted"
         )
         log.info(
@@ -261,14 +247,14 @@ class Indexer:
         )
         total = 0
         for updates in self.extract_beans(beans, batch_size):
-            self.state_store.set("beans", "extracted", updates)
+            self.cache.set("beans", "extracted", updates)
             total += len(updates)
         log.info("total extracted", extra={"source": run_id(), "num_items": total})
         return total
 
     @log_runtime(logger=log)
     def run_digestor(self, batch_size: int = BATCH_SIZE):
-        beans = self.state_store.get(
+        beans = self.cache.get(
             "beans", states="collected", exclude_states="digested"
         )
         log.info(
@@ -276,7 +262,7 @@ class Indexer:
         )
         total = 0
         for updates in self.digest_beans(beans, batch_size):
-            self.state_store.set("beans", "digested", updates)
+            self.cache.set("beans", "digested", updates)
             total += len(updates)
         log.info("total digested", extra={"source": run_id(), "num_items": total})
         return total
@@ -290,7 +276,7 @@ class Indexer:
         )
         
         total = 0
-        if beans := self.state_store.get("beans", states="collected", exclude_states="cdned"):
+        if beans := self.cache.get("beans", states="collected", exclude_states="cdned"):
             log.info("starting cdn", extra={"num_items": len(beans), "source": run_id()})
             with ThreadPoolExecutor(max_workers=batch_size) as exec:
                 cdn_urls = exec.map(
@@ -302,7 +288,7 @@ class Indexer:
                 {K_URL: bean[K_URL], "content_url": cdn_url}
                 for bean, cdn_url in zip(beans, cdn_urls)
             ]
-            self.state_store.set("beans", "cdned", updates)
+            self.cache.set("beans", "cdned", updates)
             total += len(updates)
 
         log.info("total cdned", extra={"source": run_id(), "num_items": total})

@@ -35,7 +35,7 @@ from datacollectors import (
     URL,
 )
 from pybeansack import Beansack, Chatter
-from coffeemaker.processingcache.base import AsyncStateStoreBase
+from coffeemaker.processingcache.base import AsyncProcessingCacheBase
 from .utils import *
 from icecream import ic
 
@@ -95,16 +95,16 @@ log = logging.getLogger("collectorworker")
 
 class Collector:
     db: Beansack
-    state_store: AsyncStateStoreBase
+    cache: AsyncProcessingCacheBase
     apicollector: APICollectorAsync
     webscraper: AsyncWebScraper
     run_id: str
     beans_collected: int
     publishers_collected: int
 
-    def __init__(self, state_store: AsyncStateStoreBase, db: Beansack):
+    def __init__(self, cache: AsyncProcessingCacheBase, db: Beansack):
         self.db = db   
-        self.state_store = state_store
+        self.cache = cache
 
     def _split_item(self, item: dict):
         if not item:
@@ -207,15 +207,15 @@ class Collector:
                     tg.create_task(self._scrape_publishers(to_scrape))
 
     async def _cache_beans(self, beans: list[dict]):
-        await self.state_store.set("beans", "collected", beans)
+        await self.cache.set("beans", "collected", beans)
         log.info("caching beans", extra={"source": beans[0]["source"], "num_items": len(beans)})
         
     async def _cache_publishers(self, publishers: list[dict]):
-        await self.state_store.set("publishers", "collected", publishers)
+        await self.cache.set("publishers", "collected", publishers)
         log.info("caching publishers", extra={"source": publishers[0]["source"], "num_items": len(publishers)})
 
     async def _scrape_beans(self, beans: list[dict]):
-        to_scrape = await self.state_store.deduplicate("beans", "collected", beans)
+        to_scrape = await self.cache.deduplicate("beans", "collected", beans)
         if not to_scrape: return
 
         to_triage = await self.webscraper.scrape_beans(to_scrape)
@@ -226,7 +226,7 @@ class Collector:
         
 
     async def _scrape_publishers(self, publishers: list[dict]):
-        to_scrape = await self.state_store.deduplicate("publishers", "collected", publishers)
+        to_scrape = await self.cache.deduplicate("publishers", "collected", publishers)
         if not to_scrape: return
 
         to_triage = await self.webscraper.scrape_publishers(to_scrape)
@@ -271,7 +271,7 @@ class Collector:
             extra={"source": self.run_id, "num_items": batch_size},
         )
         async with (
-            self.state_store,
+            self.cache,
             APICollectorAsync(batch_size) as self.apicollector,
             AsyncWebScraper(batch_size) as self.webscraper,
         ):

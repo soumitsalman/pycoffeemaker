@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   pgcache:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17-trixie
     ports:
       - "5432:5432"
     environment:

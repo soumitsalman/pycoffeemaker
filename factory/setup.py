@@ -2,12 +2,14 @@ import sys
 import os
 from dotenv import load_dotenv
 
+
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 load_dotenv()
 
 from icecream import ic
 from pybeansack.models import *
-from pybeansack.simplevectordb import SimpleVectorDB
+from pybeansack import BEANS, PUBLISHERS, K_URL, K_BASE_URL
 
 def create_classification_embeddings():
     import yaml
@@ -44,11 +46,21 @@ def create_classification_files():
     categories.to_parquet(f"{dir_name}/categories.parquet", engine='pyarrow')
     sentiments.to_parquet(f"{dir_name}/sentiments.parquet", engine='pyarrow')
 
-def create_classification_cache(db_path):
+def create_classification_cache(db_path: str):
     """Seed cache with classification embeddings"""
     
     categories, sentiments = create_classification_embeddings()
-    return SimpleVectorDB.create_db(db_path=db_path, table_id_keys={"beans": K_URL}, categories=categories, sentiments=sentiments)
+    table_settings = {
+        BEANS: {"id_key": K_URL, "vector_length": 384},
+        "categories": {"id_key": "category", "vector_length": 384},
+        "sentiments": {"id_key": "sentiment", "vector_length": 384}
+    }
+    
+    from coffeemaker.processingcache.pgcache import ClassificationCache
+    cls_cache = ClassificationCache(conn_str=db_path, table_settings=table_settings)
+    cls_cache.store("categories", categories.to_dict(orient="records"))
+    cls_cache.store("sentiments", sentiments.to_dict(orient="records"))
+    
 
 # def update_db(db_type: str):
 #     from pybeansack import LanceDB
@@ -79,7 +91,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
 parser.add_argument('--create', type=str, help='Type of database to create')
 parser.add_argument('--update', type=str, help='Update the lancedb')
-parser.add_argument('--cls_cache', type=str, help='Initialize Processing Cache with Seed Value')
+parser.add_argument('--cls_cache', type=str, help='Initialize Classification Cache with Seed Value')
 parser.add_argument('--cls_files', action='store_true', help='Create classification files with embeddings for categories and sentiments')
 
 if __name__ == "__main__":

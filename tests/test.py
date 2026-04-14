@@ -244,11 +244,11 @@ def test_static_db():
 
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Collector
-    from coffeemaker.processingcache.sqlitecache import AsyncStateMachine
+    from coffeemaker.processingcache.sqlitecache import AsyncProcessingCache
     from pybeansack import create_client
 
     orch = Collector(
-        AsyncStateMachine(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL}),
+        AsyncProcessingCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL}),
         create_client("lancedb", lancedb_storage=".test/lancesack")
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
