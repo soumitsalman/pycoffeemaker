@@ -218,5 +218,6 @@ if __name__ == "__main__":
             "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER."
         )
 
+    cls_cache.close()
     cache_store.close()
     db.close()

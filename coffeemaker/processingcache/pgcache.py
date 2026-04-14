@@ -197,6 +197,9 @@ class ClassificationCache:
     def search(self, object_type: str, embedding: list[float], distance_func: str = "l2", distance: Optional[float] = None, top_n: Optional[int] = None):    
         expr, params = create_vector_search_expr(object_type, self.id_keys[object_type], embedding, distance_func, distance, top_n)
         return _read(self.pool, expr, params)
+    
+    def close(self):
+        self.pool.close()
 
 
 def _execute(pool, expr: str, rows = None):

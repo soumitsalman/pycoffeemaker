@@ -246,6 +246,34 @@ def register_new_gist_files():
     db.close()
 
 
+def migrate_classification_cache(from_lance, to_pg):
+    from pybeansack import SimpleVectorDB
+    from coffeemaker.processingcache.pgcache import ClassificationCache
+
+    from_cache = SimpleVectorDB(from_lance, {BEANS: K_URL})
+    to_cache = ClassificationCache(
+        to_pg, 
+        table_settings={
+            BEANS: {"id_key": K_URL},
+            "categories": {"id_key": "category"},
+            "sentiments": {"id_key": "sentiment"}
+        }
+    )
+
+    batch_size = 256
+    total = from_cache.db[BEANS].count_rows()
+    with tqdm(total=total, desc="Migrating classification cache") as pbar:
+        def transfer(limit, offset):
+            items = from_cache.db[BEANS].search().limit(limit).offset(offset).to_list()
+            if items: 
+                pbar.update(to_cache.store(BEANS, items))
+        
+        list(ThreadPoolExecutor(max_workers=os.cpu_count()).map(lambda off: transfer(batch_size, off), range(0, total, batch_size)))
+        
+    from_cache.close()
+    to_cache.close()
+
+
 def cleanup_bean_tags():
     from pybeansack import create_client
 
@@ -370,7 +398,11 @@ def hydrate_processing_cache(cache_dir, batch_size):
 
 # adding data porting logic
 if __name__ == "__main__":
-    hydrate_processing_cache(os.getenv("CACHE_DIR"), batch_size=4096)
+    migrate_classification_cache(
+        from_lance=".cache/",
+        to_pg=os.getenv("PROCESSING_CACHE") + "/clsstore",
+    )
+    # hydrate_processing_cache(os.getenv("CACHE_DIR"), batch_size=4096)
     # cleanup_bean_tags()
     # cluster_existing_beans()
 
