@@ -66,10 +66,11 @@ class Porter:
             ic(len(beans))
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
                 counts = exec.map(db.store_beans, batched([Bean(**b) for b in beans], 64))
-            total_ported += ic(sum(counts))
+                count = sum(counts)
+            total_ported += ic(count)
             log.info(
                 "ported",
-                extra={"source": "beansack:beans", "num_items": sum(counts)},
+                extra={"source": "beansack:beans", "num_items": count},
             )                
             self.cache.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
 
@@ -79,10 +80,11 @@ class Porter:
         ):
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
                 counts = exec.map(db.store_related, batched(unpack_related(related_beans), 256))
-            total_ported += ic(sum(counts))
+                count = sum(counts)
+            total_ported += ic(count)
             log.info(
                 "ported",
-                extra={"source": "beansack:related_beans", "num_items": sum(counts)},
+                extra={"source": "beansack:related_beans", "num_items": count},
             )
             self.cache.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
 
@@ -92,17 +94,14 @@ class Porter:
         ):
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
                 counts = exec.map(db.store_publishers, batched([Publisher(**pub) for pub in publishers], 64))
-            total_ported += ic(sum(counts))
+                count = sum(counts) 
             log.info(
                 "ported",
-                extra={"source": "beansack:publishers", "num_items": sum(counts)},
+                extra={"source": "beansack:publishers", "num_items": count},
             )
             self.cache.set("publishers", "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
         
-        # now optimize
-        # with ThreadPoolExecutor() as exec:
-        #     exec.submit(db.optimize)
-        #     exec.submit(self.state_store.optimize)
+        exec.submit(db.optimize)
         
         log.info(
             "hydration complete", 
