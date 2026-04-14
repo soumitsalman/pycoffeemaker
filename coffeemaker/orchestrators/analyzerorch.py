@@ -231,7 +231,7 @@ class Indexer:
             "starting classifier", extra={"source": run_id(), "num_items": len(beans)}
         )
         total = 0        
-        for updates in self.classify_beans(beans, batch_size):
+        for updates in self.classify_beans([b for b in beans if K_EMBEDDING in b], batch_size):
             self.cache.set("beans", "classified", updates)
             total += len(updates)
         log.info("total classified", extra={"source": run_id(), "num_items": total})
@@ -240,7 +240,7 @@ class Indexer:
     @log_runtime(logger=log)
     def run_extractor(self, batch_size: int = BATCH_SIZE):
         beans = self.cache.get(
-            "beans", states="collected", exclude_states="extracted"
+            "beans", states="collected", exclude_states="extracted", limit=5000
         )
         log.info(
             "starting extractor", extra={"source": run_id(), "num_items": len(beans)}
