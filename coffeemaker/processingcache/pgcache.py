@@ -36,7 +36,7 @@ class ProcessingCache(ProcessingCacheBase):
         self.table_settings = table_settings
         self.id_keys = {tab: setting["id_key"] for tab, setting in table_settings.items() if "id_key" in setting}
         
-        self.pool = ConnectionPool(conn_str, min_size=4, max_size=64, timeout=TIMEOUT, max_idle=TIMEOUT, num_workers=os.cpu_count() or 1, configure=register_vector)
+        self.pool = ConnectionPool(conn_str, min_size=4, max_size=64, timeout=TIMEOUT, max_idle=TIMEOUT, num_workers=os.cpu_count() or 1)
         self.pool.open()
         self._init_db()
 
