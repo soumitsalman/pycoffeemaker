@@ -39,9 +39,9 @@ def merge(key, items: list[dict[str, Any]]):
 def prep_bean_items_for_beansack(beans: list[dict]):
     """Merges beans, replaces content with cdn url"""
     beans = merge(K_URL, beans)
-    for b in beans:
-        if not b.get("content_url"): print("--- PORTING ERROR ---", list(b.keys()))
-        else: b[K_CONTENT] = b["content_url"]
+    # for b in beans:
+    #     if not b.get("content_url"): print("--- PORTING ERROR ---", list(b.keys()))
+    #     else: b[K_CONTENT] = b["content_url"]
     return beans
 
 
@@ -58,7 +58,7 @@ class Porter:
         # move beans
         if beans := self.cache.get(
             "beans",
-            states=["collected", "embedded", "classified", "extracted", "digested", "cdned"],
+            states=["collected", "embedded", "classified", "extracted"],
             exclude_states=["beansacked"],
         ):  
             ic(len(beans))

@@ -240,7 +240,7 @@ class Indexer:
     @log_runtime(logger=log)
     def run_extractor(self, batch_size: int = BATCH_SIZE):
         beans = self.cache.get(
-            "beans", states="collected", exclude_states="extracted", limit=5000
+            "beans", states="collected", exclude_states="extracted"
         )
         log.info(
             "starting extractor", extra={"source": run_id(), "num_items": len(beans)}
