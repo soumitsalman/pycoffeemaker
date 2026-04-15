@@ -9,7 +9,7 @@ from dateutil.parser import parse as date_parser
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 USER_AGENT = "Cafecito-Coffeemaker/v0..0+https://github.com/soumitsalman/pycoffeemaker"
-TIMEOUT =  120 # 2 minutes
+TIMEOUT =  240 # 4 minutes
 RATELIMIT_WAIT = 600 # 600 seconds / 10 minutes
 
 # content types
