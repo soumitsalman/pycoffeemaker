@@ -208,12 +208,12 @@ class Collector:
 
     async def _cache_beans(self, beans: list[dict]):
         count = await self.cache.set("beans", "collected", beans)
-        if count: log.info("cached beans", extra={"source": beans[0]["source"], "num_items": count})
+        if count is not None: log.info("cached beans", extra={"source": beans[0]["source"], "num_items": count})
         else: log.info("caching beans", extra={"source": beans[0]["source"], "num_items": len(beans)})
         
     async def _cache_publishers(self, publishers: list[dict]):
         count = await self.cache.set("publishers", "collected", publishers)
-        if count: log.info("cached publishers", extra={"source": publishers[0]["source"], "num_items": count})
+        if count is not None: log.info("cached publishers", extra={"source": publishers[0]["source"], "num_items": count})
         else: log.info("caching publishers", extra={"source": publishers[0]["source"], "num_items": len(publishers)})
 
     async def _scrape_beans(self, beans: list[dict]):
