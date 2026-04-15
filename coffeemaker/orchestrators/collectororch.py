@@ -207,12 +207,14 @@ class Collector:
                     tg.create_task(self._scrape_publishers(to_scrape))
 
     async def _cache_beans(self, beans: list[dict]):
-        await self.cache.set("beans", "collected", beans)
-        log.info("caching beans", extra={"source": beans[0]["source"], "num_items": len(beans)})
+        count = await self.cache.set("beans", "collected", beans)
+        if count: log.info("cached beans", extra={"source": beans[0]["source"], "num_items": count})
+        else: log.info("caching beans", extra={"source": beans[0]["source"], "num_items": len(beans)})
         
     async def _cache_publishers(self, publishers: list[dict]):
-        await self.cache.set("publishers", "collected", publishers)
-        log.info("caching publishers", extra={"source": publishers[0]["source"], "num_items": len(publishers)})
+        count = await self.cache.set("publishers", "collected", publishers)
+        if count: log.info("cached publishers", extra={"source": publishers[0]["source"], "num_items": count})
+        else: log.info("caching publishers", extra={"source": publishers[0]["source"], "num_items": len(publishers)})
 
     async def _scrape_beans(self, beans: list[dict]):
         to_scrape = await self.cache.deduplicate("beans", "collected", beans)
