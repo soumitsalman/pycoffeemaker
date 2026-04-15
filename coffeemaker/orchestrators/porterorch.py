@@ -61,50 +61,54 @@ class Porter:
             states=["collected", "embedded", "classified", "extracted"],
             exclude_states=["beansacked"],
         ):  
-            ic(len(beans))
+            log.info("merging", extra={"source": "portable:beans", "num_items": len(beans)})   
             beans = prep_bean_items_for_beansack(beans)
-            ic(len(beans))
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
-                counts = exec.map(db.store_beans, batched([Bean(**b) for b in beans], 64))
+                counts = exec.map(db.store_beans, batched([Bean(**b) for b in beans], 256))
                 count = sum(counts)
-            total_ported += ic(count)
-            log.info(
-                "ported",
-                extra={"source": "beansack:beans", "num_items": count},
-            )                
+            log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
             self.cache.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
+            total_ported += count
+
+        if beans := self.cache.get(
+            "beans",
+            states=["collected", "cdned", "beansacked"],
+            exclude_states=["content_beansacked"],
+        ):  
+            log.info("merging", extra={"source": "portable:beans", "num_items": len(beans)})   
+            beans = prep_bean_items_for_beansack(beans)
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:                
+                counts = exec.map(
+                    lambda chunk: db.update_beans(chunk, [K_CONTENT]), 
+                    batched([Bean(**b) for b in beans], 256)
+                )
+                count = sum(counts)
+            log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
+            self.cache.set("beans", "content_beansacked", [{K_URL: b[K_URL]} for b in beans])
+            total_ported += count
 
         # related beans go to a separate table
         if related_beans := self.cache.get(
             "beans", states="classified", exclude_states="related_beansacked"
         ):
+            log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
-                counts = exec.map(db.store_related, batched(unpack_related(related_beans), 256))
-                count = sum(counts)
-            total_ported += ic(count)
-            log.info(
-                "ported",
-                extra={"source": "beansack:related_beans", "num_items": count},
-            )
+                counts = exec.map(db.store_related, batched(unpack_related(related_beans), 1024))
+                count = sum(counts)            
+            log.info("ported", extra={"source": "beansack:related_beans", "num_items": count})
             self.cache.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
+            total_ported += count
 
         # move the publishers
         if publishers := self.cache.get(
             "publishers", states="collected", exclude_states="beansacked"
         ):
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
-                counts = exec.map(db.store_publishers, batched([Publisher(**pub) for pub in publishers], 64))
-                count = sum(counts) 
-            log.info(
-                "ported",
-                extra={"source": "beansack:publishers", "num_items": count},
-            )
+            log.info("porting", extra={"source": "portable:publishers", "num_items": len(publishers)})
+            count = db.store_publishers([Publisher(**pub) for pub in publishers])
+            log.info("ported",extra={"source": "beansack:publishers", "num_items": count})
             self.cache.set("publishers", "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
+            total_ported += count
         
-        exec.submit(db.optimize)
-        
-        log.info(
-            "hydration complete", 
-            extra={"source": "beansack", "num_items": total_ported}
-        )
+        db.optimize()
+        log.info("hydration complete", extra={"source": "beansack", "num_items": total_ported})
         return total_ported

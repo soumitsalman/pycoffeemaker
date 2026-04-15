@@ -64,10 +64,9 @@ parser.add_argument(
         "EXTRACTOR",
         "ANALYZER",
         "CLASSIFIER",
-        "CDN",
         "PORTER",
     ],
-    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CDN, PORTER)",
+    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, PORTER)",
 )
 
 from coffeemaker.processingcache.pgcache import AsyncProcessingCache, ProcessingCache, ClassificationCache
@@ -194,16 +193,16 @@ if __name__ == "__main__":
             # keep running it while there is something to process
             pass
 
-    elif mode == "CDN":
-        from coffeemaker.orchestrators.analyzerorch import Indexer
+    # elif mode == "CDN":
+    #     from coffeemaker.orchestrators.analyzerorch import Indexer
 
-        orch = Indexer(
-            cache=cache_store,
-            cdn=CDNStore(os.getenv("CDN_BUCKET"), os.getenv("CDN_PUBLIC_ACCESS_URL")),
-        )
-        while orch.run_cdn(batch_size=batch_size):
-            # keep running it while there is something to cdn
-            pass
+    #     orch = Indexer(
+    #         cache=cache_store,
+    #         cdn=CDNStore(os.getenv("CDN_BUCKET"), os.getenv("CDN_PUBLIC_ACCESS_URL")),
+    #     )
+    #     while orch.run_cdn(batch_size=batch_size):
+    #         # keep running it while there is something to cdn
+    #         pass
 
     elif mode == "PORTER":
         from coffeemaker.orchestrators.porterorch import Porter
