@@ -61,30 +61,13 @@ class Porter:
             states=["collected", "embedded", "classified", "extracted"],
             exclude_states=["beansacked"],
         ):  
-            log.info("merging", extra={"source": "portable:beans", "num_items": len(beans)})   
             beans = prep_bean_items_for_beansack(beans)
+            log.info("porting", extra={"source": "portable:beans", "num_items": len(beans)})  
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
                 counts = exec.map(db.store_beans, batched([Bean(**b) for b in beans], 256))
                 count = sum(counts)
             log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
             self.cache.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
-            total_ported += count
-
-        if beans := self.cache.get(
-            "beans",
-            states=["collected", "cdned", "beansacked"],
-            exclude_states=["content_beansacked"],
-        ):  
-            log.info("merging", extra={"source": "portable:beans", "num_items": len(beans)})   
-            beans = prep_bean_items_for_beansack(beans)
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:                
-                counts = exec.map(
-                    lambda chunk: db.update_beans(chunk, [K_CONTENT]), 
-                    batched([Bean(**b) for b in beans], 256)
-                )
-                count = sum(counts)
-            log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
-            self.cache.set("beans", "content_beansacked", [{K_URL: b[K_URL]} for b in beans])
             total_ported += count
 
         # related beans go to a separate table
