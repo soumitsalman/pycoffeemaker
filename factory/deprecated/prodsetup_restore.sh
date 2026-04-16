@@ -1,3 +1,5 @@
+# DEPRECATED: use prodsetup.sh instead
+
 sudo apt install -y pgcopydb
 
 ORIGINAL_PG=""

@@ -1,3 +1,4 @@
+# DEPRECATED: use prodsetup.sh instead
 sudo apt update
 sudo apt install cifs-utils -y
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash

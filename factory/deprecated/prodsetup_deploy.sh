@@ -1,3 +1,4 @@
+# DEPRECATED: use prodsetup.sh instead
 sudo apt update
 sudo apt upgrade -y 
 

@@ -1,3 +1,5 @@
+# DEPRECATED: use prodsetup.sh instead
+
 find /home/soumitsr/.beansack/ -type f -mmin -370 | while read -r file; do
   # Calculate relative path by removing the source directory prefix
   relative_path="${file#/home/soumitsr/.beansack/}"

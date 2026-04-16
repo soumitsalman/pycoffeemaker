@@ -1,3 +1,5 @@
+# DEPRECATED: use prodsetup.sh instead
+
 sudo snap install go --classic
 go install github.com/peak/s5cmd/v2@v2.3.0
 

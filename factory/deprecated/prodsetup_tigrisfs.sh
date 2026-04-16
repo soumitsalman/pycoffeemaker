@@ -1,3 +1,5 @@
+# DEPRECATED: use prodsetup.sh instead
+
 sudo apt-get update
 sudo apt-get install -y fuse libfuse-dev
 
