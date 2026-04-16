@@ -46,20 +46,29 @@ def create_classification_files():
     categories.to_parquet(f"{dir_name}/categories.parquet", engine='pyarrow')
     sentiments.to_parquet(f"{dir_name}/sentiments.parquet", engine='pyarrow')
 
-def create_classification_cache(db_path: str):
+def create_processing_cache(db_path: str):
     """Seed cache with classification embeddings"""
-    
+
+    from coffeemaker.processingcache.pgcache import ClassificationCache, ProcessingCache
+    ProcessingCache(
+        db_path+"/statestore", 
+        {
+            BEANS: {"id_key": K_URL},
+            PUBLISHERS: {"id_key": K_BASE_URL},
+        }
+    ).close()
+    cls_cache = ClassificationCache(
+        db_path+"/clsstore", 
+        {
+            BEANS: {"id_key": K_URL, "vector_length": 384},
+            "categories": {"id_key": "category", "vector_length": 384},
+            "sentiments": {"id_key": "sentiment", "vector_length": 384}
+        }
+    )
     categories, sentiments = create_classification_embeddings()
-    table_settings = {
-        BEANS: {"id_key": K_URL, "vector_length": 384},
-        "categories": {"id_key": "category", "vector_length": 384},
-        "sentiments": {"id_key": "sentiment", "vector_length": 384}
-    }
-    
-    from coffeemaker.processingcache.pgcache import ClassificationCache
-    cls_cache = ClassificationCache(conn_str=db_path, table_settings=table_settings)
     cls_cache.store("categories", categories.to_dict(orient="records"))
     cls_cache.store("sentiments", sentiments.to_dict(orient="records"))
+    cls_cache.close()
     
 
 # def update_db(db_type: str):
@@ -91,12 +100,12 @@ import argparse
 parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
 parser.add_argument('--create', type=str, help='Type of database to create')
 parser.add_argument('--update', type=str, help='Update the lancedb')
-parser.add_argument('--cls_cache', type=str, help='Initialize Classification Cache with Seed Value')
+parser.add_argument('--cache', type=str, help='Initialize Classification Cache with Seed Value')
 parser.add_argument('--cls_files', action='store_true', help='Create classification files with embeddings for categories and sentiments')
 
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.create: create_db(args.create)
     # if args.update: update_db(args.update)
-    if args.cls_cache: create_classification_cache(args.cls_cache)
+    if args.cache: create_processing_cache(args.cache)
     if args.cls_files: create_classification_files()

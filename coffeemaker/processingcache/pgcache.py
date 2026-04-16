@@ -112,7 +112,7 @@ class ProcessingCache(ProcessingCacheBase):
 
     def close(self):
         # Signal writer thread to shut down
-        [self.write_queue.put_nowait(None)]*5  # Multiple signal as safety
+        [self.write_queue.put_nowait(None) for _ in range(5)]  # Multiple signal as safety
         self.writer_thread.join()
         self.pool.close()
 
@@ -213,7 +213,7 @@ class AsyncProcessingCache(AsyncProcessingCacheBase):
     
     async def close(self):
         # Signal writer task to shut down
-        [self.write_queue.put_nowait(None)]*5
+        [self.write_queue.put_nowait(None) for _ in range(5)]
         if self.write_task:
             await self.write_task
         await self.pool.close()
@@ -326,7 +326,7 @@ def _copy_insert_state_rows(pool: ConnectionPool, work_batch: dict[str, list]):
     with pool.connection() as conn:
         with conn.cursor() as cur:
             for table, rows in work_batch.items():
-                # ic("INSERTING", table, len(rows))
+                ic("INSERTING", table, len(rows))
                 # CREATE temporary staging table with ON COMMIT DROP
                 cur.execute(_INSERT_STATE_TEMP_SQL.format(table=table))
                 # COPY data into staging table
@@ -334,7 +334,7 @@ def _copy_insert_state_rows(pool: ConnectionPool, work_batch: dict[str, list]):
                     [copy.write_row(row) for row in rows]
                 # INSERT from staging to real table with conflict handling
                 cur.execute(_INSERT_STATE_PORT_SQL.format(table=table))
-                # ic("INSERTED", table, len(rows))
+                ic("INSERTED", table, len(rows))
 
 async def _copy_insert_state_rows_async(pool: AsyncConnectionPool, work_batch: dict[str, list]):
     """Async version: Insert rows using COPY + staging table for optimal performance.
@@ -346,14 +346,14 @@ async def _copy_insert_state_rows_async(pool: AsyncConnectionPool, work_batch: d
         async with conn.cursor() as cur:
             for table, rows in work_batch.items():
                 # CREATE temporary staging table with ON COMMIT DROP
-                # ic("INSERTING", table, len(rows))
+                ic("INSERTING", table, len(rows))
                 await cur.execute(_INSERT_STATE_TEMP_SQL.format(table=table))
                 # COPY data into staging table
                 async with conn.cursor().copy(_INSERT_STATE_COPY_SQL.format(table=table)) as copy:
                     await asyncio.gather(*[copy.write_row(row) for row in rows])
                 # INSERT from staging to real table with conflict handling
                 await cur.execute(_INSERT_STATE_PORT_SQL.format(table=table))
-                # ic("INSERTED", table, len(rows))
+                ic("INSERTED", table, len(rows))
 
 def _create_rows(
     id_key: str,

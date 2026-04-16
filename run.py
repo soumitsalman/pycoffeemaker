@@ -89,7 +89,7 @@ if __name__ == "__main__":
     }
     db = create_client(**db_kwargs)
     cache_path = os.getenv("PROCESSING_CACHE")
-    cache_settings = table_settings = {
+    cache_settings = {
         BEANS: {"id_key": K_URL},
         PUBLISHERS: {"id_key": K_BASE_URL},
     }
