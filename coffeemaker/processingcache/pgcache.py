@@ -1,10 +1,14 @@
 import asyncio
+from itertools import chain
 import os
+import queue
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from pydantic import BaseModel
 from .base import *
 import pandas as pd
+from psycopg import sql
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pgvector.psycopg import register_vector, Vector
 
@@ -17,6 +21,8 @@ class ProcessingCache(ProcessingCacheBase):
     table_settings: dict[str, dict[str, Any]]
     id_keys: dict[str, str]
     pool: ConnectionPool
+    write_queue: queue.Queue
+    writer_thread: threading.Thread
 
     def __init__(self, conn_str: str, table_settings: dict[str, dict[str, Any]]):
         """Initialize the ProcessingCache with a PostgreSQL connection string and table settings.
@@ -36,15 +42,33 @@ class ProcessingCache(ProcessingCacheBase):
         self.table_settings = table_settings
         self.id_keys = {tab: setting["id_key"] for tab, setting in table_settings.items() if "id_key" in setting}
         
-        self.pool = ConnectionPool(conn_str, min_size=4, max_size=64, timeout=TIMEOUT, max_idle=TIMEOUT, num_workers=os.cpu_count() or 1)
+        self.pool = ConnectionPool(conn_str, min_size=1, max_size=16, timeout=TIMEOUT, max_idle=TIMEOUT, num_workers=os.cpu_count() or 1)
         self.pool.open()
+        self.write_queue = queue.Queue()
+        self.writer_thread = threading.Thread(target=self._run_write)
+        self.writer_thread.start()
         self._init_db()
 
     def _init_db(self):
         _execute(self.pool, _create_state_tables_sql(self.table_settings))
-        
-    def close(self):
-        self.pool.close()
+    
+    def _run_write(self):
+        """Background worker that processes queued write operations in batches."""
+        while True:
+            item = self.write_queue.get()
+            if not item: break
+            
+            table, rows = item
+            work_batch = {table: rows}
+            while not self.write_queue.empty():
+                item = self.write_queue.get_nowait()
+                if not item: break
+
+                table, rows = item
+                if table in work_batch: work_batch[table].extend(rows)
+                else: work_batch[table] = rows
+
+            _copy_insert_state_rows(self.pool, work_batch)
 
     def set(
         self,
@@ -52,10 +76,10 @@ class ProcessingCache(ProcessingCacheBase):
         state: str,
         items: list[dict[str, Any]] | list[BaseModel],
     ):
-        rows = create_rows(self.id_keys[object_type], state, items)
-        if not rows: return 0
+        rows = _create_rows(self.id_keys[object_type], state, items)
+        if not rows: return
         
-        return _execute(self.pool, _INSERT_STATE_TABLE_SQL.format(table=object_type), rows)
+        self.write_queue.put_nowait((object_type, rows))
 
     def get(
         self,
@@ -86,17 +110,27 @@ class ProcessingCache(ProcessingCacheBase):
                 with conn.cursor() as cur:
                     cur.execute(expr, {"threshold": threshold})
 
+    def close(self):
+        # Signal writer thread to shut down
+        [self.write_queue.put_nowait(None)]*5  # Multiple signal as safety
+        self.writer_thread.join()
+        self.pool.close()
+
 
 class AsyncProcessingCache(AsyncProcessingCacheBase):
     conn_str: str
     table_settings: dict[str, dict[str, Any]]
     id_keys: dict[str, str]
     pool: AsyncConnectionPool
+    write_queue: asyncio.Queue
+    write_task: asyncio.Task | None
 
     def __init__(self, conn_str: str, table_settings: dict[str, dict[str, Any]]):
         self.conn_str = conn_str
         self.table_settings = table_settings
         self.id_keys = {tab: setting["id_key"] for tab, setting in table_settings.items() if "id_key" in setting}
+        self.write_queue = None
+        self.write_task = None
 
     async def _init_db(self):
         await _execute_async(self.pool, _create_state_tables_sql(self.table_settings))
@@ -110,15 +144,14 @@ class AsyncProcessingCache(AsyncProcessingCacheBase):
             max_idle=TIMEOUT,
             num_workers=os.cpu_count() or 1
         )
-        await self.pool.open()        
+        await self.pool.open()
+        self.write_queue = asyncio.Queue()
+        self.write_task = asyncio.create_task(self._run_write())
         await self._init_db()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
-
-    async def close(self):
-        await self.pool.close()
 
     async def set(
         self,
@@ -126,10 +159,10 @@ class AsyncProcessingCache(AsyncProcessingCacheBase):
         state: str,
         items: list[dict[str, Any]] | list[BaseModel],
     ):
-        rows = create_rows(self.id_keys[object_type], state, items)
-        if not rows: return 0
+        rows = _create_rows(self.id_keys[object_type], state, items)
+        if not rows: return
 
-        return await _execute_async(self.pool, _INSERT_STATE_TABLE_SQL.format(table=object_type), rows)
+        await self.write_queue.put((object_type, rows))
 
     async def get(
         self,
@@ -152,13 +185,38 @@ class AsyncProcessingCache(AsyncProcessingCacheBase):
         existing_ids = await _read_async(self.pool, expr, {"state": state, "ids": ids})
         return [item for item, item_id in zip(items, ids) if item_id not in existing_ids]
 
+    async def _run_write(self):
+        """Background worker that processes queued write operations in batches."""
+        while True:
+            item = await self.write_queue.get()
+            if not item: break
+            
+            table, rows = item
+            work_batch = {table: rows}
+            while not self.write_queue.empty():
+                item = self.write_queue.get_nowait()
+                if not item: break
+
+                table, rows = item
+                if table in work_batch: work_batch[table].extend(rows)
+                else: work_batch[table] = rows
+
+            await _copy_insert_state_rows_async(self.pool, work_batch)
+    
     async def optimize(self, cleanup_older_than: int = 7):
         threshold = datetime.now(tz=timezone.utc) - timedelta(days=cleanup_older_than)
         for table in self.id_keys:
             expr = _CLEANUP_OLD_SQL.format(table=table)
             async with self.pool.connection() as conn:
                 async with conn.cursor() as cur:
-                    await cur.execute(expr, {"threshold": threshold})   
+                    await cur.execute(expr, {"threshold": threshold})
+    
+    async def close(self):
+        # Signal writer task to shut down
+        [self.write_queue.put_nowait(None)]*5
+        if self.write_task:
+            await self.write_task
+        await self.pool.close()
     
 
 class ClassificationCache:
@@ -189,10 +247,23 @@ class ClassificationCache:
         _execute(self.pool, _create_emb_tables_sql(self.table_settings))
 
     def store(self, object_type: str, items: list[dict[str, Any]] | list[BaseModel] | pd.DataFrame):
-        rows = create_embedding_rows(self.id_keys[object_type], items)
-        if not rows: return 0
+        # get_embeddings = lambda items: [get_field_val(item, "embedding") for item in items]
+        # create rows
+        data = items # for future extension
+        if not data: return 0
 
-        return _execute(self.pool, _INSERT_EMB_TABLE_SQL.format(table=object_type, id_key=self.id_keys[object_type]), rows)
+        id_key = self.id_keys[object_type]
+        expr = f"INSERT INTO {object_type} ({id_key}, ts, embedding) VALUES {', '.join(['(%s, %s, %s)']*len(data))} ON CONFLICT ({id_key}) DO NOTHING"
+
+        ts = datetime.now(tz=timezone.utc)
+        rows = list(chain.from_iterable([
+            [item[id_key], ts, Vector(item["embedding"])]
+            for item in data
+        ]))
+        with self.pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(expr, rows)
+                return cur.rowcount
 
     def search(self, object_type: str, embedding: list[float], distance_func: str = "l2", distance: Optional[float] = None, top_n: Optional[int] = None):    
         expr, params = create_vector_search_expr(object_type, self.id_keys[object_type], embedding, distance_func, distance, top_n)
@@ -230,6 +301,74 @@ async def _read_async(pool, expr: str, params = None):
             rows = await result.fetchall()
     return [row[0] for row in rows]
 
+# STATE TABLES
+_INSERT_STATE_TEMP_SQL = """
+CREATE TEMP TABLE {table}_stage (
+    id TEXT NOT NULL,
+    state TEXT NOT NULL,
+    ts TIMESTAMPTZ NOT NULL,
+    data BYTEA DEFAULT NULL
+) ON COMMIT DROP
+"""
+_INSERT_STATE_COPY_SQL = "COPY {table}_stage (id, state, ts, data) FROM STDIN"
+_INSERT_STATE_PORT_SQL = """
+INSERT INTO {table} (id, state, ts, data)
+SELECT id, state, ts, data FROM {table}_stage
+ON CONFLICT (id, state) DO NOTHING
+"""
+
+def _copy_insert_state_rows(pool: ConnectionPool, work_batch: dict[str, list]):
+    """Insert rows using COPY + staging table for optimal performance on large batches.
+    
+    Uses PostgreSQL's COPY FROM STDIN for fast bulk loading, with ON CONFLICT handling
+    via final INSERT ... SELECT statement.
+    """
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            for table, rows in work_batch.items():
+                # ic("INSERTING", table, len(rows))
+                # CREATE temporary staging table with ON COMMIT DROP
+                cur.execute(_INSERT_STATE_TEMP_SQL.format(table=table))
+                # COPY data into staging table
+                with conn.cursor().copy(_INSERT_STATE_COPY_SQL.format(table=table)) as copy:                
+                    [copy.write_row(row) for row in rows]
+                # INSERT from staging to real table with conflict handling
+                cur.execute(_INSERT_STATE_PORT_SQL.format(table=table))
+                # ic("INSERTED", table, len(rows))
+
+async def _copy_insert_state_rows_async(pool: AsyncConnectionPool, work_batch: dict[str, list]):
+    """Async version: Insert rows using COPY + staging table for optimal performance.
+    
+    Uses PostgreSQL's COPY FROM STDIN for fast bulk loading, with ON CONFLICT handling
+    via final INSERT ... SELECT statement.
+    """
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            for table, rows in work_batch.items():
+                # CREATE temporary staging table with ON COMMIT DROP
+                # ic("INSERTING", table, len(rows))
+                await cur.execute(_INSERT_STATE_TEMP_SQL.format(table=table))
+                # COPY data into staging table
+                async with conn.cursor().copy(_INSERT_STATE_COPY_SQL.format(table=table)) as copy:
+                    await asyncio.gather(*[copy.write_row(row) for row in rows])
+                # INSERT from staging to real table with conflict handling
+                await cur.execute(_INSERT_STATE_PORT_SQL.format(table=table))
+                # ic("INSERTED", table, len(rows))
+
+def _create_rows(
+    id_key: str,
+    state: str,
+    items: list[dict[str, Any]] | list[BaseModel],
+):
+    if not items: return
+
+    ts = datetime.now(tz=timezone.utc)
+    return [
+        (get_field_val(item, id_key), state, ts, encode_data(item))
+        for item in items
+    ]
+            
+
 _CREATE_STATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS {table} (
     id TEXT NOT NULL,
@@ -241,67 +380,10 @@ CREATE TABLE IF NOT EXISTS {table} (
 CREATE INDEX IF NOT EXISTS {table}_id_idx ON {table}(id);
 CREATE INDEX IF NOT EXISTS {table}_state_idx ON {table}(state);
 """
-_INSERT_STATE_TABLE_SQL = """
-    INSERT INTO {table} (id, state, ts, data) VALUES (%(id)s, %(state)s, %(ts)s, %(data)s)
-    ON CONFLICT (id, state) DO NOTHING
-"""
 
 def _create_state_tables_sql(table_settings: dict[str, dict[str, Any]]):
     exprs = [_CREATE_STATE_TABLE_SQL.format(table=name) for name, settings in table_settings.items() if "id_key" in settings]
     return "\n".join(exprs)
-
-_CREATE_EMB_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS {table} (
-    {id_key} TEXT PRIMARY KEY,
-    ts TIMESTAMPTZ NOT NULL,
-    embedding VECTOR({vector_length})
-);
-CREATE INDEX IF NOT EXISTS {table}_embeddings_idx 
-    ON {table} USING ivfflat (embedding vector_l2_ops) 
-    WITH (lists = 100);
-"""
-_INSERT_EMB_TABLE_SQL = """
-    INSERT INTO {table} ({id_key}, ts, embedding) VALUES (%({id_key})s, %(ts)s, %(embedding)s)
-    ON CONFLICT ({id_key}) DO NOTHING
-"""
-
-def _create_emb_tables_sql(table_settings: dict[str, dict[str, Any]]):
-    exprs = [_CREATE_EMB_TABLE_SQL.format(table=name, id_key=settings["id_key"], vector_length=settings["vector_length"]) for name, settings in table_settings.items() if "vector_length" in settings]
-    return "\n".join(exprs)
-               
-
-def create_rows(
-    id_key: str,
-    state: str,
-    items: list[dict[str, Any]] | list[BaseModel],
-):
-    if not items: return
-
-    ts = datetime.now(tz=timezone.utc)
-    return [
-        {
-            "id": get_field_val(item, id_key),
-            "state": state,
-            "ts": ts,
-            "data": encode_data(item),
-        }
-        for item in items
-    ]
-
-get_embeddings = lambda items: [get_field_val(item, "embedding") for item in items]
-def create_embedding_rows(id_key: str, items: list[dict[str, Any]]):
-    data = items # for future extension
-    if not data: return
-    
-    ts = datetime.now(tz=timezone.utc)
-    return [
-        {
-            id_key: item[id_key],
-            "ts": ts,
-            "embedding": Vector(item["embedding"])
-        }
-        for item in data
-    ]
 
 def create_vector_search_expr(object_type: str, id_key: str, query_embedding, distance_func: str = "l2", distance: float | None = None, top_n: int | None = None):
     expr = f"""SELECT {id_key} FROM {object_type}"""
@@ -388,3 +470,22 @@ def _create_multi_state_query_expr(
 
 _EXISTS_SQL = "SELECT id FROM {table} WHERE state = %(state)s AND id = ANY(%(ids)s)"
 _CLEANUP_OLD_SQL = "UPDATE {table} SET data = NULL WHERE ts < %(threshold)s"
+
+# EMBEDDING TABLES
+_CREATE_EMB_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS {table} (
+    {id_key} TEXT PRIMARY KEY,
+    ts TIMESTAMPTZ NOT NULL,
+    embedding VECTOR({vector_length})
+);
+CREATE INDEX IF NOT EXISTS {table}_embeddings_idx 
+    ON {table} USING ivfflat (embedding vector_l2_ops) 
+    WITH (lists = 100);
+"""
+def _create_emb_tables_sql(table_settings: dict[str, dict[str, Any]]):
+    exprs = [_CREATE_EMB_TABLE_SQL.format(table=name, id_key=settings["id_key"], vector_length=settings["vector_length"]) for name, settings in table_settings.items() if "vector_length" in settings]
+    return "\n".join(exprs)
+               
+
+
+

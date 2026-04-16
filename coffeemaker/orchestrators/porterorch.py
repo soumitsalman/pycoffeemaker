@@ -75,9 +75,7 @@ class Porter:
             "beans", states="classified", exclude_states="related_beansacked"
         ):
             log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
-                counts = exec.map(db.store_related, batched(unpack_related(related_beans), 1024))
-                count = sum(counts)            
+            count = db.store_related(unpack_related(related_beans))
             log.info("ported", extra={"source": "beansack:related_beans", "num_items": count})
             self.cache.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
             total_ported += count
