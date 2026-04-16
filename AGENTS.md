@@ -28,4 +28,5 @@ language models and natural language processing: `nlp/src/`
 Beansack DB and data models: `pybeansack/`
 Data collectors and scrapers: `coffeemaker/collectors/`
 
-
+---
+HARD REQUIREMENT: EXTREMELY CONCISE TOKEN EFFICIENT RESPONSES ONLY
