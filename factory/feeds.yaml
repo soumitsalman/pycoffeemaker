@@ -1965,7 +1965,6 @@ sources:
   - https://micro.mjanssen.nl/feed.xml
   - https://micro.webology.dev/feed.xml
   - https://microsoftedge.github.io/edgevr/feed.xml
-  - https://mid.net.ua/feed.rss
   - https://miek.nl/index.xml
   - https://mike-naylor.blogspot.com/feeds/posts/default?alt=rss
   - https://mikehadlow.blogspot.com/feeds/posts/default?alt=rss
@@ -2162,13 +2161,11 @@ sources:
   - https://notes.willhackett.com/index.xml
   - https://notesfrompoland.com/feed/
   - https://notrickszone.com/feed/
-  - https://novayagazeta.eu/feed/rss
   - https://novice.media/feed
   - https://noyb.eu/en/rss
   - https://nsjonline.com/feed/
   - https://ntietz.com/atom.xml
   - https://nurpax.github.io/rss.xml
-  - https://nv.ua/ukr/rss/all.xml
   - https://nvidianews.nvidia.com/rss.xml
   - https://nypost.com/feed/
   - https://nyunews.com/feed/
@@ -3010,8 +3007,6 @@ sources:
   - https://unixhistory.livejournal.com/data/rss
   - https://unixism.net/feed/
   - https://unlinkedlist.org/feed/
-  - https://unn.ua/en/rss/war_en.xml
-  - https://unn.ua/rss/news_uk.xml
   - https://unseen-japan.com/feed/
   - https://updates.techforpalestine.org/rss/
   - https://upolitics.com/feed/
@@ -3335,7 +3330,6 @@ sources:
   - https://www.buchinger-wilhelmi.com/feed/
   - https://www.bugeyedandshameless.com/feed
   - https://www.business-live.co.uk/rss.xml
-  - https://www.businesskorea.co.kr/rss/gns_allArticle.xml
   - https://www.butler.org/memoryandaging/rss.xml
   - https://www.buzzhint.com/feed/
   - https://www.bworldonline.com/feed/
@@ -3486,7 +3480,6 @@ sources:
   - https://www.dailynews.com/feed/
   - https://www.dailynewsegypt.com/feed/
   - https://www.dailynk.com/english/feed/
-  - https://www.dailynk.com/feed/
   - https://www.dailyrecord.co.uk/rss.xml
   - https://www.dailysignal.com/feed/
   - https://www.dailystar.co.uk/rss.xml
@@ -4222,7 +4215,6 @@ sources:
   - https://www.pr51st.com/feed/
   - https://www.practicalecommerce.com/feed
   - https://www.praetorian.com/feed/
-  - https://www.pravda.com.ua/rss/
   - https://www.prefabcontainerhomes.org/feeds/posts/default?alt=rss
   - https://www.princeton.edu/feed/
   - https://www.privacyguides.org/articles/feed_rss_created.xml
@@ -4817,7 +4809,6 @@ sources:
   - http://feeds.wnyc.org/radiolab
   - http://feeds2.feedburner.com/AndroidPhoneFans
   - http://joythebaker.com/feed/
-  - http://k.img.com.ua/rss/ru/all_news2.0.xml
   - http://myanmargazette.net/feed
   - http://newsfeed.zeit.de/index
   - http://ohhappyday.com/feed/
@@ -4888,7 +4879,6 @@ sources:
   - https://buffer.com/resources/android/rss/
   - https://buffer.com/resources/overflow/rss/
   - https://business.financialpost.com/feed/
-  - https://censor.net.ua/includes/news_ru.xml
   - https://centsationalstyle.com/feed/
   - https://chrynan.codes/rss/
   - https://citizen.co.za/feed/
@@ -4913,7 +4903,6 @@ sources:
   - https://e00-expansion.uecdn.es/rss/portada.xml
   - https://engineering.linkedin.com/blog.rss.html
   - https://engineering.prezi.com/feed
-  - https://espreso.tv/rss
   - https://fashionista.com/.rss/excerpt/
   - https://fashionista.com/.rss/excerpt/beauty
   - https://feed.infoq.com
@@ -4966,10 +4955,8 @@ sources:
   - https://film.avclub.com/rss
   - https://finance.yahoo.com/news/rssindex
   - https://fortune.com/feed
-  - https://gazeta.ua/rss
   - https://gizmodo.com/tag/science/rss
   - https://goobar.io/feed
-  - https://gordonua.com/xml/rss_category/top.html
   - https://greenkitchenstories.com/feed/
   - https://hackaday.com/blog/feed/
   - https://handstandsam.com/feed/
@@ -4986,7 +4973,6 @@ sources:
   - https://joebirch.co/feed
   - https://jornaldebrasilia.com.br/feed/
   - https://labs.spotify.com/feed/
-  - https://lenta.ru/rss
   - https://lifehacker.com/rss
   - https://lightroomkillertips.com/feed/
   - https://majornelson.com/feed/
@@ -4998,7 +4984,6 @@ sources:
   - https://medium.com/feed/better-programming
   - https://medium.com/feed/hackernoon
   - https://medium.com/feed/mindorks/tagged/android
-  - https://meduza.io/rss/all
   - https://millennialmoney.com/feed/
   - https://mobilea11y.com/index.xml
   - https://moneysavingmom.com/feed/
@@ -5010,7 +4995,6 @@ sources:
   - https://news.yahoo.com/rss/mostviewed
   - https://news.ycombinator.com/rss
   - https://newsnblogs.com/feed/
-  - https://nv.ua/rss/all.xml
   - https://obliviousinvestor.com/feed/
   - https://ohsheglows.com/feed/
   - https://okkotlin.com/rss.xml
@@ -5030,7 +5014,6 @@ sources:
   - https://prod-qt-images.s3.amazonaws.com/production/swarajya/feed.xml
   - https://publicobject.com/rss/
   - https://readwrite.com/feed/
-  - https://rg.ru/xml/index.xml
   - https://riotimesonline.com/feed/
   - https://robohub.org/feed/
   - https://blog.robotiq.com/rss.xml
@@ -5046,8 +5029,6 @@ sources:
   - https://rss.nytimes.com/services/xml/rss/nyt/Travel.xml
   - https://rss.nytimes.com/services/xml/rss/nyt/World.xml
   - https://rss.politico.com/playbook.xml
-  - https://rss.unian.net/site/news_eng.rss
-  - https://rss.unian.net/site/news_rus.rss
   - https://rss.whooshkaa.com/rss/podcast/id/1308
   - https://russia-insider.com/en/all-content/rss
   - https://saket.me/feed/
@@ -5076,7 +5057,6 @@ sources:
   - https://tim.blog/feed/
   - https://tonite.abante.com.ph/feed/
   - https://torontosun.com/category/news/feed
-  - https://tsn.ua/rss/full.rss
   - https://tvline.com/feed/
   - https://tyler.io/feed/
   - https://usabilitygeek.com/feed/
@@ -5159,7 +5139,6 @@ sources:
   - https://www.forbes.com/business/feed/
   - https://www.francetvinfo.fr/titres.rss
   - https://www.gamespot.com/feeds/mashup/
-  - https://www.gazeta.ru/export/rss/first.xml
   - https://www.goodfinancialcents.com/feed/
   - https://www.gsmarena.com/rss-news-reviews.php3
   - https://www.heraldsun.com.au/news/breaking-news/rss
@@ -5193,7 +5172,6 @@ sources:
   - https://www.kalerkantho.com/rss.xml
   - https://www.khabaronline.ir/rss
   - https://www.kirkusreviews.com/feeds/rss/
-  - https://www.kommersant.ru/RSS/main.xml
   - https://www.ladepeche.fr/rss.xml
   - https://www.lapresse.ca/actualites/rss
   - https://www.latimes.com/world-nation/rss2.0.xml
@@ -5214,7 +5192,6 @@ sources:
   - https://www.mediapart.fr/articles/feed
   - https://www.michaelwest.com.au/feed/
   - https://www.milannews.it/rss/
-  - https://www.mk.ru/rss/index.xml
   - https://www.moneycrashers.com/feed/
   - https://www.moneyweb.co.za/feed/
   - https://www.musicbusinessworldwide.com/feed/
