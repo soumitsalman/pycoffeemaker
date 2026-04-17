@@ -5,6 +5,7 @@ import os
 import queue
 import threading
 from datetime import datetime, timedelta, timezone
+import time
 from typing import Any, Optional
 from pydantic import BaseModel
 from retry import retry
@@ -119,9 +120,9 @@ class StateCache(StateCacheBase):
             with self.pool.connection() as conn:
                 with conn.cursor(binary=True) as cur:
                     for table, rows in work_batch.items():
-                        start_time = datetime.now()
+                        # start_time = datetime.now()
                         cur.execute(_insert_state_multivalues_sql(table, len(rows)), list(chain.from_iterable(rows)))
-                        print("INSERTED", table, cur.rowcount, "in", (datetime.now() - start_time).total_seconds(), "seconds")
+                        # print("INSERTED", table, cur.rowcount, "in", (datetime.now() - start_time).total_seconds(), "seconds")
 
 
 class AsyncStateCache(AsyncStateCacheBase):
@@ -227,9 +228,9 @@ class AsyncStateCache(AsyncStateCacheBase):
             async with self.pool.connection() as conn:
                 async with conn.cursor(binary=True) as cur:
                     for table, rows in work_batch.items():
-                        start_time = datetime.now()
+                        # start_time = datetime.now()
                         await cur.execute(_insert_state_multivalues_sql(table, len(rows)), list(chain.from_iterable(rows)))
-                        print("INSERTED", table, cur.rowcount, "in", (datetime.now() - start_time).total_seconds(), "seconds")
+                        # print("INSERTED", table, cur.rowcount, "in", (datetime.now() - start_time).total_seconds(), "seconds")
     
 
 class ClassificationCache:
