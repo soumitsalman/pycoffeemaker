@@ -107,36 +107,50 @@ class Indexer:
                         stack_info=True,
                     )
 
-    def _search_classification(self, bean: dict):
-        embedding = bean[K_EMBEDDING]
-        related = self.cls_cache.search("beans", embedding=embedding, distance=CLUSTER_EPS)
-        categories = self.cls_cache.search(
-            "categories",
-            embedding=embedding,
-            distance_func="cosine",
-            top_n=MAX_CLASSIFICATIONS,            
-        )
-        sentiments = self.cls_cache.search(
-            "sentiments",
-            embedding=embedding,
-            distance_func="cosine",
-            top_n=MAX_CLASSIFICATIONS,
-        )
+    # def _search_classification(self, bean: dict):
+    #     embedding = bean[K_EMBEDDING]
+    #     related = self.cls_cache.search("beans", embedding=embedding, distance=CLUSTER_EPS)
+    #     categories = self.cls_cache.search(
+    #         "categories",
+    #         embedding=embedding,
+    #         distance_func="cosine",
+    #         top_n=MAX_CLASSIFICATIONS,            
+    #     )
+    #     sentiments = self.cls_cache.search(
+    #         "sentiments",
+    #         embedding=embedding,
+    #         distance_func="cosine",
+    #         top_n=MAX_CLASSIFICATIONS,
+    #     )
         
-        return {
-            K_URL: bean[K_URL],
-            K_RELATED: list(
-                filter(lambda x: x != bean[K_URL], related)
-            ),
-            K_CATEGORIES: categories,
-            K_SENTIMENTS: sentiments,
-        }
+    #     return {
+    #         K_URL: bean[K_URL],
+    #         K_RELATED: list(
+    #             filter(lambda x: x != bean[K_URL], related)
+    #         ),
+    #         K_CATEGORIES: categories,
+    #         K_SENTIMENTS: sentiments,
+    #     }
 
     def classify_beans(self, beans: list[dict], batch_size: int):
         # store the items first
         for chunk in batched(beans, batch_size):
             self.cls_cache.store(BEANS, chunk)
-            updates = list(ThreadPoolExecutor(max_workers=batch_size).map(self._search_classification, chunk))
+            embeddings = [bean[K_EMBEDDING] for bean in chunk]
+
+            categories_list = self.cls_cache.batch_search("categories", embeddings, distance_func="cosine", top_n=MAX_CLASSIFICATIONS)
+            sentiments_list = self.cls_cache.batch_search("sentiments", embeddings, distance_func="cosine", top_n=MAX_CLASSIFICATIONS)
+            related_list = self.cls_cache.batch_search("beans", embeddings, distance_func="l2", distance=CLUSTER_EPS)
+            updates = [
+                {
+                    K_URL: bean[K_URL],
+                    K_RELATED: list(filter(lambda x: x != bean[K_URL], related)),
+                    K_CATEGORIES: categories,
+                    K_SENTIMENTS: sentiments,
+                }
+                for bean, related, categories, sentiments in zip(chunk, related_list, categories_list, sentiments_list)
+            ]
+            # updates = list(ThreadPoolExecutor(max_workers=batch_size).map(self._search_classification, chunk))
             # updates = list(map(self._create_classification, chunk))
             log.info(
                 "classified",
@@ -266,33 +280,6 @@ class Indexer:
             total += len(updates)
         log.info("total digested", extra={"source": run_id(), "num_items": total})
         return total
-
-    # @log_runtime(logger=log)
-    # def run_cdn(self, batch_size: int = BATCH_SIZE):
-    #     """Put bean contents in CDN"""
-    #     CDN_PATH_TEMPLATE = "beansack/contents/{date}/{slugurl}.md"
-    #     create_cdn_path = lambda bean: CDN_PATH_TEMPLATE.format(
-    #         date=bean[K_CREATED].strftime("%Y/%m/%d"), slugurl=slugify(bean[K_URL])
-    #     )
-        
-    #     total = 0
-    #     if beans := self.cache.get("beans", states="collected", exclude_states="cdned"):
-    #         log.info("starting cdn", extra={"num_items": len(beans), "source": run_id()})
-    #         with ThreadPoolExecutor(max_workers=batch_size) as exec:
-    #             cdn_urls = exec.map(
-    #                 lambda bean: self.cdn.upload_text(path=create_cdn_path(bean), content=bean[K_CONTENT]),
-    #                 beans,
-    #             )
-
-    #         updates = [
-    #             {K_URL: bean[K_URL], "content_url": cdn_url}
-    #             for bean, cdn_url in zip(beans, cdn_urls)
-    #         ]
-    #         self.cache.set("beans", "cdned", updates)
-    #         total += len(updates)
-
-    #     log.info("total cdned", extra={"source": run_id(), "num_items": total})
-    #     return total
     
     @log_runtime(logger=log)
     def run(

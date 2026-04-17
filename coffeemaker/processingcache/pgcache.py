@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 import os
 import queue
@@ -260,7 +261,7 @@ class ClassificationCache:
         self.table_settings = table_settings
         self.id_keys = {tab: setting["id_key"] for tab, setting in table_settings.items() if "id_key" in setting}
         
-        self.pool = ConnectionPool(conn_str, min_size=4, max_size=64, timeout=TIMEOUT, max_idle=TIMEOUT, num_workers=os.cpu_count() or 1, configure=register_vector)
+        self.pool = ConnectionPool(conn_str, min_size=1, max_size=32, timeout=TIMEOUT, max_idle=TIMEOUT, num_workers=os.cpu_count() or 1, configure=register_vector)
         self.pool.open()
         self._init_db()
 
@@ -268,8 +269,6 @@ class ClassificationCache:
         _execute(self.pool, _create_emb_tables_sql(self.table_settings))
 
     def store(self, object_type: str, items: list[dict[str, Any]] | list[BaseModel] | pd.DataFrame):
-        # get_embeddings = lambda items: [get_field_val(item, "embedding") for item in items]
-        # create rows
         data = items # for future extension
         if not data: return 0
 
@@ -286,13 +285,24 @@ class ClassificationCache:
                 cur.execute(expr, rows)
                 return cur.rowcount
 
-    def search(self, object_type: str, embedding: list[float], distance_func: str = "l2", distance: Optional[float] = None, top_n: Optional[int] = None):    
+    def search(self, object_type: str, embedding: list[float], distance_func: str = "l2", distance: Optional[float] = None, top_n: Optional[int] = None):        
         expr, params = create_vector_search_expr(object_type, self.id_keys[object_type], embedding, distance_func, distance, top_n)
         return _read(self.pool, expr, params)
+    
+    def batch_search(self, object_type: str, embeddings: list[list[float]], distance_func: str = "l2", distance: Optional[float] = None, top_n: Optional[int] = None):
+        expr_and_params = [create_vector_search_expr(object_type, self.id_keys[object_type], embedding, distance_func, distance, top_n) for embedding in embeddings]
+        with self.pool.connection() as conn:
+            with conn.cursor() as cur:
+                results = list(ThreadPoolExecutor().map(lambda expr_param: _fetch_data(cur, *expr_param), expr_and_params))
+        return results
     
     def close(self):
         self.pool.close()
 
+def _fetch_data(cur, expr, params):
+    cur.execute(expr, params)
+    rows = cur.fetchall()
+    return [row[0] for row in rows]
 
 def _execute(pool, expr: str, rows = None):
     with pool.connection() as conn:
