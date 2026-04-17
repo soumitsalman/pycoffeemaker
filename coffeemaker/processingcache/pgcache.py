@@ -119,14 +119,8 @@ class ProcessingCache(ProcessingCacheBase):
                 with conn.cursor(binary=True) as cur:
                     for table, rows in work_batch.items():
                         start_time = datetime.now()
-                        # CREATE temporary staging table with ON COMMIT DROP
-                        expr = f"""INSERT INTO {table} (id, state, ts, data) 
-                        VALUES {', '.join(['(%s, %s, %s, %s)']*len(rows))} 
-                        ON CONFLICT (id, state) DO NOTHING"""
-                        cur.execute(expr, list(chain.from_iterable(rows)))
+                        cur.execute(_insert_state_multivalues_sql(table, len(rows)), list(chain.from_iterable(rows)))
                         print("INSERTED", table, cur.rowcount, "in", (datetime.now() - start_time).total_seconds(), "seconds")
-            # _copy_insert_state_rows(self.pool, work_batch)
-
 
 
 class AsyncProcessingCache(AsyncProcessingCacheBase):
@@ -233,11 +227,7 @@ class AsyncProcessingCache(AsyncProcessingCacheBase):
                 async with conn.cursor(binary=True) as cur:
                     for table, rows in work_batch.items():
                         start_time = datetime.now()
-                        # CREATE temporary staging table with ON COMMIT DROP
-                        expr = f"""INSERT INTO {table} (id, state, ts, data) 
-                        VALUES {', '.join(['(%s, %s, %s, %s)']*len(rows))} 
-                        ON CONFLICT (id, state) DO NOTHING"""
-                        await cur.execute(expr, list(chain.from_iterable(rows)))
+                        await cur.execute(_insert_state_multivalues_sql(table, len(rows)), list(chain.from_iterable(rows)))
                         print("INSERTED", table, cur.rowcount, "in", (datetime.now() - start_time).total_seconds(), "seconds")
     
 
@@ -333,6 +323,12 @@ async def _read_async(pool, expr: str, params = None):
     return [row[0] for row in rows]
 
 # STATE TABLES
+_insert_state_multivalues_sql = lambda table, rowcount: f"""
+INSERT INTO {table} (id, state, ts, data) 
+VALUES {', '.join(['(%s, %s, %s, %s)']*rowcount)} 
+ON CONFLICT (id, state) DO NOTHING
+"""
+
 _INSERT_STATE_TEMP_SQL = """
 CREATE TEMP TABLE {table}_stage (
     id TEXT NOT NULL,
@@ -357,7 +353,6 @@ def _copy_insert_state_rows(pool: ConnectionPool, work_batch: dict[str, list]):
     with pool.connection() as conn:
         with conn.cursor() as cur:
             for table, rows in work_batch.items():
-                ic("INSERTING", table, len(rows))
                 # CREATE temporary staging table with ON COMMIT DROP
                 cur.execute(_INSERT_STATE_TEMP_SQL.format(table=table))
                 # COPY data into staging table
@@ -365,7 +360,6 @@ def _copy_insert_state_rows(pool: ConnectionPool, work_batch: dict[str, list]):
                     [copy.write_row(row) for row in rows]
                 # INSERT from staging to real table with conflict handling
                 cur.execute(_INSERT_STATE_PORT_SQL.format(table=table))
-                ic("INSERTED", table, len(rows))
 
 async def _copy_insert_state_rows_async(pool: AsyncConnectionPool, work_batch: dict[str, list]):
     """Async version: Insert rows using COPY + staging table for optimal performance.
@@ -377,14 +371,12 @@ async def _copy_insert_state_rows_async(pool: AsyncConnectionPool, work_batch: d
         async with conn.cursor() as cur:
             for table, rows in work_batch.items():
                 # CREATE temporary staging table with ON COMMIT DROP
-                ic("INSERTING", table, len(rows))
                 await cur.execute(_INSERT_STATE_TEMP_SQL.format(table=table))
                 # COPY data into staging table
                 async with conn.cursor().copy(_INSERT_STATE_COPY_SQL.format(table=table)) as copy:
                     await asyncio.gather(*[copy.write_row(row) for row in rows])
                 # INSERT from staging to real table with conflict handling
                 await cur.execute(_INSERT_STATE_PORT_SQL.format(table=table))
-                ic("INSERTED", table, len(rows))
 
 def _create_rows(
     id_key: str,
@@ -467,6 +459,7 @@ _QUERY_SINGLE_STATE_SQL = """
 SELECT data FROM {table}
 WHERE state = %(include_state)s
 AND NOT EXISTS (SELECT 1 FROM {table} t2 WHERE t2.id = {table}.id AND t2.state = %(exclude_state)s)
+AND ts >= CURRENT_TIMESTAMP - INTERVAL '3 days'
 """
 def _create_single_state_query_expr(
     table: str,
@@ -484,6 +477,7 @@ WITH filtered AS (
             SELECT 1 FROM {table} excl 
             WHERE excl.id = incl.id AND excl.state = ANY(%(exclude_states)s)
         )
+        AND ts >= CURRENT_TIMESTAMP - INTERVAL '3 days'
     GROUP BY id
     HAVING COUNT(*) >= %(min_count)s
 )
