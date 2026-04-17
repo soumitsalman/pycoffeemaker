@@ -52,24 +52,6 @@ class ProcessingCache(ProcessingCacheBase):
     def _init_db(self):
         _execute(self.pool, _create_state_tables_sql(self.table_settings))
     
-    def _run_write(self):
-        """Background worker that processes queued write operations in batches."""
-        while True:
-            item = self.write_queue.get()
-            if not item: break
-            
-            table, rows = item
-            work_batch = {table: rows}
-            while not self.write_queue.empty():
-                item = self.write_queue.get_nowait()
-                if not item: break
-
-                table, rows = item
-                if table in work_batch: work_batch[table].extend(rows)
-                else: work_batch[table] = rows
-
-            _copy_insert_state_rows(self.pool, work_batch)
-
     def set(
         self,
         object_type: str,
@@ -115,6 +97,35 @@ class ProcessingCache(ProcessingCacheBase):
         [self.write_queue.put_nowait(None) for _ in range(5)]  # Multiple signal as safety
         self.writer_thread.join()
         self.pool.close()
+
+    def _run_write(self):
+        """Background worker that processes queued write operations in batches."""
+        while True:
+            item = self.write_queue.get()
+            if not item: break
+            
+            table, rows = item
+            work_batch = {table: rows}
+            while not self.write_queue.empty():
+                item = self.write_queue.get_nowait()
+                if not item: break
+
+                table, rows = item
+                if table in work_batch: work_batch[table].extend(rows)
+                else: work_batch[table] = rows
+
+            with self.pool.connection() as conn:
+                with conn.cursor(binary=True) as cur:
+                    for table, rows in work_batch.items():
+                        start_time = datetime.now()
+                        # CREATE temporary staging table with ON COMMIT DROP
+                        expr = f"""INSERT INTO {table} (id, state, ts, data) 
+                        VALUES {', '.join(['(%s, %s, %s, %s)']*len(rows))} 
+                        ON CONFLICT (id, state) DO NOTHING"""
+                        cur.execute(expr, list(chain.from_iterable(rows)))
+                        print("INSERTED", table, len(rows), "in", (datetime.now() - start_time).total_seconds(), "seconds")
+            # _copy_insert_state_rows(self.pool, work_batch)
+
 
 
 class AsyncProcessingCache(AsyncProcessingCacheBase):
@@ -184,6 +195,21 @@ class AsyncProcessingCache(AsyncProcessingCacheBase):
         expr = _EXISTS_SQL.format(table=object_type)
         existing_ids = await _read_async(self.pool, expr, {"state": state, "ids": ids})
         return [item for item, item_id in zip(items, ids) if item_id not in existing_ids]
+    
+    async def optimize(self, cleanup_older_than: int = 7):
+        threshold = datetime.now(tz=timezone.utc) - timedelta(days=cleanup_older_than)
+        for table in self.id_keys:
+            expr = _CLEANUP_OLD_SQL.format(table=table)
+            async with self.pool.connection() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(expr, {"threshold": threshold})
+    
+    async def close(self):
+        # Signal writer task to shut down
+        [self.write_queue.put_nowait(None) for _ in range(5)]
+        if self.write_task:
+            await self.write_task
+        await self.pool.close()
 
     async def _run_write(self):
         """Background worker that processes queued write operations in batches."""
@@ -201,22 +227,17 @@ class AsyncProcessingCache(AsyncProcessingCacheBase):
                 if table in work_batch: work_batch[table].extend(rows)
                 else: work_batch[table] = rows
 
-            await _copy_insert_state_rows_async(self.pool, work_batch)
-    
-    async def optimize(self, cleanup_older_than: int = 7):
-        threshold = datetime.now(tz=timezone.utc) - timedelta(days=cleanup_older_than)
-        for table in self.id_keys:
-            expr = _CLEANUP_OLD_SQL.format(table=table)
+            # await _copy_insert_state_rows_async(self.pool, work_batch)
             async with self.pool.connection() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute(expr, {"threshold": threshold})
-    
-    async def close(self):
-        # Signal writer task to shut down
-        [self.write_queue.put_nowait(None) for _ in range(5)]
-        if self.write_task:
-            await self.write_task
-        await self.pool.close()
+                async with conn.cursor(binary=True) as cur:
+                    for table, rows in work_batch.items():
+                        start_time = datetime.now()
+                        # CREATE temporary staging table with ON COMMIT DROP
+                        expr = f"""INSERT INTO {table} (id, state, ts, data) 
+                        VALUES {', '.join(['(%s, %s, %s, %s)']*len(rows))} 
+                        ON CONFLICT (id, state) DO NOTHING"""
+                        await cur.execute(expr, list(chain.from_iterable(rows)))
+                        print("INSERTED", table, len(rows), "in", (datetime.now() - start_time).total_seconds(), "seconds")
     
 
 class ClassificationCache:
