@@ -7,7 +7,7 @@ from typing import Optional
 
 from slugify import slugify
 
-from coffeemaker.processingcache.base import ProcessingCacheBase
+from coffeemaker.processingcache.base import StateCacheBase
 from coffeemaker.processingcache.pgcache import ClassificationCache
 from nlp import Digest, digestors, embedders
 from pybeansack import CDNStore, BEANS
@@ -42,7 +42,7 @@ digest_storables = lambda beans: [bean for bean in beans if bean.gist]
 run_id = lambda: datetime.now().strftime("%A, %b-%d-%Y")
 
 class Indexer:
-    cache: ProcessingCacheBase
+    cache: StateCacheBase
     embedder: embedders.EmbedderBase
     extractor: digestors.NamedEntityExtractor
     digestor: digestors.DigestorBase
@@ -50,7 +50,7 @@ class Indexer:
 
     def __init__(
         self,
-        cache: ProcessingCacheBase,        
+        cache: StateCacheBase,        
         embedder_path: Optional[str] = None,
         embedder_context_len: int = 0,
         extractor_path: Optional[str] = None,

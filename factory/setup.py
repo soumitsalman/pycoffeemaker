@@ -49,8 +49,8 @@ def create_classification_files():
 def create_processing_cache(db_path: str):
     """Seed cache with classification embeddings"""
 
-    from coffeemaker.processingcache.pgcache import ClassificationCache, ProcessingCache
-    ProcessingCache(
+    from coffeemaker.processingcache.pgcache import ClassificationCache, StateCache
+    StateCache(
         db_path+"/statestore", 
         {
             BEANS: {"id_key": K_URL},

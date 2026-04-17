@@ -46,7 +46,7 @@ def _rectify_path(db_path: str) -> str:
         path.parent.mkdir(parents=True, exist_ok=True)
     return str(path)
 
-class ProcessingCache(ProcessingCacheBase):
+class ProcessingCache(StateCacheBase):
     id_keys: dict[str, str]
     db_path: str
     write_queue: queue.Queue
@@ -149,7 +149,7 @@ class ProcessingCache(ProcessingCacheBase):
             self.read_conn = None
 
 
-class AsyncProcessingCache(AsyncProcessingCacheBase):
+class AsyncProcessingCache(AsyncStateCacheBase):
     id_keys: dict[str, str]
     db_path: str
     write_queue: asyncio.Queue

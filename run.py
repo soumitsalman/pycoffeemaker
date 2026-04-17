@@ -69,7 +69,7 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, PORTER)",
 )
 
-from coffeemaker.processingcache.pgcache import AsyncProcessingCache, ProcessingCache, ClassificationCache
+from coffeemaker.processingcache.pgcache import AsyncStateCache, StateCache, ClassificationCache
 from pybeansack import create_client, CDNStore, BEANS, PUBLISHERS, K_URL, K_BASE_URL
 
 if __name__ == "__main__":
@@ -93,8 +93,8 @@ if __name__ == "__main__":
         BEANS: {"id_key": K_URL},
         PUBLISHERS: {"id_key": K_BASE_URL},
     }
-    cache_store = ProcessingCache(cache_path+"/statestore", cache_settings)
-    async_cache_store = AsyncProcessingCache(cache_path+"/statestore", cache_settings)
+    cache_store = StateCache(cache_path+"/statestore", cache_settings)
+    async_cache_store = AsyncStateCache(cache_path+"/statestore", cache_settings)
     cls_cache = ClassificationCache(
         cache_path+"/clsstore", 
         table_settings={

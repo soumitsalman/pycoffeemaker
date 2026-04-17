@@ -11,7 +11,7 @@ NOT_IMPLEMENTED = NotImplementedError("Method not implemented")
 log = logging.getLogger("processingcache")
 logset = lambda total: log.info("state set", extra={"num_items": total, "source": "__default__"})
 
-class ProcessingCacheBase(ABC):
+class StateCacheBase(ABC):
     @abstractmethod
     def set(self, object_type: str, state: str, items: list[dict[str, Any]] | list[BaseModel],):
         raise NOT_IMPLEMENTED
@@ -27,7 +27,7 @@ class ProcessingCacheBase(ABC):
     def close(self):
         pass
 
-class AsyncProcessingCacheBase(ABC):
+class AsyncStateCacheBase(ABC):
     @abstractmethod
     async def set(self, object_type: str, state: str, items: list[dict[str, Any]] | list[BaseModel],):
         raise NOT_IMPLEMENTED

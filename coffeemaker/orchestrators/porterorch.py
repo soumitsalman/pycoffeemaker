@@ -5,7 +5,7 @@ import random
 from itertools import batched
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
-from coffeemaker.processingcache.base import ProcessingCacheBase
+from coffeemaker.processingcache.base import StateCacheBase
 from pybeansack import Beansack, Bean, Publisher, now
 from pybeansack.models import K_BASE_URL, K_CONTENT, K_URL
 from icecream import ic
@@ -46,9 +46,9 @@ def prep_bean_items_for_beansack(beans: list[dict]):
 
 
 class Porter:
-    cache: ProcessingCacheBase
+    cache: StateCacheBase
 
-    def __init__(self, cache: ProcessingCacheBase):
+    def __init__(self, cache: StateCacheBase):
         self.cache = cache
 
     def hydrate_beansacks(self, db: Beansack):

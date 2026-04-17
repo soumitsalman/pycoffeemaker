@@ -7,6 +7,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from pydantic import BaseModel
+from retry import retry
 from .base import *
 import pandas as pd
 from psycopg import sql
@@ -17,7 +18,7 @@ from icecream import ic
 
 TIMEOUT = 600
 
-class ProcessingCache(ProcessingCacheBase):
+class StateCache(StateCacheBase):
     conn_str: str
     table_settings: dict[str, dict[str, Any]]
     id_keys: dict[str, str]
@@ -123,7 +124,7 @@ class ProcessingCache(ProcessingCacheBase):
                         print("INSERTED", table, cur.rowcount, "in", (datetime.now() - start_time).total_seconds(), "seconds")
 
 
-class AsyncProcessingCache(AsyncProcessingCacheBase):
+class AsyncStateCache(AsyncStateCacheBase):
     conn_str: str
     table_settings: dict[str, dict[str, Any]]
     id_keys: dict[str, str]
@@ -275,15 +276,17 @@ class ClassificationCache:
                 cur.execute(expr, rows)
                 return cur.rowcount
 
+    @retry(tries=5, delay=2)
     def search(self, object_type: str, embedding: list[float], distance_func: str = "l2", distance: Optional[float] = None, top_n: Optional[int] = None):        
         expr, params = create_vector_search_expr(object_type, self.id_keys[object_type], embedding, distance_func, distance, top_n)
         return _read(self.pool, expr, params)
     
+    @retry(tries=5, delay=2)
     def batch_search(self, object_type: str, embeddings: list[list[float]], distance_func: str = "l2", distance: Optional[float] = None, top_n: Optional[int] = None):
         expr_and_params = [create_vector_search_expr(object_type, self.id_keys[object_type], embedding, distance_func, distance, top_n) for embedding in embeddings]
         with self.pool.connection() as conn:
             with conn.cursor() as cur:
-                results = list(ThreadPoolExecutor().map(lambda expr_param: _fetch_data(cur, *expr_param), expr_and_params))
+                results = list(ThreadPoolExecutor(max_workers=16).map(lambda expr_param: _fetch_data(cur, *expr_param), expr_and_params))
         return results
     
     def close(self):

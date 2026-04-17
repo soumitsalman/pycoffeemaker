@@ -35,7 +35,7 @@ from datacollectors import (
     URL,
 )
 from pybeansack import Beansack, Chatter
-from coffeemaker.processingcache.base import AsyncProcessingCacheBase
+from coffeemaker.processingcache.base import AsyncStateCacheBase
 from .utils import *
 from icecream import ic
 
@@ -95,14 +95,14 @@ log = logging.getLogger("collectorworker")
 
 class Collector:
     db: Beansack
-    cache: AsyncProcessingCacheBase
+    cache: AsyncStateCacheBase
     apicollector: APICollectorAsync
     webscraper: AsyncWebScraper
     run_id: str
     beans_collected: int
     publishers_collected: int
 
-    def __init__(self, cache: AsyncProcessingCacheBase, db: Beansack):
+    def __init__(self, cache: AsyncStateCacheBase, db: Beansack):
         self.db = db   
         self.cache = cache
 
