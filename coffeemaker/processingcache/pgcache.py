@@ -123,7 +123,7 @@ class ProcessingCache(ProcessingCacheBase):
                         VALUES {', '.join(['(%s, %s, %s, %s)']*len(rows))} 
                         ON CONFLICT (id, state) DO NOTHING"""
                         cur.execute(expr, list(chain.from_iterable(rows)))
-                        print("INSERTED", table, len(rows), "in", (datetime.now() - start_time).total_seconds(), "seconds")
+                        print("INSERTED", table, cur.rowcount, "in", (datetime.now() - start_time).total_seconds(), "seconds")
             # _copy_insert_state_rows(self.pool, work_batch)
 
 
@@ -237,7 +237,7 @@ class AsyncProcessingCache(AsyncProcessingCacheBase):
                         VALUES {', '.join(['(%s, %s, %s, %s)']*len(rows))} 
                         ON CONFLICT (id, state) DO NOTHING"""
                         await cur.execute(expr, list(chain.from_iterable(rows)))
-                        print("INSERTED", table, len(rows), "in", (datetime.now() - start_time).total_seconds(), "seconds")
+                        print("INSERTED", table, cur.rowcount, "in", (datetime.now() - start_time).total_seconds(), "seconds")
     
 
 class ClassificationCache:
