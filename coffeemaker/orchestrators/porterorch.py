@@ -12,7 +12,7 @@ from icecream import ic
 
 log = logging.getLogger("porterworker")
 
-BATCH_SIZE = 2048
+BATCH_SIZE = 256
 MAX_WORKERS = os.cpu_count()*os.cpu_count()
 
 def unpack_related(beans: list[dict]):
@@ -38,12 +38,7 @@ def merge(key, items: list[dict[str, Any]]):
 
 def prep_bean_items_for_beansack(beans: list[dict]):
     """Merges beans, replaces content with cdn url"""
-    beans = merge(K_URL, beans)
-    # for b in beans:
-    #     if not b.get("content_url"): print("--- PORTING ERROR ---", list(b.keys()))
-    #     else: b[K_CONTENT] = b["content_url"]
-    return beans
-
+    return merge(K_URL, beans)
 
 class Porter:
     cache: StateCacheBase
@@ -63,7 +58,7 @@ class Porter:
         ):  
             beans = prep_bean_items_for_beansack(beans)
             log.info("porting", extra={"source": "portable:beans", "num_items": len(beans)})  
-            count = db.store_beans([Bean(**b) for b in beans])
+            count = sum(ThreadPoolExecutor().map(db.store_beans, batched([Bean(**b) for b in beans], BATCH_SIZE)))
             log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
             self.cache.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
             total_ported += count
@@ -73,7 +68,7 @@ class Porter:
             "beans", states="classified", exclude_states="related_beansacked"
         ):
             log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
-            count = db.store_related(unpack_related(related_beans))
+            count = sum(ThreadPoolExecutor().map(db.store_related, batched(unpack_related(related_beans), BATCH_SIZE)))
             log.info("ported", extra={"source": "beansack:related_beans", "num_items": count})
             self.cache.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
             total_ported += count
