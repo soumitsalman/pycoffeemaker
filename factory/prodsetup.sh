@@ -1,7 +1,21 @@
 set -e
 
+echo "=== Updating package lists and installing dependencies ==="
+sudo apt update && sudo apt upgrade -y
+
+echo "=== Installing Go and s5cmd ==="
+sudo snap install go --classic
+go install github.com/peak/s5cmd/v2@latest
+
 echo "=== Installing PostgreSQL and pgvector ==="
 
+sudo rm -f /etc/apt/sources.list.d/pgdg.list
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates gnupg lsb-release
+sudo install -d -m 0755 /usr/share/keyrings
+curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+sudo apt-get update
 sudo apt-get install -y postgresql-17 postgresql-client-17 postgresql-contrib-17 postgresql-17-pgvector
 
 # Enable and start PostgreSQL on boot
