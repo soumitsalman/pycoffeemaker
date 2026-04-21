@@ -137,25 +137,33 @@ class Indexer:
         for chunk in batched(beans, batch_size):
             self.cls_cache.store(BEANS, chunk)
             embeddings = [bean[K_EMBEDDING] for bean in chunk]
-
             categories_list = self.cls_cache.batch_search("categories", embeddings, distance_func="cosine", top_n=MAX_CLASSIFICATIONS)
             sentiments_list = self.cls_cache.batch_search("sentiments", embeddings, distance_func="cosine", top_n=MAX_CLASSIFICATIONS)
+            updates = [
+                {
+                    K_URL: bean[K_URL],
+                    K_CATEGORIES: categories,
+                    K_SENTIMENTS: sentiments,
+                }
+                for bean, categories, sentiments in zip(chunk, categories_list, sentiments_list)
+            ]
+            log.info("classified", extra={"source": chunk[0][K_URL], "num_items": len(updates)})
+            yield updates
+
+    def cluster_beans(self, beans: list[dict], batch_size: int):
+        # store the items first
+        for chunk in batched(beans, batch_size):
+            self.cls_cache.store(BEANS, chunk)
+            embeddings = [bean[K_EMBEDDING] for bean in chunk]
             related_list = self.cls_cache.batch_search("beans", embeddings, distance_func="l2", distance=CLUSTER_EPS)
             updates = [
                 {
                     K_URL: bean[K_URL],
                     K_RELATED: list(filter(lambda x: x != bean[K_URL], related)),
-                    K_CATEGORIES: categories,
-                    K_SENTIMENTS: sentiments,
                 }
-                for bean, related, categories, sentiments in zip(chunk, related_list, categories_list, sentiments_list)
+                for bean, related in zip(chunk, related_list)
             ]
-            # updates = list(ThreadPoolExecutor(max_workers=batch_size).map(self._search_classification, chunk))
-            # updates = list(map(self._create_classification, chunk))
-            log.info(
-                "classified",
-                extra={"source": chunk[0][K_URL], "num_items": len(updates)},
-            )
+            log.info("clustered", extra={"source": chunk[0][K_URL], "num_items": len(updates)})
             yield updates
 
     def extract_beans(self, beans: list[dict], batch_size: int):
@@ -222,12 +230,8 @@ class Indexer:
 
     @log_runtime(logger=log)
     def run_embedder(self, batch_size: int = BATCH_SIZE):
-        beans = self.cache.get(
-            "beans", states="collected", exclude_states="embedded"
-        )
-        log.info(
-            "starting embedder", extra={"source": run_id(), "num_items": len(beans)}
-        )
+        beans = self.cache.get("beans", states="collected", exclude_states="embedded")
+        log.info("starting embedder", extra={"source": run_id(), "num_items": len(beans)})
         total = 0
         for updates in self.embed_beans(beans, batch_size):
             self.cache.set("beans", "embedded", updates)
@@ -238,27 +242,31 @@ class Indexer:
     @log_runtime(logger=log)
     def run_classifier(self, batch_size: int = BATCH_SIZE):
         # NOTE: this runs both classifier and clustering
-        beans = self.cache.get(
-            "beans", states="embedded", exclude_states="classified"
-        )
-        log.info(
-            "starting classifier", extra={"source": run_id(), "num_items": len(beans)}
-        )
+        beans = self.cache.get("beans", states="embedded", exclude_states="classified")
+        log.info("starting classifier", extra={"source": run_id(), "num_items": len(beans)})
         total = 0        
         for updates in self.classify_beans([b for b in beans if K_EMBEDDING in b], batch_size):
             self.cache.set("beans", "classified", updates)
             total += len(updates)
         log.info("total classified", extra={"source": run_id(), "num_items": total})
         return total
+    
+    @log_runtime(logger=log)
+    def run_clusterer(self, batch_size: int = BATCH_SIZE):
+        # NOTE: this runs both classifier and clustering
+        beans = self.cache.get("beans", states="embedded", exclude_states="clustered")
+        log.info("starting clusterer", extra={"source": run_id(), "num_items": len(beans)})
+        total = 0        
+        for updates in self.cluster_beans([b for b in beans if K_EMBEDDING in b], batch_size):
+            self.cache.set("beans", "clustered", updates)
+            total += len(updates)
+        log.info("total clustered", extra={"source": run_id(), "num_items": total})
+        return total
 
     @log_runtime(logger=log)
     def run_extractor(self, batch_size: int = BATCH_SIZE):
-        beans = self.cache.get(
-            "beans", states="collected", exclude_states="extracted"
-        )
-        log.info(
-            "starting extractor", extra={"source": run_id(), "num_items": len(beans)}
-        )
+        beans = self.cache.get("beans", states="collected", exclude_states="extracted")
+        log.info("starting extractor", extra={"source": run_id(), "num_items": len(beans)})
         total = 0
         for updates in self.extract_beans(beans, batch_size):
             self.cache.set("beans", "extracted", updates)
@@ -268,12 +276,8 @@ class Indexer:
 
     @log_runtime(logger=log)
     def run_digestor(self, batch_size: int = BATCH_SIZE):
-        beans = self.cache.get(
-            "beans", states="collected", exclude_states="digested"
-        )
-        log.info(
-            "starting digestor", extra={"source": run_id(), "num_items": len(beans)}
-        )
+        beans = self.cache.get("beans", states="collected", exclude_states="digested")
+        log.info("starting digestor", extra={"source": run_id(), "num_items": len(beans)})
         total = 0
         for updates in self.digest_beans(beans, batch_size):
             self.cache.set("beans", "digested", updates)
@@ -281,15 +285,15 @@ class Indexer:
         log.info("total digested", extra={"source": run_id(), "num_items": total})
         return total
     
-    @log_runtime(logger=log)
-    def run(
-        self,
-        embedder_batch_size: int = BATCH_SIZE,
-        extractor_batch_size: int = BATCH_SIZE,
-        digestor_batch_size: int = BATCH_SIZE,
-    ):
-        total = 0
-        total += self.run_embedder(batch_size=embedder_batch_size)
-        total += self.run_extractor(batch_size=extractor_batch_size)
-        total += self.run_digestor(batch_size=digestor_batch_size)
-        return total
+    # @log_runtime(logger=log)
+    # def run(
+    #     self,
+    #     embedder_batch_size: int = BATCH_SIZE,
+    #     extractor_batch_size: int = BATCH_SIZE,
+    #     digestor_batch_size: int = BATCH_SIZE,
+    # ):
+    #     total = 0
+    #     total += self.run_embedder(batch_size=embedder_batch_size)
+    #     total += self.run_extractor(batch_size=extractor_batch_size)
+    #     total += self.run_digestor(batch_size=digestor_batch_size)
+    #     return total

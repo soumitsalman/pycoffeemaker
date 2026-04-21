@@ -65,7 +65,7 @@ class Porter:
 
         # related beans go to a separate table
         if related_beans := self.cache.get(
-            "beans", states="classified", exclude_states="related_beansacked"
+            "beans", states="clustered", exclude_states="related_beansacked"
         ):
             log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
             count = sum(ThreadPoolExecutor().map(db.store_related, batched(unpack_related(related_beans), BATCH_SIZE)))

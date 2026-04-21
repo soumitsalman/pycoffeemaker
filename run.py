@@ -64,9 +64,10 @@ parser.add_argument(
         "EXTRACTOR",
         "ANALYZER",
         "CLASSIFIER",
+        "CLUSTERER",
         "PORTER",
     ],
-    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, PORTER)",
+    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CLUSTERER, PORTER)",
 )
 
 from coffeemaker.processingcache.pgcache import AsyncStateCache, StateCache, ClassificationCache
@@ -133,9 +134,13 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
         orch = Indexer(cache=cache_store, cls_cache=cls_cache)
-        while orch.run_classifier(batch_size=batch_size):
-            # keep running it while there is something to process
-            pass
+        orch.run_classifier(batch_size=batch_size)
+
+    elif mode == "CLUSTERER":
+        from coffeemaker.orchestrators.analyzerorch import Indexer
+
+        orch = Indexer(cache=cache_store, cls_cache=cls_cache)
+        orch.run_clusterer(batch_size=batch_size)
 
     elif mode == "EXTRACTOR":
         from coffeemaker.orchestrators.analyzerorch import Indexer
@@ -193,17 +198,6 @@ if __name__ == "__main__":
             # keep running it while there is something to process
             pass
 
-    # elif mode == "CDN":
-    #     from coffeemaker.orchestrators.analyzerorch import Indexer
-
-    #     orch = Indexer(
-    #         cache=cache_store,
-    #         cdn=CDNStore(os.getenv("CDN_BUCKET"), os.getenv("CDN_PUBLIC_ACCESS_URL")),
-    #     )
-    #     while orch.run_cdn(batch_size=batch_size):
-    #         # keep running it while there is something to cdn
-    #         pass
-
     elif mode == "PORTER":
         from coffeemaker.orchestrators.porterorch import Porter
 
@@ -214,7 +208,7 @@ if __name__ == "__main__":
 
     else:
         raise ValueError(
-            "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER."
+            "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CLUSTERER."
         )
 
     cls_cache.close()
