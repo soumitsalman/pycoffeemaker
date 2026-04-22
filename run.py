@@ -190,13 +190,9 @@ if __name__ == "__main__":
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
         )
-        while orch.run(
-            embedder_batch_size=int(args.embedder_batch_size or batch_size),
-            extractor_batch_size=int(args.extractor_batch_size or batch_size),
-            digestor_batch_size=int(args.digestor_batch_size or batch_size),
-        ):
-            # keep running it while there is something to process
-            pass
+        orch.run_embedder(batch_size=int(args.embedder_batch_size or batch_size))
+        orch.run_extractor(batch_size=int(args.extractor_batch_size or batch_size))
+        orch.run_digestor(batch_size=int(args.digestor_batch_size or batch_size))        
 
     elif mode == "PORTER":
         from coffeemaker.orchestrators.porterorch import Porter
