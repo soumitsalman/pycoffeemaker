@@ -108,7 +108,7 @@ def test_collector():
 
 
 def test_scraper():
-    from coffeemaker.collectors import WebScraper
+    from ..datacollectors import AsyncWebScraper
 
     urls = [
         "https://financebuzz.com/retirees-should-buy-at-bjs-4",
@@ -121,7 +121,7 @@ def test_scraper():
     ]
 
     async def run():
-        async with WebScraper() as scraper:
+        async with AsyncWebScraper() as scraper:
             for url in urls:
                 ic(await scraper.scrape_page(url, False))
 
@@ -129,7 +129,7 @@ def test_scraper():
 
 
 def test_publisher_scraper():
-    from coffeemaker.collectors import WebScraper
+    from ..datacollectors import WebScraper
     from coffeemaker.pybeansack import models, warehouse
 
     urls = [
@@ -451,7 +451,7 @@ def test_orch_on_lancesack():
             os.getenv("DIGESTOR_PATH"),
             max_input_tokens=4096,
             max_output_tokens=384,
-            output_parser=Digest.parse_compressed,
+            output_model=Digest,
         ) as digestor:
             while beans := db.query_latest_beans(
                 collected=ndays_ago(2),
