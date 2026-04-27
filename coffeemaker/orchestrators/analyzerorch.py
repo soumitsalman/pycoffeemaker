@@ -10,7 +10,7 @@ from slugify import slugify
 from coffeemaker.processingcache.base import StateCacheBase
 from coffeemaker.processingcache.pgcache import ClassificationCache
 from nlp import Digest, digestors, embedders
-from pybeansack import CDNStore, BEANS
+from pybeansack import BEANS
 from pybeansack.models import (
     K_CATEGORIES,
     K_CONTENT,
@@ -46,7 +46,6 @@ class Indexer:
     embedder: embedders.EmbedderBase
     extractor: digestors.NamedEntityExtractor
     digestor: digestors.DigestorBase
-    cdn: CDNStore
 
     def __init__(
         self,
@@ -58,7 +57,6 @@ class Indexer:
         digestor_path: Optional[str] = None,
         digestor_context_len: int = 0,
         cls_cache: Optional[ClassificationCache] = None,
-        cdn: Optional[CDNStore] = None,
     ):
         self.cache = cache
         if embedder_path:
@@ -69,17 +67,15 @@ class Indexer:
             self.extractor = digestors.NamedEntityExtractor(
                 model_path=extractor_path,
                 context_len=extractor_context_len,
-                confidence=0.4,
+                threshold=0.5,
             )
         if digestor_path:
             self.digestor = digestors.from_path(
                 model_path=digestor_path,
                 context_len=digestor_context_len,
-                max_output_tokens=384,
-                output_parser=Digest.parse_compressed,
+                response_mode="json",
             )
         self.cls_cache = cls_cache
-        self.cdn = cdn
 
     def embed_beans(self, beans: list[dict], batch_size: int):
         with self.embedder:
@@ -106,31 +102,6 @@ class Indexer:
                         exc_info=True,
                         stack_info=True,
                     )
-
-    # def _search_classification(self, bean: dict):
-    #     embedding = bean[K_EMBEDDING]
-    #     related = self.cls_cache.search("beans", embedding=embedding, distance=CLUSTER_EPS)
-    #     categories = self.cls_cache.search(
-    #         "categories",
-    #         embedding=embedding,
-    #         distance_func="cosine",
-    #         top_n=MAX_CLASSIFICATIONS,            
-    #     )
-    #     sentiments = self.cls_cache.search(
-    #         "sentiments",
-    #         embedding=embedding,
-    #         distance_func="cosine",
-    #         top_n=MAX_CLASSIFICATIONS,
-    #     )
-        
-    #     return {
-    #         K_URL: bean[K_URL],
-    #         K_RELATED: list(
-    #             filter(lambda x: x != bean[K_URL], related)
-    #         ),
-    #         K_CATEGORIES: categories,
-    #         K_SENTIMENTS: sentiments,
-    #     }
 
     def classify_beans(self, beans: list[dict], batch_size: int):
         # store the items first
@@ -208,12 +179,11 @@ class Indexer:
         with self.digestor:
             for chunk in batched(beans, batch_size):
                 try:
-                    gists = self.digestor.run_batch([bean[K_CONTENT] for bean in chunk])
+                    digests = self.digestor.run_batch([bean[K_CONTENT] for bean in chunk])
                     updates = [
-                        {K_URL: b[K_URL], K_GIST: d.raw}
-                        if d and d.raw
-                        else {K_URL: b[K_URL]}
-                        for b, d in zip(chunk, gists)
+                        {K_URL: b[K_URL], K_GIST: d.gist}
+                        for b, d in zip(chunk, digests)
+                        if d
                     ]
                     log.info(
                         "digested",
@@ -285,15 +255,3 @@ class Indexer:
         log.info("total digested", extra={"source": run_id(), "num_items": total})
         return total
     
-    # @log_runtime(logger=log)
-    # def run(
-    #     self,
-    #     embedder_batch_size: int = BATCH_SIZE,
-    #     extractor_batch_size: int = BATCH_SIZE,
-    #     digestor_batch_size: int = BATCH_SIZE,
-    # ):
-    #     total = 0
-    #     total += self.run_embedder(batch_size=embedder_batch_size)
-    #     total += self.run_extractor(batch_size=extractor_batch_size)
-    #     total += self.run_digestor(batch_size=digestor_batch_size)
-    #     return total

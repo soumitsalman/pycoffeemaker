@@ -33,6 +33,7 @@ from datacollectors import (
     TAGS,
     TITLE,
     URL,
+    POST
 )
 from pybeansack import Beansack, Chatter
 from coffeemaker.processingcache.base import AsyncStateCacheBase
@@ -45,9 +46,10 @@ WORDS_THRESHOLD_FOR_STORING = int(os.getenv("WORDS_THRESHOLD_FOR_STORING", 160))
 is_bean_storable = (
     lambda bean: bean
     and bean.get("content_length", 0) >= WORDS_THRESHOLD_FOR_STORING
+    and bean[KIND] != POST
 )
 scrapable_beans = (
-    lambda beans: [bean for bean in beans if not is_bean_storable(bean)]
+    lambda beans: [bean for bean in beans if not is_bean_storable(bean) and bean[KIND] != POST]
     if beans
     else beans
 )

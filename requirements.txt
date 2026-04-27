@@ -1,4 +1,5 @@
 accelerate
+vllm
 transformers
 sentence-transformers
 llama-index
@@ -18,3 +19,4 @@ aiosqlite
 python-dotenv
 python-slugify
 msgpack
+textcase
