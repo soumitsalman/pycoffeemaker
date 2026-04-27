@@ -86,9 +86,8 @@ class Indexer:
                     )
                     updates = [
                         {K_URL: b[K_URL], K_EMBEDDING: vec}
-                        if len(vec) == VECTOR_LEN
-                        else {K_URL: b[K_URL]}
                         for b, vec in zip(chunk, vectors)
+                        if vec and len(vec) == VECTOR_LEN
                     ]
                     log.info(
                         "embedded",
