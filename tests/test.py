@@ -17,12 +17,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("test")
 logger.setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.collectororch").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.analyzerorch").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.composerorch").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.refresherorch").setLevel(logging.INFO)
-logging.getLogger("coffeemaker.orchestrators.fullstack").setLevel(logging.INFO)
-# logging.getLogger("coffeemaker.collectors.collector").setLevel(logging.INFO)
+logging.getLogger("collectorworker").setLevel(logging.INFO)
+logging.getLogger("analyzerworker").setLevel(logging.INFO)
+logging.getLogger("porterworker").setLevel(logging.INFO)
+logging.getLogger("processingcache").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
 logging.getLogger("coffeemaker.nlp.digestors").propagate = False
 logging.getLogger("coffeemaker.nlp.embedders").propagate = False
@@ -247,9 +245,10 @@ def test_collector_orch():
     from coffeemaker.processingcache.sqlitecache import AsyncProcessingCache
     from pybeansack import create_client
 
+    db = create_client("lancedb", lancedb_storage=".test/lancesack")
     orch = Collector(
         AsyncProcessingCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL}),
-        create_client("lancedb", lancedb_storage=".test/lancesack")
+        
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
     # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
@@ -287,31 +286,37 @@ def test_collector_orch():
     # - energyStocks
 
     asyncio.run(orch.run(sources, batch_size=16))
-    orch.close()
+    db.close()
+
     # orch.run(sources)
 
 
-def test_indexer_orch():
+def test_embedder_orch():
     from coffeemaker.orchestrators.analyzerorch import Indexer
+    from coffeemaker.processingcache.sqlitecache import ProcessingCache
 
+    cache = ProcessingCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
     orch = Indexer(
-        db_conn_str=("lancedb:.beansack/lancesack_v2",),
-        embedder_path="avsolatorio/GIST-small-Embedding-v0",
+        cache,
+        embedder_path="vllm://avsolatorio/GIST-small-Embedding-v0",
         embedder_context_len=512,
     )
     orch.run_embedder(batch_size=32)
+    cache.close()
 
 
 def test_digestor_orch():
     from coffeemaker.orchestrators.analyzerorch import Indexer
+    from coffeemaker.processingcache.sqlitecache import ProcessingCache
 
+    cache = ProcessingCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
     orch = Indexer(
-        db_conn_str=("lancedb:.beansack/lancesack_v2",),
-        digestor_path="soumitsr/led-base-article-digestor",
-        digestor_context_len=4096,
+        cache,
+        digestor_path="vllm://LiquidAI/LFM2.5-1.2B-Instruct",
+        digestor_context_len=32768,
     )
-    orch.run_digestor(batch_size=2)
-
+    orch.run_digestor(batch_size=16)
+    cache.close()
 
 def test_warehouse():
     from coffeemaker.collectors.collector import APICollectorAsync, parse_sources
@@ -525,7 +530,7 @@ parser.add_argument(
     "--runcollector", action="store_true", help="Test collector orchestrator"
 )
 parser.add_argument(
-    "--runindexer", action="store_true", help="Test indexer orchestrator"
+    "--runembedder", action="store_true", help="Test indexer orchestrator"
 )
 parser.add_argument(
     "--rundigestor", action="store_true", help="Test digestor orchestrator"
@@ -570,16 +575,11 @@ def main():
         test_scraper()
     if args.scrapepubs:
         test_publisher_scraper()
-    if args.runcollector:
-        test_collector_orch()
-    if args.runindexer:
-        test_indexer_orch()
-    if args.rundigestor:
-        test_digestor_orch()
-    if args.runcomposer:
-        test_composer_orch()
-    if args.runrefresher:
-        test_refresher_orch()
+    
+    if args.runcollector: test_collector_orch()
+    if args.runembedder: test_embedder_orch()
+    if args.rundigestor: test_digestor_orch()
+
     if args.dbcache:
         test_dbcache()
     if args.warehouse:

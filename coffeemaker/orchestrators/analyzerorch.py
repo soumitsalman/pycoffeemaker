@@ -179,12 +179,11 @@ class Indexer:
         with self.digestor:
             for chunk in batched(beans, batch_size):
                 try:
-                    gists = self.digestor.run_batch([bean[K_CONTENT] for bean in chunk])
+                    digests = self.digestor.run_batch([bean[K_CONTENT] for bean in chunk])
                     updates = [
-                        {K_URL: b[K_URL], K_GIST: d.raw}
-                        if d and d.raw
-                        else {K_URL: b[K_URL]}
-                        for b, d in zip(chunk, gists)
+                        {K_URL: b[K_URL], K_GIST: d.gist}
+                        for b, d in zip(chunk, digests)
+                        if d
                     ]
                     log.info(
                         "digested",
