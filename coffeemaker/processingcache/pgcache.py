@@ -442,10 +442,10 @@ def create_query_expr(
         expr, params = _create_single_state_query_expr( table, include_states[0], excluded_states[0])
 
     if limit:
-        expr += "LIMIT %(limit)s"
+        expr += "\nLIMIT %(limit)s"
         params["limit"] = limit
     if offset:
-        expr += " OFFSET %(offset)s"
+        expr += "\nOFFSET %(offset)s"
         params["offset"] = offset
 
     return expr, params

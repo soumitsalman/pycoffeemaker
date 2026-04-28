@@ -242,25 +242,19 @@ def test_static_db():
 
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Collector
-    from coffeemaker.processingcache.sqlitecache import AsyncProcessingCache
+    from coffeemaker.processingcache.sqlitecache import AsyncStateCache
     from pybeansack import create_client
 
     db = create_client("lancedb", lancedb_storage=".test/lancesack")
     orch = Collector(
-        AsyncProcessingCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL}),
-        
+        AsyncStateCache(".test/statestore-test.db", {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}}),
+        db=db
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
     # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
     sources = """
     sources:
-        reddit:
-            - HelionEnergy
-            - SolarMax
-            - SolarDIY
-            - EnergyAndPower
-            - EmporiaEnergy
-            - renewableenergystocks
+        
         rss:
             - https://newatlas.com/index.rss
             - https://www.channele2e.com/feed/topic/latest
@@ -284,18 +278,22 @@ def test_collector_orch():
     # - StockNews
     # - CryptoNews
     # - energyStocks
+    # reddit:
+    #         - HelionEnergy
+    #         - SolarMax
+    #         - SolarDIY
+    #         - EnergyAndPower
+    #         - EmporiaEnergy
+    #         - renewableenergystocks
 
     asyncio.run(orch.run(sources, batch_size=16))
     db.close()
 
-    # orch.run(sources)
-
-
 def test_embedder_orch():
     from coffeemaker.orchestrators.analyzerorch import Indexer
-    from coffeemaker.processingcache.sqlitecache import ProcessingCache
+    from coffeemaker.processingcache.sqlitecache import StateCache
 
-    cache = ProcessingCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
+    cache = StateCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
     orch = Indexer(
         cache,
         embedder_path="vllm://avsolatorio/GIST-small-Embedding-v0",
@@ -307,9 +305,9 @@ def test_embedder_orch():
 
 def test_digestor_orch():
     from coffeemaker.orchestrators.analyzerorch import Indexer
-    from coffeemaker.processingcache.sqlitecache import ProcessingCache
+    from coffeemaker.processingcache.sqlitecache import StateCache
 
-    cache = ProcessingCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
+    cache = StateCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
     orch = Indexer(
         cache,
         digestor_path="vllm://LiquidAI/LFM2.5-1.2B-Instruct",
@@ -400,12 +398,18 @@ def test_warehouse():
     db.close()
 
 
-def test_dbcache():
-    from dbcache.api import kvstore
+def test_cache():
+    from coffeemaker.processingcache.sqlitecache import StateCache
 
-    cache = kvstore(os.getenv("PG_CONNECTION_STRING"))
-    # cache.set("current_snapshot", 15509)
-    print(cache.get("current_snapshot") + 10)
+    cache = StateCache(".test/statestore-test.db", {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}})
+    items = [
+        {K_URL: "http://example.com/1", K_CONTENT: "This is a test content for example.com/1", K_SOURCE: "example.com"},
+        {K_URL: "http://example.com/2", K_CONTENT: "This is a test content for example.com/2", K_SOURCE: "example.com"},
+    ]
+    cache.set(BEANS, "collected", items)
+    ic(cache.get(BEANS, "collected", "beansacked", limit=5))
+    
+    cache.close()
 
 
 def test_orch_on_lancesack():
@@ -541,7 +545,7 @@ parser.add_argument(
 parser.add_argument(
     "--runrefresher", action="store_true", help="Test refresher orchestrator"
 )
-parser.add_argument("--dbcache", action="store_true", help="Test dbcache")
+parser.add_argument("--cache", action="store_true", help="Test cache implementation")
 parser.add_argument("--readonly", action="store_true", help="Test readonly warehouse")
 parser.add_argument("--warehouse", action="store_true", help="Test warehouse v2")
 parser.add_argument(
@@ -561,14 +565,6 @@ def main():
 
     if args.hydrate:
         hydrate_test_db()
-    # if args.test_local_gobeansack_query:
-    #     test_local_gobeansack_query()
-    # if args.hydrate_test_db:
-    #     hydrate_test_db()
-    # if args.test_static_db:
-    #     test_static_db()
-    # if args.test_trend_analysis:
-    #     test_trend_analysis()
     if args.collect:
         test_collector()
     if args.scrape:
@@ -580,8 +576,8 @@ def main():
     if args.runembedder: test_embedder_orch()
     if args.rundigestor: test_digestor_orch()
 
-    if args.dbcache:
-        test_dbcache()
+    if args.cache:
+        test_cache()
     if args.warehouse:
         test_warehouse()
     if args.orchonlance:

@@ -20,3 +20,4 @@ python-dotenv
 python-slugify
 msgpack
 textcase
+pyturso
