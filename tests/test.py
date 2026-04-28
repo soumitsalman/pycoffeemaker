@@ -399,17 +399,44 @@ def test_warehouse():
 
 
 def test_cache():
+    from coffeemaker.processingcache.firecache import ClassificationCache
+    import numpy as np
+    import pandas as pd
+    from nlp import embedders
     from coffeemaker.processingcache.sqlitecache import StateCache
+    from faker import Faker
+        
+    fake = Faker()
 
-    cache = StateCache(".test/statestore-test.db", {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}})
-    items = [
-        {K_URL: "http://example.com/1", K_CONTENT: "This is a test content for example.com/1", K_SOURCE: "example.com"},
-        {K_URL: "http://example.com/2", K_CONTENT: "This is a test content for example.com/2", K_SOURCE: "example.com"},
-    ]
-    cache.set(BEANS, "collected", items)
-    ic(cache.get(BEANS, "collected", "beansacked", limit=5))
-    
-    cache.close()
+    if True:
+        st_cache = StateCache(".test/cache", {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}})
+        fake_bean = lambda: {K_URL: fake.url(), K_CONTENT: fake.paragraph(5), K_SOURCE: fake.domain_name()}
+        beans = [fake_bean() for _ in range(50)]        
+        st_cache.set(BEANS, "collected", beans)
+        time.sleep(60)
+        ic(st_cache.get(BEANS, "collected", "beansacked", limit=5))
+        
+        st_cache.close()
+
+    if False:
+        VECTOR_LEN = 384
+        cls_cache = ClassificationCache(
+            ".test/cache",
+            {
+                BEANS: {"id_key": K_URL, "distance_func": "l2", "vector_length": VECTOR_LEN},
+                "categories": {"id_key": "category", "distance_func": "cosine", "vector_length": VECTOR_LEN},
+                "sentiments": {"id_key": "sentiment", "distance_func": "cosine", "vector_length": VECTOR_LEN},
+            }
+        )
+        cls_cache.store("categories", pd.read_parquet( "/home/soumitsr/codes/pycoffeemaker-cache/factory/categories.parquet").to_dict(orient="records"))
+        cls_cache.store("sentiments", pd.read_parquet("/home/soumitsr/codes/pycoffeemaker-cache/factory/sentiments.parquet").to_dict(orient="records"))
+        
+        categories = ["AI", "information security", "software engineering", "cloud computing", "arts and entertainment"]*100
+        with embedders.from_path(os.getenv('EMBEDDER_PATH'), 512) as embedder:        
+            embs = embedder.embed_documents(categories)
+            ic(cls_cache.batch_search("categories", embs, distance=0.17, topn=5))
+        
+        cls_cache.close()
 
 
 def test_orch_on_lancesack():

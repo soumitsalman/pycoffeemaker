@@ -31,7 +31,11 @@ if log_dir:
     os.makedirs(log_dir, exist_ok=True)
     log_file = f"{log_dir}/rectify-{now().strftime('%Y-%m-%d-%H')}.log"
 
-logging.basicConfig(level=logging.INFO, filename=log_file, format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s") 
+logging.basicConfig(
+    level=logging.INFO,
+    filename=log_file,
+    format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s",
+)
 
 ndays_ago = lambda n: datetime.now() - timedelta(days=n)
 make_id = lambda text: re.sub(r"[^a-zA-Z0-9]", "-", text.lower())
@@ -248,28 +252,33 @@ def register_new_gist_files():
 
 def migrate_classification_cache(from_lance, to_pg):
     from pybeansack import SimpleVectorDB
-    from coffeemaker.processingcache.pgcache import ClassificationCache
+    from coffeemaker.processingcache.firecache import ClassificationCache
 
     from_cache = SimpleVectorDB(from_lance, {BEANS: K_URL})
     to_cache = ClassificationCache(
-        to_pg, 
+        to_pg,
         table_settings={
             BEANS: {"id_key": K_URL},
             "categories": {"id_key": "category"},
-            "sentiments": {"id_key": "sentiment"}
-        }
+            "sentiments": {"id_key": "sentiment"},
+        },
     )
 
     batch_size = 256
     total = from_cache.db[BEANS].count_rows()
     with tqdm(total=total, desc="Migrating classification cache") as pbar:
+
         def transfer(limit, offset):
             items = from_cache.db[BEANS].search().limit(limit).offset(offset).to_list()
-            if items: 
+            if items:
                 pbar.update(to_cache.store(BEANS, items))
-        
-        list(ThreadPoolExecutor(max_workers=os.cpu_count()).map(lambda off: transfer(batch_size, off), range(0, total, batch_size)))
-        
+
+        list(
+            ThreadPoolExecutor(max_workers=os.cpu_count()).map(
+                lambda off: transfer(batch_size, off), range(0, total, batch_size)
+            )
+        )
+
     from_cache.close()
     to_cache.close()
 
@@ -336,20 +345,32 @@ def cleanup_bean_tags():
 
 def hydrate_processing_cache(cache_dir, batch_size):
     """Hydrates local processing cache with beans and publishers from production/backup db
-    
+
     Loading Publishers: processed publishers that already has either site_name, favicon or description as `collected` and `beansacked`
-    Loading Beans: 
+    Loading Beans:
     - processed beans that already has both gist and embedding as `collected`, `embedded`, `extracted`, `digested` (since we don't want to repeat any of those steps for existing beans). Query only the `url` and `embedding`. Store the embedding in classification cache
-    - unprocessed beans that do not have `gist`. Store those in `collected` state in processing cache so they can be picked up by the pipeline and processed as usual.  
+    - unprocessed beans that do not have `gist`. Store those in `collected` state in processing cache so they can be picked up by the pipeline and processed as usual.
     """
     import os
     from coffeemaker.processingcache.sqlitecache import StateCache
     from coffeemaker.processingcache.base import ClassificationStore
-    from pybeansack import K_URL, K_EMBEDDING, K_BASE_URL, BEANS, PUBLISHERS, RELATED_BEANS, create_client
-    
-    db = create_client(db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING"))
-    state_store = StateCache(cache_dir, {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}})
-    
+    from pybeansack import (
+        K_URL,
+        K_EMBEDDING,
+        K_BASE_URL,
+        BEANS,
+        PUBLISHERS,
+        RELATED_BEANS,
+        create_client,
+    )
+
+    db = create_client(
+        db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING")
+    )
+    state_store = StateCache(
+        cache_dir, {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}}
+    )
+
     if False:
         offset = 0
         while pubs := db.query_publishers(
@@ -360,12 +381,21 @@ def hydrate_processing_cache(cache_dir, batch_size):
             offset=offset,
             columns=[K_BASE_URL, K_SOURCE],
         ):
-            publisher_states = [pub.model_dump(exclude_none=True, exclude_unset=True) for pub in pubs]
-            list(map(lambda state: state_store.set(PUBLISHERS, state, publisher_states),  ["collected", "beansacked"]))
+            publisher_states = [
+                pub.model_dump(exclude_none=True, exclude_unset=True) for pub in pubs
+            ]
+            list(
+                map(
+                    lambda state: state_store.set(PUBLISHERS, state, publisher_states),
+                    ["collected", "beansacked"],
+                )
+            )
             offset += len(pubs)
-            logging.info("hydrated", extra={"source": "publishers", "num_items": offset})
+            logging.info(
+                "hydrated", extra={"source": "publishers", "num_items": offset}
+            )
 
-    if False:        
+    if False:
         offset = 0
         with ThreadPoolExecutor() as exec:
             while beans := db.query_latest_beans(
@@ -373,13 +403,26 @@ def hydrate_processing_cache(cache_dir, batch_size):
                 limit=batch_size,
                 offset=offset,
                 columns=[K_URL],
-            ):                  
+            ):
                 basic_vals = [{K_URL: bean.url} for bean in beans]
-                exec.map(lambda state: state_store.set(BEANS, state, basic_vals), ["collected", "extracted", "digested", "cdned", "classified", "embedded", "beansacked"])
+                exec.map(
+                    lambda state: state_store.set(BEANS, state, basic_vals),
+                    [
+                        "collected",
+                        "extracted",
+                        "digested",
+                        "cdned",
+                        "classified",
+                        "embedded",
+                        "beansacked",
+                    ],
+                )
                 offset += len(beans)
-                logging.info("hydrated", extra={"source": "processed beans", "num_items": offset})
+                logging.info(
+                    "hydrated", extra={"source": "processed beans", "num_items": offset}
+                )
 
-    if True:        
+    if True:
         offset = 0
         cls_cache = ClassificationStore(cache_dir, {BEANS: K_URL})
         while beans := db.query_latest_beans(
@@ -387,14 +430,23 @@ def hydrate_processing_cache(cache_dir, batch_size):
             limit=batch_size,
             offset=offset,
             columns=[K_URL, K_EMBEDDING],
-        ):          
-            offset += len(beans)        
-            count = cls_cache.store(BEANS, [bean.model_dump(exclude_none=True, exclude_unset=True) for bean in beans])
-            logging.info("hydrated:cls_cache", extra={"source": offset, "num_items": count})
+        ):
+            offset += len(beans)
+            count = cls_cache.store(
+                BEANS,
+                [
+                    bean.model_dump(exclude_none=True, exclude_unset=True)
+                    for bean in beans
+                ],
+            )
+            logging.info(
+                "hydrated:cls_cache", extra={"source": offset, "num_items": count}
+            )
         cls_cache.close()
-    
+
     state_store.close()
     db.close()
+
 
 # adding data porting logic
 if __name__ == "__main__":

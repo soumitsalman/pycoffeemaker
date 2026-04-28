@@ -21,3 +21,5 @@ python-slugify
 msgpack
 textcase
 pyturso
+zvec
+firebird-driver
