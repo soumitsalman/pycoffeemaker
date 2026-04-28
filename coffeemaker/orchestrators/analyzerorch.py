@@ -137,26 +137,24 @@ class Indexer:
             yield updates
 
     def extract_beans(self, beans: list[dict], batch_size: int):
+        clean_update = lambda pack: {k:v for k,v in pack.items() if v}
         with self.extractor:
             for chunk in batched(beans, batch_size):
                 try:
-                    extractions = self.extractor.run_batch(
-                        [b[K_CONTENT] for b in chunk]
-                    )
+                    extractions = self.extractor.run_batch([b[K_CONTENT] for b in chunk])
                     updates = [
-                        {
+                        clean_update({
                             K_URL: b[K_URL],
                             K_ENTITIES: merge_lists(
                                 ents.people,
-                                ents.organizations,
+                                ents.companies,
                                 ents.products,
                                 ents.stock_tickers,
                             ),
-                            K_REGIONS: ents.regions,
-                        }
-                        if ents
-                        else {K_URL: b[K_URL]}
+                            K_REGIONS: ents.regions
+                        })              
                         for b, ents in zip(chunk, extractions)
+                        if ents
                     ]
                     log.info(
                         "extracted",
