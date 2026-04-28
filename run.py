@@ -128,7 +128,7 @@ if __name__ == "__main__":
         
         cls_cache = ClassificationCache(
             # TODO: change this later
-            ".test/clsstore", 
+            ".cache/clsstore", 
             table_settings={
                 BEANS: {"id_key": K_URL, "distance_func": "l2"},
                 "categories": {"id_key": "category", "distance_func": "cosine"},
