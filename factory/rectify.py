@@ -398,8 +398,8 @@ def hydrate_processing_cache(cache_dir, batch_size):
 if __name__ == "__main__":
     migrate_classification_cache_pg_to_fire(
         pg_conn_str=os.getenv("PROCESSING_CACHE")+"/clsstore",
-        fire_db_path=".test/clsstore",
-        batch_size=256,
+        fire_db_path=".cache/clsstore",
+        batch_size=512,
         vector_length=384,
         distance_func="l2",
     )
