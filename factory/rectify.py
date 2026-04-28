@@ -21,6 +21,10 @@ from tqdm import tqdm
 from pybeansack import create_client
 from pybeansack.database import *
 from pybeansack.models import *
+from coffeemaker.processingcache.pgcache import ClassificationCache as PGClassificationCache
+from coffeemaker.processingcache.firecache import (
+    ClassificationCache as FireClassificationCache,
+)
 
 K_RELATED = "related"
 LIMIT = 40000
@@ -41,95 +45,12 @@ ndays_ago = lambda n: datetime.now() - timedelta(days=n)
 make_id = lambda text: re.sub(r"[^a-zA-Z0-9]", "-", text.lower())
 
 
-def merge_feeds():
-    import yaml
-    from coffeemaker.collectors.collector import parse_sources
-
-    from coffeemaker.orchestrators.collectororch import Collector
-
-    local = Collector(mongodb_conn_str="mongodb://localhost:27017/", db_name="test3")
-
-    # SCRAPE FOR DETAILS
-    rss_feeds = local.db.sourcestore.distinct(
-        "rss_feed", filter={"rss_feed": {"$nin": to_ignore}}
-    )
-
-    existing = parse_sources(
-        "/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"
-    )
-    existing["rss"] = list(set(existing["rss"] + rss_feeds))
-    existing = {"sources": existing}
-
-    with open(
-        "/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml", "w"
-    ) as file:
-        yaml.dump(existing, file)
-
-
-def remove_non_functional_feeds():
-    import csv
-
-    import yaml
-
-    csv_path = "/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/non-functional-rss.csv"
-    yaml_path = "/home/soumitsr/codes/pycoffeemaker/coffeemaker/collectors/feeds.yaml"
-
-    # Read non-functional RSS feeds from CSV (handling quoted values)
-    with open(csv_path, newline="") as csvfile:
-        reader = csv.reader(csvfile)
-        non_functional = [
-            row[0].strip().strip('"') for row in reader if row and row[0].strip()
-        ]
-
-    ic(len(non_functional))
-    # Load YAML feeds
-    with open(yaml_path, "r") as file:
-        feeds_data = yaml.safe_load(file)
-
-    # Remove non-functional feeds from the rss list
-    if "sources" in feeds_data and "rss" in feeds_data["sources"]:
-        original_count = len(feeds_data["sources"]["rss"])
-        feeds_data["sources"]["rss"] = sorted(
-            [
-                feed
-                for feed in feeds_data["sources"]["rss"]
-                if feed not in non_functional
-            ]
-        )
-        print(f"Removed {original_count - len(feeds_data['sources']['rss'])} feeds.")
-
-    # Save the updated YAML
-    with open(yaml_path, "w") as file:
-        yaml.dump(feeds_data, file)
-
-
-def port_pages_locally():
-    from coffeemaker.orchestrators.analyzerorch import Indexer
-
-    orch = Indexer(
-        os.getenv("DB_REMOTE"), "beansackV2", os.getenv("QUEUE_PATH_TEST"), "test"
-    )
-    local_orch = Indexer(
-        os.getenv("DB_REMOTE_TEST"), "test", os.getenv("QUEUE_PATH_TEST"), "test"
-    )
-
-    pages = list(orch.db.db["baristas"].find({}))
-    for page in pages:
-        if K_EMBEDDING in page:
-            page[K_EMBEDDING] = local_orch.embedder.embed(
-                "category/classification/domain: " + page[K_DESCRIPTION]
-            )
-    local_orch.db.db["pages"].insert_many(pages)
-
-    print(datetime.now(), "ported pages|%d", len(pages))
-
-
 def create_composer_topics_locally():
     import json
 
     import pandas as pd
     import yaml
-    from coffeemaker.nlp import embedders
+    from nlp import embedders
 
     with open(
         "/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.yaml", "r"
@@ -154,36 +75,6 @@ def migrate_users(from_db, to_db):
     new_prod = Collector(os.getenv("MONGODB_CONN_STR"), to_db)
 
     new_prod.db.userstore.insert_many(old_prod.db.userstore.find({}), ordered=False)
-
-
-def swap_gist_regions_entities(batch_size: int = 256):
-    """Query all rows from warehouse.bean_gists, swap the `entities` and
-    `regions` values for each row and update the table in batches.
-
-    This uses the warehouse Beansack.query and Beansack.execute APIs so it
-    behaves like other functions in this module.
-    """
-    from coffeemaker.pybeansack.warehouse import Beansack
-
-    db = Beansack(os.getenv("PG_CONNECTION_STRING"), os.getenv("CACHE_DIR"))
-
-    # Fetch all gists with their entities/regions
-    query_expr = "SELECT url, gist, entities, regions FROM warehouse.bean_gists"
-    rows = db.query(query_expr)
-    total = len(rows)
-    print(datetime.now(), f"fetched bean_gists|{total}")
-
-    for item in rows:
-        temp = item.get("entities")
-        item["entities"] = item.get("regions")
-        item["regions"] = temp
-
-    import pandas as pd
-
-    pd.DataFrame(rows).to_parquet(
-        os.getenv("CACHE_DIR") + "/main/bean_gists/bean-gists-rectified.parquet"
-    )
-    db.close()
 
 
 def split_parquet_into_chunks(
@@ -228,27 +119,6 @@ def split_parquet_into_chunks(
     return written
 
 
-def register_new_gist_files():
-    from coffeemaker.pybeansack.warehouse import SQL_INSERT_PARQUET, Beansack
-
-    db = Beansack(os.getenv("PG_CONNECTION_STRING"), os.getenv("STORAGE_DATAPATH"))
-
-    import glob
-
-    files = glob.glob(
-        os.getenv("STORAGE_DATAPATH") + "/main/bean_gists/bean-gists-chunk-*.parquet"
-    )
-    for f in files:
-        db.execute(
-            SQL_INSERT_PARQUET,
-            (
-                "bean_gists",
-                f,
-            ),
-        )
-
-    db.close()
-
 
 def migrate_classification_cache(from_lance, to_pg):
     from pybeansack import SimpleVectorDB
@@ -281,6 +151,82 @@ def migrate_classification_cache(from_lance, to_pg):
 
     from_cache.close()
     to_cache.close()
+
+
+def migrate_classification_cache_pg_to_fire(
+    pg_conn_str: str = None,
+    fire_db_path: str = "./firecache",
+    batch_size: int = 256,
+    vector_length: int = 384,
+    distance_func: str = "l2",
+):
+    """Migrate ClassificationCache from PostgreSQL to Firebird/zvec.
+
+    Args:
+        pg_conn_str: PostgreSQL connection string (default: PROCESSING_CACHE env)
+        fire_db_path: Target Firebird/zvec database path
+        batch_size: Number of rows per batch
+        vector_length: Embedding dimension
+        distance_func: Distance function (l2 or cosine)
+    """
+    if pg_conn_str is None:
+        pg_conn_str = os.getenv("PROCESSING_CACHE")
+
+    if not pg_conn_str:
+        raise ValueError("PG connection string not provided")
+
+    table_settings={
+        BEANS: {
+            "id_key": K_URL,
+            "vector_length": vector_length,
+            "distance_func": distance_func,
+        },
+    }
+
+    from_cache = PGClassificationCache(pg_conn_str, table_settings)
+    to_cache = FireClassificationCache(fire_db_path, table_settings)
+
+    with from_cache.pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM beans")
+            total = cur.fetchone()[0]
+
+
+    def fetch_batch(offset):
+        with from_cache.pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT url, embedding FROM beans WHERE embedding IS NOT NULL LIMIT {batch_size} OFFSET {offset}"
+                )
+                rows = cur.fetchall()
+                items = [
+                    {
+                        "url": row[0],
+                        "embedding": row[1].tolist() if hasattr(row[1], "tolist") else row[1],
+                    }
+                    for row in rows
+                ]
+                if items:
+                    return to_cache.store(BEANS, items)
+        return 0
+
+    # with tqdm(total=total, desc="Migrating PG→Fire") as pbar:
+    #     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+    #         futures = [
+    #             executor.submit(fetch_batch, offset)
+    #             for offset in range(0, total, batch_size)
+    #         ]
+    #         for future in futures:
+    #             pbar.update(future.result())
+
+    list(map(
+        fetch_batch, 
+        tqdm(range(0, total, batch_size), desc="Migrated", total=(total//batch_size)+1)
+    ))
+
+    from_cache.close()
+    to_cache.close()
+    ic("Migration complete")
 
 
 def cleanup_bean_tags():
@@ -450,10 +396,17 @@ def hydrate_processing_cache(cache_dir, batch_size):
 
 # adding data porting logic
 if __name__ == "__main__":
-    migrate_classification_cache(
-        from_lance=".cache/",
-        to_pg=os.getenv("PROCESSING_CACHE") + "/clsstore",
+    migrate_classification_cache_pg_to_fire(
+        pg_conn_str=os.getenv("PROCESSING_CACHE")+"/clsstore",
+        fire_db_path=".test/clsstore",
+        batch_size=256,
+        vector_length=384,
+        distance_func="l2",
     )
+    # migrate_classification_cache(
+    #     from_lance=".cache/",
+    #     to_pg=os.getenv("PROCESSING_CACHE") + "/clsstore",
+    # )
     # hydrate_processing_cache(os.getenv("CACHE_DIR"), batch_size=4096)
     # cleanup_bean_tags()
     # cluster_existing_beans()

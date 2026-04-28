@@ -1,13 +1,12 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from itertools import count
 import os
 import queue
 import threading
 from typing import Any, Optional
 from pathlib import Path
-from slugify import slugify
+import hashlib
 import zvec
 from firebird.driver import connect, create_database
 from pydantic import BaseModel
@@ -516,9 +515,8 @@ def _cleanup_sql(table: str) -> str:
 
 
 _METRIC_MAP = {"l2": zvec.MetricType.L2, "cosine": zvec.MetricType.COSINE}
-_DEFAULT_TOPN = 10
 
-class ClassificationCache:
+class ClassificationCache(ClassificationCacheBase):
     def __init__(self, db_path: str, table_settings: dict[str, dict[str, Any]]):
         self.db_path = db_path
         self.table_settings = table_settings
@@ -529,12 +527,9 @@ class ClassificationCache:
         }
 
         Path(db_path).mkdir(parents=True, exist_ok=True)
-        zvec.init()
+        zvec.init(query_threads=os.cpu_count(), optimize_threads=max(1, os.cpu_count()>>1))
         self.collections: dict[str, zvec.Collection] = {}
-        for tab, setting in table_settings.items():
-            if "id_key" not in setting or "vector_length" not in setting:
-                continue
-            
+        for tab, setting in table_settings.items():            
             path = os.path.join(db_path, tab)
             if os.path.exists(path): 
                 coll = zvec.open(path=path)
@@ -545,7 +540,7 @@ class ClassificationCache:
                         "embedding", 
                         data_type=zvec.DataType.VECTOR_FP32, 
                         dimension=setting["vector_length"],
-                        index_param=zvec.HnswIndexParam(_METRIC_MAP.get(setting.get("distance_func", "l2"), zvec.MetricType.L2))
+                        index_param=zvec.HnswIndexParam(_METRIC_MAP.get(setting.get("distance_func"), zvec.MetricType.L2))
                     ),
                     fields=[zvec.FieldSchema(setting["id_key"], zvec.DataType.STRING)],
                 )                
@@ -558,7 +553,7 @@ class ClassificationCache:
         id_key = self.id_keys[object_type]
         docs = [
             zvec.Doc(
-                id=slugify(item[id_key]),
+                id=hashlib.sha256(item[id_key].encode('utf-8')).hexdigest(),
                 vectors={"embedding": item["embedding"]},
                 fields={id_key: item[id_key]},
             )
@@ -567,17 +562,17 @@ class ClassificationCache:
         results = self.collections[object_type].insert(docs)
         return len([r for r in results if r.code == 0])
 
-    def search(self, object_type: str, embedding: list[float], distance: Optional[float] = None, topn: int = _DEFAULT_TOPN) -> list[str]:        
+    def search(self, object_type: str, embedding: list[float], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN) -> list[str]:        
         results = self.collections[object_type].query(
             zvec.VectorQuery("embedding", vector=embedding),
-            topk=topn,
+            topk=top_n,
             output_fields=[self.id_keys[object_type]]
         )
         filter_distance = lambda r: not distance or (r.score <= distance)    
         return [r.fields[self.id_keys[object_type]] for r in filter(filter_distance, results)]
 
-    def batch_search(self, object_type: str, embeddings: list[list[float]], distance: Optional[float] = None, topn: int = _DEFAULT_TOPN) -> list[list[str]]:
-        return list(ThreadPoolExecutor().map(lambda emb: self.search(object_type, emb, distance, topn), embeddings))        
+    def batch_search(self, object_type: str, embeddings: list[list[float]], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN) -> list[list[str]]:
+        return list(ThreadPoolExecutor().map(lambda emb: self.search(object_type, emb, distance, top_n), embeddings))        
 
     def close(self):
         [coll.optimize() for coll in self.collections.values()]

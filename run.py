@@ -70,8 +70,8 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CLUSTERER, PORTER)",
 )
 
-from coffeemaker.processingcache.pgcache import AsyncStateCache, StateCache, ClassificationCache
-from pybeansack import create_client, CDNStore, BEANS, PUBLISHERS, K_URL, K_BASE_URL
+from coffeemaker.processingcache.pgcache import AsyncStateCache, StateCache
+from pybeansack import create_client, BEANS, PUBLISHERS, K_URL, K_BASE_URL
 
 if __name__ == "__main__":
     # Use command line args if provided, otherwise fall back to env vars
@@ -95,15 +95,7 @@ if __name__ == "__main__":
         PUBLISHERS: {"id_key": K_BASE_URL},
     }
     cache_store = StateCache(cache_path+"/statestore", cache_settings)
-    async_cache_store = AsyncStateCache(cache_path+"/statestore", cache_settings)
-    cls_cache = ClassificationCache(
-        cache_path+"/clsstore", 
-        table_settings={
-            BEANS: {"id_key": K_URL},
-            "categories": {"id_key": "category"},
-            "sentiments": {"id_key": "sentiment"}
-        }
-    )
+    async_cache_store = AsyncStateCache(cache_path+"/statestore", cache_settings)    
 
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Collector
@@ -132,15 +124,28 @@ if __name__ == "__main__":
 
     elif mode == "CLASSIFIER":
         from coffeemaker.orchestrators.analyzerorch import Indexer
+        from coffeemaker.processingcache.firecache import ClassificationCache
+        
+        cls_cache = ClassificationCache(
+            # TODO: change this later
+            ".test/clsstore", 
+            table_settings={
+                BEANS: {"id_key": K_URL, "distance_func": "l2"},
+                "categories": {"id_key": "category", "distance_func": "cosine"},
+                "sentiments": {"id_key": "sentiment", "distance_func": "cosine"}
+            }
+        )
 
         orch = Indexer(cache=cache_store, cls_cache=cls_cache)
         orch.run_classifier(batch_size=batch_size)
-
-    elif mode == "CLUSTERER":
-        from coffeemaker.orchestrators.analyzerorch import Indexer
-
-        orch = Indexer(cache=cache_store, cls_cache=cls_cache)
         orch.run_clusterer(batch_size=batch_size)
+        cls_cache.close()
+
+    # elif mode == "CLUSTERER":
+    #     from coffeemaker.orchestrators.analyzerorch import Indexer
+
+    #     orch = Indexer(cache=cache_store, cls_cache=cls_cache)
+    #     orch.run_clusterer(batch_size=batch_size)
 
     elif mode == "EXTRACTOR":
         from coffeemaker.orchestrators.analyzerorch import Indexer
@@ -207,6 +212,6 @@ if __name__ == "__main__":
             "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CLUSTERER."
         )
 
-    cls_cache.close()
+    
     cache_store.close()
     db.close()

@@ -10,8 +10,7 @@ from typing import Any, Optional
 from pydantic import BaseModel
 from .base import *
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
-from pgvector import Vector
-
+from pgvector.psycopg import register_vector, Vector
 
 TIMEOUT = 600
 
@@ -504,7 +503,12 @@ _CLEANUP_OLD_SQL = "UPDATE {table} SET data = NULL WHERE ts < %(threshold)s"
 # Classification Cache
 ###########################
 
-class ClassificationCache:
+_DISTANCE_OPS = {
+    "l2": "<->",
+    "cosine": "<=>"
+}
+
+class ClassificationCache(ClassificationCacheBase):
     def __init__(self, conn_str: str, table_settings: dict[str, dict[str, Any]]):
         """Initialize the ProcessingCache with a PostgreSQL connection string and table settings.
         
@@ -523,6 +527,7 @@ class ClassificationCache:
         self.conn_str = conn_str
         self.table_settings = table_settings
         self.id_keys = {tab: setting["id_key"] for tab, setting in table_settings.items() if "id_key" in setting}
+        self.distance_funcs = {tab: setting["distance_func"] for tab, setting in table_settings.items() if "distance_func" in setting}
         
         self.pool = ConnectionPool(conn_str, min_size=1, max_size=32, timeout=TIMEOUT, max_idle=TIMEOUT, num_workers=os.cpu_count() or 1, configure=register_vector)
         self.pool.open()
@@ -531,7 +536,7 @@ class ClassificationCache:
     def _init_db(self):
         _execute(self.pool, _create_emb_tables_sql(self.table_settings))
 
-    def store(self, object_type: str, items: list[dict[str, Any]] | list[BaseModel] | pd.DataFrame):
+    def store(self, object_type: str, items: list[dict[str, Any]]):
         data = items # for future extension
         if not data: return 0
 
@@ -548,14 +553,17 @@ class ClassificationCache:
                 cur.execute(expr, rows)
                 return cur.rowcount
 
+    def distance_op(self, object_type):
+        return _DISTANCE_OPS[self.distance_funcs.get(object_type, "l2")]
+
     @retry(tries=5, delay=2)
-    def search(self, object_type: str, embedding: list[float], distance_func: str = "l2", distance: Optional[float] = None, top_n: Optional[int] = None):        
-        expr, params = create_vector_search_expr(object_type, self.id_keys[object_type], embedding, distance_func, distance, top_n)
+    def search(self, object_type: str, embedding: list[float], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN):        
+        expr, params = create_vector_search_expr(object_type, self.id_keys[object_type], embedding, self.distance_op(object_type), distance, top_n)
         return _read(self.pool, expr, params)
     
     @retry(tries=5, delay=2)
-    def batch_search(self, object_type: str, embeddings: list[list[float]], distance_func: str = "l2", distance: Optional[float] = None, top_n: Optional[int] = None):
-        expr_and_params = [create_vector_search_expr(object_type, self.id_keys[object_type], embedding, distance_func, distance, top_n) for embedding in embeddings]
+    def batch_search(self, object_type: str, embeddings: list[list[float]], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN):
+        expr_and_params = [create_vector_search_expr(object_type, self.id_keys[object_type], embedding, self.distance_op(object_type), distance, top_n) for embedding in embeddings]
         with self.pool.connection() as conn:
             with conn.cursor() as cur:
                 results = list(ThreadPoolExecutor(max_workers=16).map(lambda expr_param: _fetch_data(cur, *expr_param), expr_and_params))
@@ -564,10 +572,9 @@ class ClassificationCache:
     def close(self):
         self.pool.close()
 
-def create_vector_search_expr(object_type: str, id_key: str, query_embedding, distance_func: str = "l2", distance: float | None = None, top_n: int | None = None):
+def create_vector_search_expr(object_type: str, id_key: str, query_embedding, distance_op: str, distance: float | None = None, top_n: int | None = None):
     expr = f"""SELECT {id_key} FROM {object_type}"""
     params = {"query_embedding": Vector(query_embedding)}
-    distance_op = "<->" if distance_func == "l2" else "<=>"
     
     if distance:
         expr += f"\nWHERE embedding {distance_op} %(query_embedding)s <= %(distance)s"

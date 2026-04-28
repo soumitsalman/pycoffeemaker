@@ -7,8 +7,7 @@ from typing import Optional
 
 from slugify import slugify
 
-from coffeemaker.processingcache.base import StateCacheBase
-from coffeemaker.processingcache.pgcache import ClassificationCache
+from coffeemaker.processingcache.base import StateCacheBase, ClassificationCacheBase
 from nlp import Digest, digestors, embedders
 from pybeansack import BEANS
 from pybeansack.models import (
@@ -34,11 +33,13 @@ log = logging.getLogger("analyzerworker")
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
 MAX_CLASSIFICATIONS = int(os.getenv("MAX_CLASSIFICATIONS", 2))
+MAX_RELATED = int(os.getenv('MAX_RELATED', 500))
 CLUSTER_EPS = float(os.getenv("CLUSTER_EPS", 0.4))
 VECTOR_LEN = int(os.getenv("VECTOR_LEN", 384))
 
-index_storables = lambda beans: [bean for bean in beans if bean.embedding]
-digest_storables = lambda beans: [bean for bean in beans if bean.gist]
+# index_storables = lambda beans: [bean for bean in beans if bean.embedding]
+# digest_storables = lambda beans: [bean for bean in beans if bean.gist]
+clean_updates = lambda packlist: [{k:v for k,v in pack.items() if v} for pack in packlist if pack]
 run_id = lambda: datetime.now().strftime("%A, %b-%d-%Y")
 
 class Indexer:
@@ -56,7 +57,7 @@ class Indexer:
         extractor_context_len: int = 0,
         digestor_path: Optional[str] = None,
         digestor_context_len: int = 0,
-        cls_cache: Optional[ClassificationCache] = None,
+        cls_cache: Optional[ClassificationCacheBase] = None,
     ):
         self.cache = cache
         if embedder_path:
@@ -81,14 +82,12 @@ class Indexer:
         with self.embedder:
             for chunk in batched(beans, batch_size):
                 try:
-                    vectors = self.embedder.embed_documents(
-                        [bean[K_CONTENT] for bean in chunk]
-                    )
-                    updates = [
+                    vectors = self.embedder.embed_documents([bean[K_CONTENT] for bean in chunk])
+                    updates = clean_updates([
                         {K_URL: b[K_URL], K_EMBEDDING: vec}
                         for b, vec in zip(chunk, vectors)
                         if vec and len(vec) == VECTOR_LEN
-                    ]
+                    ])
                     log.info(
                         "embedded",
                         extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)},
@@ -107,43 +106,42 @@ class Indexer:
         for chunk in batched(beans, batch_size):
             self.cls_cache.store(BEANS, chunk)
             embeddings = [bean[K_EMBEDDING] for bean in chunk]
-            categories_list = self.cls_cache.batch_search("categories", embeddings, distance_func="cosine", top_n=MAX_CLASSIFICATIONS)
-            sentiments_list = self.cls_cache.batch_search("sentiments", embeddings, distance_func="cosine", top_n=MAX_CLASSIFICATIONS)
-            updates = [
+            categories_list = self.cls_cache.batch_search("categories", embeddings, top_n=MAX_CLASSIFICATIONS)
+            sentiments_list = self.cls_cache.batch_search("sentiments", embeddings, top_n=MAX_CLASSIFICATIONS)
+            updates = clean_updates([
                 {
                     K_URL: bean[K_URL],
                     K_CATEGORIES: categories,
                     K_SENTIMENTS: sentiments,
                 }
                 for bean, categories, sentiments in zip(chunk, categories_list, sentiments_list)
-            ]
+            ])
             log.info("classified", extra={"source": chunk[0][K_URL], "num_items": len(updates)})
             yield updates
 
     def cluster_beans(self, beans: list[dict], batch_size: int):
-        # store the items first
-        for chunk in batched(beans, batch_size):
-            self.cls_cache.store(BEANS, chunk)
+        
+        [self.cls_cache.store(BEANS, chunk) for chunk in batched(beans, batch_size)]
+        for chunk in batched(beans, batch_size):            
             embeddings = [bean[K_EMBEDDING] for bean in chunk]
-            related_list = self.cls_cache.batch_search("beans", embeddings, distance_func="l2", distance=CLUSTER_EPS)
-            updates = [
+            related_list = self.cls_cache.batch_search("beans", embeddings, distance=CLUSTER_EPS, top_n=MAX_RELATED)
+            updates = clean_updates([
                 {
                     K_URL: bean[K_URL],
                     K_RELATED: list(filter(lambda x: x != bean[K_URL], related)),
                 }
                 for bean, related in zip(chunk, related_list)
-            ]
+            ])
             log.info("clustered", extra={"source": chunk[0][K_URL], "num_items": len(updates)})
             yield updates
 
     def extract_beans(self, beans: list[dict], batch_size: int):
-        clean_update = lambda pack: {k:v for k,v in pack.items() if v}
         with self.extractor:
             for chunk in batched(beans, batch_size):
                 try:
                     extractions = self.extractor.run_batch([b[K_CONTENT] for b in chunk])
-                    updates = [
-                        clean_update({
+                    updates = clean_updates([
+                        {
                             K_URL: b[K_URL],
                             K_ENTITIES: merge_lists(
                                 ents.people,
@@ -152,10 +150,10 @@ class Indexer:
                                 ents.stock_tickers,
                             ),
                             K_REGIONS: ents.regions
-                        })              
+                        }            
                         for b, ents in zip(chunk, extractions)
                         if ents
-                    ]
+                    ])
                     log.info(
                         "extracted",
                         extra={
@@ -177,11 +175,11 @@ class Indexer:
             for chunk in batched(beans, batch_size):
                 try:
                     digests = self.digestor.run_batch([bean[K_CONTENT] for bean in chunk])
-                    updates = [
+                    updates = clean_updates([
                         {K_URL: b[K_URL], K_GIST: d.gist}
                         for b, d in zip(chunk, digests)
                         if d
-                    ]
+                    ])
                     log.info(
                         "digested",
                         extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)},

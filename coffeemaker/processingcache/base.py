@@ -1,12 +1,13 @@
 import pandas as pd
 from pydantic import BaseModel
-from typing import Any
+from typing import Any, Optional
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 import msgpack
 import logging
 
 NOT_IMPLEMENTED = NotImplementedError("Method not implemented")
+DEFAULT_TOPN = 10
 
 log = logging.getLogger("processingcache")
 logset = lambda total: log.info("state set", extra={"num_items": total, "source": "__default__"})
@@ -42,6 +43,20 @@ class AsyncStateCacheBase(ABC):
     
     async def close(self):
         pass
+
+class ClassificationCacheBase(ABC):
+    @abstractmethod
+    def store(self, object_type: str, items: list[dict[str, Any]]) -> int:
+        pass
+
+    @abstractmethod
+    def search(self, object_type: str, embedding: list[float], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN) -> list[str]:
+        pass
+
+    @abstractmethod
+    def batch_search(self, object_type: str, embeddings: list[list[float]], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN) -> list[list[str]]:
+        pass
+
 
 def encode_data(data):
     assign_timezone = lambda obj: obj.replace(tzinfo=timezone.utc) if (isinstance(obj, datetime) and not obj.tzinfo) else obj

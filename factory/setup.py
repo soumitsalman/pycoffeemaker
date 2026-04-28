@@ -49,20 +49,20 @@ def create_classification_files():
 def create_processing_cache(db_path: str):
     """Seed cache with classification embeddings"""
 
-    from coffeemaker.processingcache.pgcache import ClassificationCache, StateCache
-    StateCache(
-        db_path+"/statestore", 
-        {
-            BEANS: {"id_key": K_URL},
-            PUBLISHERS: {"id_key": K_BASE_URL},
-        }
-    ).close()
+    from coffeemaker.processingcache.firecache import ClassificationCache, StateCache
+    # StateCache(
+    #     db_path+"/statestore", 
+    #     {
+    #         BEANS: {"id_key": K_URL},
+    #         PUBLISHERS: {"id_key": K_BASE_URL},
+    #     }
+    # ).close()
     cls_cache = ClassificationCache(
         db_path+"/clsstore", 
         {
-            BEANS: {"id_key": K_URL, "vector_length": 384},
-            "categories": {"id_key": "category", "vector_length": 384},
-            "sentiments": {"id_key": "sentiment", "vector_length": 384}
+            BEANS: {"id_key": K_URL, "vector_length": 384, "distance_func": "l2"},
+            "categories": {"id_key": "category", "vector_length": 384, "distance_func": "cosine"},
+            "sentiments": {"id_key": "sentiment", "vector_length": 384, "distance_func": "cosine"}
         }
     )
     categories, sentiments = create_classification_embeddings()
