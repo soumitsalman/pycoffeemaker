@@ -449,7 +449,7 @@ _QUERY_SINGLE_STATE_SQL = """
 SELECT data FROM {table}
 WHERE state = %(include_state)s
 AND NOT EXISTS (SELECT 1 FROM {table} t2 WHERE t2.id = {table}.id AND t2.state = %(exclude_state)s)
-AND ts >= CURRENT_TIMESTAMP - INTERVAL '14 days'
+AND ts >= CURRENT_TIMESTAMP - INTERVAL '7 days'
 """
 
 
@@ -472,7 +472,7 @@ WITH filtered AS (
             SELECT 1 FROM {table} excl 
             WHERE excl.id = incl.id AND excl.state = ANY(%(exclude_states)s)
         )
-        AND ts >= CURRENT_TIMESTAMP - INTERVAL '14 days'
+        AND ts >= CURRENT_TIMESTAMP - INTERVAL '7 days'
     GROUP BY id
     HAVING COUNT(*) >= %(min_count)s
 )
