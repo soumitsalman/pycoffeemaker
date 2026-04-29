@@ -119,9 +119,8 @@ class Indexer:
             log.info("classified", extra={"source": chunk[0][K_URL], "num_items": len(updates)})
             yield updates
 
-    def cluster_beans(self, beans: list[dict], batch_size: int):
-        
-        [self.cls_cache.store(BEANS, chunk) for chunk in batched(beans, batch_size)]
+    def cluster_beans(self, beans: list[dict], batch_size: int):        
+        self.cls_cache.store(BEANS, beans)
         for chunk in batched(beans, batch_size):            
             embeddings = [bean[K_EMBEDDING] for bean in chunk]
             related_list = self.cls_cache.batch_search("beans", embeddings, distance=CLUSTER_EPS, top_n=MAX_RELATED)
