@@ -1,6 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from itertools import batched, chain
 import os
 import queue
 import threading
@@ -526,13 +527,13 @@ class ClassificationCache(ClassificationCacheBase):
             if "id_key" in setting
         }
 
-        Path(db_path).mkdir(parents=True, exist_ok=True)
+        Path(self.db_path).mkdir(parents=True, exist_ok=True)
         zvec.init(query_threads=os.cpu_count(), optimize_threads=max(1, os.cpu_count()>>1))
         self.collections: dict[str, zvec.Collection] = {}
         for tab, setting in table_settings.items():            
-            path = os.path.join(db_path, tab)
+            path = os.path.join(self.db_path, tab)
             if os.path.exists(path): 
-                coll = zvec.open(path=path)
+                coll = zvec.open(path)
             else:
                 schema = zvec.CollectionSchema(
                     name=tab,
@@ -559,7 +560,8 @@ class ClassificationCache(ClassificationCacheBase):
             )
             for item in items
         ]
-        results = self.collections[object_type].insert(docs)
+        conn = self.collections[object_type]
+        results = chain(*(conn.insert(chunk) for chunk in batched(docs, 768)))        
         return len([r for r in results if r.code == 0])
 
     def search(self, object_type: str, embedding: list[float], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN) -> list[str]:        
