@@ -242,19 +242,28 @@ def test_static_db():
 
 def test_collector_orch():
     from coffeemaker.orchestrators.collectororch import Collector
-    from coffeemaker.processingcache.sqlitecache import AsyncStateCache
-    from pybeansack import create_client
+    from coffeemaker.processingcache.pgcache import AsyncStateCache
 
-    db = create_client("lancedb", lancedb_storage=".test/lancesack")
-    orch = Collector(
-        AsyncStateCache(".test/statestore-test.db", {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}}),
-        db=db
-    )
+    cache_settings = {
+        BEANS: {"id_key": K_URL},
+        PUBLISHERS: {"id_key": K_BASE_URL},
+        CHATTERS: {"id_key": "id"}
+    }
+    orch = Collector(AsyncStateCache(os.getenv("PROCESSING_CACHE")+"/statestore", cache_settings))
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
     # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
     sources = """
     sources:
-        
+        reddit:
+            - news
+            - worldnews
+            - InternationalNews
+            - GlobalNews
+            - GlobalMarketNews
+            - FinanceNews
+            - StockNews
+            - CryptoNews
+            - energyStocks
         rss:
             - https://newatlas.com/index.rss
             - https://www.channele2e.com/feed/topic/latest
@@ -268,26 +277,9 @@ def test_collector_orch():
             - https://hacker-news.firebaseio.com/v0/newstories.json
 
     """
-    # reddit:
-    # - news
-    # - worldnews
-    # - InternationalNews
-    # - GlobalNews
-    # - GlobalMarketNews
-    # - FinanceNews
-    # - StockNews
-    # - CryptoNews
-    # - energyStocks
-    # reddit:
-    #         - HelionEnergy
-    #         - SolarMax
-    #         - SolarDIY
-    #         - EnergyAndPower
-    #         - EmporiaEnergy
-    #         - renewableenergystocks
 
     asyncio.run(orch.run(sources, batch_size=16))
-    db.close()
+    
 
 def test_embedder_orch():
     from coffeemaker.orchestrators.analyzerorch import Indexer

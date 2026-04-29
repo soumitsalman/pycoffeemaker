@@ -71,28 +71,19 @@ parser.add_argument(
 )
 
 from coffeemaker.processingcache.pgcache import AsyncStateCache, StateCache
-from pybeansack import create_client, BEANS, PUBLISHERS, K_URL, K_BASE_URL
+from pybeansack import create_client, BEANS, PUBLISHERS, CHATTERS, K_URL, K_BASE_URL
 
 if __name__ == "__main__":
     # Use command line args if provided, otherwise fall back to env vars
     args = parser.parse_args()
     mode = args.mode or os.getenv("MODE")
     batch_size = int(args.batch_size or os.getenv("BATCH_SIZE") or os.cpu_count())
-    db_kwargs = {
-        "db_type": os.getenv("DB_TYPE"),
-        "mongo_connection_string": os.getenv("MONGO_CONNECTION_STRING"),
-        "mongo_database": os.getenv("MONGO_DATABASE"),
-        "pg_connection_string": os.getenv("PG_CONNECTION_STRING"),
-        "duckdb_storage": os.getenv("DUCKDB_STORAGE"),
-        "lancedb_storage": os.getenv("LANCEDB_STORAGE"),
-        "ducklake_catalog": os.getenv("DUCKLAKE_CATALOG"),
-        "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
-    }
-    db = create_client(**db_kwargs)
+    
     cache_path = os.getenv("PROCESSING_CACHE")
     cache_settings = {
         BEANS: {"id_key": K_URL},
         PUBLISHERS: {"id_key": K_BASE_URL},
+        CHATTERS: {"id_key": "id"}
     }
     cache_store = StateCache(cache_path+"/statestore", cache_settings)
     async_cache_store = AsyncStateCache(cache_path+"/statestore", cache_settings)    
@@ -100,7 +91,7 @@ if __name__ == "__main__":
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Collector
 
-        orch = Collector(cache=async_cache_store, db=db)
+        orch = Collector(cache=async_cache_store)
         asyncio.run(
             orch.run(
                 os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
@@ -201,6 +192,18 @@ if __name__ == "__main__":
 
     elif mode == "PORTER":
         from coffeemaker.orchestrators.porterorch import Porter
+
+        db_kwargs = {
+            "db_type": os.getenv("DB_TYPE"),
+            "mongo_connection_string": os.getenv("MONGO_CONNECTION_STRING"),
+            "mongo_database": os.getenv("MONGO_DATABASE"),
+            "pg_connection_string": os.getenv("PG_CONNECTION_STRING"),
+            "duckdb_storage": os.getenv("DUCKDB_STORAGE"),
+            "lancedb_storage": os.getenv("LANCEDB_STORAGE"),
+            "ducklake_catalog": os.getenv("DUCKLAKE_CATALOG"),
+            "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
+        }
+        db = create_client(**db_kwargs)
 
         orch = Porter(cache=cache_store)
         while orch.hydrate_beansacks(db):
