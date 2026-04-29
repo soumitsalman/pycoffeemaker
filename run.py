@@ -119,7 +119,7 @@ if __name__ == "__main__":
         
         cls_cache = ClassificationCache(
             # TODO: change this later
-            f"{os.getenv('CLASSIFICATION_CACHE', '.cache')}/clsstore", 
+            os.getenv('CLASSIFICATION_CACHE', '.cache')+"/clsstore", 
             table_settings={
                 BEANS: {"id_key": K_URL, "distance_func": "l2"},
                 "categories": {"id_key": "category", "distance_func": "cosine"},
@@ -210,11 +210,12 @@ if __name__ == "__main__":
             # keep running it while there is something to port
             pass
 
+        db.close()
+
     else:
         raise ValueError(
             "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CLUSTERER."
         )
-
     
     cache_store.close()
-    db.close()
+    
