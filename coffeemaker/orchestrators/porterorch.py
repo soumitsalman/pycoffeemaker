@@ -2,11 +2,11 @@ import json
 import logging
 import os
 import random
-from itertools import batched
+from itertools import batched, chain
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 from coffeemaker.processingcache.base import StateCacheBase
-from pybeansack import Beansack, Bean, Publisher, now
+from pybeansack import Beansack, Bean, Chatter, Publisher, now
 from pybeansack.models import K_BASE_URL, K_CONTENT, K_URL
 from icecream import ic
 
@@ -81,6 +81,19 @@ class Porter:
             count = db.store_publishers([Publisher(**pub) for pub in publishers])
             log.info("ported",extra={"source": "beansack:publishers", "num_items": count})
             self.cache.set("publishers", "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
+            total_ported += count
+
+        # move the publishers
+        if chatters := self.cache.get(
+            "chatters", states="collected", exclude_states="beansacked"
+        ):
+            # save the ids for cache resetting
+            ids = [{"id": pkg['id']} for pkg in chatters]
+            chatters = list(chain(*(pkg['chatters'] for pkg in chatters)))
+            log.info("porting", extra={"source": "portable:chatters", "num_items": len(chatters)})
+            count = db.store_chatters([Chatter(**ch) for ch in chatters])
+            log.info("ported",extra={"source": "beansack:chatters", "num_items": count})
+            self.cache.set("chatters", "beansacked", ids)
             total_ported += count
         
         db.optimize()

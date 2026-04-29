@@ -57,6 +57,10 @@ def _batch_run(func: Callable, sources: list):
         results = list(executor.map(func, sources))
     return results
 
+def _extract_link(entry, feed, feed_url, site_url):
+    if 'link' in entry: return full_url(site_url, entry.link)
+    if 'links' in entry and entry.links: full_url(site_url, ic(entry.links[0]['href']))
+
 ### rss feed related utilities ###
 def _extract_body(entry: feedparser.FeedParserDict) -> tuple[str, str]:
     # the body usually lives in <dc:content>, <content:encoded> or <description>
@@ -93,6 +97,8 @@ def _extract_main_image(entry: feedparser.FeedParserDict) -> str:
         return entry.media_content[0].get('url')
     if ('media_thumbnail' in entry) and entry.media_thumbnail:
         return entry.media_thumbnail[0].get('url')
+    if 'image' in entry:
+        return entry.image.get('href')
     
 def _get_site_url(*urls):
     for url in urls:
@@ -121,7 +127,7 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
     tags = _extract_tags(entry)
     author_email = _extract_author_email(entry)
     language = _extract_language(entry, feed)
-    entry_link = full_url(site_url, entry.link)
+    entry_link = _extract_link(entry, feed, feed_url, site_url)
     source = extract_source(entry_link)
     base_url = extract_base_url(entry_link)
 
@@ -352,7 +358,7 @@ class APICollectorAsync:
 
         if not feed.entries: return
 
-        source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].link)
+        source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].get('link'))
         return _return_collected(
             extract_source(source_url),
             [_build_rss_item(feed=feed, feed_url=url, site_url=source_url, entry=entry, default_kind=default_kind) for entry in feed.entries]

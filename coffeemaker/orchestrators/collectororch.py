@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import random
+import uuid
 import yaml
 from datetime import datetime
 from datacollectors import (
@@ -96,7 +97,6 @@ def parse_sources(sources: str) -> dict:
 log = logging.getLogger("collectorworker")
 
 class Collector:
-    db: Beansack
     cache: AsyncStateCacheBase
     apicollector: APICollectorAsync
     webscraper: AsyncWebScraper
@@ -104,8 +104,7 @@ class Collector:
     beans_collected: int
     publishers_collected: int
 
-    def __init__(self, cache: AsyncStateCacheBase, db: Beansack):
-        self.db = db   
+    def __init__(self, cache: AsyncStateCacheBase):
         self.cache = cache
 
     def _split_item(self, item: dict):
@@ -186,11 +185,10 @@ class Collector:
             return
 
         beans, chatters, publishers = self._split_items(items)
-        chatters = [Chatter(**item) for item in chatters]
 
         async with asyncio.TaskGroup() as tg:
             if chatters:
-                tg.create_task(asyncio.to_thread(self.db.store_chatters, chatters))
+                tg.create_task(self._cache_chatters(chatters))
             if beans:
                 to_store = storable_beans(beans)
                 to_scrape = scrapable_beans(beans)
@@ -200,9 +198,7 @@ class Collector:
                     tg.create_task(self._scrape_beans(to_scrape))
             if publishers:
                 to_store = storable_publishers(publishers)
-                to_scrape = [
-                    pub for pub in publishers if not is_publisher_storable(pub)
-                ]
+                to_scrape = [pub for pub in publishers if not is_publisher_storable(pub)]
                 if to_store:
                     tg.create_task(self._cache_publishers(to_store))
                 if scrape_on_fail and to_scrape:
@@ -217,6 +213,12 @@ class Collector:
         count = await self.cache.set("publishers", "collected", publishers)
         if count is not None: log.info("cached publishers", extra={"source": publishers[0]["source"], "num_items": count})
         else: log.info("caching publishers", extra={"source": publishers[0]["source"], "num_items": len(publishers)})
+
+    async def _cache_chatters(self, chatters: list[dict]):
+        pkg = [{"id": str(uuid.uuid4()), "chatters": chatters}]
+        count = await self.cache.set("chatters", "collected", pkg)
+        if count is not None: log.info("cached chatters", extra={"source": chatters[0]["source"], "num_items": count})
+        else: log.info("caching chatters", extra={"source": chatters[0]["source"], "num_items": len(chatters)})
 
     async def _scrape_beans(self, beans: list[dict]):
         to_scrape = await self.cache.deduplicate("beans", "collected", beans)
@@ -242,7 +244,7 @@ class Collector:
 
     async def _collect(self, collect_func, *args, **kwargs):
         try: await self._triage(await collect_func(*args, **kwargs), scrape_on_fail=True)
-        except Exception as e: log.warning(f"{collect_func.__name__}{args} failed", extra={"source": f"{e.__class__.__name__}: {e}", "num_items": 1})
+        except Exception as e: log.warning(f"{collect_func.__name__}{args} failed", extra={"source": f"{e.__class__.__name__}: {e}", "num_items": 1}, exc_info=True)
 
     def _create_collection_funcs(self, sources):
         funcs = []
