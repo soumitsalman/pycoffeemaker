@@ -6,7 +6,7 @@ tar -xzf .cache/clsstore_backup.tar.gz
 rm .cache/clsstore_backup.tar.gz
 
 echo "=== Restoring PG State Cache ==="
-~/go/bin/s5cmd --endpoint-url https://t3.storage.dev --credentials-file ~/.aws/credentials cp s3://cafecito-archives-new/processingcache/statestore/statestore.dump .cache/
+~/go/bin/s5cmd --endpoint-url https://t3.storage.dev --credentials-file ~/.aws/credentials cp s3://cafecito-archives-new/processingcache/statestore/statestore_backup.tar.gz .cache/
 
 sudo systemctl stop postgresql@17-main
 sudo rm -rf /var/lib/postgresql/17/main
@@ -16,4 +16,4 @@ sudo chown -R postgres:postgres /var/lib/postgresql/17/main
 sudo chmod 700 /var/lib/postgresql/17/main
 sudo systemctl start postgresql@17-main
 
-rm .cache/statestore.dump
+rm .cache/statestore_backup.tar.gz
