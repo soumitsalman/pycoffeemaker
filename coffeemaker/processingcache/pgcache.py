@@ -141,11 +141,13 @@ class StateCache(StateCacheBase):
             with self.pool.connection() as conn:
                 with conn.cursor(binary=True) as cur:
                     for table, rows in work_batch.items():
-                        for chunk in batched(rows, 2048):
-                            cur.execute(
+                        list(ThreadPoolExecutor().map(
+                            lambda chunk: cur.execute(
                                 _insert_state_multivalues_sql(table, len(chunk)),
                                 list(chain.from_iterable(chunk)),
-                            )
+                            ),
+                            batched(rows, 2048)
+                        ))
 
 
 class AsyncStateCache(AsyncStateCacheBase):
