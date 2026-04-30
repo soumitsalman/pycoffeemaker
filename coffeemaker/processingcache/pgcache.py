@@ -1,5 +1,5 @@
 import asyncio
-from itertools import chain
+from itertools import batched, chain
 import os
 import queue
 import threading
@@ -141,10 +141,11 @@ class StateCache(StateCacheBase):
             with self.pool.connection() as conn:
                 with conn.cursor(binary=True) as cur:
                     for table, rows in work_batch.items():
-                        cur.execute(
-                            _insert_state_multivalues_sql(table, len(rows)),
-                            list(chain.from_iterable(rows)),
-                        )
+                        for chunk in batched(rows, 2048):
+                            cur.execute(
+                                _insert_state_multivalues_sql(table, len(chunk)),
+                                list(chain.from_iterable(chunk)),
+                            )
 
 
 class AsyncStateCache(AsyncStateCacheBase):
@@ -262,13 +263,14 @@ class AsyncStateCache(AsyncStateCacheBase):
             # await _copy_insert_state_rows_async(self.pool, work_batch)
             async with self.pool.connection() as conn:
                 async with conn.cursor(binary=True) as cur:
-                    for table, rows in work_batch.items():
-                        # start_time = datetime.now()
-                        await cur.execute(
-                            _insert_state_multivalues_sql(table, len(rows)),
-                            list(chain.from_iterable(rows)),
-                        )
-                        # print("INSERTED", table, cur.rowcount, "in", (datetime.now() - start_time).total_seconds(), "seconds")
+                    for table, rows in work_batch.items():                        
+                        await asyncio.gather(*(
+                            cur.execute(
+                                _insert_state_multivalues_sql(table, len(chunk)),
+                                list(chain.from_iterable(chunk)),
+                            )
+                            for chunk in batched(rows, 2048)
+                        ))
 
 
 def _execute(pool, expr: str, rows=None):
