@@ -53,7 +53,7 @@ class Porter:
         # move beans
         if beans := self.cache.get(
             "beans",
-            states=["collected", "embedded", "classified", "extracted", "digested"],
+            states=["collected", "embedded", "classified", "extracted"],
             exclude_states=["beansacked"],
         ):  
             beans = prep_bean_items_for_beansack(beans)

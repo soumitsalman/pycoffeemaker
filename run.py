@@ -188,7 +188,7 @@ if __name__ == "__main__":
         )
         orch.run_embedder(batch_size=int(args.embedder_batch_size or batch_size))
         orch.run_extractor(batch_size=int(args.extractor_batch_size or batch_size))
-        orch.run_digestor(batch_size=int(args.digestor_batch_size or batch_size))        
+        # orch.run_digestor(batch_size=int(args.digestor_batch_size or batch_size))        
 
     elif mode == "PORTER":
         from coffeemaker.orchestrators.porterorch import Porter
