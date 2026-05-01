@@ -43,22 +43,23 @@ BACKUP_BUCKET="s3://cafecito-archives-new/processingcache"
 WORK_DIR="$HOME/.cache/pycoffeemaker"
 mkdir -p "${WORK_DIR}"
 
-echo "=== Restoring ZVEC Classification Cache ==="
-$S5CMD_BIN "${S5CMD_ARGS[@]}" cp "$BACKUP_BUCKET/clscache.tar.gz" $WORK_DIR/
-tar -xzf "$WORK_DIR/clscache.tar.gz"
-rm "$WORK_DIR/clscache.tar.gz"
+restore_zvec() {
+  echo "=== [STARTING] ZVEC Classification Cache Restore ==="
+  "$S5CMD_BIN" "${S5CMD_ARGS[@]}" cp "$BACKUP_BUCKET/clscache.tar.gz" "$WORK_DIR/"
+  tar -xzf "$WORK_DIR/clscache.tar.gz"
+  rm "$WORK_DIR/clscache.tar.gz"
+  echo "=== [FINISHED] ZVEC Classification Cache Restore ==="
+}
 
-echo "=== Restoring PG State Cache ==="
-$S5CMD_BIN "${S5CMD_ARGS[@]}" cp "$BACKUP_BUCKET/statecache.dump" $WORK_DIR/
-pg_restore --clean --if-exists --no-owner --no-privileges --schema=public --dbname="$PG_PCACHE" "$WORK_DIR/statecache.dump"
-rm "$WORK_DIR/statecache.dump"
+restore_pg() {
+  echo "=== [STARTING] PG State Cache Restore ==="
+  "$S5CMD_BIN" "${S5CMD_ARGS[@]}" cp "$BACKUP_BUCKET/statecache.dump" "$WORK_DIR/"
+  pg_restore --clean --if-exists --no-owner --no-privileges --schema=public --dbname="$PG_PCACHE" "$WORK_DIR/statecache.dump"
+  rm "$WORK_DIR/statecache.dump"
+  echo "=== [FINISHED] PG State Cache Restore ==="
+}
 
-# sudo systemctl stop postgresql@17-main
-# sudo rm -rf /var/lib/postgresql/17/main
-# sudo mkdir -p /var/lib/postgresql/17
-# sudo tar -xzf .cache/statestore_backup.tar.gz -C /
-# sudo chown -R postgres:postgres /var/lib/postgresql/17/main
-# sudo chmod 700 /var/lib/postgresql/17/main
-# sudo systemctl start postgresql@17-main
+restore_zvec &
+restore_pg &
 
-# rm .cache/statestore_backup.tar.gz
+wait

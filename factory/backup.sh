@@ -56,17 +56,28 @@ BACKUP_BUCKET="s3://cafecito-archives-new/processingcache"
 WORK_DIR="$HOME/.cache/pycoffeemaker"
 mkdir -p "${WORK_DIR}"
 
-echo "=== Starting ZVEC Classification Cache Backup ==="
-DUMP_FILE="$WORK_DIR/clscache.tar.gz"
-tar -czf "$DUMP_FILE" "$LOCAL_CLSCACHE"
-$S5CMD_BIN "${S5CMD_ARGS[@]}" cp "$DUMP_FILE" "$BACKUP_BUCKET/"
-rm -f "$DUMP_FILE"
+backup_zvec() {
+  echo "=== [STARTING] ZVEC Classification Cache Backup ==="
+  local dump_file="$WORK_DIR/clscache.tar.gz"
+  tar -czf "$dump_file" "$LOCAL_CLSCACHE"
+  "$S5CMD_BIN" "${S5CMD_ARGS[@]}" cp "$dump_file" "$BACKUP_BUCKET/"
+  rm -f "$dump_file"
+  echo "=== [FINISHED] ZVEC Classification Cache Backup ==="
+}
 
-echo "=== Starting PG State Cache Backup ==="
-DUMP_FILE="$WORK_DIR/statecache.dump"
-pg_dump --no-owner --no-privileges --format=custom --file="$DUMP_FILE" "$PG_PCACHE"
-$S5CMD_BIN "${S5CMD_ARGS[@]}" cp "$DUMP_FILE" "$BACKUP_BUCKET/"
-rm -f "$DUMP_FILE"
+backup_pg() {
+  echo "=== [STARTING] PG State Cache Backup ==="
+  local dump_file="$WORK_DIR/statecache.dump"
+  pg_dump --no-owner --no-privileges --format=custom --file="$dump_file" "$PG_PCACHE"
+  "$S5CMD_BIN" "${S5CMD_ARGS[@]}" cp "$dump_file" "$BACKUP_BUCKET/"
+  rm -f "$dump_file"
+  echo "=== [FINISHED] PG State Cache Backup ==="
+}
+
+backup_zvec &
+backup_pg &
+
+wait
 
 
 
