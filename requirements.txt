@@ -1,7 +1,9 @@
 accelerate
 vllm
 transformers
-sentence-transformers
+# sentence-transformers
+sentence-transformers[onnx-gpu]
+sentence-transformers[onnx]
 llama-index
 gliner
 tiktoken

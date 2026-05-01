@@ -59,9 +59,10 @@ def create_processing_cache(db_path: str):
         }
     ).close()
 
+def create_classification_cache(db_path: str):
     from coffeemaker.processingcache.firecache import ClassificationCache
     cls_cache = ClassificationCache(
-        db_path+"/clsstore", 
+        db_path, 
         {
             BEANS: {"id_key": K_URL, "vector_length": 384, "distance_func": "l2"},
             "categories": {"id_key": "category", "vector_length": 384, "distance_func": "cosine"},
@@ -103,12 +104,13 @@ import argparse
 parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
 parser.add_argument('--create', type=str, help='Type of database to create')
 parser.add_argument('--update', type=str, help='Update the lancedb')
-parser.add_argument('--cache', type=str, help='Initialize Classification Cache with Seed Value')
+parser.add_argument('--pg_pcache', type=str, help='Initialize PG State Cache')
+parser.add_argument('--local_clscache', type=str, help='Initialize Classification Cache with Seed Value')
 parser.add_argument('--cls_files', action='store_true', help='Create classification files with embeddings for categories and sentiments')
 
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.create: create_db(args.create)
-    # if args.update: update_db(args.update)
-    if args.cache: create_processing_cache(args.cache)
+    if args.pg_pcache: create_processing_cache(args.pg_pcache)
+    if args.local_clscache: create_classification_cache(args.local_clscache)
     if args.cls_files: create_classification_files()
