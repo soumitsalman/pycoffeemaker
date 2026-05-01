@@ -59,7 +59,8 @@ def _batch_run(func: Callable, sources: list):
 
 def _extract_link(entry, feed, feed_url, site_url):
     if 'link' in entry: return full_url(site_url, entry.link)
-    if 'links' in entry and entry.links: full_url(site_url, ic(entry.links[0]['href']))
+    if 'links' in entry and entry.links: full_url(site_url, entry.links[0]['href'])
+    raise ValueError(f"Invalid rss feed entry without link {entry}")
 
 ### rss feed related utilities ###
 def _extract_body(entry: feedparser.FeedParserDict) -> tuple[str, str]:

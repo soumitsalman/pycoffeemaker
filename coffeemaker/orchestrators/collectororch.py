@@ -244,7 +244,7 @@ class Collector:
 
     async def _collect(self, collect_func, *args, **kwargs):
         try: await self._triage(await collect_func(*args, **kwargs), scrape_on_fail=True)
-        except Exception as e: log.warning(f"{collect_func.__name__}{args} failed", extra={"source": f"{e.__class__.__name__}: {e}", "num_items": 1}, exc_info=True)
+        except Exception as e: log.warning(f"{collect_func.__name__}{args} failed", extra={"source": f"{e.__class__.__name__}: {e}", "num_items": 1})
 
     def _create_collection_funcs(self, sources):
         funcs = []
