@@ -13,6 +13,8 @@ from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pgvector.psycopg import register_vector, Vector
 
 TIMEOUT = 600
+MAX_WORKERS = os.cpu_count() * os.cpu_count()
+BATCH_SIZE = 1024
 
 ##############
 # STATE CACHE
@@ -50,20 +52,21 @@ class StateCache(StateCacheBase):
 
         self.pool = ConnectionPool(
             conn_str,
-            min_size=1,
-            max_size=16,
+            max_size=32,
             timeout=TIMEOUT,
             max_idle=TIMEOUT,
             num_workers=os.cpu_count() or 1,
         )
         self.pool.open()
-        self.write_queue = queue.Queue()
-        self.writer_thread = threading.Thread(target=self._run_write)
-        self.writer_thread.start()
+        # self.write_queue = queue.Queue()
+        # self.writer_thread = threading.Thread(target=self._run_write)
+        # self.writer_thread.start()
         self._init_db()
 
     def _init_db(self):
-        _execute(self.pool, _create_state_tables_sql(self.table_settings))
+        # _execute(self.pool, _create_state_tables_sql(self.table_settings))
+        with self.pool.connection() as conn:
+            conn.execute(_create_state_tables_sql(self.table_settings))
 
     def set(
         self,
@@ -75,7 +78,16 @@ class StateCache(StateCacheBase):
         if not rows:
             return
 
-        self.write_queue.put_nowait((object_type, rows))
+        # self.write_queue.put_nowait((object_type, rows))
+        with self.pool.connection() as conn:
+            res = list(ThreadPoolExecutor().map(
+                lambda chunk: conn.execute(
+                    _insert_state_multivalues_sql(object_type, len(chunk)),
+                    list(chain.from_iterable(chunk)),
+                ),
+                batched(rows, BATCH_SIZE)
+            ))
+            return sum(item.rowcount for item in res)
 
     def get(
         self,
@@ -104,50 +116,47 @@ class StateCache(StateCacheBase):
 
     def optimize(self, cleanup_older_than: int = 7):
         threshold = datetime.now(tz=timezone.utc) - timedelta(days=cleanup_older_than)
-        for table in self.id_keys:
-            expr = _CLEANUP_OLD_SQL.format(table=table)
-            with self.pool.connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(expr, {"threshold": threshold})
+        with self.pool.connection() as conn:
+            [conn.execute(_CLEANUP_OLD_SQL.format(table=table), {"threshold": threshold}) for table in self.id_keys]
 
     def close(self):
-        # Signal writer thread to shut down
-        [
-            self.write_queue.put_nowait(None) for _ in range(5)
-        ]  # Multiple signal as safety
-        self.writer_thread.join()
+        # # Signal writer thread to shut down
+        # [
+        #     self.write_queue.put_nowait(None) for _ in range(5)
+        # ]  # Multiple signal as safety
+        # self.writer_thread.join()
         self.pool.close()
 
-    def _run_write(self):
-        """Background worker that processes queued write operations in batches."""
-        while True:
-            item = self.write_queue.get()
-            if not item:
-                break
+    # def _run_write(self):
+    #     """Background worker that processes queued write operations in batches."""
+    #     while True:
+    #         item = self.write_queue.get()
+    #         if not item:
+    #             break
 
-            table, rows = item
-            work_batch = {table: rows}
-            while not self.write_queue.empty():
-                item = self.write_queue.get_nowait()
-                if not item:
-                    break
+    #         table, rows = item
+    #         work_batch = {table: rows}
+    #         while not self.write_queue.empty():
+    #             item = self.write_queue.get_nowait()
+    #             if not item:
+    #                 break
 
-                table, rows = item
-                if table in work_batch:
-                    work_batch[table].extend(rows)
-                else:
-                    work_batch[table] = rows
+    #             table, rows = item
+    #             if table in work_batch:
+    #                 work_batch[table].extend(rows)
+    #             else:
+    #                 work_batch[table] = rows
 
-            with self.pool.connection() as conn:
-                with conn.cursor(binary=True) as cur:
-                    for table, rows in work_batch.items():
-                        list(ThreadPoolExecutor().map(
-                            lambda chunk: cur.execute(
-                                _insert_state_multivalues_sql(table, len(chunk)),
-                                list(chain.from_iterable(chunk)),
-                            ),
-                            batched(rows, 2048)
-                        ))
+    #         with self.pool.connection() as conn:
+    #             with conn.cursor(binary=True) as cur:
+    #                 for table, rows in work_batch.items():
+    #                     list(ThreadPoolExecutor().map(
+    #                         lambda chunk: cur.execute(
+    #                             _insert_state_multivalues_sql(table, len(chunk)),
+    #                             list(chain.from_iterable(chunk)),
+    #                         ),
+    #                         batched(rows, 2048)
+    #                     ))
 
 
 class AsyncStateCache(AsyncStateCacheBase):
@@ -166,24 +175,25 @@ class AsyncStateCache(AsyncStateCacheBase):
             for tab, setting in table_settings.items()
             if "id_key" in setting
         }
-        self.write_queue = None
-        self.write_task = None
+        # self.write_queue = None
+        # self.write_task = None
 
     async def _init_db(self):
-        await _execute_async(self.pool, _create_state_tables_sql(self.table_settings))
+        # await _execute_async(self.pool, _create_state_tables_sql(self.table_settings))
+        async with self.pool.connection() as conn:
+            await conn.execute(_create_state_tables_sql(self.table_settings))
 
     async def __aenter__(self):
         self.pool = AsyncConnectionPool(
             self.conn_str,
-            min_size=4,
             max_size=64,
             timeout=TIMEOUT,
             max_idle=TIMEOUT,
             num_workers=os.cpu_count() or 1,
         )
         await self.pool.open()
-        self.write_queue = asyncio.Queue()
-        self.write_task = asyncio.create_task(self._run_write())
+        # self.write_queue = asyncio.Queue()
+        # self.write_task = asyncio.create_task(self._run_write())
         await self._init_db()
         return self
 
@@ -200,7 +210,16 @@ class AsyncStateCache(AsyncStateCacheBase):
         if not rows:
             return
 
-        await self.write_queue.put((object_type, rows))
+        # await self.write_queue.put((object_type, rows))
+        async with self.pool.connection() as conn:
+            res = await asyncio.gather(*(
+                conn.execute(
+                    _insert_state_multivalues_sql(object_type, len(chunk)),
+                    list(chain.from_iterable(chunk)),
+                )
+                for chunk in batched(rows, BATCH_SIZE)
+            ))
+            return sum(item.rowcount for item in res)
 
     async def get(
         self,
@@ -232,80 +251,77 @@ class AsyncStateCache(AsyncStateCacheBase):
         for table in self.id_keys:
             expr = _CLEANUP_OLD_SQL.format(table=table)
             async with self.pool.connection() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute(expr, {"threshold": threshold})
+                await conn.execute(expr, {"threshold": threshold})
 
     async def close(self):
         # Signal writer task to shut down
-        [self.write_queue.put_nowait(None) for _ in range(5)]
-        if self.write_task:
-            await self.write_task
+        # [self.write_queue.put_nowait(None) for _ in range(5)]
+        # if self.write_task:
+        #     await self.write_task
         await self.pool.close()
 
-    async def _run_write(self):
-        """Background worker that processes queued write operations in batches."""
-        while True:
-            item = await self.write_queue.get()
-            if not item:
-                break
+    # async def _run_write(self):
+    #     """Background worker that processes queued write operations in batches."""
+    #     while True:
+    #         item = await self.write_queue.get()
+    #         if not item:
+    #             break
 
-            table, rows = item
-            work_batch = {table: rows}
-            while not self.write_queue.empty():
-                item = self.write_queue.get_nowait()
-                if not item:
-                    break
+    #         table, rows = item
+    #         work_batch = {table: rows}
+    #         while not self.write_queue.empty():
+    #             item = self.write_queue.get_nowait()
+    #             if not item:
+    #                 break
 
-                table, rows = item
-                if table in work_batch:
-                    work_batch[table].extend(rows)
-                else:
-                    work_batch[table] = rows
+    #             table, rows = item
+    #             if table in work_batch:
+    #                 work_batch[table].extend(rows)
+    #             else:
+    #                 work_batch[table] = rows
 
-            # await _copy_insert_state_rows_async(self.pool, work_batch)
-            async with self.pool.connection() as conn:
-                async with conn.cursor(binary=True) as cur:
-                    for table, rows in work_batch.items():                        
-                        await asyncio.gather(*(
-                            cur.execute(
-                                _insert_state_multivalues_sql(table, len(chunk)),
-                                list(chain.from_iterable(chunk)),
-                            )
-                            for chunk in batched(rows, 2048)
-                        ))
-
-
-def _execute(pool, expr: str, rows=None):
-    with pool.connection() as conn:
-        with conn.cursor(binary=bool(rows)) as cur:
-            cur.executemany(expr, rows) if rows else cur.execute(expr)
-            total = cur.rowcount
-    return total
+    #         # await _copy_insert_state_rows_async(self.pool, work_batch)
+    #         async with self.pool.connection() as conn:
+    #             async with conn.cursor(binary=True) as cur:
+    #                 for table, rows in work_batch.items():                        
+    #                     await asyncio.gather(*(
+    #                         cur.execute(
+    #                             _insert_state_multivalues_sql(table, len(chunk)),
+    #                             list(chain.from_iterable(chunk)),
+    #                         )
+    #                         for chunk in batched(rows, 2048)
+    #                     ))
 
 
-async def _execute_async(pool, expr: str, rows=None):
-    async with pool.connection() as conn:
-        async with conn.cursor(binary=bool(rows)) as cur:
-            if rows:
-                await cur.executemany(expr, rows)
-            else:
-                await cur.execute(expr)
-            total = cur.rowcount
-    return total
+# def _execute(pool, expr: str, rows=None):
+#     with pool.connection() as conn:
+#         with conn.cursor(binary=bool(rows)) as cur:
+#             cur.executemany(expr, rows) if rows else cur.execute(expr)
+#             total = cur.rowcount
+#     return total
+
+
+# async def _execute_async(pool, expr: str, rows=None):
+#     async with pool.connection() as conn:
+#         async with conn.cursor(binary=bool(rows)) as cur:
+#             if rows:
+#                 await cur.executemany(expr, rows)
+#             else:
+#                 await cur.execute(expr)
+#             total = cur.rowcount
+#     return total
 
 
 def _read(pool, expr: str, params=None):
     with pool.connection() as conn:
-        with conn.cursor(binary=bool(params)) as cur:
-            rows = cur.execute(expr, params).fetchall()
+        rows = conn.execute(expr, params, binary=True).fetchall()
     return [row[0] for row in rows]
 
 
 async def _read_async(pool, expr: str, params=None):
     async with pool.connection() as conn:
-        async with conn.cursor(binary=bool(params)) as cur:
-            result = await cur.execute(expr, params)
-            rows = await result.fetchall()
+        result = await conn.execute(expr, params, binary=True)
+        rows = await result.fetchall()
     return [row[0] for row in rows]
 
 

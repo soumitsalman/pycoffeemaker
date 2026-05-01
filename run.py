@@ -6,6 +6,7 @@ from datetime import datetime as dt
 
 from dotenv import load_dotenv
 
+LIMIT = 5000
 EMBEDDER_CONTEXT_LEN = 512
 EXTRACTOR_CONTEXT_LEN = 4096
 DIGESTOR_CONTEXT_LEN = 4096
@@ -54,6 +55,7 @@ parser.add_argument("--batch_size", type=int, help="Batch size for processing")
 parser.add_argument("--embedder_batch_size", type=int, help="Batch size for processing")
 parser.add_argument("--extractor_batch_size", type=int, help="Batch size for processing")
 parser.add_argument("--digestor_batch_size", type=int, help="Batch size for processing")
+parser.add_argument("--limit", type=int, help="Max number of items per run")
 parser.add_argument(
     "--mode",
     type=str,
@@ -78,6 +80,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     mode = args.mode or os.getenv("MODE")
     batch_size = int(args.batch_size or os.getenv("BATCH_SIZE") or os.cpu_count())
+    limit = int(args.limit or LIMIT)
     
     cache_path = os.getenv("PROCESSING_CACHE")
     cache_settings = {
@@ -109,8 +112,7 @@ if __name__ == "__main__":
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
             ),
         )
-        while orch.run_embedder(batch_size=batch_size):
-            # keep running it while there is something to process
+        while orch.run_embedder(batch_size=batch_size, limit=limit):
             pass
 
     elif mode == "CLASSIFIER":
@@ -128,8 +130,11 @@ if __name__ == "__main__":
         )
 
         orch = Indexer(cache=cache_store, cls_cache=cls_cache)
-        orch.run_classifier(batch_size=batch_size)
-        orch.run_clusterer(batch_size=batch_size)
+        while (
+            orch.run_classifier(batch_size=batch_size, limit=limit) + \
+            orch.run_clusterer(batch_size=batch_size, limit=limit)
+        ):
+            pass
         cls_cache.close()
 
     # elif mode == "CLUSTERER":
@@ -148,8 +153,7 @@ if __name__ == "__main__":
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
             ),
         )
-        while orch.run_extractor(batch_size=batch_size):
-            # keep running it while there is something to process
+        while orch.run_extractor(batch_size=batch_size, limit=limit):
             pass
 
     elif mode == "DIGESTOR":
@@ -162,8 +166,7 @@ if __name__ == "__main__":
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
         )
-        while orch.run_digestor(batch_size=batch_size):
-            # keep running it while there is something to process
+        while orch.run_digestor(batch_size=batch_size, limit=limit):
             pass
 
     # TODO: better naming
@@ -186,8 +189,12 @@ if __name__ == "__main__":
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
         )
-        orch.run_embedder(batch_size=int(args.embedder_batch_size or batch_size))
-        orch.run_extractor(batch_size=int(args.extractor_batch_size or batch_size))
+        
+        while (
+            orch.run_embedder(batch_size=int(args.embedder_batch_size or batch_size), limit=limit) + \
+            orch.run_extractor(batch_size=int(args.extractor_batch_size or batch_size), limit=limit)
+        ):
+            pass
         # orch.run_digestor(batch_size=int(args.digestor_batch_size or batch_size))        
 
     elif mode == "PORTER":
@@ -206,10 +213,7 @@ if __name__ == "__main__":
         db = create_client(**db_kwargs)
 
         orch = Porter(cache=cache_store)
-        while orch.hydrate_beansacks(db, batch_size):
-            # keep running it while there is something to port
-            pass
-
+        orch.hydrate_beansacks(db, batch_size, limit)
         db.close()
 
     else:

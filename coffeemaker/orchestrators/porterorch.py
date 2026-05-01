@@ -6,12 +6,13 @@ from itertools import batched, chain
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 from coffeemaker.processingcache.base import StateCacheBase
-from pybeansack import Beansack, Bean, Chatter, Publisher, now
+from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
 from pybeansack.models import K_BASE_URL, K_CONTENT, K_URL
 from icecream import ic
 
 log = logging.getLogger("porterworker")
 
+LIMIT=5000
 BATCH_SIZE = 256
 MAX_WORKERS = os.cpu_count()*os.cpu_count()
 
@@ -46,46 +47,47 @@ class Porter:
     def __init__(self, cache: StateCacheBase):
         self.cache = cache
 
-    def hydrate_beansacks(self, db: Beansack, batch_size: int = BATCH_SIZE):
+    def hydrate_beansacks(self, db: Beansack, batch_size: int = BATCH_SIZE, limit: int = LIMIT):
         """Ports beans, publishers and related beans to 1 or more Beansacks"""
         total_ported = 0
 
         # move beans
-        if beans := self.cache.get(
-            "beans",
+        while beans := self.cache.get(
+            BEANS,
             states=["collected", "embedded", "classified", "extracted"],
             exclude_states=["beansacked"],
+            # limit=LIMIT
         ):  
             beans = prep_bean_items_for_beansack(beans)
             log.info("porting", extra={"source": "portable:beans", "num_items": len(beans)})  
             count = sum(ThreadPoolExecutor(max_workers=MAX_WORKERS).map(db.store_beans, batched([Bean(**b) for b in beans], batch_size)))
             log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
-            self.cache.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
+            self.cache.set(BEANS, "beansacked", [{K_URL: b[K_URL]} for b in beans])
             total_ported += count
 
         # related beans go to a separate table
-        if related_beans := self.cache.get(
-            "beans", states="clustered", exclude_states="related_beansacked"
+        while related_beans := self.cache.get(
+            BEANS, states="clustered", exclude_states="related_beansacked",
         ):
             log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
             count = sum(ThreadPoolExecutor(max_workers=MAX_WORKERS).map(db.store_related, batched(unpack_related(related_beans), batch_size)))
             log.info("ported", extra={"source": "beansack:related_beans", "num_items": count})
-            self.cache.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
+            self.cache.set(BEANS, "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
             total_ported += count
 
         # move the publishers
         if publishers := self.cache.get(
-            "publishers", states="collected", exclude_states="beansacked"
+            PUBLISHERS, states="collected", exclude_states="beansacked"
         ):
             log.info("porting", extra={"source": "portable:publishers", "num_items": len(publishers)})
             count = db.store_publishers([Publisher(**pub) for pub in publishers])
             log.info("ported",extra={"source": "beansack:publishers", "num_items": count})
-            self.cache.set("publishers", "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
+            self.cache.set(PUBLISHERS, "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
             total_ported += count
 
         # move the publishers
         if chatters := self.cache.get(
-            "chatters", states="collected", exclude_states="beansacked"
+            CHATTERS, states="collected", exclude_states="beansacked"
         ):
             # save the ids for cache resetting
             ids = [{"id": pkg['id']} for pkg in chatters]
@@ -93,7 +95,7 @@ class Porter:
             log.info("porting", extra={"source": "portable:chatters", "num_items": len(chatters)})
             count = db.store_chatters([Chatter(**ch) for ch in chatters])
             log.info("ported",extra={"source": "beansack:chatters", "num_items": count})
-            self.cache.set("chatters", "beansacked", ids)
+            self.cache.set(CHATTERS, "beansacked", ids)
             total_ported += count
         
         db.optimize()
