@@ -9,7 +9,7 @@ load_dotenv()
 
 from icecream import ic
 from pybeansack.models import *
-from pybeansack import BEANS, PUBLISHERS, K_URL, K_BASE_URL
+from pybeansack import BEANS, CHATTERS, PUBLISHERS, K_URL, K_BASE_URL
 
 def create_classification_embeddings():
     import yaml
@@ -49,14 +49,17 @@ def create_classification_files():
 def create_processing_cache(db_path: str):
     """Seed cache with classification embeddings"""
 
-    from coffeemaker.processingcache.firecache import ClassificationCache, StateCache
-    # StateCache(
-    #     db_path+"/statestore", 
-    #     {
-    #         BEANS: {"id_key": K_URL},
-    #         PUBLISHERS: {"id_key": K_BASE_URL},
-    #     }
-    # ).close()
+    from coffeemaker.processingcache.pgcache import StateCache
+    StateCache(
+        db_path, 
+        {
+            BEANS: {"id_key": K_URL},
+            PUBLISHERS: {"id_key": K_BASE_URL},
+            CHATTERS: {"id_key": "id"}
+        }
+    ).close()
+
+    from coffeemaker.processingcache.firecache import ClassificationCache
     cls_cache = ClassificationCache(
         db_path+"/clsstore", 
         {

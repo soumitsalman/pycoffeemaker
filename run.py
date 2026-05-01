@@ -85,8 +85,8 @@ if __name__ == "__main__":
         PUBLISHERS: {"id_key": K_BASE_URL},
         CHATTERS: {"id_key": "id"}
     }
-    cache_store = StateCache(cache_path+"/statestore", cache_settings)
-    async_cache_store = AsyncStateCache(cache_path+"/statestore", cache_settings)    
+    cache_store = StateCache(cache_path, cache_settings)
+    async_cache_store = AsyncStateCache(cache_path, cache_settings)    
 
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Collector
@@ -206,7 +206,7 @@ if __name__ == "__main__":
         db = create_client(**db_kwargs)
 
         orch = Porter(cache=cache_store)
-        while orch.hydrate_beansacks(db):
+        while orch.hydrate_beansacks(db, batch_size):
             # keep running it while there is something to port
             pass
 

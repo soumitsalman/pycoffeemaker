@@ -528,7 +528,7 @@ class ClassificationCache(ClassificationCacheBase):
         }
 
         Path(self.db_path).mkdir(parents=True, exist_ok=True)
-        zvec.init(query_threads=os.cpu_count(), optimize_threads=max(1, os.cpu_count()>>1))
+        zvec.init(query_threads=os.cpu_count(), optimize_threads=os.cpu_count())
         self.collections: dict[str, zvec.Collection] = {}
         for tab, setting in table_settings.items():            
             path = os.path.join(self.db_path, tab)

@@ -46,7 +46,7 @@ class Porter:
     def __init__(self, cache: StateCacheBase):
         self.cache = cache
 
-    def hydrate_beansacks(self, db: Beansack):
+    def hydrate_beansacks(self, db: Beansack, batch_size: int = BATCH_SIZE):
         """Ports beans, publishers and related beans to 1 or more Beansacks"""
         total_ported = 0
 
@@ -58,7 +58,7 @@ class Porter:
         ):  
             beans = prep_bean_items_for_beansack(beans)
             log.info("porting", extra={"source": "portable:beans", "num_items": len(beans)})  
-            count = sum(ThreadPoolExecutor().map(db.store_beans, batched([Bean(**b) for b in beans], BATCH_SIZE)))
+            count = sum(ThreadPoolExecutor(max_workers=MAX_WORKERS).map(db.store_beans, batched([Bean(**b) for b in beans], batch_size)))
             log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
             self.cache.set("beans", "beansacked", [{K_URL: b[K_URL]} for b in beans])
             total_ported += count
@@ -68,7 +68,7 @@ class Porter:
             "beans", states="clustered", exclude_states="related_beansacked"
         ):
             log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
-            count = sum(ThreadPoolExecutor().map(db.store_related, batched(unpack_related(related_beans), BATCH_SIZE)))
+            count = sum(ThreadPoolExecutor(max_workers=MAX_WORKERS).map(db.store_related, batched(unpack_related(related_beans), batch_size)))
             log.info("ported", extra={"source": "beansack:related_beans", "num_items": count})
             self.cache.set("beans", "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
             total_ported += count
