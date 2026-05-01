@@ -80,14 +80,16 @@ class StateCache(StateCacheBase):
 
         # self.write_queue.put_nowait((object_type, rows))
         with self.pool.connection() as conn:
-            res = list(ThreadPoolExecutor().map(
-                lambda chunk: conn.execute(
-                    _insert_state_multivalues_sql(object_type, len(chunk)),
-                    list(chain.from_iterable(chunk)),
-                ),
-                batched(rows, BATCH_SIZE)
-            ))
-            return sum(item.rowcount for item in res)
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
+                res = list(exec.map(
+                    lambda chunk: conn.execute(
+                        _insert_state_multivalues_sql(object_type, len(chunk)),
+                        list(chain.from_iterable(chunk)),
+                    ),
+                    batched(rows, BATCH_SIZE)
+                ))
+            if res: 
+                return sum(item.rowcount for item in res)
 
     def get(
         self,
