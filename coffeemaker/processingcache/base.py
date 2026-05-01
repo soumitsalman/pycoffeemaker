@@ -14,7 +14,7 @@ logset = lambda total: log.info("state set", extra={"num_items": total, "source"
 
 class StateCacheBase(ABC):
     @abstractmethod
-    def set(self, object_type: str, state: str, items: list[dict[str, Any]] | list[BaseModel],):
+    def set(self, object_type: str, state: str, items: list[dict[str, Any]]):
         raise NOT_IMPLEMENTED
     
     @abstractmethod

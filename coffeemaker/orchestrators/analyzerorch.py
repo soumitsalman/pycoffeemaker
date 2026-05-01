@@ -234,7 +234,7 @@ class Indexer:
         total = 0
         for updates in self.extract_beans(beans, batch_size):
             count = self.cache.set(BEANS, "extracted", updates)
-            total += (count or len(updates))
+            total += (ic(count) or len(updates))
         log.info("total extracted", extra={"source": run_id(), "num_items": total})
         return total
 
