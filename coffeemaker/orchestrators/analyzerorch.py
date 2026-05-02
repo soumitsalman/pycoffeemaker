@@ -149,17 +149,10 @@ class Indexer:
                                 ents.stock_tickers,
                             ),
                             K_REGIONS: ents.regions
-                        }            
+                        } if ents else {K_URL:b[K_URL]}         
                         for b, ents in zip(chunk, extractions)
-                        if ents
                     ])
-                    log.info(
-                        "extracted",
-                        extra={
-                            "source": chunk[0][K_SOURCE],
-                            "num_items": len(extractions),
-                        },
-                    )
+                    log.info("extracted", extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)})
                     yield updates
                 except Exception:
                     log.error(
@@ -199,14 +192,14 @@ class Indexer:
         total = 0
         for updates in self.embed_beans(beans, batch_size):
             count = self.cache.set(BEANS, "embedded", updates)
-            total += (count or len(updates))
+            total += (ic(count) or len(updates))
         log.info("total embedded", extra={"source": run_id(), "num_items": total})
         return total
 
     @log_runtime(logger=log)
     def run_classifier(self, batch_size: int = BATCH_SIZE, limit: int = LIMIT):
         # NOTE: this runs both classifier and clustering
-        beans = self.cache.get(BEANS, states="embedded", exclude_states="classified", limit=LIMIT)
+        beans = self.cache.get(BEANS, states="embedded", exclude_states="classified", limit=limit)
         log.info("starting classifier", extra={"source": run_id(), "num_items": len(beans)})
         total = 0        
         for updates in self.classify_beans([b for b in beans if K_EMBEDDING in b], batch_size):
@@ -218,7 +211,7 @@ class Indexer:
     @log_runtime(logger=log)
     def run_clusterer(self, batch_size: int = BATCH_SIZE, limit: int = LIMIT):
         # NOTE: this runs both classifier and clustering
-        beans = self.cache.get(BEANS, states="embedded", exclude_states="clustered", limit=LIMIT)
+        beans = self.cache.get(BEANS, states="embedded", exclude_states="clustered", limit=limit)
         log.info("starting clusterer", extra={"source": run_id(), "num_items": len(beans)})
         total = 0        
         for updates in self.cluster_beans([b for b in beans if K_EMBEDDING in b], batch_size):
@@ -229,7 +222,7 @@ class Indexer:
 
     @log_runtime(logger=log)
     def run_extractor(self, batch_size: int = BATCH_SIZE, limit: int = LIMIT):
-        beans = self.cache.get(BEANS, states="collected", exclude_states="extracted", limit=LIMIT)
+        beans = self.cache.get(BEANS, states="collected", exclude_states="extracted", limit=limit)
         log.info("starting extractor", extra={"source": run_id(), "num_items": len(beans)})
         total = 0
         for updates in self.extract_beans(beans, batch_size):
@@ -240,7 +233,7 @@ class Indexer:
 
     @log_runtime(logger=log)
     def run_digestor(self, batch_size: int = BATCH_SIZE, limit: int = LIMIT):
-        beans = self.cache.get(BEANS, states="collected", exclude_states="digested", limit=LIMIT)
+        beans = self.cache.get(BEANS, states="collected", exclude_states="digested", limit=limit)
         log.info("starting digestor", extra={"source": run_id(), "num_items": len(beans)})
         total = 0
         for updates in self.digest_beans(beans, batch_size):
