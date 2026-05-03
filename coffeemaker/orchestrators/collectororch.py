@@ -206,13 +206,19 @@ class Collector:
 
     async def _cache_beans(self, beans: list[dict]):
         count = await self.cache.set("beans", "collected", beans)
-        if count is not None: log.info("cached beans", extra={"source": beans[0]["source"], "num_items": count})
-        else: log.info("caching beans", extra={"source": beans[0]["source"], "num_items": len(beans)})
+        if count is not None: 
+            log.info("cached beans", extra={"source": beans[0]["source"], "num_items": count})
+            self.beans_collected += count
+        else: 
+            log.info("caching beans", extra={"source": beans[0]["source"], "num_items": len(beans)})
         
     async def _cache_publishers(self, publishers: list[dict]):
         count = await self.cache.set("publishers", "collected", publishers)
-        if count is not None: log.info("cached publishers", extra={"source": publishers[0]["source"], "num_items": count})
-        else: log.info("caching publishers", extra={"source": publishers[0]["source"], "num_items": len(publishers)})
+        if count is not None: 
+            log.info("cached publishers", extra={"source": publishers[0]["source"], "num_items": count})
+            self.publishers_collected += count
+        else: 
+            log.info("caching publishers", extra={"source": publishers[0]["source"], "num_items": len(publishers)})
 
     async def _cache_chatters(self, chatters: list[dict]):
         pkg = [{"id": str(uuid.uuid4()), "chatters": chatters}]
@@ -272,12 +278,8 @@ class Collector:
         self.run_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.beans_collected, self.publishers_collected = 0, 0
 
-        log.info(
-            "starting collectors",
-            extra={"source": self.run_id, "num_items": batch_size},
-        )
+        log.info("starting collectors", extra={"source": self.run_id, "num_items": 1})
         async with (
-            self.cache,
             APICollectorAsync(batch_size) as self.apicollector,
             AsyncWebScraper(batch_size) as self.webscraper,
         ):
@@ -287,3 +289,6 @@ class Collector:
                     for func, source in self._create_collection_funcs(sources)
                 )
             )
+        log.info("total collected: beans", extra={"source": self.run_id, "num_items": self.beans_collected})
+        log.info("total collected: publishers", extra={"source": self.run_id, "num_items": self.publishers_collected})
+        
