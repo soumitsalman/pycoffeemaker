@@ -67,7 +67,7 @@ class Indexer:
             self.extractor = digestors.NamedEntityExtractor(
                 model_path=extractor_path,
                 context_len=extractor_context_len,
-                threshold=0.5,
+                threshold=0.35,
             )
         if digestor_path:
             self.digestor = digestors.from_path(
