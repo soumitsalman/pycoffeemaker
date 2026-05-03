@@ -59,7 +59,8 @@ restore_pg() {
   echo "=== [FINISHED] PG State Cache Restore ==="
 }
 
-restore_zvec &
-restore_pg &
-
-wait
+# disabling pg restore - its unimportant
+# restore_zvec &
+# restore_pg &
+# wait
+restore_zvec
