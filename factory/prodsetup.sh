@@ -2,6 +2,7 @@ set -e
 
 echo "=== Updating package lists and installing dependencies ==="
 sudo apt update && sudo apt upgrade -y
+sudo apt install -y build-essential python3.12-venv python3.12-dev
 
 echo "=== Installing Go and s5cmd ==="
 sudo snap install go --classic
