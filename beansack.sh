@@ -45,16 +45,18 @@ run_extractor() {
     $PYTHON $RUN --mode EXTRACTOR --batch_size $EXTRACTOR_BATCH_SIZE
 }
 
-run_classifier() {
-    $PYTHON $RUN --mode CLASSIFIER --batch_size $CLASSIFIER_BATCH_SIZE
-
+backup_clscache() {
     echo "=== [STARTING] ZVEC Classification Cache Backup ==="
     local dump_file="$WORKING_DIR/.cache/clscache.tar.gz"
     tar -czf "$dump_file" "$LOCAL_CLSCACHE"
     "$S5CMD_BIN" "${S5CMD_ARGS[@]}" cp "$dump_file" "$BACKUP_BUCKET/"
     rm -f "$dump_file"
     echo "=== [FINISHED] ZVEC Classification Cache Backup ==="
-    
+}
+
+run_classifier() {
+    $PYTHON $RUN --mode CLASSIFIER --batch_size $CLASSIFIER_BATCH_SIZE
+    backup_clscache
 }
 
 run_porter() {
