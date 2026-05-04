@@ -68,15 +68,22 @@ run_porter() {
 # extractor and classifier starts parallelly after embedder finishes
 # porter starts after extractor without waiting for classifier 
 # since the main work for classifier is finished early and most of the time it spends on optimization and backup
-run_embedder
+for round in 1 2; do
+    echo "=== [STARTING] Round $round/2 ==="
 
-run_extractor &
-extractor_pid=$!
+    run_embedder
 
-run_classifier &
+    run_extractor &
+    extractor_pid=$!
 
-wait "$extractor_pid"
-run_porter
+    run_classifier &
+    wait "$extractor_pid"
+    
+    run_porter &
+
+    echo "=== [FINISHED] Round $round/2 ==="
+done
+
 wait
 
 $PYTHON $WORKING_DIR/machine_ops.py --action stop --instance tensordock
