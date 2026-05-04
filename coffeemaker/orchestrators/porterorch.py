@@ -12,7 +12,7 @@ from icecream import ic
 
 log = logging.getLogger("porterworker")
 
-MAX_ITEMS = 1024
+MAX_ITEMS = 512
 MAX_WORKERS = os.cpu_count()*os.cpu_count()
 
 def unpack_related(beans: list[dict]):
