@@ -16,7 +16,7 @@ def shutdown_td(instance_id, api_key):
 
 def start_td(instance_id, api_key):
     URL = "https://dashboard.tensordock.com/api/v2/instances/{id}/start"
-    res = requests.post(URL.format(instance_id), headers={"Authorization": "Bearer "+api_key})
+    res = requests.post(URL.format(id=instance_id), headers={"Authorization": "Bearer "+api_key})
     res.raise_for_status()
     print(res)
 
