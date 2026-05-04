@@ -96,6 +96,6 @@ class Porter:
             self.cache.set(CHATTERS, "beansacked", ids)
             total_ported += count
         
-        self.db.optimize()
+        db.optimize()
         log.info("hydration complete", extra={"source": "beansack", "num_items": total_ported})
         return total_ported
