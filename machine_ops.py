@@ -9,16 +9,17 @@ load_dotenv(CURR_DIR + "/.env")
 
 # @retry(tries=3, delay=60)
 def shutdown_td(instance_id, api_key):
-    URL = "https://dashboard.tensordock.com/api/v2/instances/{id}/stop"
-    res = requests.post(URL.format(instance_id), headers={"Authorization": "Bearer "+api_key})
+    url = f"https://dashboard.tensordock.com/api/v2/instances/{instance_id}/stop"
+    res = requests.post(url, headers={"Authorization": f"Bearer {api_key}"})
     res.raise_for_status()
-    print(res)
+    print(res.text)
+
 
 def start_td(instance_id, api_key):
-    URL = "https://dashboard.tensordock.com/api/v2/instances/{id}/start"
-    res = requests.post(URL.format(id=instance_id), headers={"Authorization": "Bearer "+api_key})
+    url = f"https://dashboard.tensordock.com/api/v2/instances/{instance_id}/start"
+    res = requests.post(url, headers={"Authorization": f"Bearer {api_key}"})
     res.raise_for_status()
-    print(res)
+    print(res.text)
 
 def run(instance, action):
     if instance.lower() == "tensordock":
