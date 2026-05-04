@@ -74,10 +74,11 @@ backup_pg() {
   echo "=== [FINISHED] PG State Cache Backup ==="
 }
 
-backup_zvec &
-backup_pg &
+# backup_zvec &
+# backup_pg &
+# wait
 
-wait
+backup_zvec
 
 
 

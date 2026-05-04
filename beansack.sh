@@ -79,4 +79,4 @@ wait "$extractor_pid"
 run_porter
 wait
 
-$PYTHON $WORKING_DIR/shutdown.py
+$PYTHON $WORKING_DIR/machine_ops.py --action stop --instance tensordock

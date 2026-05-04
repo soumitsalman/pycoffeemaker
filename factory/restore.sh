@@ -1,5 +1,11 @@
 set -euo pipefail
 
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+    WORKING_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+else
+    WORKING_DIR="$(pwd -P)"
+fi
+
 # --- ARGS / DEFAULTS ---
 PG_PCACHE="postgresql://postgres:local@localhost:5432/statestore"
 
@@ -40,14 +46,13 @@ fi
 S5CMD_BIN="$HOME/go/bin/s5cmd"
 S5CMD_ARGS=(--credentials-file "$HOME/.aws/credentials" --endpoint-url https://t3.storage.dev)
 BACKUP_BUCKET="s3://cafecito-archives-new/processingcache"
-WORK_DIR="$HOME/.cache/pycoffeemaker"
-mkdir -p "${WORK_DIR}"
+
 
 restore_zvec() {
   echo "=== [STARTING] ZVEC Classification Cache Restore ==="
-  "$S5CMD_BIN" "${S5CMD_ARGS[@]}" cp "$BACKUP_BUCKET/clscache.tar.gz" "$WORK_DIR/"
-  tar -xzf "$WORK_DIR/clscache.tar.gz"
-  rm "$WORK_DIR/clscache.tar.gz"
+  "$S5CMD_BIN" "${S5CMD_ARGS[@]}" cp "$BACKUP_BUCKET/clscache.tar.gz" "$WORKING_DIR/.cache/"
+  tar -xzf "$WORKING_DIR/.cache/clscache.tar.gz" -C "$WORKING_DIR/.cache/"
+  rm "$WORKING_DIR/.cache/clscache.tar.gz"
   echo "=== [FINISHED] ZVEC Classification Cache Restore ==="
 }
 
