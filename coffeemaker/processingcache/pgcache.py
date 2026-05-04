@@ -184,7 +184,7 @@ class AsyncStateCache(AsyncStateCacheBase):
                 )
                 for chunk in batched(rows, MAX_WRITE_ITEMS)
             ))
-            conn.commit()
+            await conn.commit()
             return sum(item.rowcount for item in res)
 
     async def get(
