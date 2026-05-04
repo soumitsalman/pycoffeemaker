@@ -56,7 +56,6 @@ backup_clscache() {
 
 run_classifier() {
     $PYTHON $RUN --mode CLASSIFIER --batch_size $CLASSIFIER_BATCH_SIZE
-    backup_clscache
 }
 
 run_porter() {
@@ -74,16 +73,13 @@ for round in 1 2; do
     run_embedder
 
     run_extractor &
-    extractor_pid=$!
-
     run_classifier &
-    wait "$extractor_pid"
-    
-    run_porter &
-
+    wait
     echo "=== [FINISHED] Round $round/2 ==="
 done
 
+run_porter &
+backup_clscache &
 wait
 
 $PYTHON $WORKING_DIR/machine_ops.py --action stop --instance tensordock
