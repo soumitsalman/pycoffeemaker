@@ -1,3 +1,4 @@
+pyyaml
 retry
 requests
 beautifulsoup4
@@ -7,6 +8,11 @@ tldextract
 praw
 asyncpraw
 readability-lxml
-pyyaml
 icecream
 python-dotenv
+python-slugify
+msgpack
+textcase
+pyturso
+zvec
+firebird-driver

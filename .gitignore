@@ -13,7 +13,6 @@
 .n8n
 .logs
 .tmp
-.aws
 .beansackv2
 .config
 .postgresql
@@ -23,6 +22,8 @@
 .delete-models
 .deploy.sh
 .s3upload.sh
+.ruff_cache
+zvec
 __azurite*
 __queuestorage__
 __pycache__

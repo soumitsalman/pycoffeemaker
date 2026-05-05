@@ -86,23 +86,22 @@ if __name__ == "__main__":
         PUBLISHERS: {"id_key": K_BASE_URL},
         CHATTERS: {"id_key": "id"}
     }
-    cache_store = StateCache(cache_path, cache_settings)
+    cache = StateCache(cache_path, cache_settings)
+    async_cache = AsyncStateCache(cache_path, cache_settings)
 
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Collector
-        async def run_collector():
-            async with AsyncStateCache(cache_path, cache_settings) as cache:
-                await Collector(cache=cache).run(
-                    os.getenv("COLLECTOR_SOURCES", "./factory/feeds.yaml"),
-                    batch_size=batch_size,
-                )
-        asyncio.run(run_collector())
+        collector = Collector(cache=async_cache)       
+        asyncio.run(collector.run(
+            os.getenv("COLLECTOR_SOURCES", f"{CURR_DIR}/../../factory/feeds.yaml"),
+            batch_size=batch_size,
+        ))
 
     elif mode == "EMBEDDER":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
         orch = Indexer(
-            cache=cache_store,
+            cache=cache,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
@@ -116,14 +115,14 @@ if __name__ == "__main__":
         
         cls_cache = ClassificationCache(
             # TODO: change this later
-            os.getenv('CLASSIFICATION_CACHE', '.cache/clsstore'), 
+            os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/../../cache/clsstore'), 
             table_settings={
                 BEANS: {"id_key": K_URL, "distance_func": "l2"},
                 "categories": {"id_key": "category", "distance_func": "cosine"},
                 "sentiments": {"id_key": "sentiment", "distance_func": "cosine"}
             }
         )
-        orch = Indexer(cache=cache_store, cls_cache=cls_cache)
+        orch = Indexer(cache=cache, cls_cache=cls_cache)
         orch.run_classifier(batch_size=batch_size)
         orch.run_clusterer(batch_size=batch_size)        
         cls_cache.close()
@@ -132,7 +131,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
         orch = Indexer(
-            cache=cache_store,
+            cache=cache,
             extractor_path=os.getenv("EXTRACTOR_PATH"),
             extractor_context_len=int(
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
@@ -144,7 +143,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.analyzerorch import Indexer
 
         orch = Indexer(
-            cache=cache_store,
+            cache=cache,
             digestor_path=os.getenv("DIGESTOR_PATH"),
             digestor_context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
@@ -166,8 +165,8 @@ if __name__ == "__main__":
             "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
         }
         db = create_client(**db_kwargs)
-        orch = Porter(cache=cache_store)
-        orch.hydrate_beansacks(db)
+        orch = Porter(cache=async_cache)
+        asyncio.run(orch.hydrate_beansacks(db))
         db.close()
 
     else:
@@ -175,5 +174,5 @@ if __name__ == "__main__":
             "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CLUSTERER."
         )
     
-    cache_store.close()
+    cache.close()
     

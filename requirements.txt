@@ -5,6 +5,7 @@ sentence-transformers
 llama-index
 gliner
 tiktoken
+pyyaml
 retry
 requests
 beautifulsoup4
@@ -15,7 +16,6 @@ praw
 asyncpraw
 readability-lxml
 icecream
-aiosqlite
 python-dotenv
 python-slugify
 msgpack

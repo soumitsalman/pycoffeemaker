@@ -8,6 +8,9 @@
 .db
 .cache
 .mongodb
+.models
+.ruff_cache
+.tmp
 .vscode
 .logs
 *.git

@@ -78,8 +78,9 @@ for round in 1 2; do
     echo "=== [FINISHED] Round $round/2 ==="
 done
 
-run_porter &
-backup_clscache &
-wait
+backup_clscache
+# run_porter &
+# backup_clscache &
+# wait
 
 $PYTHON $WORKING_DIR/machine_ops.py --action stop --instance tensordock

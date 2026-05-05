@@ -2,15 +2,15 @@
 # It is not built to run cpu/gpu intensive tasks like indexer and digestor unless they are remote/openai api
 
 # Build stage
-FROM python:3.13-slim-bookworm AS iobuilder
+# FROM python:3.13-slim-bookworm AS iobuilder
 
-WORKDIR /worker
+# WORKDIR /worker
 
-COPY coffeemaker/pybeansack/requirements.txt pybeansack-requirements.txt
-COPY requirements-io.txt requirements.txt
+# COPY pybeansack/requirements.txt pybeansack-requirements.txt
+# COPY requirements-io.txt requirements.txt
 
-RUN pip install --prefix=/pythonlibs -r pybeansack-requirements.txt
-RUN pip install --prefix=/pythonlibs -r requirements.txt
+# RUN pip install --prefix=/pythonlibs -r pybeansack-requirements.txt
+# RUN pip install --prefix=/pythonlibs -r requirements.txt
 
 # Final stage
 FROM python:3.13-slim-bookworm
@@ -18,21 +18,15 @@ FROM python:3.13-slim-bookworm
 # Set the working directory
 WORKDIR /worker
 
-COPY --from=iobuilder /pythonlibs /usr/local
+# COPY --from=iobuilder /pythonlibs /usr/local
 COPY . .
-RUN rm -rf .models
+RUN pip install --no-cache -r pybeansack/requirements.txt
+RUN pip install --no-cache -r requirements-io.txt
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
-    # Collector stuff
-    WORDS_THRESHOLD_FOR_SCRAPING=150 \
     COLLECTOR_SOURCES=/worker/factory/feeds.yaml \
-    BATCH_SIZE=48 \
-    # Composer stuff    
-    MIN_CLUSTER_SIZE=16 \
-    MAX_CLUSTER_SIZE=128 \
-    MAX_ARTICLES=8 \    
-    COMPOSER_TOPICS=/worker/factory/composer-topics.json
+    BATCH_SIZE=48
 
 # Use ENTRYPOINT to make the container more flexible with arguments
-ENTRYPOINT ["python", "run.py"]
+ENTRYPOINT python run.py --mode $MODE
