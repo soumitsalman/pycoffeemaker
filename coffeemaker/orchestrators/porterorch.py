@@ -71,6 +71,7 @@ class Porter:
                 log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
                 await self.cache.set(BEANS, "beansacked", [{K_URL: b[K_URL]} for b in beans])
                 return count
+            return 0
 
         async def hydrate_publishers():
             if publishers := await self.cache.get(
@@ -81,6 +82,7 @@ class Porter:
                 log.info("ported",extra={"source": "beansack:publishers", "num_items": count})
                 await self.cache.set(PUBLISHERS, "beansacked", [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
                 return count
+            return 0
 
         async def hydrate_related():
             if related_beans := await self.cache.get(
@@ -91,6 +93,7 @@ class Porter:
                 log.info("ported", extra={"source": "beansack:related_beans", "num_items": count})
                 await self.cache.set(BEANS, "related_beansacked", [{K_URL: b[K_URL]} for b in related_beans])
                 return count
+            return 0
 
         async def hydrate_chatters():
             if chatters := await self.cache.get(
@@ -104,12 +107,12 @@ class Porter:
                 log.info("ported",extra={"source": "beansack:chatters", "num_items": count})
                 await self.cache.set(CHATTERS, "beansacked", ids)
                 return count
+            return 0
 
         async def hydrate_trends():
             counts = await asyncio.gather(*(hydrate_related(), hydrate_chatters()))
             await asyncio.to_thread(db.optimize)
             return sum(counts)
-
 
         async with self.cache:
             counts = await asyncio.gather(*[hydrate_beans(), hydrate_publishers(), hydrate_trends()])
