@@ -166,7 +166,7 @@ class Indexer:
                 try:
                     digests = self.digestor.run_batch([bean[K_CONTENT] for bean in chunk])
                     updates = clean_updates([
-                        {K_URL: b[K_URL], K_GIST: d.gist}
+                        {K_URL: b[K_URL], **d}
                         for b, d in zip(chunk, digests)
                         if d
                     ])
@@ -229,7 +229,7 @@ class Indexer:
 
     @log_runtime(logger=log)
     def run_digestor(self, batch_size: int = BATCH_SIZE):
-        beans = self.cache.get(BEANS, states="collected", exclude_states="digested")
+        beans = self.cache.get(BEANS, states="collected", exclude_states="digested", limit=50)
         log.info("starting digestor", extra={"source": run_id(), "num_items": len(beans)})
         total = 0
         for updates in self.digest_beans(beans, batch_size):
