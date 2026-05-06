@@ -308,6 +308,20 @@ def test_digestor_orch():
     orch.run_digestor(batch_size=16)
     cache.close()
 
+def test_porter_orch(beansack_or_cupboard):
+    from coffeemaker.orchestrators.porterorch import Porter, Cupboard
+    from coffeemaker.processingcache.pgcache import AsyncStateCache
+
+    cache_settings = {
+        BEANS: {"id_key": K_URL},
+        PUBLISHERS: {"id_key": K_BASE_URL},
+        CHATTERS: {"id_key": "id"}
+    }
+    
+    orch = Porter(cache=AsyncStateCache(os.getenv('PROCESSING_CACHE'), cache_settings))
+    if beansack_or_cupboard == "cupboard": asyncio.run(orch.hydrate_cupboard(Cupboard(".test/cupboard.db")))
+    
+
 def test_warehouse():
     from coffeemaker.collectors.collector import APICollectorAsync, parse_sources
     from coffeemaker.nlp.src import agents, embedders
@@ -558,9 +572,7 @@ parser.add_argument(
 parser.add_argument(
     "--rundigestor", action="store_true", help="Test digestor orchestrator"
 )
-parser.add_argument(
-    "--runcomposer", action="store_true", help="Test composer orchestrator"
-)
+parser.add_argument("--runporter", type=str, help="Test porter")
 parser.add_argument(
     "--runrefresher", action="store_true", help="Test refresher orchestrator"
 )
@@ -594,6 +606,7 @@ def main():
     if args.runcollector: test_collector_orch()
     if args.runembedder: test_embedder_orch()
     if args.rundigestor: test_digestor_orch()
+    if args.runporter: test_porter_orch(args.runporter)
 
     if args.cache:
         test_cache()

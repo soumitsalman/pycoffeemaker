@@ -6,8 +6,10 @@ from itertools import batched, chain
 from typing import Any, Optional
 from coffeemaker.processingcache.base import AsyncStateCacheBase
 from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
-from pybeansack.models import K_BASE_URL, K_CONTENT, K_URL
+from pybeansack.models import K_BASE_URL, K_CATEGORIES, K_CONTENT, K_CREATED, K_EMBEDDING, K_RELATED, K_SOURCE, K_TAGS, K_URL
 from icecream import ic
+
+from pybeansack.utils import VECTOR_LEN
 
 log = logging.getLogger("porterworker")
 
@@ -38,6 +40,72 @@ def merge(key, items: list[dict[str, Any]]):
 def prep_bean_items_for_beansack(beans: list[dict]):
     """Merges beans, replaces content with cdn url"""
     return merge(K_URL, beans)
+
+from grafeo import GrafeoDB
+
+
+EVENTS = "Events"
+SIGNALS = "Signals"
+REPORTS = "Reports"
+SOURCES = "Sources"
+
+distinct = lambda items: list({item.strip().lower():item for item in items}.values())
+
+class Cupboard:
+    db_path: str
+    db: GrafeoDB
+
+    def __init__(self, db_path: str):
+        self.db = GrafeoDB(db_path)
+
+    @classmethod
+    def create_db(cls, db_path: str):
+        db = GrafeoDB(db_path)
+        db.create_property_index(K_URL)
+        db.create_property_index(K_SOURCE)
+        db.create_property_index(K_CREATED)
+        db.create_property_index(K_CATEGORIES)
+        db.create_property_index(K_BASE_URL)
+        db.create_text_index(EVENTS, K_TAGS)
+        db.create_text_index(SIGNALS, K_TAGS)
+        db.create_text_index(REPORTS, K_TAGS)
+        db.create_vector_index(EVENTS, K_EMBEDDING, VECTOR_LEN, "cosine")
+        db.create_vector_index(SIGNALS, K_EMBEDDING, VECTOR_LEN, "cosine")
+        db.create_vector_index(REPORTS, K_EMBEDDING, VECTOR_LEN, "cosine")
+
+    def store(self, data_type: str, items: list[dict[str, Any]]):
+        if not items: return 0
+
+        res = self.db.batch_create_nodes_with_props(data_type, items)
+        
+        if data_type in [EVENTS, SOURCES]:            
+            expr = """
+            FOR src in $sources
+            MATCH (e:Events {source: src}), (s:Sources {source: src})
+            MERGE (s)-[:PUBLISHED]->(e)
+            """
+            sources = distinct(item[K_SOURCE] for item in items if item)
+            self.db.execute(expr, {"sources": sources})
+
+        return len(res)
+
+    def link_events(self, items: list[dict[str, list[str]]]):
+        expr =  """
+        FOR rel in $related
+        MATCH (e1:Events {url: $url}), (e2:Events {url: rel})                
+        MERGE (e1)-[:SAME_AS]-(e2)
+        """
+        res = [len(self.db.execute(expr, pack)) for pack in items if pack.get(K_RELATED)]
+        return sum(res)
+
+    def optimize(self):
+        # rebuild events and sources links
+        expr = "MATCH (e:Events), (s:Sources {source: e.source}) MERGE (s)-[:PUBLISHED]->(e)"
+        self.db.execute(expr)
+
+    def close(self):
+        self.db.close()
+
 
 class Porter:
     cache: AsyncStateCacheBase
@@ -110,10 +178,57 @@ class Porter:
             await asyncio.to_thread(db.optimize)
             return sum(counts)
 
-
         async with self.cache:
             counts = await asyncio.gather(*[hydrate_beans(), hydrate_publishers(), hydrate_trends()])
             total_ported = sum(counts)
             log.info("hydration complete", extra={"source": "beansack", "num_items": total_ported})
         
         return total_ported
+
+    async def hydrate_cupboard(self, db: Cupboard):
+        async def hydrate_events():
+            # move beans
+            TARGET = "cupboarded"
+            if beans := await self.cache.get(
+                BEANS,
+                states=["collected", "embedded", "classified"],
+                exclude_states=TARGET
+            ):  
+                beans = prep_bean_items_for_beansack(beans)
+                log.info("porting", extra={"source": "portable:events", "num_items": len(beans)})  
+                count = db.store(EVENTS, beans)
+                log.info("ported", extra={"source": "cupboard:events", "num_items": count})                
+                await self.cache.set(BEANS, TARGET, [{K_URL: b[K_URL]} for b in beans])
+                return count
+            return 0
+
+        async def hydrate_sources():
+            TARGET = "cupboarded"
+            if sources := await self.cache.get(
+                PUBLISHERS, states="collected", exclude_states=TARGET
+            ):
+                log.info("porting", extra={"source": "portable:sources", "num_items": len(sources)})
+                count = db.store(SOURCES, sources)
+                log.info("ported",extra={"source": "cupboard:sources", "num_items": count})
+                await self.cache.set(PUBLISHERS, TARGET, [{K_BASE_URL: p[K_BASE_URL]} for p in sources])
+                return count
+            return 0
+
+        async def hydrate_related():
+            TARGET = "link:cupboarded"
+            if related_beans := await self.cache.get(
+                BEANS, states="clustered", exclude_states=TARGET
+            ):
+                log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
+                count = db.link_events(related_beans)
+                log.info("ported", extra={"source": "cupboard:related_beans", "num_items": count})
+                await self.cache.set(BEANS, TARGET, [{K_URL: b[K_URL]} for b in related_beans])
+                return count
+
+        async with self.cache:
+            await hydrate_events()
+            await asyncio.gather(*(hydrate_related(), hydrate_sources()))
+            # await hydrate_related()
+        db.optimize()
+        db.close()
+        

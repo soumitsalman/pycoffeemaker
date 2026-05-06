@@ -93,7 +93,7 @@ if __name__ == "__main__":
         from coffeemaker.orchestrators.collectororch import Collector
         collector = Collector(cache=async_cache)       
         asyncio.run(collector.run(
-            os.getenv("COLLECTOR_SOURCES", f"{CURR_DIR}/../../factory/feeds.yaml"),
+            os.getenv("COLLECTOR_SOURCES", f"{CURR_DIR}/factory/feeds.yaml"),
             batch_size=batch_size,
         ))
 
@@ -115,7 +115,7 @@ if __name__ == "__main__":
         
         cls_cache = ClassificationCache(
             # TODO: change this later
-            os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/../../cache/clsstore'), 
+            os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/.cache/clsstore'), 
             table_settings={
                 BEANS: {"id_key": K_URL, "distance_func": "l2"},
                 "categories": {"id_key": "category", "distance_func": "cosine"},
