@@ -4,6 +4,8 @@ import os
 import asyncio
 from itertools import batched, chain
 from typing import Any, Optional
+
+from pandas._testing import ThreadPoolExecutor
 from coffeemaker.processingcache.base import AsyncStateCacheBase
 from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
 from pybeansack.models import K_BASE_URL, K_CATEGORIES, K_CONTENT, K_CREATED, K_EMBEDDING, K_RELATED, K_SOURCE, K_TAGS, K_URL
@@ -78,14 +80,21 @@ class Cupboard:
 
         res = self.db.batch_create_nodes_with_props(data_type, items)
         
-        if data_type in [EVENTS, SOURCES]:            
+        if data_type == EVENTS:
             expr = """
-            FOR src in $sources
-            MATCH (e:Events {source: src}), (s:Sources {source: src})
-            MERGE (s)-[:PUBLISHED]->(e)
+            FOR evt IN $evts
+            MATCH (e:Events {url: evt.url}), (s:Sources {base_url: evt.base_url})
+            INSERT (s)-[:PUBLISHED]->(e)
             """
-            sources = distinct(item[K_SOURCE] for item in items if item)
-            self.db.execute(expr, {"sources": sources})
+            ic(self.db.execute(expr, {"evts": items}))
+        
+        if data_type == SOURCES:
+            expr = """
+            FOR src in $base_urls
+            MATCH (s:Sources {base_url: src}), (e:Events {base_url: src}), 
+            INSERT (s)-[:PUBLISHED]->(e)
+            """            
+            ic(self.db.execute(expr, {"base_urls": distinct([item[K_BASE_URL] for item in items])}))
 
         return len(res)
 
@@ -93,15 +102,34 @@ class Cupboard:
         expr =  """
         FOR rel in $related
         MATCH (e1:Events {url: $url}), (e2:Events {url: rel})                
-        MERGE (e1)-[:SAME_AS]-(e2)
+        INSERT (e1)-[:SAME_AS]-(e2)
         """
-        res = [len(self.db.execute(expr, pack)) for pack in items if pack.get(K_RELATED)]
-        return sum(res)
+        packs = [pack for pack in items if pack.get(K_RELATED)]
+        from tqdm import tqdm
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
+            list(exec.map(lambda pack: self.db.execute(expr, pack), tqdm(packs, total=len(packs), unit="related events")))
+        
+        
 
-    def optimize(self):
-        # rebuild events and sources links
-        expr = "MATCH (e:Events), (s:Sources {source: e.source}) MERGE (s)-[:PUBLISHED]->(e)"
-        self.db.execute(expr)
+    def query_events(self, embedding: list[float], distance: float = None, limit: int = 0, fields: list[str] = None):
+        params = {"embedding": embedding}
+        query = "MATCH (e.Events)"
+
+        if distance:
+            query += "\nWHERE cosine_distance(e.embedding, $embedding) AS distance <= $distance"
+            params["distance"] = distance
+
+        return_expr = "e" if not fields else ", ".join(f"e.{f}" for f in fields)
+        query += f"""
+        RETURN {return_expr}, cosine_distance(e.embedding, $embedding) AS distance
+        ORDER BY distance
+        """
+        
+        if limit:
+            query += "\nLIMIT $limit"
+            params["limit"] = limit
+
+        return self.db.execute(query, params)
 
     def close(self):
         self.db.close()
@@ -196,7 +224,7 @@ class Porter:
             ):  
                 beans = prep_bean_items_for_beansack(beans)
                 log.info("porting", extra={"source": "portable:events", "num_items": len(beans)})  
-                count = db.store(EVENTS, beans)
+                count = await asyncio.to_thread(db.store, EVENTS, beans)
                 log.info("ported", extra={"source": "cupboard:events", "num_items": count})                
                 await self.cache.set(BEANS, TARGET, [{K_URL: b[K_URL]} for b in beans])
                 return count
@@ -208,7 +236,7 @@ class Porter:
                 PUBLISHERS, states="collected", exclude_states=TARGET
             ):
                 log.info("porting", extra={"source": "portable:sources", "num_items": len(sources)})
-                count = db.store(SOURCES, sources)
+                count = await asyncio.to_thread(db.store, SOURCES, sources)
                 log.info("ported",extra={"source": "cupboard:sources", "num_items": count})
                 await self.cache.set(PUBLISHERS, TARGET, [{K_BASE_URL: p[K_BASE_URL]} for p in sources])
                 return count
@@ -217,18 +245,18 @@ class Porter:
         async def hydrate_related():
             TARGET = "link:cupboarded"
             if related_beans := await self.cache.get(
-                BEANS, states="clustered", exclude_states=TARGET
+                BEANS, states="clustered", exclude_states=TARGET, limit=1000
             ):
                 log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
-                count = db.link_events(related_beans)
+                count = await asyncio.to_thread(db.link_events, related_beans)
                 log.info("ported", extra={"source": "cupboard:related_beans", "num_items": count})
                 await self.cache.set(BEANS, TARGET, [{K_URL: b[K_URL]} for b in related_beans])
                 return count
 
         async with self.cache:
-            await hydrate_events()
-            await asyncio.gather(*(hydrate_related(), hydrate_sources()))
-            # await hydrate_related()
-        db.optimize()
+            # await hydrate_events()
+            # await asyncio.gather(*(hydrate_related(), hydrate_sources()))
+            await hydrate_related()
+        
         db.close()
         
