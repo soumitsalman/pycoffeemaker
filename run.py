@@ -152,7 +152,7 @@ if __name__ == "__main__":
         orch.run_digestor(batch_size=batch_size)       
 
     elif mode == "PORTER":
-        from coffeemaker.orchestrators.porterorch import Porter
+        from coffeemaker.orchestrators.porterorch import BeansackPorter
 
         db_kwargs = {
             "db_type": os.getenv("DB_TYPE"),
@@ -165,8 +165,8 @@ if __name__ == "__main__":
             "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
         }
         db = create_client(**db_kwargs)
-        orch = Porter(cache=async_cache)
-        asyncio.run(orch.hydrate_beansacks(db))
+        orch = BeansackPorter(cache=async_cache)
+        asyncio.run(orch.hydrate_beansacks(db, "beansacked"))
         db.close()
 
     else:

@@ -65,22 +65,18 @@ run_porter() {
 # run sequence
 # embedder runs first
 # extractor and classifier starts parallelly after embedder finishes
-# porter starts after extractor without waiting for classifier 
 # since the main work for classifier is finished early and most of the time it spends on optimization and backup
-for round in 1 2; do
-    echo "=== [STARTING] Round $round/2 ==="
 
-    run_embedder
+echo "=== [STARTING] ==="
 
-    run_extractor &
-    run_classifier &
-    wait
-    echo "=== [FINISHED] Round $round/2 ==="
-done
+run_embedder
 
+run_extractor &
+run_classifier &
+wait
+echo "=== [FINISHED] ==="
+
+# TODO: backup should start right after classifier ends and not wait for extractor
 backup_clscache
-# run_porter &
-# backup_clscache &
-# wait
 
 $PYTHON $WORKING_DIR/machine_ops.py --action stop --instance tensordock

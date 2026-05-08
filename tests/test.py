@@ -309,7 +309,8 @@ def test_digestor_orch():
     cache.close()
 
 def test_porter_orch(beansack_or_cupboard):
-    from coffeemaker.orchestrators.porterorch import Porter, Cupboard
+    from coffeemaker.orchestrators.porterorch import BeansackPorter, CupboardPorter
+    from coffeemaker.orchestrators.cupboard import Cupboard
     from coffeemaker.processingcache.pgcache import AsyncStateCache
 
     cache_settings = {
@@ -317,9 +318,13 @@ def test_porter_orch(beansack_or_cupboard):
         PUBLISHERS: {"id_key": K_BASE_URL},
         CHATTERS: {"id_key": "id"}
     }
+    cache = AsyncStateCache(os.getenv('PROCESSING_CACHE'), cache_settings)    
     
-    orch = Porter(cache=AsyncStateCache(os.getenv('PROCESSING_CACHE'), cache_settings))
-    if beansack_or_cupboard == "cupboard": asyncio.run(orch.hydrate_cupboard(Cupboard(".test/cupboard.db")))
+    if beansack_or_cupboard == "cupboard": 
+        orch = CupboardPorter(cache=cache)
+        db = Cupboard(".test/cupboard.db")
+        asyncio.run(orch.hydrate_cupboard(db))
+        db.close()
     
 
 def test_warehouse():
@@ -400,6 +405,28 @@ def test_warehouse():
 
     if True:
         ic(db.query_aggregated_chatters(updated=ndays_ago(7), limit=16))
+
+    db.close()
+
+def test_vector_search():
+    from coffeemaker.orchestrators.cupboard import Cupboard
+    from pybeansack import create_client
+    from nlp import embedders
+
+    # db = create_client(db_type="pg", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))
+    db = Cupboard("/home/soumitsr/codes/pycoffeemaker/.test/cupboard.db")
+    embedder = embedders.from_path("ibm-granite/granite-embedding-97m-multilingual-r2", 8192)
+
+    queries = [
+        "Hackers used AI to steal hundreds of millions of Mexican government and private citizen records in one of the largest cybersecurity breaches ever", 
+        "Trump's 'decline' just became 'impossible to ignore' after press dinner 'shooting: analyst", 
+        "How to share images and videos in Tomodachi Life: Living the Dream"
+    ]
+    with embedder:
+        vecs = embedder.embed_documents(queries)
+        for q, vec in zip(queries, vecs):
+            items = db.query_events(embedding=vec, limit=10, fields = [K_URL, K_TITLE, K_CREATED])
+            ic(q, vec[:2], [(item['e.title'], item['distance']) for item in items])
 
     db.close()
 
@@ -577,6 +604,7 @@ parser.add_argument(
     "--runrefresher", action="store_true", help="Test refresher orchestrator"
 )
 parser.add_argument("--cache", action="store_true", help="Test cache implementation")
+parser.add_argument("--vector", action="store_true", help="Test vector search implementation")
 parser.add_argument("--readonly", action="store_true", help="Test readonly warehouse")
 parser.add_argument("--warehouse", action="store_true", help="Test warehouse v2")
 parser.add_argument(
@@ -614,6 +642,9 @@ def main():
         test_warehouse()
     if args.orchonlance:
         test_orch_on_lancesack()
+
+    if args.vector:
+        test_vector_search()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:
