@@ -197,8 +197,8 @@ class AsyncStateCache(AsyncStateCacheBase):
     ):
         expr, params = create_query_expr(object_type, states, exclude_states, limit, offset)
         async with self.pool.connection() as conn:
-            rows = await _read_async(conn, expr, params)
-        return [decode_data(row) for row in rows]
+            rows = await _read_async(conn, expr, params)        
+        return [decode_data(row) if not isinstance(row, list) else [decode_data(data) for data in row] for row in rows]
 
     async def deduplicate(self, object_type: str, state: str, items: list):
         if not items:
@@ -405,10 +405,11 @@ WITH filtered AS (
     GROUP BY id
     HAVING COUNT(*) >= %(min_count)s
 )
-SELECT data FROM {table}
+SELECT ARRAY_AGG(data) AS data FROM {table}
 WHERE EXISTS (
     SELECT 1 FROM filtered WHERE filtered.id = {table}.id
 )
+GROUP BY id
 """
 
 

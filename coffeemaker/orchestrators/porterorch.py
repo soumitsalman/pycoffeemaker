@@ -18,16 +18,25 @@ log = logging.getLogger("porterworker")
 
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', 256))
     
-def merge(key, items: list[dict[str, Any]]):
-    merged = {}
-    for data in items:
-        # NOTE: it is important to update only the keys for which there is a value
-        update = {k: v for k, v in data.items() if v}
-        if data[key] not in merged:
-            merged[data[key]] = update
-        else:
-            merged[data[key]].update(update)
-    return list(merged.values())
+# def merge(key, items: list[dict[str, Any]]):
+#     merged = {}
+#     for data in items:
+#         # NOTE: it is important to update only the keys for which there is a value
+#         update = {k: v for k, v in data.items() if v}
+#         if data[key] not in merged:
+#             merged[data[key]] = update
+#         else:
+#             merged[data[key]].update(update)
+#     return list(merged.values())
+
+def merge(groups: list[dict[str, Any]]):
+    merged = []
+    for gr in groups:
+        pack = {}
+        for data in gr:
+            pack.update({k: v for k, v in data.items() if v})
+        merged.append(pack)
+    return merged
 
 def unpack_related(beans: list[dict]):
     items = {}
@@ -57,7 +66,7 @@ class BeansackPorter:
     @classmethod
     def prep_beans_for_beansack(cls, beans: list[dict]):
         """Merges beans, replaces content with cdn url"""
-        return [Bean(**bean) for bean in merge(K_URL, beans)]
+        return [Bean(**bean) for bean in merge(beans)]
 
     async def hydrate_beans(self, db: Beansack, target_state: str):
         # move beans
@@ -135,8 +144,9 @@ class CupboardPorter:
 
     @classmethod
     def prep_events_for_cupboard(cls, beans: list):
-        beans = merge(K_URL, beans)
+        beans = merge(beans)
         for bean in beans:
+            bean['id'] = bean[K_URL]
             if K_CONTENT in bean: del bean[K_CONTENT]
             if K_CONTENT_LENGTH in bean: del bean[K_CONTENT_LENGTH]
             if K_RESTRICTED_CONTENT in bean: del bean[K_RESTRICTED_CONTENT]
@@ -147,16 +157,24 @@ class CupboardPorter:
             if K_RELATED in bean: del bean[K_RELATED]
         return beans
 
+    @classmethod
+    def prep_sources_for_cupboard(cls, sources: list):
+        for item in sources:
+            item['id'] = item[K_BASE_URL]            
+        return sources
+
     async def hydrate_events(self, db: Cupboard, target_state: str):
         # move beans
         if beans := await self.cache.get(
             BEANS,
             states=["collected", "embedded", "classified"],
-            exclude_states=target_state
+            exclude_states=target_state,
         ):  
             beans = self.prep_events_for_cupboard(beans)
             log.info("porting", extra={"source": "portable:events", "num_items": len(beans)})  
-            count = await asyncio.to_thread(db.store, EVENTS, beans)
+            count = 0
+            for chunk in batched(beans, 500):
+                count += await db.store(EVENTS, chunk)
             log.info("ported", extra={"source": "cupboard:events", "num_items": count})                
             await self.cache.set(BEANS, target_state, [{K_URL: b[K_URL]} for b in beans])
             return count
@@ -164,8 +182,9 @@ class CupboardPorter:
 
     async def hydrate_sources(self, db: Cupboard, target_state: str):
         if sources := await self.cache.get(PUBLISHERS, states="collected", exclude_states=target_state):
+            sources = self.prep_sources_for_cupboard(sources)
             log.info("porting", extra={"source": "portable:sources", "num_items": len(sources)})
-            count = await asyncio.to_thread(db.store, SOURCES, sources)
+            count = await db.store(SOURCES, sources)
             log.info("ported",extra={"source": "cupboard:sources", "num_items": count})
             await self.cache.set(PUBLISHERS, target_state, [{K_BASE_URL: p[K_BASE_URL]} for p in sources])
             return count
@@ -178,17 +197,20 @@ class CupboardPorter:
             BEANS, states="clustered", exclude_states=target
         ):
             log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
-            count = await asyncio.to_thread(db.link_events, unpack_related(related_beans))
+            count = await db.link_events(unpack_related(related_beans))
             log.info("ported", extra={"source": "cupboard:related_beans", "num_items": count})
             await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
             return count
         return 0
 
     async def hydrate_cupboard(self, db: Cupboard, target_state: str = "cupboarded"):
-        async with self.cache:
-            await self.hydrate_events(db, target_state)
-            await self.hydrate_sources(db, target_state)            
-            await self.hydrate_related(db, target_state)
+        async with self.cache, db:           
+            await asyncio.gather(*(
+                self.hydrate_events(db, target_state),
+                self.hydrate_sources(db, target_state)
+            ))            
+            # await self.hydrate_related(db, target_state)
+            await db.optimize()
         
         
         

@@ -322,113 +322,46 @@ def test_porter_orch(beansack_or_cupboard):
     
     if beansack_or_cupboard == "cupboard": 
         orch = CupboardPorter(cache=cache)
-        db = Cupboard(".test/cupboard.db")
+        db = Cupboard("http://localhost:8000")
         asyncio.run(orch.hydrate_cupboard(db))
-        db.close()
     
-
-def test_warehouse():
-    from coffeemaker.collectors.collector import APICollectorAsync, parse_sources
-    from coffeemaker.nlp.src import agents, embedders
-    from coffeemaker.orchestrators.composerorch import parse_topics
-    from coffeemaker.pybeansack.models import K_CONTENT, K_CREATED, K_URL, Bean
-    from coffeemaker.pybeansack.warehouse import DIGEST_COLUMNS, Beansack
-    from tqdm import tqdm
-
-    db = Beansack(
-        catalogdb="sqlite:.test/beansack/catalogdb.db",
-        storagedb=".test/beansack/storage",
-        factory_dir="factory",
-    )
-    col = APICollectorAsync(batch_size=128)
-    sources = parse_sources(f"{os.path.dirname(__file__)}/sources-2.yaml")
-    embedder = embedders.from_path(os.getenv("EMBEDDER_PATH"), EMBEDDER_CONTEXT_LEN)
-
-    async def run_collector():
-        async with col:
-            for rss in sources["rss"][:5]:
-                beans = await col.collect_rssfeed(rss)
-                ic(db.store_beans(beans))
-
-    if False:
-        asyncio.run(run_collector())
-
-    def run_indexer():
-        while beans := db.query_latest_beans(
-            exprs=["embedding IS NULL", "content_length >= 10"],
-            limit=8,
-            select=[K_URL, K_CONTENT, K_CREATED],
-        ):
-            vecs = embedder.embed_documents([bean.content for bean in beans])
-            beans = [
-                Bean(url=bean.url, embedding=vec)
-                for bean, vec in zip(beans, vecs)
-                if vec
-            ]
-            ic(db.update_beans(beans, columns=[K_EMBEDDING]))
-
-    if False:
-        run_indexer()
-
-    if False:
-        ic(db.refresh_classifications())
-    if False:
-        ic(db.refresh_clusters())
-
-    def run_vector_query():
-        topics = parse_topics(
-            "/workspaces/beansack/pycoffeemaker/tests/composer-topics.json"
-        )
-        vecs = (
-            embedder.embed_documents([topic[K_DESCRIPTION] for topic in topics]) * 100
-        )
-
-        def query(vec):
-            limit = random.randint(24, 256)
-            beans = db.query_trending_beans(
-                updated=ndays_ago(7),
-                embedding=vec,
-                distance=0.3,
-                limit=limit,
-                columns=DIGEST_COLUMNS,
-            )
-            pbar.update(1)
-            # ic(limit, len(beans))
-
-        with tqdm(total=len(vecs)) as pbar:
-            with ThreadPoolExecutor(max_workers=30) as executor:
-                executor.map(query, vecs)
-            # list(map(query, vecs))
-
-    if False:
-        run_vector_query()
-
-    if True:
-        ic(db.query_aggregated_chatters(updated=ndays_ago(7), limit=16))
-
-    db.close()
 
 def test_vector_search():
     from coffeemaker.orchestrators.cupboard import Cupboard
-    from pybeansack import create_client
+    from tqdm import tqdm
     from nlp import embedders
+    from faker import Faker
+
+    fake = Faker()
 
     # db = create_client(db_type="pg", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))
-    db = Cupboard("/home/soumitsr/codes/pycoffeemaker/.test/cupboard.db")
-    embedder = embedders.from_path("ibm-granite/granite-embedding-97m-multilingual-r2", 8192)
+    # Cupboard.create_db("/home/soumitsr/codes/pycoffeemaker/.test/cupboard.db")
+    db = Cupboard("http://localhost:8000")    
+    embedder = embedders.from_path("avsolatorio/GIST-small-Embedding-v0", 512)
 
-    queries = [
-        "Hackers used AI to steal hundreds of millions of Mexican government and private citizen records in one of the largest cybersecurity breaches ever", 
-        "Trump's 'decline' just became 'impossible to ignore' after press dinner 'shooting: analyst", 
-        "How to share images and videos in Tomodachi Life: Living the Dream"
-    ]
+    queries = fake.sentences(100)
     with embedder:
         vecs = embedder.embed_documents(queries)
-        for q, vec in zip(queries, vecs):
-            items = db.query_events(embedding=vec, limit=10, fields = [K_URL, K_TITLE, K_CREATED])
-            ic(q, vec[:2], [(item['e.title'], item['distance']) for item in items])
+        queries = queries*100
+        vecs = vecs*100
 
-    db.close()
+
+    async def run():        
+        async with db:
+            # await db.optimize()
+            with tqdm(total=len(vecs), unit="Query") as pbar:
+            # for q, vec in zip(queries, vecs):
+            #     result = await db.query_events(vec, limit=10, columns=['url', 'published_by'])
+            #     print("#", q, "=======")
+            #     [print(item['url'], item['published_by']) for item in result]
+                async def search(q, vec):
+                    result = await db.query_events(vec, limit=10, columns=['url', 'published_by'])
+                    # print("#", q, "=======")
+                    # [print(item['url'], item['published_by']) for item in result]
+                    pbar.update(1)
+                await asyncio.gather(*(search(q, vec) for q, vec in zip(queries, vecs)))            
+
+    asyncio.run(run())
 
 
 def test_cache():
