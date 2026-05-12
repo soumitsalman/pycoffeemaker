@@ -166,6 +166,7 @@ if __name__ == "__main__":
         }
         db = create_client(**db_kwargs)
         orch = BeansackPorter(cache=async_cache)
+        # TODO: add cupboard porter
         asyncio.run(orch.hydrate_beansacks(db, "beansacked"))
         db.close()
 

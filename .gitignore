@@ -23,6 +23,10 @@
 .deploy.sh
 .s3upload.sh
 .ruff_cache
+.codex
+.opencode
+history.txt
+graphify*
 zvec
 __azurite*
 __queuestorage__

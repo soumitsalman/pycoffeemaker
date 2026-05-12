@@ -23,5 +23,3 @@ textcase
 pyturso
 zvec
 firebird-driver
-grafeo
-surrealdb

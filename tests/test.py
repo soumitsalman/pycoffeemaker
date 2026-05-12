@@ -48,7 +48,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from coffeemaker.orchestrators.utils import log_runtime
-from pybeansack import *
 from pybeansack.models import *
 
 os.makedirs(".test", exist_ok=True)
@@ -310,7 +309,7 @@ def test_digestor_orch():
 
 def test_porter_orch(beansack_or_cupboard):
     from coffeemaker.orchestrators.porterorch import BeansackPorter, CupboardPorter
-    from coffeemaker.orchestrators.cupboard import Cupboard
+    from pybeansack.cupboards.surrealcupboard import Cupboard
     from coffeemaker.processingcache.pgcache import AsyncStateCache
 
     cache_settings = {
@@ -322,12 +321,12 @@ def test_porter_orch(beansack_or_cupboard):
     
     if beansack_or_cupboard == "cupboard": 
         orch = CupboardPorter(cache=cache)
-        db = Cupboard("http://localhost:8000")
+        db = Cupboard("ws://localhost:8000")
         asyncio.run(orch.hydrate_cupboard(db))
     
 
 def test_vector_search():
-    from coffeemaker.orchestrators.cupboard import Cupboard
+    from pybeansack.cupboards.surrealcupboard import Cupboard
     from tqdm import tqdm
     from nlp import embedders
     from faker import Faker
@@ -336,30 +335,32 @@ def test_vector_search():
 
     # db = create_client(db_type="pg", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))
     # Cupboard.create_db("/home/soumitsr/codes/pycoffeemaker/.test/cupboard.db")
-    db = Cupboard("http://localhost:8000")    
+    db = Cupboard("ws://localhost:8000")    
     embedder = embedders.from_path("avsolatorio/GIST-small-Embedding-v0", 512)
 
-    queries = fake.sentences(100)
+    queries = fake.sentences(64)
     with embedder:
         vecs = embedder.embed_documents(queries)
-        queries = queries*100
-        vecs = vecs*100
+        queries = queries
+        vecs = vecs
 
 
     async def run():        
         async with db:
             # await db.optimize()
-            with tqdm(total=len(vecs), unit="Query") as pbar:
+            # with tqdm(total=len(vecs), unit="Query") as pbar:
             # for q, vec in zip(queries, vecs):
             #     result = await db.query_events(vec, limit=10, columns=['url', 'published_by'])
             #     print("#", q, "=======")
             #     [print(item['url'], item['published_by']) for item in result]
                 async def search(q, vec):
-                    result = await db.query_events(vec, limit=10, columns=['url', 'published_by'])
-                    # print("#", q, "=======")
-                    # [print(item['url'], item['published_by']) for item in result]
-                    pbar.update(1)
+                    result = await db.query_events(embedding=vec, limit=10, columns=['url'])
+                    print("#", q, "=======")
+                    [print(item['url'], item['published_by']) for item in result]
+                    # pbar.update(1)
+                start = now()
                 await asyncio.gather(*(search(q, vec) for q, vec in zip(queries, vecs)))            
+                print((now() - start).total_seconds()/len(vecs))
 
     asyncio.run(run())
 
