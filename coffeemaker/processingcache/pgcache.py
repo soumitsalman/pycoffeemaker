@@ -166,6 +166,7 @@ class AsyncStateCache(AsyncStateCacheBase):
         await self.close()
         return False
 
+    @retry(tries=3, delay=10)
     async def set(
         self,
         object_type: str,

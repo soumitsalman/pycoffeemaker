@@ -4,17 +4,15 @@ services:
   pgcache:
     image: pgvector/pgvector:pg17-trixie
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=local
-      - POSTGRES_DB=processing-cache
+      - POSTGRES_DB=postgres
     networks:
       - coffeemaker-bridge
     cpus: 2
     mem_limit: 16g
-    volumes:
-      - ./.cache/pgcache:/var/lib/postgresql/data
 
   localcollector:
     image: soumitsr/coffeemaker:06-25

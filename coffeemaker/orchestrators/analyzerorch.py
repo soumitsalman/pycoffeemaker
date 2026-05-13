@@ -26,12 +26,12 @@ from pybeansack.models import (
     K_URL,
     # POST,
 )
+from pycupboard.pgcupboard import DIGEST
 
 from .utils import *
 
 log = logging.getLogger("analyzerworker")
 
-LIMIT=5000
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
 MAX_CLASSIFICATIONS = int(os.getenv("MAX_CLASSIFICATIONS", 2))
 MAX_RELATED = int(os.getenv('MAX_RELATED', 500))
@@ -166,7 +166,10 @@ class Indexer:
                 try:
                     digests = self.digestor.run_batch([bean[K_CONTENT] for bean in chunk])
                     updates = clean_updates([
-                        {K_URL: b[K_URL], **d.model_dump(exclude_none=True, exclude_unset=True, exclude_defaults=True)}
+                        {
+                            K_URL: b[K_URL], 
+                            DIGEST: d.model_dump(exclude_none=True, exclude_unset=True, exclude_defaults=True)
+                        }
                         for b, d in zip(chunk, digests)
                         if d
                     ])

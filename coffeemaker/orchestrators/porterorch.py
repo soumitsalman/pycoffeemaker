@@ -8,11 +8,10 @@ from typing import Any, Optional
 from pandas._testing import ThreadPoolExecutor
 from coffeemaker.processingcache.base import AsyncStateCacheBase
 from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
-from pybeansack.cupboards.surrealcupboard import Cupboard
-from pybeansack.models import K_BASE_URL, K_CATEGORIES, K_CONTENT, K_CONTENT_LENGTH, K_CREATED, K_EMBEDDING, K_RELATED, K_RESTRICTED_CONTENT, K_SOURCE, K_SUMMARY, K_SUMMARY_LENGTH, K_TAGS, K_TITLE, K_TITLE_LENGTH, K_URL
-from icecream import ic
+from pybeansack.models import K_BASE_URL, K_CATEGORIES, K_CONTENT, K_CONTENT_LENGTH, K_CREATED, K_EMBEDDING, K_KIND, K_RELATED, K_RESTRICTED_CONTENT, K_SENTIMENTS, K_SOURCE, K_SUMMARY, K_SUMMARY_LENGTH, K_TAGS, K_TITLE, K_TITLE_LENGTH, K_URL
+from pycupboard.pgcupboard import *
 
-from pybeansack.utils import VECTOR_LEN
+from icecream import ic
 
 log = logging.getLogger("porterworker")
 
@@ -135,25 +134,31 @@ class CupboardPorter:
     @classmethod
     def prep_events(cls, beans: list):
         beans = merge(beans)
-        for bean in beans:
-            if K_CONTENT in bean: del bean[K_CONTENT]
-            if K_CONTENT_LENGTH in bean: del bean[K_CONTENT_LENGTH]
-            if K_RESTRICTED_CONTENT in bean: del bean[K_RESTRICTED_CONTENT]
-            if K_SUMMARY in bean: del bean[K_SUMMARY]
-            if K_SUMMARY_LENGTH in bean: del bean[K_SUMMARY_LENGTH]
-            if K_TITLE in bean: del bean[K_TITLE]
-            if K_TITLE_LENGTH in bean: del bean[K_TITLE_LENGTH]
-            if K_RELATED in bean: del bean[K_RELATED]
-        return beans
+        return [
+            Sip(
+                created=bean[K_CREATED],
+                kind="event:"+bean[K_KIND],
+                embedding=bean[K_EMBEDDING],
+                tags=list((*bean[K_CATEGORIES], *bean[K_SENTIMENTS], *bean.get(DIGEST, {}).get(TAGS, []))),
+                digest=bean.get(DIGEST),
+                url=bean[K_URL],
+                base_url=bean[K_BASE_URL],
+            )
+            for bean in beans
+        ]
 
     @classmethod
-    def prep_links(cls, links: list):
-        unpacked = []
-        for item in links:
-            url = item[K_URL]
-            if related := item.get(K_RELATED):
-                unpacked.extend([{K_URL: url, "related_url": r} for r in related])
-        return unpacked
+    def prep_sources(cls, sources: list[dict]):
+        return [Source(**src, domain_name=src.get(K_SOURCE)) for src in sources]
+
+    # @classmethod
+    # def prep_links(cls, links: list):
+    #     unpacked = []
+    #     for item in links:
+    #         url = item[K_URL]
+    #         if related := item.get(K_RELATED):
+    #             unpacked.extend([{K_URL: url, "related_url": r} for r in related])
+    #     return unpacked
 
     async def hydrate_events(self, db: Cupboard, target_state: str):
         # move beans
@@ -161,22 +166,25 @@ class CupboardPorter:
         if beans := await self.cache.get(
             BEANS,
             states=["collected", "embedded", "classified", "digested"],
-            exclude_states=target_state
+            exclude_states=target_state,
         ):  
             beans = self.prep_events(beans)
             log.info("porting", extra={"source": "portable:events", "num_items": len(beans)})             
-            count = await db.store("events", beans)
+            count = await db.store_sips(beans)
             log.info("ported", extra={"source": "cupboard:events", "num_items": count})                
-            await self.cache.set(BEANS, target_state, [{K_URL: b[K_URL]} for b in beans])            
+            await self.cache.set(BEANS, target_state, [{K_URL: b.url} for b in beans])            
         return count
 
     async def hydrate_sources(self, db: Cupboard, target_state: str):
         count = 0
-        if sources := await self.cache.get(PUBLISHERS, states="collected", exclude_states=target_state):
+        if sources := await self.cache.get(
+            PUBLISHERS, states="collected", exclude_states=target_state
+        ):
+            sources = self.prep_sources(sources)
             log.info("porting", extra={"source": "portable:sources", "num_items": len(sources)})
-            count = await db.store("sources", sources)
+            count = await db.store_sources(sources)
             log.info("ported",extra={"source": "cupboard:sources", "num_items": count})
-            await self.cache.set(PUBLISHERS, target_state, [{K_BASE_URL: p[K_BASE_URL]} for p in sources])
+            await self.cache.set(PUBLISHERS, target_state, [{K_BASE_URL: p.base_url} for p in sources])
         return count
 
     async def hydrate_related(self, db: Cupboard, target_state: str):
@@ -187,7 +195,7 @@ class CupboardPorter:
             BEANS, states="clustered", exclude_states=target
         ):
             log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
-            count = await db.link_events(self.prep_links(related_beans))
+            count = await db.link_sips(related_beans, "SAME_AS")
             log.info("ported", extra={"source": "cupboard:related_beans", "num_items": count})
             await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
         return count
