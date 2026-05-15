@@ -5,12 +5,11 @@ import asyncio
 from itertools import batched, chain
 from typing import Any, Optional
 
-from pandas._testing import ThreadPoolExecutor
 from coffeemaker.processingcache.base import AsyncStateCacheBase
 from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
-from pybeansack.models import K_BASE_URL, K_CATEGORIES, K_CONTENT, K_CONTENT_LENGTH, K_CREATED, K_EMBEDDING, K_KIND, K_RELATED, K_RESTRICTED_CONTENT, K_SENTIMENTS, K_SOURCE, K_SUMMARY, K_SUMMARY_LENGTH, K_TAGS, K_TITLE, K_TITLE_LENGTH, K_URL
+from pybeansack.models import K_BASE_URL, K_CATEGORIES, K_CONTENT, K_CONTENT_LENGTH, K_CREATED, K_EMBEDDING, K_ENTITIES, K_KIND, K_REGIONS, K_RELATED, K_RESTRICTED_CONTENT, K_SENTIMENTS, K_SOURCE, K_SUMMARY, K_SUMMARY_LENGTH, K_TAGS, K_TITLE, K_TITLE_LENGTH, K_URL
 from pycupboard.pgcupboard import *
-
+from .utils import *
 from icecream import ic
 
 log = logging.getLogger("porterworker")
@@ -45,6 +44,18 @@ class BeansackPorter:
     @classmethod
     def prep_beans(cls, beans: list[dict]):
         """Merges beans, replaces content with cdn url"""
+        beans = merge(beans)
+        for bean in beans:
+            if entities := bean.get(K_ENTITIES):
+                bean.update({
+                    K_ENTITIES: merge_lists(
+                        entities.people,
+                        entities.companies,
+                        entities.products,
+                        entities.stock_tickers,
+                    ),
+                    K_REGIONS: entities.regions
+                })
         return [Bean(**bean) for bean in merge(beans)]
 
     @classmethod
@@ -139,7 +150,7 @@ class CupboardPorter:
                 created=bean[K_CREATED],
                 kind="event:"+bean[K_KIND],
                 embedding=bean[K_EMBEDDING],
-                tags=list((*bean[K_CATEGORIES], *bean[K_SENTIMENTS], *bean.get(DIGEST, {}).get(TAGS, []))),
+                tags=merge_lists(bean[K_CATEGORIES], bean[K_SENTIMENTS], bean.get(DIGEST, {}).get(TAGS, [])),
                 digest=bean.get(DIGEST),
                 url=bean[K_URL],
                 base_url=bean[K_BASE_URL],
@@ -202,11 +213,11 @@ class CupboardPorter:
 
     async def hydrate_cupboard(self, db: Cupboard, target_state: str = "cupboarded"):
         async with self.cache, db:           
-            await asyncio.gather(*(
+            counts = await asyncio.gather(*(
                 self.hydrate_events(db, target_state),
-                self.hydrate_sources(db, target_state)
-            ))            
-            await self.hydrate_related(db, target_state)
+                self.hydrate_sources(db, target_state),
+                self.hydrate_related(db, target_state)
+            ))
             await db.optimize()
         
         

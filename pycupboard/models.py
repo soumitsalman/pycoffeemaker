@@ -21,7 +21,7 @@ DESCRIPTION = 'description'
 FAVICON = 'favicon'
 RSS_FEED = 'rss_feed'
 
-_gen_id = lambda url: uuid5(NAMESPACE_URL, url)
+generate_id = lambda url: uuid5(NAMESPACE_URL, url)
 
 class Sip(BaseModel):
     id: Optional[UUID] = Field(default=None)
@@ -37,9 +37,9 @@ class Sip(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         if self.url and not self.id:
-            self.id = _gen_id(self.url)        
+            self.id = generate_id(self.url)        
         if self.base_url and not self.source:
-            self.source = _gen_id(self.base_url)
+            self.source = generate_id(self.base_url)
         if not self.id:
             raise ValueError("Sip must have a `url` or `id`")
 
@@ -55,6 +55,6 @@ class Source(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         if self.base_url and not self.id:
-            self.id = _gen_id(self.base_url)
+            self.id = generate_id(self.base_url)
         if not self.id:
             raise ValueError("Source must have a `base_url` or `id`")

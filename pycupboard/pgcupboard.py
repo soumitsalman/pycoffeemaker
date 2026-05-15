@@ -56,8 +56,9 @@ CREATE TABLE IF NOT EXISTS sources (
 );
 
 CREATE TABLE IF NOT EXISTS relations (
-    from_id UUID NOT NULL REFERENCES sips(id) ON DELETE CASCADE,
-    to_id UUID NOT NULL REFERENCES sips(id) ON DELETE CASCADE,
+    -- NOTE: from_id and to_id are supposed to be foreign keys to sips but ignoring it to improve performance
+    from_id UUID NOT NULL,
+    to_id UUID NOT NULL,
     relationship TEXT NOT NULL,
     UNIQUE(from_id, to_id, relationship)
 );
@@ -179,26 +180,27 @@ class Cupboard:
         if not relations:
             return 0
 
-        # step 1: resolve urls to ids
-        urls = set()
-        for item in relations:
-            if not (related_urls := item.get(RELATED)): continue
+        # # step 1: resolve urls to ids
+        # urls = set()
+        # for item in relations:
+        #     if not (related_urls := item.get(RELATED)): continue
 
-            if isinstance(url := item.get(URL), str): urls.add(url)
-            urls.update(ref for ref in related_urls if isinstance(ref, str))
+        #     if isinstance(url := item.get(URL), str): urls.add(url)
+        #     urls.update(ref for ref in related_urls if isinstance(ref, str))
 
-        url_ids = {}
-        if urls:
-            async with self.pool.connection() as conn:
-                cur = await conn.execute(
-                    "SELECT id, url FROM sips WHERE url = ANY(%(urls)s)",
-                    {"urls": list(urls)},
-                )
-                url_ids = {row[1]: row[0] async for row in cur}
+        # url_ids = {}
+        # if urls:
+        #     async with self.pool.connection() as conn:
+        #         cur = await conn.execute(
+        #             "SELECT id, url FROM sips WHERE url = ANY(%(urls)s)",
+        #             {"urls": list(urls)},
+        #         )
+        #         url_ids = {row[1]: row[0] async for row in cur}
 
         def _sip_id(ref: str | UUID) -> uuid.UUID | None:
             if isinstance(ref, UUID): return ref
-            if isinstance(ref, str): return url_ids.get(ref)
+            # no need to resolve urls to ids because the ids are deterministic based on the url
+            if isinstance(ref, str): return generate_id(ref)
             
         # step 2: build relation rows
         relation_rows: list[tuple[uuid.UUID, uuid.UUID, str]] = []
@@ -301,3 +303,6 @@ class Cupboard:
             cols = [desc[0] for desc in cur.description]
             results = [Sip(**dict(zip(cols, row))) async for row in cur]
         return results
+
+    async def optimize(self):
+        pass

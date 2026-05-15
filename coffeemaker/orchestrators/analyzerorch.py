@@ -140,13 +140,7 @@ class Indexer:
                     updates = clean_updates([
                         {
                             K_URL: b[K_URL],
-                            K_ENTITIES: merge_lists(
-                                ents.people,
-                                ents.companies,
-                                ents.products,
-                                ents.stock_tickers,
-                            ),
-                            K_REGIONS: ents.regions
+                            K_ENTITIES: extractions
                         } if ents else {K_URL:b[K_URL]}         
                         for b, ents in zip(chunk, extractions)
                     ])
