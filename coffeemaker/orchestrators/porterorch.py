@@ -212,8 +212,8 @@ class CupboardPorter:
     async def hydrate_cupboard(self, db: Cupboard, target_state: str = "cupboarded"):
         async with db:
             counts = await asyncio.gather(
-                # self.hydrate_events(db, target_state),
-                # self.hydrate_sources(db, target_state),
+                self.hydrate_events(db, target_state),
+                self.hydrate_sources(db, target_state),
                 self.hydrate_related(db, target_state),
             )
             await db.optimize()
