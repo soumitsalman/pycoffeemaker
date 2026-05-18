@@ -15,6 +15,7 @@ BACKUP_BUCKET="s3://cafecito-archives-new/processingcache"
 EMBEDDER_BATCH_SIZE="${EMBEDDER_BATCH_SIZE:-192}"
 EXTRACTOR_BATCH_SIZE="${EXTRACTOR_BATCH_SIZE:-32}"
 CLASSIFIER_BATCH_SIZE="${CLASSIFIER_BATCH_SIZE:-128}"
+DIGESTOR_BATCH_SIZE="${DIGESTOR_BATCH_SIZE:-32}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -28,6 +29,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --classifier-batch-size|--classifier_batch_size)
             CLASSIFIER_BATCH_SIZE="$2"
+            shift 2
+            ;;
+        --digestor-batch-size|--digestor_batch_size)
+            DIGESTOR_BATCH_SIZE="$2"
             shift 2
             ;;
         *)
@@ -45,6 +50,14 @@ run_extractor() {
     $PYTHON $RUN --mode EXTRACTOR --batch_size $EXTRACTOR_BATCH_SIZE
 }
 
+run_digestor() {
+    $PYTHON $RUN --mode DIGESTOR --batch_size $DIGESTOR_BATCH_SIZE
+}
+
+run_classifier() {
+    $PYTHON $RUN --mode CLASSIFIER --batch_size $CLASSIFIER_BATCH_SIZE    
+}
+
 backup_clscache() {
     echo "=== [STARTING] ZVEC Classification Cache Backup ==="
     local dump_file="$WORKING_DIR/.cache/clscache.tar.gz"
@@ -54,12 +67,15 @@ backup_clscache() {
     echo "=== [FINISHED] ZVEC Classification Cache Backup ==="
 }
 
-run_classifier() {
-    $PYTHON $RUN --mode CLASSIFIER --batch_size $CLASSIFIER_BATCH_SIZE
+
+run_extractor_and_digestor() {
+    run_extractor
+    run_digestor
 }
 
-run_porter() {
-    $PYTHON $RUN --mode PORTER 
+run_classifier_and_backup_clscache() {
+    run_classifier
+    backup_clscache
 }
 
 # run sequence
@@ -71,12 +87,9 @@ echo "=== [STARTING] ==="
 
 run_embedder
 
-run_extractor &
-run_classifier &
+run_extractor_and_digestor &
+run_classifier_and_backup_clscache &
 wait
 echo "=== [FINISHED] ==="
-
-# TODO: backup should start right after classifier ends and not wait for extractor
-backup_clscache
 
 $PYTHON $WORKING_DIR/machine_ops.py --action stop --instance tensordock
