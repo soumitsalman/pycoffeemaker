@@ -53,6 +53,7 @@ class StateCache(StateCacheBase):
         }
         self.pool = ConnectionPool(
             self.conn_str,
+            min_size=0,
             max_size=16,
             timeout=TIMEOUT,
             max_idle=TIMEOUT,
@@ -153,6 +154,7 @@ class AsyncStateCache(AsyncStateCacheBase):
     async def __aenter__(self):
         self.pool = AsyncConnectionPool(
             self.conn_str,
+            min_size=0,
             max_size=32,
             timeout=TIMEOUT,
             max_idle=TIMEOUT,

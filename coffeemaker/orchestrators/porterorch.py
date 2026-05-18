@@ -122,17 +122,15 @@ class BeansackPorter:
         await asyncio.to_thread(db.optimize)
         return sum(counts)
 
-    async def hydrate_beansacks(self, db: Beansack, target_state: str = "beansacked"):
+    async def hydrate_beansack(self, db: Beansack, target_state: str = "beansacked"):
         """Ports beans, publishers and related beans to 1 or more Beansacks"""
-        total_ported = 0
-        async with self.cache:
-            counts = await asyncio.gather(*[
-                self.hydrate_beans(db, target_state), 
-                self.hydrate_publishers(db, target_state), 
-                self.hydrate_trends(db, target_state)
-            ])
-            total_ported = sum(counts)
-            log.info("hydration complete", extra={"source": "beansack", "num_items": total_ported})        
+        counts = await asyncio.gather(*[
+            self.hydrate_beans(db, target_state),
+            self.hydrate_publishers(db, target_state),
+            self.hydrate_trends(db, target_state),
+        ])
+        total_ported = sum(counts)
+        log.info("hydration complete", extra={"source": "beansack", "num_items": total_ported})
         return total_ported
 
 
@@ -212,13 +210,16 @@ class CupboardPorter:
         return count
 
     async def hydrate_cupboard(self, db: Cupboard, target_state: str = "cupboarded"):
-        async with self.cache, db:           
-            counts = await asyncio.gather(*(
-                self.hydrate_events(db, target_state),
-                self.hydrate_sources(db, target_state),
-                self.hydrate_related(db, target_state)
-            ))
+        async with db:
+            counts = await asyncio.gather(
+                # self.hydrate_events(db, target_state),
+                # self.hydrate_sources(db, target_state),
+                self.hydrate_related(db, target_state),
+            )
             await db.optimize()
+            total_ported = sum(counts)
+            log.info("hydration complete", extra={"source": "cupboard", "num_items": total_ported})
+            return total_ported
         
         
         

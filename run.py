@@ -45,10 +45,9 @@ logging.getLogger("connectionpool").propagate = False
 
 ### WORKER SCHEDULING ###
 # Collector can run 2 times a day for 1-1.5 hours -- 6 AM / 6 PM
-# Indexer can run 3 times a day for 30 mins -- 7 AM, 3 PM, 11 PM
+# Embedder / Extractor / Classifier can run 3 times a day for 30 mins -- 7 AM, 3 PM, 11 PM
 # Digestor can run 3 times a day for 30 mins (in GPU) -- 7 AM, 3 PM, 11 PM
-# Composer can run 1 time a day for 30 mins -- 5:30 AM (this way the contents will get picked up by indexer and digestor as needed)
-# All UI clients can do their porting as they please
+# Porter clients can run as needed
 
 # Set up argument parser
 parser = argparse.ArgumentParser(description="Run the coffee maker application")
@@ -98,23 +97,22 @@ if __name__ == "__main__":
         ))
 
     elif mode == "EMBEDDER":
-        from coffeemaker.orchestrators.analyzerorch import Indexer
+        from coffeemaker.orchestrators.analyzerorch import Embedder
 
-        orch = Indexer(
+        orch = Embedder(
             cache=cache,
             embedder_path=os.getenv("EMBEDDER_PATH"),
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
             ),
         )
-        orch.run_embedder(batch_size=batch_size)
+        orch.run(batch_size=batch_size)
 
     elif mode == "CLASSIFIER":
-        from coffeemaker.orchestrators.analyzerorch import Indexer
+        from coffeemaker.orchestrators.analyzerorch import Classifier
         from coffeemaker.processingcache.firecache import ClassificationCache
         
         cls_cache = ClassificationCache(
-            # TODO: change this later
             os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/.cache/clsstore'), 
             table_settings={
                 BEANS: {"id_key": K_URL, "distance_func": "l2"},
@@ -122,37 +120,36 @@ if __name__ == "__main__":
                 "sentiments": {"id_key": "sentiment", "distance_func": "cosine"}
             }
         )
-        orch = Indexer(cache=cache, cls_cache=cls_cache)
-        orch.run_classifier(batch_size=batch_size)
-        orch.run_clusterer(batch_size=batch_size)        
+        Classifier(cache=cache, cls_cache=cls_cache).run(batch_size=batch_size)
         cls_cache.close()
 
     elif mode == "EXTRACTOR":
-        from coffeemaker.orchestrators.analyzerorch import Indexer
+        from coffeemaker.orchestrators.analyzerorch import Extractor
 
-        orch = Indexer(
+        orch = Extractor(
             cache=cache,
             extractor_path=os.getenv("EXTRACTOR_PATH"),
             extractor_context_len=int(
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
             ),
         )
-        orch.run_extractor(batch_size=batch_size)
+        orch.run(batch_size=batch_size)
 
     elif mode == "DIGESTOR":
-        from coffeemaker.orchestrators.analyzerorch import Indexer
+        from coffeemaker.orchestrators.analyzerorch import Digestor
 
-        orch = Indexer(
+        orch = Digestor(
             cache=cache,
             digestor_path=os.getenv("DIGESTOR_PATH"),
             digestor_context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
         )
-        orch.run_digestor(batch_size=batch_size)       
+        orch.run(batch_size=batch_size)       
 
     elif mode == "PORTER":
-        from coffeemaker.orchestrators.porterorch import BeansackPorter
+        from coffeemaker.orchestrators.porterorch import BeansackPorter, CupboardPorter
+        from pycupboard.pgcupboard import Cupboard
 
         db_kwargs = {
             "db_type": os.getenv("DB_TYPE"),
@@ -164,15 +161,26 @@ if __name__ == "__main__":
             "ducklake_catalog": os.getenv("DUCKLAKE_CATALOG"),
             "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
         }
-        db = create_client(**db_kwargs)
-        orch = BeansackPorter(cache=async_cache)
-        # TODO: add cupboard porter
-        asyncio.run(orch.hydrate_beansacks(db, "beansacked"))
-        db.close()
+
+        async def run_porter():
+            beansack_db = create_client(**db_kwargs)
+            cupboard_db = Cupboard(os.getenv("CUPBOARD_CONNECTION_STRING"))
+            beansack_orch = BeansackPorter(cache=async_cache)
+            cupboard_orch = CupboardPorter(cache=async_cache)
+            try:
+                async with async_cache:
+                    await asyncio.gather(
+                        beansack_orch.hydrate_beansack(beansack_db, "beansacked"),
+                        cupboard_orch.hydrate_cupboard(cupboard_db, "cupboarded"),
+                    )
+            finally:
+                beansack_db.close()
+
+        asyncio.run(run_porter())
 
     else:
         raise ValueError(
-            "Invalid mode. Please choose from COLLECTOR, INDEXER, DIGESTOR, EXTRACTOR, ANALYZER, CLASSIFIER, CLUSTERER."
+            "Invalid mode. Choose COLLECTOR, EMBEDDER, EXTRACTOR, DIGESTOR, CLASSIFIER, or PORTER."
         )
     
     cache.close()

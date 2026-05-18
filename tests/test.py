@@ -281,31 +281,75 @@ def test_collector_orch():
     asyncio.run(orch.run(sources, batch_size=16))
     
 
-def test_embedder_orch():
-    from coffeemaker.orchestrators.analyzerorch import Indexer
+def _analyzer_test_cache():
     from coffeemaker.processingcache.sqlitecache import StateCache
 
-    cache = StateCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
-    orch = Indexer(
-        cache,
-        embedder_path="vllm://avsolatorio/GIST-small-Embedding-v0",
-        embedder_context_len=512,
+    return StateCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
+
+
+def _analyzer_cls_cache():
+    from coffeemaker.processingcache.firecache import ClassificationCache
+
+    return ClassificationCache(
+        ".test/clsstore-test",
+        table_settings={
+            BEANS: {"id_key": K_URL, "distance_func": "l2"},
+            "categories": {"id_key": "category", "distance_func": "cosine"},
+            "sentiments": {"id_key": "sentiment", "distance_func": "cosine"},
+        },
     )
-    orch.run_embedder(batch_size=32)
+
+
+def test_embedder_orch():
+    from coffeemaker.orchestrators.analyzerorch import Embedder
+
+    cache = _analyzer_test_cache()
+    orch = Embedder(
+        cache=cache,
+        embedder_path=os.getenv(
+            "EMBEDDER_PATH", "vllm://avsolatorio/GIST-small-Embedding-v0"
+        ),
+        embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
+    )
+    orch.run(batch_size=32)
+    cache.close()
+
+
+def test_extractor_orch():
+    from coffeemaker.orchestrators.analyzerorch import Extractor
+
+    cache = _analyzer_test_cache()
+    orch = Extractor(
+        cache=cache,
+        extractor_path=os.getenv("EXTRACTOR_PATH"),
+        extractor_context_len=int(os.getenv("EXTRACTOR_CONTEXT_LEN", 4096)),
+    )
+    orch.run(batch_size=16)
     cache.close()
 
 
 def test_digestor_orch():
-    from coffeemaker.orchestrators.analyzerorch import Indexer
-    from coffeemaker.processingcache.sqlitecache import StateCache
+    from coffeemaker.orchestrators.analyzerorch import Digestor
 
-    cache = StateCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
-    orch = Indexer(
-        cache,
-        digestor_path="vllm://LiquidAI/LFM2.5-1.2B-Instruct",
-        digestor_context_len=32768,
+    cache = _analyzer_test_cache()
+    orch = Digestor(
+        cache=cache,
+        digestor_path=os.getenv(
+            "DIGESTOR_PATH", "vllm://LiquidAI/LFM2.5-1.2B-Instruct"
+        ),
+        digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", 32768)),
     )
-    orch.run_digestor(batch_size=16)
+    orch.run(batch_size=16)
+    cache.close()
+
+
+def test_classifier_orch():
+    from coffeemaker.orchestrators.analyzerorch import Classifier
+
+    cache = _analyzer_test_cache()
+    cls_cache = _analyzer_cls_cache()
+    Classifier(cache=cache, cls_cache=cls_cache).run(batch_size=32)
+    cls_cache.close()
     cache.close()
 
 def test_porter_orch(beansack_or_cupboard):
@@ -320,10 +364,15 @@ def test_porter_orch(beansack_or_cupboard):
     }
     cache = AsyncStateCache(os.getenv('PROCESSING_CACHE'), cache_settings)    
     
-    if beansack_or_cupboard == "cupboard": 
+    if beansack_or_cupboard == "cupboard":
         orch = CupboardPorter(cache=cache)
         db = Cupboard(os.getenv('CUPBOARD_CONNECTION_STRING'))
-        asyncio.run(orch.hydrate_cupboard(db))    
+
+        async def run():
+            async with cache, db:
+                await orch.hydrate_cupboard(db)
+
+        asyncio.run(run())
 
 def test_vector_search():
     from pycupboard.pgcupboard import Cupboard
@@ -521,10 +570,16 @@ parser.add_argument(
     "--runcollector", action="store_true", help="Test collector orchestrator"
 )
 parser.add_argument(
-    "--runembedder", action="store_true", help="Test indexer orchestrator"
+    "--runembedder", action="store_true", help="Test embedder orchestrator"
+)
+parser.add_argument(
+    "--runextractor", action="store_true", help="Test extractor orchestrator"
 )
 parser.add_argument(
     "--rundigestor", action="store_true", help="Test digestor orchestrator"
+)
+parser.add_argument(
+    "--runclassifier", action="store_true", help="Test classifier orchestrator"
 )
 parser.add_argument("--runporter", type=str, help="Test porter")
 parser.add_argument(
@@ -560,7 +615,9 @@ def main():
     
     if args.runcollector: test_collector_orch()
     if args.runembedder: test_embedder_orch()
+    if args.runextractor: test_extractor_orch()
     if args.rundigestor: test_digestor_orch()
+    if args.runclassifier: test_classifier_orch()
     if args.runporter: test_porter_orch(args.runporter)
 
     if args.cache:

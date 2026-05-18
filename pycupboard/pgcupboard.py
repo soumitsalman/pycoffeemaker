@@ -180,23 +180,6 @@ class Cupboard:
         if not relations:
             return 0
 
-        # # step 1: resolve urls to ids
-        # urls = set()
-        # for item in relations:
-        #     if not (related_urls := item.get(RELATED)): continue
-
-        #     if isinstance(url := item.get(URL), str): urls.add(url)
-        #     urls.update(ref for ref in related_urls if isinstance(ref, str))
-
-        # url_ids = {}
-        # if urls:
-        #     async with self.pool.connection() as conn:
-        #         cur = await conn.execute(
-        #             "SELECT id, url FROM sips WHERE url = ANY(%(urls)s)",
-        #             {"urls": list(urls)},
-        #         )
-        #         url_ids = {row[1]: row[0] async for row in cur}
-
         def _sip_id(ref: str | UUID) -> uuid.UUID | None:
             if isinstance(ref, UUID): return ref
             # no need to resolve urls to ids because the ids are deterministic based on the url
@@ -210,8 +193,8 @@ class Cupboard:
             if from_id and related_urls:
                 relation_rows.extend((from_id, to_id, relationship) for to_ref in related_urls if (to_id := _sip_id(to_ref)))
         
-        if not relation_rows:
-            return 0
+        # from icecream import ic
+        # ic(relation_rows[:3])
 
         # step 3: create insertion statements and insert relation rows
         expr_format = """INSERT INTO relations (from_id, to_id, relationship) VALUES {values}

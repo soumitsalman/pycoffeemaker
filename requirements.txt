@@ -2,6 +2,7 @@ accelerate
 vllm
 transformers
 sentence-transformers
+lm-format-enforcer
 llama-index
 gliner
 tiktoken
