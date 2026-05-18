@@ -35,11 +35,11 @@ if log_dir:
     os.makedirs(log_dir, exist_ok=True)
     log_file = f"{log_dir}/rectify-{now().strftime('%Y-%m-%d-%H')}.log"
 
-logging.basicConfig(
-    level=logging.INFO,
-    filename=log_file,
-    format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s",
-)
+# logging.basicConfig(
+#     level=logging.INFO,
+#     filename=log_file,
+#     format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s",
+# )
 
 ndays_ago = lambda n: datetime.now() - timedelta(days=n)
 make_id = lambda text: re.sub(r"[^a-zA-Z0-9]", "-", text.lower())
@@ -394,15 +394,52 @@ def hydrate_processing_cache(cache_dir, batch_size):
     db.close()
 
 
+def recitify_embeddings_and_classifications():
+    from nlp import embedders
+    db = create_client(
+        db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING")
+    )
+    cls_cache =  FireClassificationCache(
+        os.getenv('CLASSIFICATION_CACHE', f'.cache/clsstore'), 
+        table_settings={
+            BEANS: {"id_key": K_URL, "distance_func": "l2"},
+            "categories": {"id_key": "category", "distance_func": "cosine"},
+            "sentiments": {"id_key": "sentiment", "distance_func": "cosine"}
+        }
+    )
+    with embedders.from_path(os.getenv("EMBEDDER_PATH"), int(os.getenv("EMBEDDER_CONTEXT_LEN"))) as embedder:
+        while beans := db.query_latest_beans(
+            conditions=["embedding IS NOT NULL"],
+            limit=16,
+            offset=0,
+            columns=[K_URL, K_CONTENT],
+        ):
+            embeddings = embedder.embed_documents([bean.content for bean in beans])
+            categories = cls_cache.batch_search("categories", embeddings, top_n=2)
+            sentiments = cls_cache.batch_search("sentiments", embeddings, top_n=2)
+            cls_cache.store(BEANS, [{"url": bean.url, "embedding": embedding} for bean, embedding in zip(beans, embeddings)])
+            db.update_beans(
+                [ 
+                    Bean(url=bean.url, embedding=emb, categories=cats, sentiments=sents)
+                    for bean, emb, cats, sents in zip(beans, embeddings, categories, sentiments)
+                ], 
+                columns=[K_EMBEDDING, K_CATEGORIES, K_SENTIMENTS]
+            )
+            print("rectified %d" % offset)
+            offset += len(beans)
+    db.close()
+    cls_cache.close()
+
 # adding data porting logic
 if __name__ == "__main__":
-    migrate_classification_cache_pg_to_fire(
-        pg_conn_str=os.getenv("PROCESSING_CACHE")+"/clsstore",
-        fire_db_path=".cache/clsstore",
-        batch_size=512,
-        vector_length=384,
-        distance_func="l2",
-    )
+    recitify_embeddings_and_classifications()
+    # migrate_classification_cache_pg_to_fire(
+    #     pg_conn_str=os.getenv("PROCESSING_CACHE")+"/clsstore",
+    #     fire_db_path=".cache/clsstore",
+    #     batch_size=512,
+    #     vector_length=384,
+    #     distance_func="l2",
+    # )
     # migrate_classification_cache(
     #     from_lance=".cache/",
     #     to_pg=os.getenv("PROCESSING_CACHE") + "/clsstore",
