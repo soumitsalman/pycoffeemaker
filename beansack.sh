@@ -92,4 +92,4 @@ run_classifier_and_backup_clscache &
 wait
 echo "=== [FINISHED] ==="
 
-$PYTHON $WORKING_DIR/machine_ops.py --action stop --instance tensordock
+$PYTHON $WORKING_DIR/machine_ops.py --action stop

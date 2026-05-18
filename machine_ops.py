@@ -14,6 +14,10 @@ def shutdown_td(instance_id, api_key):
     res.raise_for_status()
     print(res.text)
 
+def shutdown_az(auth_url: str):
+    res = requests.post(auth_url)
+    res.raise_for_status()
+    print(res.text)
 
 def start_td(instance_id, api_key):
     url = f"https://dashboard.tensordock.com/api/v2/instances/{instance_id}/start"
@@ -21,17 +25,26 @@ def start_td(instance_id, api_key):
     res.raise_for_status()
     print(res.text)
 
-def run(instance, action):
-    if instance.lower() == "tensordock":
-        id, api_key = os.getenv('TD_INSTANCE_ID'), os.getenv('TD_API_KEY')
-        if action == "stop": shutdown_td(id, api_key)
-        elif action == "start": start_td(id, api_key)
+def run(provider, action):
+    match provider.lower():
+        case "tensordock":
+            id, api_key = os.getenv('TD_INSTANCE_ID'), os.getenv('TD_API_KEY')
+            match action:
+                case "stop": shutdown_td(id, api_key)
+                case "start": start_td(id, api_key)
+        case "azure":
+            auth_url = os.getenv('AZ_AUTH_URL')
+            match action:
+                case "stop": shutdown_az(auth_url)
 
 parser = argparse.ArgumentParser(description="Run the coffee maker application")
-parser.add_argument("--action", type=str, help="The action to do")
-parser.add_argument("--instance", type=str, help="The instance to act upon")
+parser.add_argument("--action", type=str, required=True, help="The action to do")
+parser.add_argument("--provider", type=str, default=None, help="The provider to act upon (default: GPU_PROVIDER)")
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    run(instance=args.instance, action=args.action)
+    provider = args.provider or os.getenv("GPU_PROVIDER")
+    if not provider:
+        parser.error("provider required via --provider or GPU_PROVIDER")
+    run(provider=provider, action=args.action)
     
