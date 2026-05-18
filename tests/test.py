@@ -365,12 +365,19 @@ def test_porter_orch(beansack_or_cupboard):
     cache = AsyncStateCache(os.getenv('PROCESSING_CACHE'), cache_settings)    
     
     if beansack_or_cupboard == "cupboard":
-        orch = CupboardPorter(cache=cache)
         db = Cupboard(os.getenv('CUPBOARD_CONNECTION_STRING'))
-
         async def run():
-            async with cache, db:
-                await orch.hydrate_cupboard(db)
+            async with cache:
+                await CupboardPorter(cache=cache).hydrate_cupboard(db)
+
+        asyncio.run(run())
+
+    elif beansack_or_cupboard == "beansack":
+        db = create_client(db_type="pg", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))
+        async def run():
+            async with cache:
+                await BeansackPorter(cache=cache).hydrate_beansack(db)
+            db.close()
 
         asyncio.run(run())
 

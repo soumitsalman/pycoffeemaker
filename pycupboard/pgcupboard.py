@@ -9,6 +9,7 @@ from typing import Any
 from psycopg_pool import AsyncConnectionPool
 from pgvector.psycopg import Vector, register_vector_async
 from psycopg import sql
+from psycopg.types.json import Jsonb
 
 from .models import *
 
@@ -122,11 +123,11 @@ class Cupboard:
 
     async def store_sips(self, sips: list[Sip]) -> int:
         """Store a list of sips in the database."""
-
         if not sips: return 0
         
         for sip in sips:
             sip.embedding = Vector(sip.embedding)
+            if sip.digest: sip.digest = Jsonb(sip.digest)
 
         row_placeholder = sql.SQL("(" + ",".join(["%s"] * len(SIP_COLUMNS)) + ")")
         store_batches = [
@@ -192,9 +193,6 @@ class Cupboard:
             related_urls = item.get(RELATED)
             if from_id and related_urls:
                 relation_rows.extend((from_id, to_id, relationship) for to_ref in related_urls if (to_id := _sip_id(to_ref)))
-        
-        # from icecream import ic
-        # ic(relation_rows[:3])
 
         # step 3: create insertion statements and insert relation rows
         expr_format = """INSERT INTO relations (from_id, to_id, relationship) VALUES {values}

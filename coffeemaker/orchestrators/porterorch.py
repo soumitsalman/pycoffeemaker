@@ -16,7 +16,7 @@ log = logging.getLogger("porterworker")
 
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', 256))
     
-def merge(groups: list[dict[str, Any]]):
+def merge(groups: list[list[dict[str, Any]]]):
     merged = []
     for gr in groups:
         pack = {}
@@ -49,14 +49,14 @@ class BeansackPorter:
             if entities := bean.get(K_ENTITIES):
                 bean.update({
                     K_ENTITIES: merge_lists(
-                        entities.people,
-                        entities.companies,
-                        entities.products,
-                        entities.stock_tickers,
+                        entities.get('people', []),
+                        entities.get('companies', []),
+                        entities.get('products', []),
+                        entities.get('stock_tickers', []),
                     ),
-                    K_REGIONS: entities.regions
+                    K_REGIONS: entities.get('regions', [])  
                 })
-        return [Bean(**bean) for bean in merge(beans)]
+        return [Bean(**bean) for bean in beans]
 
     @classmethod
     def prep_related(cls, beans: list[dict]):
@@ -73,10 +73,10 @@ class BeansackPorter:
         if beans := await self.cache.get(
             BEANS,
             states=["collected", "embedded", "classified", "extracted"],
-            exclude_states=target_state
+            exclude_states=target_state,
         ):  
             beans = self.prep_beans(beans)
-            log.info("porting", extra={"source": "portable:beans", "num_items": len(beans)})  
+            log.info("porting", extra={"source": "beansack:beans", "num_items": len(beans)})  
             count = await self.store_chunks(db.store_beans, beans)
             log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
             await self.cache.set(BEANS, target_state, [{K_URL: b.url} for b in beans])
@@ -85,7 +85,7 @@ class BeansackPorter:
 
     async def hydrate_publishers(self, db: Beansack, target_state: str):
         if publishers := await self.cache.get(PUBLISHERS, states="collected", exclude_states=target_state):
-            log.info("porting", extra={"source": "portable:publishers", "num_items": len(publishers)})
+            log.info("porting", extra={"source": "beansack:publishers", "num_items": len(publishers)})
             count = await self.store_chunks(db.store_publishers, [Publisher(**pub) for pub in publishers])
             log.info("ported",extra={"source": "beansack:publishers", "num_items": count})
             await self.cache.set(PUBLISHERS, target_state, [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
@@ -95,7 +95,7 @@ class BeansackPorter:
     async def hydrate_related(self, db: Beansack, target_state: str):
         target = target_state+":link"
         if related_beans := await self.cache.get(BEANS, states="clustered", exclude_states=target):
-            log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
+            log.info("porting", extra={"source": "beansack:related_beans", "num_items": len(related_beans)})
             count = await self.store_chunks(db.store_related, self.prep_related(related_beans))
             log.info("ported", extra={"source": "beansack:related_beans", "num_items": count})
             await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
@@ -107,7 +107,7 @@ class BeansackPorter:
             # save the ids for cache resetting
             ids = [{"id": pkg['id']} for pkg in chatters]
             chatters = list(chain(*(pkg['chatters'] for pkg in chatters)))
-            log.info("porting", extra={"source": "portable:chatters", "num_items": len(chatters)})
+            log.info("porting", extra={"source": "beansack:chatters", "num_items": len(chatters)})
             count = await asyncio.to_thread(db.store_chatters, [Chatter(**ch) for ch in chatters])
             log.info("ported",extra={"source": "beansack:chatters", "num_items": count})
             await self.cache.set(CHATTERS, target_state, ids)
@@ -178,7 +178,7 @@ class CupboardPorter:
             exclude_states=target_state,
         ):  
             beans = self.prep_events(beans)
-            log.info("porting", extra={"source": "portable:events", "num_items": len(beans)})             
+            log.info("porting", extra={"source": "cupboard:events", "num_items": len(beans)})             
             count = await db.store_sips(beans)
             log.info("ported", extra={"source": "cupboard:events", "num_items": count})                
             await self.cache.set(BEANS, target_state, [{K_URL: b.url} for b in beans])            
@@ -186,11 +186,9 @@ class CupboardPorter:
 
     async def hydrate_sources(self, db: Cupboard, target_state: str):
         count = 0
-        if sources := await self.cache.get(
-            PUBLISHERS, states="collected", exclude_states=target_state
-        ):
+        if sources := await self.cache.get(PUBLISHERS, states="collected", exclude_states=target_state):
             sources = self.prep_sources(sources)
-            log.info("porting", extra={"source": "portable:sources", "num_items": len(sources)})
+            log.info("porting", extra={"source": "cupboard:sources", "num_items": len(sources)})
             count = await db.store_sources(sources)
             log.info("ported",extra={"source": "cupboard:sources", "num_items": count})
             await self.cache.set(PUBLISHERS, target_state, [{K_BASE_URL: p.base_url} for p in sources])
@@ -200,10 +198,8 @@ class CupboardPorter:
         # related bean is pulling from the same well so distinguishing related vs regular
         target = target_state+":link"
         count = 0
-        if related_beans := await self.cache.get(
-            BEANS, states="clustered", exclude_states=target
-        ):
-            log.info("porting", extra={"source": "portable:related_beans", "num_items": len(related_beans)})
+        if related_beans := await self.cache.get(BEANS, states="clustered", exclude_states=target):
+            log.info("porting", extra={"source": "cupboard:related_beans", "num_items": len(related_beans)})
             count = await db.link_sips(related_beans, "SAME_AS")
             log.info("ported", extra={"source": "cupboard:related_beans", "num_items": count})
             await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
@@ -213,7 +209,7 @@ class CupboardPorter:
         async with db:
             counts = await asyncio.gather(
                 self.hydrate_events(db, target_state),
-                self.hydrate_sources(db, target_state),
+                # self.hydrate_sources(db, target_state),
                 self.hydrate_related(db, target_state),
             )
             await db.optimize()
