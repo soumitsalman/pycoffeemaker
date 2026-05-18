@@ -164,15 +164,16 @@ if __name__ == "__main__":
 
         async def run_porter():
             beansack_db = create_client(**db_kwargs)
-            cupboard_db = Cupboard(os.getenv("CUPBOARD_CONNECTION_STRING"))
-            beansack_orch = BeansackPorter(cache=async_cache)
-            cupboard_orch = CupboardPorter(cache=async_cache)
             try:
-                async with async_cache:
-                    await asyncio.gather(
-                        beansack_orch.hydrate_beansack(beansack_db, "beansacked"),
-                        cupboard_orch.hydrate_cupboard(cupboard_db, "cupboarded"),
-                    )
+                async with async_cache, asyncio.TaskGroup() as tg:
+                    tg.create_task(BeansackPorter(cache=async_cache).hydrate_beansack(beansack_db, "beansacked"))
+                    if cupboard_conn_str := os.getenv("CUPBOARD_CONNECTION_STRING"):
+                        tg.create_task(
+                            CupboardPorter(cache=async_cache).hydrate_cupboard(
+                                Cupboard(cupboard_conn_str), 
+                                "cupboarded"
+                            )
+                        )
             finally:
                 beansack_db.close()
 
