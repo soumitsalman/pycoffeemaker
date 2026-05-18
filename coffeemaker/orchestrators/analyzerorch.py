@@ -73,7 +73,7 @@ class Embedder:
 
     @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
-        beans = self.cache.get(BEANS, states="collected", exclude_states="embedded", limit=100)
+        beans = self.cache.get(BEANS, states="collected", exclude_states="embedded")
         log.info("starting embedder", extra={"source": run_id(), "num_items": len(beans)})
         total = 0
         for updates in self.embed_beans(beans, batch_size):
