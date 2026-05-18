@@ -48,8 +48,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from coffeemaker.orchestrators.utils import log_runtime
-from pybeansack import *
 from pybeansack.models import *
+from pybeansack import *
 
 os.makedirs(".test", exist_ok=True)
 
@@ -281,113 +281,130 @@ def test_collector_orch():
     asyncio.run(orch.run(sources, batch_size=16))
     
 
-def test_embedder_orch():
-    from coffeemaker.orchestrators.analyzerorch import Indexer
+def _analyzer_test_cache():
     from coffeemaker.processingcache.sqlitecache import StateCache
 
-    cache = StateCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
-    orch = Indexer(
-        cache,
-        embedder_path="vllm://avsolatorio/GIST-small-Embedding-v0",
-        embedder_context_len=512,
+    return StateCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
+
+
+def _analyzer_cls_cache():
+    from coffeemaker.processingcache.firecache import ClassificationCache
+
+    return ClassificationCache(
+        ".test/clsstore-test",
+        table_settings={
+            BEANS: {"id_key": K_URL, "distance_func": "l2"},
+            "categories": {"id_key": "category", "distance_func": "cosine"},
+            "sentiments": {"id_key": "sentiment", "distance_func": "cosine"},
+        },
     )
-    orch.run_embedder(batch_size=32)
+
+
+def test_embedder_orch():
+    from coffeemaker.orchestrators.analyzerorch import Embedder
+
+    cache = _analyzer_test_cache()
+    orch = Embedder(
+        cache=cache,
+        embedder_path=os.getenv(
+            "EMBEDDER_PATH", "vllm://avsolatorio/GIST-small-Embedding-v0"
+        ),
+        embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
+    )
+    orch.run(batch_size=32)
+    cache.close()
+
+
+def test_extractor_orch():
+    from coffeemaker.orchestrators.analyzerorch import Extractor
+
+    cache = _analyzer_test_cache()
+    orch = Extractor(
+        cache=cache,
+        extractor_path=os.getenv("EXTRACTOR_PATH"),
+        extractor_context_len=int(os.getenv("EXTRACTOR_CONTEXT_LEN", 4096)),
+    )
+    orch.run(batch_size=16)
     cache.close()
 
 
 def test_digestor_orch():
-    from coffeemaker.orchestrators.analyzerorch import Indexer
-    from coffeemaker.processingcache.sqlitecache import StateCache
+    from coffeemaker.orchestrators.analyzerorch import Digestor
 
-    cache = StateCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
-    orch = Indexer(
-        cache,
-        digestor_path="vllm://LiquidAI/LFM2.5-1.2B-Instruct",
-        digestor_context_len=32768,
+    cache = _analyzer_test_cache()
+    orch = Digestor(
+        cache=cache,
+        digestor_path=os.getenv(
+            "DIGESTOR_PATH", "vllm://LiquidAI/LFM2.5-1.2B-Instruct"
+        ),
+        digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", 32768)),
     )
-    orch.run_digestor(batch_size=16)
+    orch.run(batch_size=16)
     cache.close()
 
-def test_warehouse():
-    from coffeemaker.collectors.collector import APICollectorAsync, parse_sources
-    from coffeemaker.nlp.src import agents, embedders
-    from coffeemaker.orchestrators.composerorch import parse_topics
-    from coffeemaker.pybeansack.models import K_CONTENT, K_CREATED, K_URL, Bean
-    from coffeemaker.pybeansack.warehouse import DIGEST_COLUMNS, Beansack
+
+def test_classifier_orch():
+    from coffeemaker.orchestrators.analyzerorch import Classifier
+
+    cache = _analyzer_test_cache()
+    cls_cache = _analyzer_cls_cache()
+    Classifier(cache=cache, cls_cache=cls_cache).run(batch_size=32)
+    cls_cache.close()
+    cache.close()
+
+def test_porter_orch(beansack_or_cupboard):
+    from coffeemaker.orchestrators.porterorch import BeansackPorter, CupboardPorter
+    from coffeemaker.processingcache.pgcache import AsyncStateCache
+    from pycupboard.pgcupboard import Cupboard
+
+    cache_settings = {
+        BEANS: {"id_key": K_URL},
+        PUBLISHERS: {"id_key": K_BASE_URL},
+        CHATTERS: {"id_key": "id"}
+    }
+    cache = AsyncStateCache(os.getenv('PROCESSING_CACHE'), cache_settings)    
+    
+    if beansack_or_cupboard == "cupboard":
+        orch = CupboardPorter(cache=cache)
+        db = Cupboard(os.getenv('CUPBOARD_CONNECTION_STRING'))
+
+        async def run():
+            async with cache, db:
+                await orch.hydrate_cupboard(db)
+
+        asyncio.run(run())
+
+def test_vector_search():
+    from pycupboard.pgcupboard import Cupboard
+    from pycupboard.models import URL
     from tqdm import tqdm
+    from nlp import embedders
+    from faker import Faker
 
-    db = Beansack(
-        catalogdb="sqlite:.test/beansack/catalogdb.db",
-        storagedb=".test/beansack/storage",
-        factory_dir="factory",
-    )
-    col = APICollectorAsync(batch_size=128)
-    sources = parse_sources(f"{os.path.dirname(__file__)}/sources-2.yaml")
-    embedder = embedders.from_path(os.getenv("EMBEDDER_PATH"), EMBEDDER_CONTEXT_LEN)
+    fake = Faker()
 
-    async def run_collector():
-        async with col:
-            for rss in sources["rss"][:5]:
-                beans = await col.collect_rssfeed(rss)
-                ic(db.store_beans(beans))
+    # db = create_client(db_type="pg", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))
+    # Cupboard.create_db("/home/soumitsr/codes/pycoffeemaker/.test/cupboard.db")
+    db = Cupboard(os.getenv('CUPBOARD_CONNECTION_STRING'))
+    embedder = embedders.from_path("avsolatorio/GIST-small-Embedding-v0", 512)
 
-    if False:
-        asyncio.run(run_collector())
+    queries = fake.sentences(256)
+    with embedder:
+        vecs = embedder.embed_documents(queries)
+        queries = queries
+        vecs = vecs
 
-    def run_indexer():
-        while beans := db.query_latest_beans(
-            exprs=["embedding IS NULL", "content_length >= 10"],
-            limit=8,
-            select=[K_URL, K_CONTENT, K_CREATED],
-        ):
-            vecs = embedder.embed_documents([bean.content for bean in beans])
-            beans = [
-                Bean(url=bean.url, embedding=vec)
-                for bean, vec in zip(beans, vecs)
-                if vec
-            ]
-            ic(db.update_beans(beans, columns=[K_EMBEDDING]))
+    async def run():        
+        async with db:            
+            async def search(q, vec):
+                result = await db.query_sips(embedding=vec, limit=10, columns=[URL])
+                print("#", q, "=======")
+                [print(item.url) for item in result]
+            start = now()
+            await asyncio.gather(*(search(q, vec) for q, vec in zip(queries, vecs)))            
+            print((now() - start).total_seconds()/len(vecs))
 
-    if False:
-        run_indexer()
-
-    if False:
-        ic(db.refresh_classifications())
-    if False:
-        ic(db.refresh_clusters())
-
-    def run_vector_query():
-        topics = parse_topics(
-            "/workspaces/beansack/pycoffeemaker/tests/composer-topics.json"
-        )
-        vecs = (
-            embedder.embed_documents([topic[K_DESCRIPTION] for topic in topics]) * 100
-        )
-
-        def query(vec):
-            limit = random.randint(24, 256)
-            beans = db.query_trending_beans(
-                updated=ndays_ago(7),
-                embedding=vec,
-                distance=0.3,
-                limit=limit,
-                columns=DIGEST_COLUMNS,
-            )
-            pbar.update(1)
-            # ic(limit, len(beans))
-
-        with tqdm(total=len(vecs)) as pbar:
-            with ThreadPoolExecutor(max_workers=30) as executor:
-                executor.map(query, vecs)
-            # list(map(query, vecs))
-
-    if False:
-        run_vector_query()
-
-    if True:
-        ic(db.query_aggregated_chatters(updated=ndays_ago(7), limit=16))
-
-    db.close()
+    asyncio.run(run())
 
 
 def test_cache():
@@ -553,18 +570,23 @@ parser.add_argument(
     "--runcollector", action="store_true", help="Test collector orchestrator"
 )
 parser.add_argument(
-    "--runembedder", action="store_true", help="Test indexer orchestrator"
+    "--runembedder", action="store_true", help="Test embedder orchestrator"
+)
+parser.add_argument(
+    "--runextractor", action="store_true", help="Test extractor orchestrator"
 )
 parser.add_argument(
     "--rundigestor", action="store_true", help="Test digestor orchestrator"
 )
 parser.add_argument(
-    "--runcomposer", action="store_true", help="Test composer orchestrator"
+    "--runclassifier", action="store_true", help="Test classifier orchestrator"
 )
+parser.add_argument("--runporter", type=str, help="Test porter")
 parser.add_argument(
     "--runrefresher", action="store_true", help="Test refresher orchestrator"
 )
 parser.add_argument("--cache", action="store_true", help="Test cache implementation")
+parser.add_argument("--vector", action="store_true", help="Test vector search implementation")
 parser.add_argument("--readonly", action="store_true", help="Test readonly warehouse")
 parser.add_argument("--warehouse", action="store_true", help="Test warehouse v2")
 parser.add_argument(
@@ -593,7 +615,10 @@ def main():
     
     if args.runcollector: test_collector_orch()
     if args.runembedder: test_embedder_orch()
+    if args.runextractor: test_extractor_orch()
     if args.rundigestor: test_digestor_orch()
+    if args.runclassifier: test_classifier_orch()
+    if args.runporter: test_porter_orch(args.runporter)
 
     if args.cache:
         test_cache()
@@ -601,6 +626,9 @@ def main():
         test_warehouse()
     if args.orchonlance:
         test_orch_on_lancesack()
+
+    if args.vector:
+        test_vector_search()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:
