@@ -1,5 +1,5 @@
 .venv
-*.env
+.infinity_cache
 .chromadb
 .models
 .processingqueue
@@ -25,6 +25,7 @@
 .ruff_cache
 .codex
 .opencode
+*.env
 history.txt
 graphify*
 zvec
