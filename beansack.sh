@@ -73,10 +73,10 @@ backup_clscache() {
 #     run_digestor
 # }
 
-run_classifier_and_backup_clscache() {
-    run_classifier
-    backup_clscache
-}
+# run_classifier_and_backup_clscache() {
+#     run_classifier
+#     backup_clscache
+# }
 
 # run sequence
 # embedder runs first
@@ -88,9 +88,11 @@ echo "=== [STARTING] ==="
 run_embedder
 
 run_extractor &
-run_classifier_and_backup_clscache &
+run_classifier &
 wait
-run_digestor
+run_digestor &
+backup_clscache &
+wait
 echo "=== [FINISHED] ==="
 
 $PYTHON $WORKING_DIR/machine_ops.py --action stop
