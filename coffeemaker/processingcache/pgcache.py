@@ -199,7 +199,7 @@ class AsyncStateCache(AsyncStateCacheBase):
         limit: int = 0,
         offset: int = 0,
     ):
-        expr, params = create_query_expr(object_type, states, exclude_states, limit, offset)
+        expr, params = create_query_expr(object_type, states, exclude_states, ids, window, limit, offset)
         async with self.pool.connection() as conn:
             rows = await _read_async(conn, expr, params)        
         return [decode_data(row) if not isinstance(row, list) else [decode_data(data) for data in row] for row in rows]
