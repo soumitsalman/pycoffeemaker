@@ -1,5 +1,6 @@
 accelerate
 vllm
+infinity-emb[all]
 transformers
 sentence-transformers
 lm-format-enforcer
