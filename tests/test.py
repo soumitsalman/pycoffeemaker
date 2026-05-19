@@ -282,13 +282,20 @@ def test_collector_orch():
     
 
 def _analyzer_test_cache():
-    from coffeemaker.processingcache.sqlitecache import StateCache
+    from coffeemaker.processingcache.pgcache import StateCache
 
-    return StateCache(".test/statestore-test.db", {BEANS: K_URL, PUBLISHERS: K_BASE_URL})
+    return StateCache(
+        os.getenv("PROCESSING_CACHE"),
+        {
+            BEANS: {"id_key": K_URL},
+            PUBLISHERS: {"id_key": K_BASE_URL},
+            CHATTERS: {"id_key": "id"}
+        }
+    )
 
 
 def _analyzer_cls_cache():
-    from coffeemaker.processingcache.firecache import ClassificationCache
+    from coffeemaker.processingcache.clscache import ClassificationCache
 
     return ClassificationCache(
         ".test/clsstore-test",
@@ -415,23 +422,71 @@ def test_vector_search():
 
 
 def test_cache():
-    from coffeemaker.processingcache.firecache import ClassificationCache
-    import numpy as np
+    from coffeemaker.processingcache.base import DEFAULT_WINDOW
+    from coffeemaker.processingcache.clscache import ClassificationCache
     import pandas as pd
     from nlp import embedders
-    from coffeemaker.processingcache.sqlitecache import StateCache
+    from coffeemaker.processingcache.pgcache import StateCache
     from faker import Faker
-        
-    fake = Faker()
 
-    if True:
-        st_cache = StateCache(".test/cache", {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}})
-        fake_bean = lambda: {K_URL: fake.url(), K_CONTENT: fake.paragraph(5), K_SOURCE: fake.domain_name()}
-        beans = [fake_bean() for _ in range(50)]        
-        st_cache.set(BEANS, "collected", beans)
-        time.sleep(60)
-        ic(st_cache.get(BEANS, "collected", "beansacked", limit=5))
-        
+    fake = Faker()
+    conn_str = os.getenv("PROCESSING_CACHE")
+    if not conn_str:
+        raise RuntimeError("PROCESSING_CACHE must be set in .env")
+
+    test_state = "test_cache_collected"
+    exclude_state = "test_cache_beansacked"
+
+    st_cache = StateCache(
+        conn_str,
+        {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}},
+    )
+    try:
+        beans = [
+            {
+                K_URL: fake.unique.url(),
+                K_CONTENT: fake.paragraph(3),
+                K_SOURCE: fake.domain_name(),
+            }
+            for _ in range(10)
+        ]
+        urls = [b[K_URL] for b in beans]
+        st_cache.set(BEANS, test_state, beans)
+
+        subset = urls[2:7]
+        by_ids = st_cache.get(BEANS, test_state, exclude_state, ids=subset)
+        returned_urls = {item[K_URL] for item in by_ids}
+        assert returned_urls == set(subset), f"get by ids: {returned_urls} != {set(subset)}"
+        ic("get by ids ok", len(by_ids))
+
+        old_urls, recent_urls = urls[:5], urls[5:]
+        with st_cache.pool.connection() as conn:
+            conn.execute(
+                f"UPDATE {BEANS} SET ts = CURRENT_TIMESTAMP - INTERVAL '10 days' "
+                "WHERE id = ANY(%(ids)s) AND state = %(state)s",
+                {"ids": old_urls, "state": test_state},
+            )
+        within_window = st_cache.get(
+            BEANS, test_state, exclude_state, ids=urls, window=7
+        )
+        in_window = {item[K_URL] for item in within_window}
+        assert set(recent_urls) <= in_window
+        assert not set(old_urls) & in_window, f"window=7 should exclude: {old_urls & in_window}"
+        ic("window=7 ok", sorted(in_window))
+
+        wide = st_cache.get(
+            BEANS, test_state, exclude_state, ids=old_urls, window=14
+        )
+        assert {item[K_URL] for item in wide} == set(old_urls)
+        ic("window=14 ok", len(wide))
+
+        st_cache.set(BEANS, exclude_state, beans)
+        excluded = st_cache.get(
+            BEANS, test_state, exclude_state, ids=urls, window=DEFAULT_WINDOW
+        )
+        assert not excluded
+        ic("exclude_states ok")
+    finally:
         st_cache.close()
 
     if False:
@@ -603,10 +658,6 @@ parser.add_argument(
     "--orchonlance", action="store_true", help="Test lancesack orchestrator"
 )
 
-# parser.add_argument("--test-fullstack-orch", action="store_true", help="Test fullstack orchestrator")
-# parser.add_argument("--create-test-data-file", metavar="OUTPUT_PATH", help="Create test data file at OUTPUT_PATH")
-
-
 def main():
 
     args = parser.parse_args()
@@ -626,16 +677,8 @@ def main():
     if args.rundigestor: test_digestor_orch()
     if args.runclassifier: test_classifier_orch()
     if args.runporter: test_porter_orch(args.runporter)
-
-    if args.cache:
-        test_cache()
-    if args.warehouse:
-        test_warehouse()
-    if args.orchonlance:
-        test_orch_on_lancesack()
-
-    if args.vector:
-        test_vector_search()
+    if args.cache: test_cache()
+    if args.vector: test_vector_search()
     # if args.test_fullstack_orch:
     #     test_fullstack_orch()
     # if args.create_test_data_file:

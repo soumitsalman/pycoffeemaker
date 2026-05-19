@@ -30,17 +30,7 @@ class BeansackPorter:
 
     def __init__(self, cache: AsyncStateCacheBase):
         self.cache = cache
-
-    @classmethod
-    async def store_chunks(cls, store_func, items):
-        counts = await asyncio.gather(
-            *(
-                asyncio.to_thread(store_func, chunk) 
-                for chunk in batched(items, BATCH_SIZE)
-            )
-        )
-        return sum(counts)
-
+    
     @classmethod
     def prep_beans(cls, beans: list[dict]):
         """Merges beans, replaces content with cdn url"""
@@ -69,21 +59,18 @@ class BeansackPorter:
         return list(items.values())
 
     async def hydrate_beans(self, db: Beansack, target_state: str):
-        # move beans
-        total_count = 0
-        while beans := await self.cache.get(
+        if beans := await self.cache.get(
             BEANS,
             states=["collected", "embedded", "classified", "extracted"],
             exclude_states=target_state,
-            limit=BATCH_SIZE
         ):  
             beans = self.prep_beans(beans)
             log.info("porting", extra={"source": "beansack:beans", "num_items": len(beans)})  
             count = await asyncio.to_thread(db.store_beans, beans)
             log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
             await self.cache.set(BEANS, target_state, [{K_URL: b.url} for b in beans])
-            total_count += count
-        return total_count
+            return count
+        return 0
 
     async def hydrate_publishers(self, db: Beansack, target_state: str):
         if publishers := await self.cache.get(PUBLISHERS, states="collected", exclude_states=target_state):
@@ -96,14 +83,13 @@ class BeansackPorter:
 
     async def hydrate_related(self, db: Beansack, target_state: str):
         target = target_state+":link"
-        total_count = 0
-        while related_beans := await self.cache.get(BEANS, states="clustered", exclude_states=target, limit=BATCH_SIZE):
+        if related_beans := await self.cache.get(BEANS, states="clustered", exclude_states=target):
             log.info("porting", extra={"source": "beansack:related_beans", "num_items": len(related_beans)})
             count = await asyncio.to_thread(db.store_related, self.prep_related(related_beans))
             log.info("ported", extra={"source": "beansack:related_beans", "num_items": count})
             await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
-            total_count += count
-        return total_count
+            return count
+        return 0
 
     async def hydrate_chatters(self, db: Beansack, target_state: str):
         if chatters := await self.cache.get(CHATTERS, states="collected", exclude_states=target_state):
@@ -117,20 +103,20 @@ class BeansackPorter:
             return count
         return 0    
 
-    async def hydrate_trends(self, db: Beansack, target_state: str):
-        counts = await asyncio.gather(*(
-            self.hydrate_related(db, target_state), 
-            self.hydrate_chatters(db, target_state)
-        ))
-        await asyncio.to_thread(db.optimize)
-        return sum(counts)
-
     async def hydrate_beansack(self, db: Beansack, target_state: str = "beansacked"):
         """Ports beans, publishers and related beans to 1 or more Beansacks"""
+        async def hydrate_trends():
+            counts = await asyncio.gather(*(
+                self.hydrate_related(db, target_state), 
+                self.hydrate_chatters(db, target_state)
+            ))
+            await asyncio.to_thread(db.optimize)
+            return sum(counts)
+
         counts = await asyncio.gather(*[
             self.hydrate_beans(db, target_state),
             self.hydrate_publishers(db, target_state),
-            self.hydrate_trends(db, target_state),
+            hydrate_trends(),
         ])
         total_ported = sum(counts)
         log.info("hydration complete", extra={"source": "beansack", "num_items": total_ported})

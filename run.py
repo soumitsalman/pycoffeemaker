@@ -110,7 +110,7 @@ if __name__ == "__main__":
 
     elif mode == "CLASSIFIER":
         from coffeemaker.orchestrators.analyzerorch import Classifier
-        from coffeemaker.processingcache.firecache import ClassificationCache
+        from coffeemaker.processingcache.clscache import ClassificationCache
         
         cls_cache = ClassificationCache(
             os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/.cache/clsstore'), 

@@ -15,7 +15,7 @@ from .models import *
 
 log = logging.getLogger("cupboard")
 
-BATCH_SIZE = 256
+BATCH_SIZE = int(os.getenv('BATCH_SIZE', 512))
 VECTOR_LEN = int(os.getenv('VECTOR_LEN', 384))
 
 _INIT_STMTS = """
@@ -207,13 +207,12 @@ class Cupboard:
         return await self._batch_insert(store_batches)
 
     async def _batch_insert(self, to_store: list[dict[str, Any]]):
-        async with self.pool.connection() as conn:
-            results = await asyncio.gather(*(
-                conn.execute(item["expr"], item["params"])
-                for item in to_store
-            ))
-            await conn.commit()
-            return sum(item.rowcount for item in results)
+        async def _insert_chunk(chunk: dict):
+            async with self.pool.connection() as conn:
+                result = await conn.execute(chunk["expr"], params=chunk["params"], binary=True)
+                return result.rowcount
+        results = await asyncio.gather(*(_insert_chunk(item) for item in to_store))
+        return sum(results)
 
     async def query_sips(
         self,

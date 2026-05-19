@@ -2,9 +2,9 @@ import logging
 import os
 from datetime import datetime
 from itertools import batched
-from typing import Optional
 
-from coffeemaker.processingcache.base import StateCacheBase, ClassificationCacheBase
+from coffeemaker.processingcache.base import StateCacheBase
+from coffeemaker.processingcache.clscache import ClassificationCache
 from nlp import digestors, embedders, valid_tags
 from pybeansack import BEANS
 from pybeansack.models import (
@@ -191,9 +191,9 @@ class Digestor:
 
 class Classifier:
     cache: StateCacheBase
-    cls_cache: ClassificationCacheBase
+    cls_cache: ClassificationCache
 
-    def __init__(self, cache: StateCacheBase, cls_cache: ClassificationCacheBase):
+    def __init__(self, cache: StateCacheBase, cls_cache: ClassificationCache):
         self.cache = cache
         self.cls_cache = cls_cache
 

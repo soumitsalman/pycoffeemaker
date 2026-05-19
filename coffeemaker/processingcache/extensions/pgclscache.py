@@ -15,7 +15,8 @@ from icecream import ic
 
 TIMEOUT = 600
 MAX_WORKERS = os.cpu_count() * os.cpu_count()
-BATCH_SIZE = 512
+MAX_WRITE_ITEMS = 1024
+MAX_READ_ITEMS = 8192
 
 ##############
 # STATE CACHE
@@ -56,7 +57,7 @@ class StateCache(StateCacheBase):
             max_size=16,
             timeout=TIMEOUT,
             max_idle=TIMEOUT,
-            num_workers=MAX_WORKERS,
+            num_workers=os.cpu_count() or 1,
         )
         self.pool.open()
         self._init_db()
@@ -82,28 +83,27 @@ class StateCache(StateCacheBase):
         if not rows:
             return
 
-        def insert_chunk(chunk: list):
-            with self.pool.connection() as conn:
-                return conn.execute(
+        with self.pool.connection() as conn, ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
+            res = list(exec.map(
+                lambda chunk: conn.execute(
                     _insert_state_multivalues_sql(object_type, len(chunk)),
                     list(chain.from_iterable(chunk)),
-                ).rowcount
-
-        with self.pool.connection() as conn, ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
-            counts = list(exec.map(insert_chunk, batched(rows, BATCH_SIZE)))
-        return sum(counts)
+                ),
+                batched(rows, MAX_WRITE_ITEMS)
+            ))
+            conn.commit()
+            count = sum(item.rowcount for item in res)
+        return count
 
     def get(
         self,
         object_type: str,
         states: str | list[str],
         exclude_states: str | list[str],
-        ids: list[str] = None,
-        window: int = DEFAULT_WINDOW,
         limit: int = 0,
         offset: int = 0,
     ):
-        expr, params = create_query_expr(object_type, states, exclude_states, ids, window, limit, offset)
+        expr, params = create_query_expr(object_type, states, exclude_states, limit, offset)
         with self.pool.connection() as conn:
             rows = _read(conn, expr, params)
         return [decode_data(row) for row in rows]
@@ -158,7 +158,7 @@ class AsyncStateCache(AsyncStateCacheBase):
             max_size=32,
             timeout=TIMEOUT,
             max_idle=TIMEOUT,
-            num_workers=MAX_WORKERS,
+            num_workers=os.cpu_count() or 1,
         )
         await self.pool.open()
         await self._init_db()
@@ -180,22 +180,21 @@ class AsyncStateCache(AsyncStateCacheBase):
             return
 
         async with self.pool.connection() as conn:
-            results = await asyncio.gather(*(
+            res = await asyncio.gather(*(
                 conn.execute(
                     _insert_state_multivalues_sql(object_type, len(chunk)),
                     list(chain.from_iterable(chunk)),
                 )
-                for chunk in batched(rows, BATCH_SIZE)
+                for chunk in batched(rows, MAX_WRITE_ITEMS)
             ))
-            return sum(result.rowcount for result in results)
+            await conn.commit()
+            return sum(item.rowcount for item in res)
 
     async def get(
         self,
         object_type: str,
         states: str | list[str],
         exclude_states: str | list[str],
-        ids: list[str] = None,
-        window: int = DEFAULT_WINDOW,
         limit: int = 0,
         offset: int = 0,
     ):
@@ -345,8 +344,6 @@ def create_query_expr(
     table: str,
     states: str | list[str],
     exclude_states: str | list[str],
-    ids: list[str] = None,
-    window: int = DEFAULT_WINDOW,
     limit: int = 0,
     offset: int = 0,
 ):
@@ -355,11 +352,11 @@ def create_query_expr(
 
     if len(include_states) > 1 or len(excluded_states) > 1:
         expr, params = _create_multi_state_query_expr(
-            table, include_states, excluded_states, ids, window
+            table, include_states, excluded_states
         )
     else:
         expr, params = _create_single_state_query_expr(
-            table, include_states[0], excluded_states[0], ids, window
+            table, include_states[0], excluded_states[0]
         )
 
     if limit:
@@ -384,24 +381,19 @@ _QUERY_SINGLE_STATE_SQL = """
 SELECT data FROM {table}
 WHERE state = %(include_state)s
 AND NOT EXISTS (SELECT 1 FROM {table} t2 WHERE t2.id = {table}.id AND t2.state = %(exclude_state)s)
-AND ts >= CURRENT_TIMESTAMP - INTERVAL '{window} days'
+AND ts >= CURRENT_TIMESTAMP - INTERVAL '7 days'
 """
+
+
 def _create_single_state_query_expr(
     table: str,
     include_state: str | None,
     exclude_state: str | None,
-    ids: list[str] = None,
-    window: int = DEFAULT_WINDOW,
 ):
-    expr = _QUERY_SINGLE_STATE_SQL.format(table=table, window=window)
-    params = {
+    return _QUERY_SINGLE_STATE_SQL.format(table=table), {
         "include_state": include_state,
-        "exclude_state": exclude_state
+        "exclude_state": exclude_state,
     }
-    if ids:
-        expr += "\nAND id = ANY(%(ids)s)"
-        params["ids"] = ids
-    return expr, params
 
 
 _QUERY_MULTI_STATE_SQL = """
@@ -412,8 +404,7 @@ WITH filtered AS (
             SELECT 1 FROM {table} excl 
             WHERE excl.id = incl.id AND excl.state = ANY(%(exclude_states)s)
         )
-        AND ts >= CURRENT_TIMESTAMP - INTERVAL '{window} days'
-        {ids_expr}
+        AND ts >= CURRENT_TIMESTAMP - INTERVAL '7 days'
     GROUP BY id
     HAVING COUNT(*) >= %(min_count)s
 )
@@ -423,22 +414,120 @@ WHERE EXISTS (
 )
 GROUP BY id
 """
+
+
 def _create_multi_state_query_expr(
     table: str,
     include_states: list[str],
     exclude_states: list[str],
-    ids: list[str] = None,
-    window: int = DEFAULT_WINDOW,
 ):
-    ids_expr = f"AND id = ANY(%(ids)s)" if ids else ""
-    params = {
+    return _QUERY_MULTI_STATE_SQL.format(table=table), {
         "include_states": include_states,
         "exclude_states": exclude_states,
-        "min_count": len(include_states)
+        "min_count": len(include_states),
     }
-    if ids:
-        params["ids"] = ids
-    return _QUERY_MULTI_STATE_SQL.format(table=table, window=window, ids_expr=ids_expr), params
+
 
 _EXISTS_SQL = "SELECT id FROM {table} WHERE state = %(state)s AND id = ANY(%(ids)s)"
 _CLEANUP_OLD_SQL = "UPDATE {table} SET data = NULL WHERE ts < %(threshold)s"
+
+
+###########################
+# Classification Cache
+###########################
+
+_DISTANCE_OPS = {
+    "l2": "<->",
+    "cosine": "<=>"
+}
+
+class ClassificationCache(ClassificationCacheBase):
+    def __init__(self, conn_str: str, table_settings: dict[str, dict[str, Any]]):
+        """Initialize the ProcessingCache with a PostgreSQL connection string and table settings.
+        
+        Parameters:
+            conn_str: The connection string to the PostgreSQL database.
+            table_settings: A dictionary of table settings. table_settings should be formatted as 
+            ```
+            {
+                table_name: {id_key: str, vector_length: int, data: Optional[pd.DataFrame]},
+                ...
+            }
+            ```
+            if `id_key` & 'vector_length` is present then it will create a table with `CREATE TABLE <table_name> (id, embedding)`            
+            if `data` is present then it will ignore `id_key` and `vector_length` and use the data to create a fixed table
+        """
+        self.conn_str = conn_str
+        self.table_settings = table_settings
+        self.id_keys = {tab: setting["id_key"] for tab, setting in table_settings.items() if "id_key" in setting}
+        self.distance_funcs = {tab: setting["distance_func"] for tab, setting in table_settings.items() if "distance_func" in setting}
+        
+        self.pool = ConnectionPool(conn_str, min_size=1, max_size=32, timeout=TIMEOUT, max_idle=TIMEOUT, num_workers=os.cpu_count() or 1, configure=register_vector)
+        self.pool.open()
+        self._init_db()
+
+    def _init_db(self):
+        with self.pool.connection() as conn:
+            conn.execute(_create_emb_tables_sql(self.table_settings))
+
+    def store(self, object_type: str, items: list[dict[str, Any]]):
+        data = items # for future extension
+        if not data: return 0
+
+        id_key = self.id_keys[object_type]
+        expr = f"INSERT INTO {object_type} ({id_key}, ts, embedding) VALUES {', '.join(['(%s, %s, %s)']*len(data))} ON CONFLICT ({id_key}) DO NOTHING"
+
+        ts = datetime.now(tz=timezone.utc)
+        rows = list(chain.from_iterable([
+            [item[id_key], ts, Vector(item["embedding"])]
+            for item in data
+        ]))
+        with self.pool.connection() as conn:
+            res = conn.execute(expr, rows)
+            return res.rowcount
+
+    def distance_op(self, object_type):
+        return _DISTANCE_OPS[self.distance_funcs.get(object_type, "l2")]
+
+    @retry(tries=5, delay=2)
+    def search(self, object_type: str, embedding: list[float], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN):        
+        expr, params = create_vector_search_expr(object_type, self.id_keys[object_type], embedding, self.distance_op(object_type), distance, top_n)
+        with self.pool.connection() as conn:
+            return _read(conn, expr, params)
+    
+    @retry(tries=5, delay=2)
+    def batch_search(self, object_type: str, embeddings: list[list[float]], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN):
+        expr_and_params = [create_vector_search_expr(object_type, self.id_keys[object_type], embedding, self.distance_op(object_type), distance, top_n) for embedding in embeddings]
+        with self.pool.connection() as conn:            
+            results = list(ThreadPoolExecutor(max_workers=16).map(lambda expr_param: _read(conn, *expr_param), expr_and_params))
+        return results
+    
+    def close(self):
+        self.pool.close()
+
+def create_vector_search_expr(object_type: str, id_key: str, query_embedding, distance_op: str, distance: float | None = None, top_n: int | None = None):
+    expr = f"""SELECT {id_key} FROM {object_type}"""
+    params = {"query_embedding": Vector(query_embedding)}
+    
+    if distance:
+        expr += f"\nWHERE embedding {distance_op} %(query_embedding)s <= %(distance)s"
+        params["distance"] = distance
+    
+    if top_n:
+        expr += f"\nORDER BY embedding {distance_op} %(query_embedding)s LIMIT %(top_n)s"
+        params["top_n"] = top_n
+    return expr, params
+
+_CREATE_EMB_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS {table} (
+    {id_key} TEXT PRIMARY KEY,
+    ts TIMESTAMPTZ NOT NULL,
+    embedding VECTOR({vector_length})
+);
+CREATE INDEX IF NOT EXISTS {table}_embeddings_idx 
+    ON {table} USING ivfflat (embedding vector_l2_ops) 
+    WITH (lists = 100);
+"""
+def _create_emb_tables_sql(table_settings: dict[str, dict[str, Any]]):
+    exprs = [_CREATE_EMB_TABLE_SQL.format(table=name, id_key=settings["id_key"], vector_length=settings["vector_length"]) for name, settings in table_settings.items() if "vector_length" in settings]
+    return "\n".join(exprs)
