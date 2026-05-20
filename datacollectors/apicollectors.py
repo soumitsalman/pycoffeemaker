@@ -188,7 +188,7 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
     else:
         source = extract_source(post.url)
         if source:
-            url = post.url
+            url = remove_query_params(post.url)
             kind = guess_article_type({
                 URL: url,
                 BASE_URL: extract_base_url(url),
@@ -233,7 +233,7 @@ def _build_hackernews_item(story: dict, default_kind: str):
     story_id = story['id']
 
     if story.get('url'):
-        url = story['url']
+        url = remove_query_params(story['url'])
         source = extract_source(url)
         tags = []
         kind = guess_article_type({'URL': url, 'SOURCE': source}) or (SITE if "show hn" in story.get('title', '').lower() else default_kind)

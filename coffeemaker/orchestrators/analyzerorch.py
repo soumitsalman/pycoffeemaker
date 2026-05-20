@@ -49,38 +49,40 @@ class Embedder:
         )
 
     def embed_beans(self, beans: list[dict], batch_size: int):
-        with self.embedder:
-            for chunk in batched(beans, batch_size):
-                try:
-                    vectors = self.embedder.embed_documents([bean[K_CONTENT] for bean in chunk])
-                    updates = clean_updates([
-                        {K_URL: b[K_URL], K_EMBEDDING: vec}
-                        for b, vec in zip(chunk, vectors)
-                        if vec and len(vec) == VECTOR_LEN
-                    ])
-                    log.info(
-                        "embedded",
-                        extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)},
-                    )
-                    yield updates
-                except Exception:
-                    log.error(
-                        "failed embedding",
-                        extra={"source": chunk[0][K_SOURCE], "num_items": len(chunk)},
-                        exc_info=True,
-                        stack_info=True,
-                    )
+        for chunk in batched(beans, batch_size):
+            try:
+                vectors = self.embedder.embed_documents([bean[K_CONTENT] for bean in chunk])
+                updates = clean_updates([
+                    {K_URL: b[K_URL], K_EMBEDDING: vec}
+                    for b, vec in zip(chunk, vectors)
+                    if vec and len(vec) == VECTOR_LEN
+                ])
+                log.info(
+                    "embedded",
+                    extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)},
+                )
+                yield updates
+            except Exception:
+                log.error(
+                    "failed embedding",
+                    extra={"source": chunk[0][K_SOURCE], "num_items": len(chunk)},
+                    exc_info=True,
+                    stack_info=True,
+                )
 
     @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
         beans = self.cache.get(BEANS, states="collected", exclude_states="embedded")
         log.info("starting embedder", extra={"source": run_id(), "num_items": len(beans)})
-        total = 0
-        for updates in self.embed_beans(beans, batch_size):
-            count = self.cache.set(BEANS, "embedded", updates)
-            total += (count or len(updates))
-        log.info("total embedded", extra={"source": run_id(), "num_items": total})
-        return total
+        if not beans: return 0
+        
+        with self.embedder:
+            total = 0
+            for updates in self.embed_beans(beans, batch_size):
+                count = self.cache.set(BEANS, "embedded", updates)
+                total += (count or len(updates))
+            log.info("total embedded", extra={"source": run_id(), "num_items": total})
+            return total
 
 
 class Extractor:
@@ -101,37 +103,39 @@ class Extractor:
         )
 
     def extract_beans(self, beans: list[dict], batch_size: int):
-        with self.extractor:
-            for chunk in batched(beans, batch_size):
-                try:
-                    extractions = self.extractor.run_batch([b[K_CONTENT] for b in chunk])
-                    updates = clean_updates([
-                        {
-                            K_URL: b[K_URL],
-                            K_ENTITIES: ents.model_dump()
-                        } if ents else {K_URL:b[K_URL]}
-                        for b, ents in zip(chunk, extractions)
-                    ])
-                    log.info("extracted", extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)})
-                    yield updates
-                except Exception:
-                    log.error(
-                        "failed extracting",
-                        extra={"source": chunk[0][K_SOURCE], "num_items": len(chunk)},
-                        exc_info=True,
-                        stack_info=True,
-                    )
+        for chunk in batched(beans, batch_size):
+            try:
+                extractions = self.extractor.run_batch([b[K_CONTENT] for b in chunk])
+                updates = clean_updates([
+                    {
+                        K_URL: b[K_URL],
+                        K_ENTITIES: ents.model_dump()
+                    } if ents else {K_URL:b[K_URL]}
+                    for b, ents in zip(chunk, extractions)
+                ])
+                log.info("extracted", extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)})
+                yield updates
+            except Exception:
+                log.error(
+                    "failed extracting",
+                    extra={"source": chunk[0][K_SOURCE], "num_items": len(chunk)},
+                    exc_info=True,
+                    stack_info=True,
+                )
 
     @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
         beans = self.cache.get(BEANS, states="collected", exclude_states="extracted")
         log.info("starting extractor", extra={"source": run_id(), "num_items": len(beans)})
-        total = 0
-        for updates in self.extract_beans(beans, batch_size):
-            count = self.cache.set(BEANS, "extracted", updates)
-            total += (count or len(updates))
-        log.info("total extracted", extra={"source": run_id(), "num_items": total})
-        return total
+        if not beans: return 0
+        
+        with self.extractor:
+            total = 0
+            for updates in self.extract_beans(beans, batch_size):
+                count = self.cache.set(BEANS, "extracted", updates)
+                total += (count or len(updates))
+            log.info("total extracted", extra={"source": run_id(), "num_items": total})
+            return total
 
 
 class Digestor:
@@ -152,41 +156,43 @@ class Digestor:
         )
 
     def digest_beans(self, beans: list[dict], batch_size: int):
-        with self.digestor:
-            for chunk in batched(beans, batch_size):
-                try:
-                    digests = self.digestor.run_batch([bean[K_CONTENT] for bean in chunk])
-                    updates = clean_updates([
-                        {
-                            K_URL: b[K_URL],
-                            DIGEST: d.model_dump()
-                        }
-                        for b, d in zip(chunk, digests)
-                        if d
-                    ])
-                    log.info(
-                        "digested",
-                        extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)},
-                    )
-                    yield updates
-                except Exception:
-                    log.error(
-                        "failed digesting",
-                        extra={"source": chunk[0][K_SOURCE], "num_items": len(chunk)},
-                        exc_info=True,
-                        stack_info=True,
-                    )
+        for chunk in batched(beans, batch_size):
+            try:
+                digests = self.digestor.run_batch([bean[K_CONTENT] for bean in chunk])
+                updates = clean_updates([
+                    {
+                        K_URL: b[K_URL],
+                        DIGEST: d.model_dump()
+                    }
+                    for b, d in zip(chunk, digests)
+                    if d
+                ])
+                log.info(
+                    "digested",
+                    extra={"source": chunk[0][K_SOURCE], "num_items": len(updates)},
+                )
+                yield updates
+            except Exception:
+                log.error(
+                    "failed digesting",
+                    extra={"source": chunk[0][K_SOURCE], "num_items": len(chunk)},
+                    exc_info=True,
+                    stack_info=True,
+                )
 
     @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
         beans = self.cache.get(BEANS, states="collected", exclude_states="digested")
         log.info("starting digestor", extra={"source": run_id(), "num_items": len(beans)})
-        total = 0
-        for updates in self.digest_beans(beans, batch_size):
-            count = self.cache.set(BEANS, "digested", updates)
-            total += (count or len(updates))
-        log.info("total digested", extra={"source": run_id(), "num_items": total})
-        return total
+        if not beans: return 0
+        
+        with self.digestor:
+            total = 0
+            for updates in self.digest_beans(beans, batch_size):
+                count = self.cache.set(BEANS, "digested", updates)
+                total += (count or len(updates))
+            log.info("total digested", extra={"source": run_id(), "num_items": total})
+            return total
 
 
 class Classifier:
@@ -200,17 +206,22 @@ class Classifier:
     def classify_beans(self, beans: list[dict], batch_size: int):
         for chunk in batched(beans, batch_size):
             embeddings = [bean[K_EMBEDDING] for bean in chunk]
-            categories_list = self.cls_cache.batch_search("categories", embeddings, top_n=MAX_CLASSIFICATIONS)
-            sentiments_list = self.cls_cache.batch_search("sentiments", embeddings, top_n=MAX_CLASSIFICATIONS)
+            categories = self.cls_cache.batch_search("categories", embeddings, top_n=MAX_CLASSIFICATIONS)
+            sentiments = self.cls_cache.batch_search("sentiments", embeddings, top_n=MAX_CLASSIFICATIONS)
             updates = clean_updates([
                 {
                     K_URL: bean[K_URL],
-                    K_CATEGORIES: valid_tags(categories),
-                    K_SENTIMENTS: valid_tags(sentiments),
+                    K_CATEGORIES: valid_tags(cats),
+                    K_SENTIMENTS: valid_tags(sents),
                 }
-                for bean, categories, sentiments in zip(chunk, categories_list, sentiments_list)
+                for bean, cats, sents in zip(chunk, categories, sentiments)
+                if cats and sents
             ])
             log.info("classified", extra={"source": chunk[0][K_URL], "num_items": len(updates)})
+            # debug
+            print("# MISSING CATEGORIES AND SENTIMENTS")
+            [print(bean[K_URL], len(embs), cats, sents) for bean, embs, cats, sents in zip(chunk, embeddings, categories, sentiments) if not cats or not sents]
+            print("# END MISSING CATEGORIES AND SENTIMENTS")
             yield updates
 
     def cluster_beans(self, beans: list[dict], batch_size: int):

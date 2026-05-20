@@ -36,7 +36,6 @@ from datacollectors import (
     URL,
     POST
 )
-from pybeansack import Beansack, Chatter
 from coffeemaker.processingcache.base import AsyncStateCacheBase
 from .utils import *
 from icecream import ic

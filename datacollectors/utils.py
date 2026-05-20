@@ -4,7 +4,7 @@ import warnings
 import tldextract
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 from dateutil.parser import parse as date_parser
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
@@ -148,6 +148,10 @@ def strip_html_tags(html):
 
 def full_url(base_url: str, target_url: str) -> str:
     return urljoin(base_url, target_url)
+
+def remove_query_params(url: str) -> str:
+    try: return urlunparse(urlparse(url)._replace(query="", fragment=""))
+    except: return url
 
 now = lambda: datetime.now(timezone.utc)
 extract_source = lambda url: (extract_domain(url) or extract_base_url(url)).strip().lower()

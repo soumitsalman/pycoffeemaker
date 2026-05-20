@@ -15,15 +15,6 @@ from icecream import ic
 log = logging.getLogger("porterworker")
 
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', 512))
-    
-def merge(groups: list[list[dict[str, Any]]]):
-    merged = []
-    for gr in groups:
-        pack = {}
-        for data in gr:
-            pack.update({k: v for k, v in data.items() if v})
-        merged.append(pack)
-    return merged
 
 class BeansackPorter:
     cache: AsyncStateCacheBase
@@ -34,17 +25,16 @@ class BeansackPorter:
     @classmethod
     def prep_beans(cls, beans: list[dict]):
         """Merges beans, replaces content with cdn url"""
-        beans = merge(beans)
         for bean in beans:
             if entities := bean.get(K_ENTITIES):
                 bean.update({
-                    K_ENTITIES: merge_lists(
-                        entities.get('people', []),
-                        entities.get('companies', []),
-                        entities.get('products', []),
-                        entities.get('stock_tickers', []),
+                    K_ENTITIES: merge_tags(
+                        entities.get('people'),
+                        entities.get('companies'),
+                        entities.get('products'),
+                        entities.get('stock_tickers'),
                     ),
-                    K_REGIONS: entities.get('regions', [])  
+                    K_REGIONS: entities.get('regions')  
                 })
         return [Bean(**bean) for bean in beans]
 
@@ -64,11 +54,10 @@ class BeansackPorter:
             states=["collected", "embedded", "classified", "extracted"],
             exclude_states=target_state,
         ):  
-            beans = self.prep_beans(beans)
             log.info("porting", extra={"source": "beansack:beans", "num_items": len(beans)})  
-            count = await asyncio.to_thread(db.store_beans, beans)
+            count = await asyncio.to_thread(db.store_beans, self.prep_beans(beans))
             log.info("ported", extra={"source": "beansack:beans", "num_items": count})                
-            await self.cache.set(BEANS, target_state, [{K_URL: b.url} for b in beans])
+            await self.cache.set(BEANS, target_state, [{K_URL: b[K_URL]} for b in beans])
             return count
         return 0
 
@@ -130,20 +119,12 @@ class CupboardPorter:
         self.cache = cache
 
     @classmethod
-    def prep_events(cls, beans: list):
-        beans = merge(beans)
-        return [
-            Sip(
-                created=bean[K_CREATED],
-                kind="event:"+bean[K_KIND],
-                embedding=bean[K_EMBEDDING],
-                tags=merge_lists(bean[K_CATEGORIES], bean[K_SENTIMENTS], bean.get(DIGEST, {}).get(TAGS, [])),
-                digest=bean.get(DIGEST),
-                url=bean[K_URL],
-                base_url=bean[K_BASE_URL],
-            )
-            for bean in beans
-        ]
+    def prep_events(cls, beans: list[dict[str, Any]]):
+        for bean in beans:
+            bean.pop(K_SOURCE)
+            bean[K_KIND] = "event:"+bean[K_KIND]
+            bean[K_TAGS] = merge_tags(bean.get(K_CATEGORIES), bean.get(K_SENTIMENTS), bean.get(DIGEST, {}).get(TAGS))
+        return [Sip(**bean) for bean in beans]
 
     @classmethod
     def prep_sources(cls, sources: list[dict]):
@@ -166,11 +147,10 @@ class CupboardPorter:
             states=["collected", "embedded", "classified", "digested"],
             exclude_states=target_state,
         ):  
-            beans = self.prep_events(beans)
             log.info("porting", extra={"source": "cupboard:events", "num_items": len(beans)})             
-            count = await db.store_sips(beans)
+            count = await db.store_sips(self.prep_events(beans))
             log.info("ported", extra={"source": "cupboard:events", "num_items": count})                
-            await self.cache.set(BEANS, target_state, [{K_URL: b.url} for b in beans])            
+            await self.cache.set(BEANS, target_state, [{K_URL: b[K_URL]} for b in beans])       
         return count
 
     async def hydrate_sources(self, db: Cupboard, target_state: str):
@@ -198,7 +178,7 @@ class CupboardPorter:
         async with db:
             counts = await asyncio.gather(
                 self.hydrate_events(db, target_state),
-                # self.hydrate_sources(db, target_state),
+                self.hydrate_sources(db, target_state),
                 self.hydrate_related(db, target_state),
             )
             await db.optimize()

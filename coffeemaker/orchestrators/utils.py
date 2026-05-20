@@ -3,14 +3,10 @@ import os
 from datetime import datetime, timezone
 from functools import wraps
 from logging import Logger
-
-import msgpack
-from icecream import ic
-
-# log = logging.getLogger(__name__)
+from nlp import valid_tags
 
 merge_lists = lambda *lists: [item for sublist in lists if sublist for item in sublist]
-
+merge_tags = lambda *tag_lists: list(set(valid_tags(item for tag_list in tag_lists if tag_list for item in tag_list)))
 
 def log_runtime(logger: Logger):
     def decorator(func):

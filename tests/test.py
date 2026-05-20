@@ -374,8 +374,9 @@ def test_porter_orch(beansack_or_cupboard):
     if beansack_or_cupboard == "cupboard":
         db = Cupboard(os.getenv('CUPBOARD_CONNECTION_STRING'))
         async def run():
-            async with cache:
-                await CupboardPorter(cache=cache).hydrate_cupboard(db)
+            porter = CupboardPorter(cache=cache)
+            async with cache, db:
+                await porter.hydrate_events(db, "cupboarded-v2")
 
         asyncio.run(run())
 
@@ -383,7 +384,7 @@ def test_porter_orch(beansack_or_cupboard):
         db = create_client(db_type="pg", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))
         async def run():
             async with cache:
-                await BeansackPorter(cache=cache).hydrate_beansack(db)
+                await BeansackPorter(cache=cache).hydrate_beans(db, "beansacked")
             db.close()
 
         asyncio.run(run())

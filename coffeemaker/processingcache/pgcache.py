@@ -72,6 +72,7 @@ class StateCache(StateCacheBase):
         self.close()
         return False
 
+    @retry(tries=3, delay=10)
     def set(
         self,
         object_type: str,
@@ -106,7 +107,7 @@ class StateCache(StateCacheBase):
         expr, params = create_query_expr(object_type, states, exclude_states, ids, window, limit, offset)
         with self.pool.connection() as conn:
             rows = _read(conn, expr, params)
-        return [decode_data(row) for row in rows]
+        return deserialize_data_rows(rows) 
 
     def deduplicate(self, object_type: str, state: str, items: list):
         if not items:
@@ -201,8 +202,8 @@ class AsyncStateCache(AsyncStateCacheBase):
     ):
         expr, params = create_query_expr(object_type, states, exclude_states, ids, window, limit, offset)
         async with self.pool.connection() as conn:
-            rows = await _read_async(conn, expr, params)        
-        return [decode_data(row) if not isinstance(row, list) else [decode_data(data) for data in row] for row in rows]
+            rows = await _read_async(conn, expr, params)
+        return deserialize_data_rows(rows)         
 
     async def deduplicate(self, object_type: str, state: str, items: list):
         if not items:
@@ -231,12 +232,34 @@ def _read(conn, expr: str, params=None):
     rows = conn.execute(expr, params, binary=True).fetchall()
     return [row[0] for row in rows]
 
-
 async def _read_async(conn, expr: str, params=None):    
     result = await conn.execute(expr, params, binary=True)
     rows = await result.fetchall()
     return [row[0] for row in rows]
 
+# def merge(groups: list[list[dict[str, Any]]]):
+#     merged = []
+#     for gr in groups:
+#         pack = {}
+#         for data in gr:
+#             pack.update({k: v for k, v in data.items() if v})
+#         merged.append(pack)
+#     return merged
+
+def merge(group: list[dict[str, Any]]):
+    if not group: return
+    if not (isinstance(group, list) and all(isinstance(item, dict) for item in group if item)):
+        raise ValueError("Group must be a list of dictionaries")
+    pack = {}    
+    [pack.update({k: v for k, v in fields.items() if v}) for fields in group if fields]
+    return pack
+
+def deserialize_data_rows(rows: list[bytes]):
+    return [
+        decode_data(row) if not isinstance(row, list) 
+        else merge([decode_data(data) for data in row]) 
+        for row in rows
+    ]
 
 # STATE TABLES
 _insert_state_multivalues_sql = (
@@ -405,23 +428,16 @@ def _create_single_state_query_expr(
 
 
 _QUERY_MULTI_STATE_SQL = """
-WITH filtered AS (
-    SELECT id FROM {table} incl
-    WHERE state = ANY(%(include_states)s)
-        AND NOT EXISTS (
-            SELECT 1 FROM {table} excl 
-            WHERE excl.id = incl.id AND excl.state = ANY(%(exclude_states)s)
-        )
-        AND ts >= CURRENT_TIMESTAMP - INTERVAL '{window} days'
-        {ids_expr}
-    GROUP BY id
-    HAVING COUNT(*) >= %(min_count)s
-)
-SELECT ARRAY_AGG(data) AS data FROM {table}
-WHERE EXISTS (
-    SELECT 1 FROM filtered WHERE filtered.id = {table}.id
-)
+SELECT ARRAY_AGG(data) AS data FROM {table} incl
+WHERE state = ANY(%(include_states)s)
+    AND NOT EXISTS (
+        SELECT 1 FROM {table} excl 
+        WHERE excl.id = incl.id AND excl.state = ANY(%(exclude_states)s)
+    )
+    AND ts >= CURRENT_TIMESTAMP - INTERVAL '{window} days'
+    {ids_expr}
 GROUP BY id
+HAVING COUNT(*) >= %(min_count)s
 """
 def _create_multi_state_query_expr(
     table: str,
