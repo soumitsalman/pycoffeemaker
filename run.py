@@ -11,6 +11,7 @@ MAX_WORKERS = os.cpu_count() * os.cpu_count()
 EMBEDDER_CONTEXT_LEN = 512
 EXTRACTOR_CONTEXT_LEN = 4096
 DIGESTOR_CONTEXT_LEN = 4096
+CONSOLIDATOR_CONTEXT_LEN = 65536
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR + "/.env")
@@ -64,14 +65,17 @@ parser.add_argument(
         "EMBEDDER",
         "DIGESTOR",
         "EXTRACTOR",
-        "CLASSIFIER",        
+        "CLASSIFIER",
+        "CONSOLIDATOR",
         "PORTER",
     ],
-    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLASSIFIER, PORTER)",
+    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLASSIFIER, CONSOLIDATOR, PORTER)",
 )
 
 from coffeemaker.processingcache.pgcache import AsyncStateCache, StateCache
-from pybeansack import create_client, BEANS, PUBLISHERS, CHATTERS, K_URL, K_BASE_URL
+from coffeemaker.orchestrators.utils import BEANSACKED, CATEGORIES, CUPBOARDED, SENTIMENTS, SIGNALS, BEANS, PUBLISHERS, CHATTERS, ID
+from datacollectors.utils import URL, BASE_URL
+from pybeansack import create_client
 
 if __name__ == "__main__":
     # Use command line args if provided, otherwise fall back to env vars
@@ -81,32 +85,34 @@ if __name__ == "__main__":
     
     cache_path = os.getenv("PROCESSING_CACHE")
     cache_settings = {
-        BEANS: {"id_key": K_URL},
-        PUBLISHERS: {"id_key": K_BASE_URL},
-        CHATTERS: {"id_key": "id"}
+        BEANS: {"id_key": URL},
+        PUBLISHERS: {"id_key": BASE_URL},
+        CHATTERS: {"id_key": ID},
+        SIGNALS: {"id_key": ID}
     }
     cache = StateCache(cache_path, cache_settings)
     async_cache = AsyncStateCache(cache_path, cache_settings)
 
     if mode == "COLLECTOR":
         from coffeemaker.orchestrators.collectororch import Collector
-        collector = Collector(cache=async_cache)       
-        asyncio.run(collector.run(
-            os.getenv("COLLECTOR_SOURCES", f"{CURR_DIR}/factory/feeds.yaml"),
-            batch_size=batch_size,
-        ))
+
+        asyncio.run(
+            Collector(cache=async_cache).run(
+                os.getenv("COLLECTOR_SOURCES", f"{CURR_DIR}/factory/feeds.yaml"),
+                batch_size=batch_size,
+            )
+        )
 
     elif mode == "EMBEDDER":
         from coffeemaker.orchestrators.analyzerorch import Embedder
 
-        orch = Embedder(
+        Embedder(
             cache=cache,
-            embedder_path=os.getenv("EMBEDDER_PATH"),
+            embedder_model_path=os.environ["EMBEDDER_PATH"],
             embedder_context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
             ),
-        )
-        orch.run(batch_size=batch_size)
+        ).run(batch_size=batch_size)
 
     elif mode == "CLASSIFIER":
         from coffeemaker.orchestrators.analyzerorch import Classifier
@@ -115,9 +121,9 @@ if __name__ == "__main__":
         cls_cache = ClassificationCache(
             os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/.cache/clsstore'), 
             table_settings={
-                BEANS: {"id_key": K_URL, "distance_func": "l2"},
-                "categories": {"id_key": "category", "distance_func": "cosine"},
-                "sentiments": {"id_key": "sentiment", "distance_func": "cosine"}
+                BEANS: {"id_key": URL, "distance_func": "l2"},
+                CATEGORIES: {"id_key": "category", "distance_func": "cosine"},
+                SENTIMENTS: {"id_key": "sentiment", "distance_func": "cosine"}
             }
         )
         Classifier(cache=cache, cls_cache=cls_cache).run(batch_size=batch_size)
@@ -126,26 +132,37 @@ if __name__ == "__main__":
     elif mode == "EXTRACTOR":
         from coffeemaker.orchestrators.analyzerorch import Extractor
 
-        orch = Extractor(
+        Extractor(
             cache=cache,
-            extractor_path=os.getenv("EXTRACTOR_PATH"),
+            extractor_model_path=os.environ["EXTRACTOR_PATH"],
             extractor_context_len=int(
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
             ),
-        )
-        orch.run(batch_size=batch_size)
+        ).run(batch_size=batch_size)
 
     elif mode == "DIGESTOR":
         from coffeemaker.orchestrators.analyzerorch import Digestor
 
-        orch = Digestor(
+        Digestor(
             cache=cache,
-            digestor_path=os.getenv("DIGESTOR_PATH"),
+            digestor_model_path=os.environ["DIGESTOR_PATH"],
             digestor_context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
-        )
-        orch.run(batch_size=batch_size)       
+        ).run(batch_size=batch_size)     
+
+    elif mode == "CONSOLIDATOR":
+        from coffeemaker.orchestrators.analyzerorch import Consolidator
+        
+        Consolidator(
+            cache=cache,
+            consolidator_model_path=os.environ["CONSOLIDATOR_PATH"],
+            consolidator_context_len=int(
+                os.getenv("CONSOLIDATOR_CONTEXT_LEN", CONSOLIDATOR_CONTEXT_LEN)
+            ),
+            base_url=os.getenv("CONSOLIDATOR_BASE_URL"),
+            api_key=os.getenv("CONSOLIDATOR_API_KEY"),
+        ).run(batch_size=batch_size)
 
     elif mode == "PORTER":
         from coffeemaker.orchestrators.porterorch import BeansackPorter, CupboardPorter
@@ -164,16 +181,13 @@ if __name__ == "__main__":
 
         async def run_porter():
             beansack_db = create_client(**db_kwargs)
+            cupboard_db = Cupboard(os.getenv("CUPBOARD_CONNECTION_STRING"))
             try:
-                async with async_cache, asyncio.TaskGroup() as tg:
-                    tg.create_task(BeansackPorter(cache=async_cache).hydrate_beansack(beansack_db, "beansacked"))
-                    if cupboard_conn_str := os.getenv("CUPBOARD_CONNECTION_STRING"):
-                        tg.create_task(
-                            CupboardPorter(cache=async_cache).hydrate_cupboard(
-                                Cupboard(cupboard_conn_str), 
-                                "cupboarded"
-                            )
-                        )
+                async with async_cache:
+                    await asyncio.gather(
+                        BeansackPorter(cache=async_cache).hydrate_beansack(beansack_db, BEANSACKED),
+                        CupboardPorter(cache=async_cache).hydrate_cupboard(cupboard_db, CUPBOARDED)
+                    )
             finally:
                 beansack_db.close()
 
@@ -181,7 +195,7 @@ if __name__ == "__main__":
 
     else:
         raise ValueError(
-            "Invalid mode. Choose COLLECTOR, EMBEDDER, EXTRACTOR, DIGESTOR, CLASSIFIER, or PORTER."
+            "Invalid mode. Choose COLLECTOR, EMBEDDER, EXTRACTOR, DIGESTOR, CLASSIFIER, CONSOLIDATOR, or PORTER."
         )
     
     cache.close()

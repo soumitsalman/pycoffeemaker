@@ -98,7 +98,7 @@ class StateCache(StateCacheBase):
         self,
         object_type: str,
         states: str | list[str],
-        exclude_states: str | list[str],
+        exclude_states: str | list[str] = NULL_STATE,
         ids: list[str] = None,
         window: int = DEFAULT_WINDOW,
         limit: int = 0,
@@ -194,7 +194,7 @@ class AsyncStateCache(AsyncStateCacheBase):
         self,
         object_type: str,
         states: str | list[str],
-        exclude_states: str | list[str],
+        exclude_states: str | list[str] = NULL_STATE,
         ids: list[str] = None,
         window: int = DEFAULT_WINDOW,
         limit: int = 0,
@@ -354,7 +354,6 @@ CREATE INDEX IF NOT EXISTS {table}_id_idx ON {table}(id);
 CREATE INDEX IF NOT EXISTS {table}_state_idx ON {table}(state);
 """
 
-
 def _create_state_tables_sql(table_settings: dict[str, dict[str, Any]]):
     exprs = [
         _CREATE_STATE_TABLE_SQL.format(table=name)
@@ -393,7 +392,6 @@ def create_query_expr(
         params["offset"] = offset
 
     return expr, params
-
 
 def _normalize_states(states: str | list[str] | None) -> list[str]:
     if states is None:

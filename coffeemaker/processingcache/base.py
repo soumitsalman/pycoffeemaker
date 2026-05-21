@@ -7,6 +7,7 @@ import msgpack
 import logging
 
 NOT_IMPLEMENTED = NotImplementedError("Method not implemented")
+NULL_STATE = "__NULL__"
 
 log = logging.getLogger("processingcache")
 logset = lambda total: log.info("state set", extra={"num_items": total, "source": "__default__"})
@@ -19,7 +20,7 @@ class StateCacheBase(ABC):
         raise NOT_IMPLEMENTED
     
     @abstractmethod
-    def get(self, object_type: str, states: str | list[str], exclude_states: str | list[str], ids: list[str] = None, window: int = DEFAULT_WINDOW, limit: int = 0, offset: int = 0):
+    def get(self, object_type: str, states: str | list[str], exclude_states: str | list[str] = NULL_STATE, ids: list[str] = None, window: int = DEFAULT_WINDOW, limit: int = 0, offset: int = 0):
         raise NOT_IMPLEMENTED
     
     @abstractmethod
@@ -35,7 +36,7 @@ class AsyncStateCacheBase(ABC):
         raise NOT_IMPLEMENTED
     
     @abstractmethod
-    async def get(self, object_type: str, states: str | list[str], exclude_states: str | list[str], ids: list[str] = None, window: int = DEFAULT_WINDOW, limit: int = 0, offset: int = 0):
+    async def get(self, object_type: str, states: str | list[str], exclude_states: str | list[str] = NULL_STATE, ids: list[str] = None, window: int = DEFAULT_WINDOW, limit: int = 0, offset: int = 0):
         raise NOT_IMPLEMENTED
 
     @abstractmethod
