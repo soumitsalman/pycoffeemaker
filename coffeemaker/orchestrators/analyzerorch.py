@@ -265,8 +265,8 @@ class Classifier:
 CONSOLIDATION_EPS = float(os.getenv("CONSOLIDATION_EPS", 0.5))
 CONSOLIDATION_WINDOW = int(os.getenv("CONSOLIDATION_WINDOW", 2))
 CONSOLIDATION_RELATED_WINDOW = int(os.getenv("CONSOLIDATION_RELATED_WINDOW", 30))
-CONSOLIDATION_RELATED_LIMIT = int(os.getenv("CONSOLIDATION_RELATED_LIMIT", 64))
-CONSOLIDATION_GROUP_SIZE = int(os.getenv("CONSOLIDATION_GROUP_SIZE", 2))
+CONSOLIDATION_MAX_SIZE = int(os.getenv("CONSOLIDATION_MAX_SIZE", 64))
+CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 2))
 
 class Consolidator:
     """Consolidates events and data to create consolidated briefings and signals"""
@@ -293,6 +293,7 @@ class Consolidator:
     def _get_beans(self, states: list[str], exclude_states: list[str] = None, ids: list[str] = None, window: int = None, limit: int = None) -> list[dict]:
         beans = self.cache.get(BEANS, states=states, exclude_states=exclude_states, ids=ids, window=window, limit=limit)
         # remove content, summary, and title from beans to save memory
+        beans = [b for b in beans if b.get(EMBEDDING)]
         for bean in beans:
             bean.pop(CONTENT, None)
             bean.pop(SUMMARY, None)
@@ -300,22 +301,29 @@ class Consolidator:
         return beans        
 
     def _expand_group(self, group: dict) -> dict:
-        # add limit here
-        ids = list(chain.from_iterable(b[RELATED] for b in group["data"]))
-        related = self._get_beans(states=[COLLECTED, EMBEDDED, DIGESTED], ids=ids, window=CONSOLIDATION_RELATED_WINDOW, limit=CONSOLIDATION_RELATED_LIMIT)
-        group["data"].extend(b for b in related if b.get(EMBEDDING))
-        group["embedding"] = np.median([b[EMBEDDING] for b in group["data"]], axis=0).tolist()
+        if len(group["data"]) < CONSOLIDATION_MAX_SIZE:
+            related = self._get_beans(
+                states=[COLLECTED, EMBEDDED, DIGESTED], 
+                ids=list(chain.from_iterable(b.get(RELATED, []) for b in group["data"])), 
+                window=CONSOLIDATION_RELATED_WINDOW, 
+                limit=CONSOLIDATION_MAX_SIZE
+            )
+            group["data"].extend(related)
+            group["embedding"] = np.median([b[EMBEDDING] for b in group["data"]], axis=0).tolist()
         return group
 
-    def run(self, batch_size: int = BATCH_SIZE):
-        beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED, window=CONSOLIDATION_WINDOW, limit=5000)
-        beans = [b for b in beans if b.get(RELATED)]     
-        log.info("starting consolidator", extra={"source": run_id(), "num_items": len(beans)})
-
+    def _create_consolidation_groups(self, beans: list[dict]) -> list[dict]:
         groups = _group_items(beans, CONSOLIDATION_EPS)[:10]
         ic(len(groups))
-        groups = [self._expand_group(group) for group in groups if len(group['data']) >= CONSOLIDATION_GROUP_SIZE]   
-        ic(len(groups))     
+        groups = [self._expand_group(group) for group in groups if len(group['data']) >= CONSOLIDATION_MIN_SIZE]   
+        ic(len(groups)) 
+        return groups
+
+    def run(self, batch_size: int = BATCH_SIZE):
+        beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED, window=CONSOLIDATION_WINDOW)
+        log.info("starting consolidator", extra={"source": run_id(), "num_items": len(beans)})
+
+        groups = self._create_consolidation_groups(beans)
         if not groups: return 0
 
         with self.consolidator:
@@ -369,7 +377,7 @@ def _bean_to_str(bean: dict) -> str:
     return "\n".join(lines)
 
 def _group_to_str(group: dict) -> str:
-    return "\n\n".join(_bean_to_str(b) for b in group["data"][:64])
+    return "\n\n".join(_bean_to_str(b) for b in group["data"])
 
 from sklearn.cluster import DBSCAN
 import numpy as np
