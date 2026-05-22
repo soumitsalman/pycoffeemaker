@@ -36,7 +36,7 @@ from datacollectors import (
     URL,
     POST
 )
-from coffeemaker.processingcache.base import AsyncStateCacheBase
+from processingcache.base import AsyncStateCacheBase
 from .utils import *
 from icecream import ic
 

@@ -5,10 +5,12 @@ import asyncio
 from itertools import batched, chain
 from typing import Any, Optional
 
-from coffeemaker.processingcache.base import AsyncStateCacheBase
+from processingcache.base import AsyncStateCacheBase
 from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
 from pybeansack.models import K_BASE_URL, K_CATEGORIES, K_CONTENT, K_CONTENT_LENGTH, K_CREATED, K_EMBEDDING, K_ENTITIES, K_KIND, K_REGIONS, K_RELATED, K_RESTRICTED_CONTENT, K_SENTIMENTS, K_SOURCE, K_SUMMARY, K_SUMMARY_LENGTH, K_TAGS, K_TITLE, K_TITLE_LENGTH, K_URL
-from pycupboard.pgcupboard import *
+from pycupboard.pgcupboard import Cupboard
+from pycupboard.models import SOURCE, URL, Sip, Source, DEFAULT_SOURCE, KIND, generate_id
+
 from .utils import *
 from icecream import ic
 
@@ -111,7 +113,8 @@ class BeansackPorter:
         log.info("hydration complete", extra={"source": "beansack", "num_items": total_ported})
         return total_ported
 
-
+CUPBOARD_SIGNAL_KIND = "signal"
+CUPBOARD_SIGNAL_URL_PREFIX = "https://api.cafecito.tech/espresso/signals/"
 class CupboardPorter:
     cache: AsyncStateCacheBase
 
@@ -126,19 +129,6 @@ class CupboardPorter:
             bean[K_TAGS] = merge_tags(bean.get(K_CATEGORIES), bean.get(K_SENTIMENTS), bean.get(DIGEST, {}).get(TAGS))
         return [Sip(**bean) for bean in beans]
 
-    @classmethod
-    def prep_sources(cls, sources: list[dict]):
-        return [Source(**src, domain_name=src.get(K_SOURCE)) for src in sources]
-
-    # @classmethod
-    # def prep_links(cls, links: list):
-    #     unpacked = []
-    #     for item in links:
-    #         url = item[K_URL]
-    #         if related := item.get(K_RELATED):
-    #             unpacked.extend([{K_URL: url, "related_url": r} for r in related])
-    #     return unpacked
-
     async def hydrate_events(self, db: Cupboard, target_state: str):
         # move beans
         count = 0
@@ -152,6 +142,10 @@ class CupboardPorter:
             log.info("ported", extra={"source": "cupboard:events", "num_items": count})                
             await self.cache.set(BEANS, target_state, [{K_URL: b[K_URL]} for b in beans])       
         return count
+
+    @classmethod
+    def prep_sources(cls, sources: list[dict]):
+        return [Source(**src, domain_name=src.get(K_SOURCE)) for src in sources]
 
     async def hydrate_sources(self, db: Cupboard, target_state: str):
         count = 0
@@ -168,10 +162,41 @@ class CupboardPorter:
         target = target_state+":link"
         count = 0
         if related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target):
-            log.info("porting", extra={"source": "cupboard:related_beans", "num_items": len(related_beans)})
+            log.info("porting", extra={"source": "cupboard:event_links", "num_items": len(related_beans)})
             count = await db.link_sips(related_beans, "SAME_AS")
-            log.info("ported", extra={"source": "cupboard:related_beans", "num_items": count})
+            log.info("ported", extra={"source": "cupboard:event_links", "num_items": count})
             await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
+        return count
+
+    @classmethod
+    def prep_signals(cls, composites: list[dict]):
+        """Adding fields for easier conversion for storage."""
+        for comp in composites:
+            # this is just for convenient storage and linking ops
+            url = CUPBOARD_SIGNAL_URL_PREFIX+comp[ID]
+            comp.update({
+                SOURCE: DEFAULT_SOURCE,
+                KIND: CUPBOARD_SIGNAL_KIND,
+                ID: generate_id(url),
+                URL: url
+            })  
+        return composites              
+
+    async def hydrate_signals(self, db: Cupboard, target_state: str):
+        count = 0
+        if composites := await self.cache.get(COMPOSITES, states=COLLECTED, exclude_states=target_state):
+            log.info("porting", extra={"source": "cupboard:signals", "num_items": len(composites)})
+            # saving this for cache resetting
+            ids = [{ID: comp[ID]} for comp in composites]
+            composites = self.prep_signals(composites)
+            counts = await asyncio.gather(*[
+                db.store_sips([Sip(**comp) for comp in composites]),
+                db.link_sips(composites, "DERIVED_FROM"),
+            ])
+            log.info("ported", extra={"source": "cupboard:signals", "num_items": counts[0]})
+            log.info("ported", extra={"source": "cupboard:singal_links", "num_items": counts[1]})
+            await self.cache.set(COMPOSITES, target_state, ids)
+            count = sum(counts)
         return count
 
     async def hydrate_cupboard(self, db: Cupboard, target_state: str = CUPBOARDED):
@@ -180,6 +205,7 @@ class CupboardPorter:
                 self.hydrate_events(db, target_state),
                 self.hydrate_sources(db, target_state),
                 self.hydrate_related(db, target_state),
+                self.hydrate_signals(db, target_state),
             )
             await db.optimize()
             total_ported = sum(counts)

@@ -10,6 +10,7 @@ from psycopg_pool import AsyncConnectionPool
 from pgvector.psycopg import Vector, register_vector_async
 from psycopg import sql
 from psycopg.types.json import Jsonb
+from icecream import ic
 
 from .models import *
 
@@ -84,6 +85,7 @@ RELATED = 'related'
 FROM_ID = 'from_id'
 TO_ID = 'to_id'
 RELATIONSHIP = 'relationship'
+TIMEOUT = 270
 
 SIP_COLUMNS = [ID, CREATED, KIND, SOURCE, EMBEDDING, TAGS, DIGEST, URL, BASE_URL]
 SOURCE_COLUMNS = [ID, DOMAIN_NAME, BASE_URL, SITE_NAME, DESCRIPTION, FAVICON, RSS_FEED]
@@ -101,7 +103,8 @@ class Cupboard:
             self.conn_str,
             min_size=0,
             max_size=32,
-            timeout=270,
+            timeout=TIMEOUT,
+            max_idle=TIMEOUT,
             num_workers=os.cpu_count()*2,
             configure=register_vector_async
         )

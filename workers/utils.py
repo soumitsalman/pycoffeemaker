@@ -7,7 +7,7 @@ from nlp import valid_tags
 # Object Types
 #--------------------------------#
 BEANS = "beans"
-SIGNALS = "signals"
+COMPOSITES = "composites"
 PUBLISHERS = "publishers"
 CHATTERS = "chatters"
 

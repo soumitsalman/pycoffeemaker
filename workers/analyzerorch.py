@@ -1,24 +1,23 @@
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import os
 from datetime import datetime
 from itertools import batched, chain
 from textcase import snake
-from coffeemaker.processingcache.base import StateCacheBase
-from coffeemaker.processingcache.clscache import ClassificationCache
+from processingcache.base import StateCacheBase
+from processingcache.clscache import ClassificationCache
 from nlp import (
-    Digest, Briefing, 
-    NamedEntityExtractor, DigestorBase, EmbedderBase, 
-    valid_tags, create_embedder, create_digestor,
-    DIGEST_SYS, DIGEST_INST, BRIEFING_SYS, BRIEFING_INST,
+    Digest, 
+    Briefing, 
+    EntityExtractor, 
+    EmbedderBase,
+    MicroAgentBase, 
+    valid_tags, 
+    create_embedder, 
+    create_micro_agent
 )
-from datacollectors.utils import (
-    SUMMARY,
-    TAGS,
-    TITLE,
-    URL,
-    CONTENT,
-    SOURCE,
-    CREATED,
+from datacollectors import (
+    CONTENT, CREATED, SUMMARY, TAGS, TITLE, URL, SOURCE
 )
 
 from .utils import *
@@ -83,7 +82,7 @@ class Embedder:
 
 class Extractor:
     cache: StateCacheBase
-    extractor: NamedEntityExtractor
+    extractor: EntityExtractor
 
     def __init__(
         self,
@@ -92,7 +91,7 @@ class Extractor:
         extractor_context_len: int
     ):
         self.cache = cache
-        self.extractor = NamedEntityExtractor(
+        self.extractor = EntityExtractor(
             model_path=extractor_model_path,
             context_len=extractor_context_len,
             threshold=0.35,
@@ -134,9 +133,25 @@ class Extractor:
             return total
 
 
+DIGEST_SYS = """
+TASK=EXTRACT digests FROM content IF specified
+DIGEST_ELEMENTS=
+{description}
+RULES=
+exclude:unspecified data, implied assessments, assumptions
+remove:N/A,null values, empty fields
+avoid:markdown,prose,code_fences,null_placeholders,implied_information,assumptions
+RESPONSE=JSON object matching schema
+"""
+DIGEST_INST = """
+EXTRACT digests FROM content IF specified
+=== content ===
+{input_text}
+"""
+
 class Digestor:
     cache: StateCacheBase
-    digestor: DigestorBase
+    digestor: MicroAgentBase
 
     def __init__(
         self,
@@ -145,10 +160,10 @@ class Digestor:
         digestor_context_len: int,
     ):
         self.cache = cache
-        self.digestor = create_digestor(
+        self.digestor = create_micro_agent(
             model_path=digestor_model_path,
             context_len=digestor_context_len,
-            system_template=DIGEST_SYS,
+            instruction=DIGEST_SYS.format(description=Digest.model_text_schema()),
             input_template=DIGEST_INST,
             output_model=Digest,
         )
@@ -263,15 +278,37 @@ class Classifier:
 
 
 CONSOLIDATION_EPS = float(os.getenv("CONSOLIDATION_EPS", 0.5))
-CONSOLIDATION_WINDOW = int(os.getenv("CONSOLIDATION_WINDOW", 2))
+CONSOLIDATION_WINDOW = int(os.getenv("CONSOLIDATION_WINDOW", 1))
 CONSOLIDATION_RELATED_WINDOW = int(os.getenv("CONSOLIDATION_RELATED_WINDOW", 30))
-CONSOLIDATION_MAX_SIZE = int(os.getenv("CONSOLIDATION_MAX_SIZE", 64))
-CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 2))
+CONSOLIDATION_MAX_SIZE = int(os.getenv("CONSOLIDATION_MAX_SIZE", 40))
+CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 4))
+
+BRIEFING_SYS = """
+TASK=CREATE consolidated_intelligence_briefing FROM EventStream
+BRIEFING_ELEMENTS=
+{description}
+RULES=
+grounding:normative,multi_events,strict_tracing
+phrasing:structured,dynamic,specific,granular,direct
+tone:informative,objective,concrete,analytical,data_driven
+avoid:clickbait,sensationalism,ambiguity,vagueness,generic_phrasing,speculative_narrative,emotive_language,technical_inconsistencies,political_biases
+RESPONSE=JSON object matching schema
+"""
+BRIEFING_INST = """
+CREATE consolidated_intelligence_briefing FROM EventStream
+STEPS=
+1.DETERMINE relationships between events,entities,domains,datapoints,impacts
+2.DETERMINE causal_chain driving or preceding the events
+3.DETERMINE impacts,implications,target_groups of the events sequence
+4.DETERMINE forecast FROM impacts,implications
+=== EVENT STREAM ===
+{input_text}
+"""
 
 class Consolidator:
     """Consolidates events and data to create consolidated briefings and signals"""
     cache: StateCacheBase
-    consolidator: DigestorBase
+    consolidator: MicroAgentBase
 
     def __init__(
         self,
@@ -281,19 +318,20 @@ class Consolidator:
         **consolidator_kwargs
     ):
         self.cache = cache
-        self.consolidator = create_digestor(
+        self.consolidator = create_micro_agent(
             model_path=consolidator_model_path,
             context_len=consolidator_context_len,
-            system_template=BRIEFING_SYS,
+            instruction=BRIEFING_SYS.format(description=Briefing.model_text_schema()),
             input_template=BRIEFING_INST,
             output_model=Briefing,
+            max_tokens=4096,
             **consolidator_kwargs
         )
 
     def _get_beans(self, states: list[str], exclude_states: list[str] = None, ids: list[str] = None, window: int = None, limit: int = None) -> list[dict]:
         beans = self.cache.get(BEANS, states=states, exclude_states=exclude_states, ids=ids, window=window, limit=limit)
         # remove content, summary, and title from beans to save memory
-        beans = [b for b in beans if b.get(EMBEDDING)]
+        beans = [b for b in beans if b.get(EMBEDDING) and b.get(DIGEST)]
         for bean in beans:
             bean.pop(CONTENT, None)
             bean.pop(SUMMARY, None)
@@ -301,73 +339,94 @@ class Consolidator:
         return beans        
 
     def _expand_group(self, group: dict) -> dict:
-        if len(group["data"]) < CONSOLIDATION_MAX_SIZE:
-            related = self._get_beans(
-                states=[COLLECTED, EMBEDDED, DIGESTED], 
-                ids=list(chain.from_iterable(b.get(RELATED, []) for b in group["data"])), 
-                window=CONSOLIDATION_RELATED_WINDOW, 
-                limit=CONSOLIDATION_MAX_SIZE
-            )
-            group["data"].extend(related)
-            group["embedding"] = np.median([b[EMBEDDING] for b in group["data"]], axis=0).tolist()
+        # no need to do anything since we have enough beans in the group
+        if len(group["data"]) >= CONSOLIDATION_MAX_SIZE: 
+            group["data"] = group["data"][:CONSOLIDATION_MAX_SIZE]
+            return group
+
+        ids_to_fetch = list(chain.from_iterable(b.get(RELATED, []) for b in group["data"]))
+        # no need to fetch related beans if we don't have enough beans to consolidate
+        if len(ids_to_fetch) + len(group["data"]) < CONSOLIDATION_MIN_SIZE: return group
+
+        related = self._get_beans(
+            states=[COLLECTED, EMBEDDED, DIGESTED], 
+            ids=ids_to_fetch, 
+            window=CONSOLIDATION_RELATED_WINDOW, 
+            limit=CONSOLIDATION_MAX_SIZE
+        )
+        # no need to expand group if we don't have enough beans to consolidate
+        if len(related) + len(group["data"]) < CONSOLIDATION_MIN_SIZE: return group
+
+        group["data"].extend(related[:CONSOLIDATION_MAX_SIZE - len(group["data"])])       
+        group["embedding"] = np.median([b[EMBEDDING] for b in group["data"]], axis=0).tolist()
         return group
 
     def _create_consolidation_groups(self, beans: list[dict]) -> list[dict]:
-        groups = _group_items(beans, CONSOLIDATION_EPS)[:10]
-        ic(len(groups))
-        groups = [self._expand_group(group) for group in groups if len(group['data']) >= CONSOLIDATION_MIN_SIZE]   
-        ic(len(groups)) 
+        groups = _group_items(beans, CONSOLIDATION_EPS, CONSOLIDATION_MIN_SIZE)        
+        log.info("initial groups", extra={"source": run_id(), "num_items": len(groups)})
+        with ThreadPoolExecutor(max_workers=32) as exec:
+            groups = list(exec.map(self._expand_group, groups))
+        groups = [group for group in groups if len(group["data"]) >= CONSOLIDATION_MIN_SIZE]   
+        log.info("consolidation groups", extra={"source": run_id(), "num_items": len(groups)}) 
         return groups
 
+    def consolidate_bean_groups(self, groups: list[dict], batch_size: int):
+        for chunk in batched(groups, batch_size):
+            try:
+                [print(len(gr['data'])) for gr in chunk]
+                briefings = self.consolidator.run_batch(list(map(_group_to_str, chunk)))
+
+                composite_updates, bean_updates = [], []
+                for group, br in zip(chunk, briefings):
+                    if not br: continue
+
+                    composite_updates.append({
+                        ID: now().strftime("%Y_%m_%d") + '_' + snake(br.briefing),
+                        CREATED: max(b[CREATED] for b in group['data']), 
+                        EMBEDDING: group[EMBEDDING],
+                        TAGS: merge_tags(br.tags, *[b.get(CATEGORIES, []) for b in group['data']]),
+                        DIGEST: br.model_dump(),
+                        RELATED: [b[URL] for b in group['data']]
+                    })
+                    bean_updates.extend({URL: b[URL]} for b in group['data'])
+
+                log.info("consolidated composites", extra={"source": run_id(), "num_items": len(composite_updates)})
+                log.info("consolidated beans", extra={"source": run_id(), "num_items": len(bean_updates)})
+                yield composite_updates, bean_updates
+
+            except Exception:
+                log.error(
+                    "failed consolidating",
+                    extra={"source": chunk[0]['data'][0][SOURCE], "num_items": len(chunk)},
+                    exc_info=True,
+                    stack_info=True,
+                )
+
     def run(self, batch_size: int = BATCH_SIZE):
-        beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED, window=CONSOLIDATION_WINDOW)
+        beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED, window=CONSOLIDATION_WINDOW)
         log.info("starting consolidator", extra={"source": run_id(), "num_items": len(beans)})
 
         groups = self._create_consolidation_groups(beans)
         if not groups: return 0
 
         with self.consolidator:
-            total_briefings, total_beans = 0, 0
+            total_composites, total_beans = 0, 0
 
-            for chunk in batched(groups, batch_size):
-                briefings = ic(self.consolidator.run_batch(list(map(_group_to_str, chunk))))
-
-                briefing_updates = [
-                    {
-                        ID: now().strftime("%b_%d_%Y") + '_' + snake(br.briefing),
-                        CREATED: max(b[CREATED] for b in group['data']), 
-                        EMBEDDING: group[EMBEDDING],
-                        # TODO: add classification
-                        TAGS: br.tags,
-                        DIGEST: br.model_dump(),
-                        RELATED: list(chain.from_iterable(b[URL] for b in group['data']))
-                    } 
-                    for group, br in zip(chunk, briefings)
-                    if br
-                ]
-                count = self.cache.set(SIGNALS, COLLECTED, briefing_updates)
-                count = count or len(briefing_updates)
-                log.info("consolidated briefings", extra={"source": run_id(), "num_items": count})
-                total_briefings += count
-
-                bean_updates = [
-                    {URL: b[URL]} 
-                    for group, br in zip(chunk, briefings) for b in group['data']
-                    if br
-                ]
+            for composite_updates, bean_updates in self.consolidate_bean_groups(groups, batch_size):
+                [print({k:v for k,v in update.items() if k != EMBEDDING}) for update in composite_updates]
+                count = self.cache.set(COMPOSITES, COLLECTED, composite_updates)
+                total_composites += (count or len(composite_updates))
                 count = self.cache.set(BEANS, CONSOLIDATED, bean_updates)
-                count = count or len(bean_updates)
-                log.info("consolidated beans", extra={"source": run_id(), "num_items": count})
-                total_beans += count
+                total_beans += (count or len(bean_updates))
 
-            log.info("total consolidated briefings", extra={"source": run_id(), "num_items": total_briefings})
+            log.info("total consolidated composites", extra={"source": run_id(), "num_items": total_composites})
             log.info("total consolidated beans", extra={"source": run_id(), "num_items": total_beans})
-            return total_briefings + total_beans
+            return total_composites + total_beans
 
 def _value_to_str(value) -> str:
-    if isinstance(value, list): return "|".join(_value_to_str(v) for v in value)
+    if isinstance(value, list): return ",".join(_value_to_str(v) for v in value)
     if isinstance(value, dict): return "|".join(f"{k}:{_value_to_str(v)}" for k,v in value.items() if v)
-    if isinstance(value, datetime): return value.strftime('%A, %b-%d-%Y')
+    if isinstance(value, datetime): return value.strftime('%Y-%m-%d')
     return str(value)
 
 def _bean_to_str(bean: dict) -> str:
@@ -382,7 +441,7 @@ def _group_to_str(group: dict) -> str:
 from sklearn.cluster import DBSCAN
 import numpy as np
 
-def _group_items(items: list, distance: float) -> list[dict]:
+def _group_items(items: list, distance: float, min_group_size: int) -> list[dict]:
     """Groups items based on L2 distance between embeddings.
     
     Args:
@@ -398,11 +457,11 @@ def _group_items(items: list, distance: float) -> list[dict]:
 
     # Cluster vectors using DBSCAN; points within `distance` and density-connected
     # end up in the same cluster. We treat noise points as singletons.
-    labels = DBSCAN(eps=distance, min_samples=1, metric="euclidean").fit_predict(np.array([item[EMBEDDING] for item in items]))
+    labels = DBSCAN(eps=distance, min_samples=min_group_size, metric="euclidean").fit_predict(np.array([item[EMBEDDING] for item in items]))
     # Build groups of indices: clusters (label >= 0) and singleton noise points
     cluster_map: dict[int, list[int]] = {}
     for idx, label in enumerate(labels):
-        if label == -1: cluster_map[len(labels)+idx] = [idx] # Noise point, treat as its own cluster
+        if label == -1: cluster_map[len(items)+idx] = [idx] # Noise point, treat as its own cluster
         else: cluster_map.setdefault(label, []).append(idx)
     
     return [

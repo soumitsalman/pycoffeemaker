@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 MAX_WORKERS = os.cpu_count() * os.cpu_count()
 EMBEDDER_CONTEXT_LEN = 512
 EXTRACTOR_CONTEXT_LEN = 4096
-DIGESTOR_CONTEXT_LEN = 4096
+DIGESTOR_CONTEXT_LEN = 32768
 CONSOLIDATOR_CONTEXT_LEN = 65536
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,8 +34,8 @@ logging.getLogger("analyzerworker").setLevel(logging.INFO)
 logging.getLogger("porterworker").setLevel(logging.INFO)
 logging.getLogger("processingcache").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
-logging.getLogger("coffeemaker.nlp.agents").propagate = False
-logging.getLogger("coffeemaker.nlp.embedders").propagate = False
+logging.getLogger("nlp.digestors").propagate = False
+logging.getLogger("nlp.embedders").propagate = False
 logging.getLogger("asyncprawcore").propagate = False
 logging.getLogger("asyncpraw").propagate = False
 logging.getLogger("dammit").propagate = False
@@ -72,9 +72,9 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLASSIFIER, CONSOLIDATOR, PORTER)",
 )
 
-from coffeemaker.processingcache.pgcache import AsyncStateCache, StateCache
-from coffeemaker.orchestrators.utils import BEANSACKED, CATEGORIES, CUPBOARDED, SENTIMENTS, SIGNALS, BEANS, PUBLISHERS, CHATTERS, ID
-from datacollectors.utils import URL, BASE_URL
+from processingcache.pgcache import AsyncStateCache, StateCache
+from workers.utils import BEANSACKED, CATEGORIES, CUPBOARDED, SENTIMENTS, COMPOSITES, BEANS, PUBLISHERS, CHATTERS, ID
+from datacollectors import URL, BASE_URL
 from pybeansack import create_client
 
 if __name__ == "__main__":
@@ -88,13 +88,13 @@ if __name__ == "__main__":
         BEANS: {"id_key": URL},
         PUBLISHERS: {"id_key": BASE_URL},
         CHATTERS: {"id_key": ID},
-        SIGNALS: {"id_key": ID}
+        COMPOSITES: {"id_key": ID}
     }
     cache = StateCache(cache_path, cache_settings)
     async_cache = AsyncStateCache(cache_path, cache_settings)
 
     if mode == "COLLECTOR":
-        from coffeemaker.orchestrators.collectororch import Collector
+        from workers.collectororch import Collector
 
         asyncio.run(
             Collector(cache=async_cache).run(
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         )
 
     elif mode == "EMBEDDER":
-        from coffeemaker.orchestrators.analyzerorch import Embedder
+        from workers.analyzerorch import Embedder
 
         Embedder(
             cache=cache,
@@ -115,8 +115,8 @@ if __name__ == "__main__":
         ).run(batch_size=batch_size)
 
     elif mode == "CLASSIFIER":
-        from coffeemaker.orchestrators.analyzerorch import Classifier
-        from coffeemaker.processingcache.clscache import ClassificationCache
+        from workers.analyzerorch import Classifier
+        from processingcache.clscache import ClassificationCache
         
         cls_cache = ClassificationCache(
             os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/.cache/clsstore'), 
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         cls_cache.close()
 
     elif mode == "EXTRACTOR":
-        from coffeemaker.orchestrators.analyzerorch import Extractor
+        from workers.analyzerorch import Extractor
 
         Extractor(
             cache=cache,
@@ -141,7 +141,7 @@ if __name__ == "__main__":
         ).run(batch_size=batch_size)
 
     elif mode == "DIGESTOR":
-        from coffeemaker.orchestrators.analyzerorch import Digestor
+        from workers.analyzerorch import Digestor
 
         Digestor(
             cache=cache,
@@ -152,7 +152,7 @@ if __name__ == "__main__":
         ).run(batch_size=batch_size)     
 
     elif mode == "CONSOLIDATOR":
-        from coffeemaker.orchestrators.analyzerorch import Consolidator
+        from workers.analyzerorch import Consolidator
         
         Consolidator(
             cache=cache,
@@ -165,22 +165,11 @@ if __name__ == "__main__":
         ).run(batch_size=batch_size)
 
     elif mode == "PORTER":
-        from coffeemaker.orchestrators.porterorch import BeansackPorter, CupboardPorter
+        from workers.porterorch import BeansackPorter, CupboardPorter
         from pycupboard.pgcupboard import Cupboard
 
-        db_kwargs = {
-            "db_type": os.getenv("DB_TYPE"),
-            "mongo_connection_string": os.getenv("MONGO_CONNECTION_STRING"),
-            "mongo_database": os.getenv("MONGO_DATABASE"),
-            "pg_connection_string": os.getenv("PG_CONNECTION_STRING"),
-            "duckdb_storage": os.getenv("DUCKDB_STORAGE"),
-            "lancedb_storage": os.getenv("LANCEDB_STORAGE"),
-            "ducklake_catalog": os.getenv("DUCKLAKE_CATALOG"),
-            "ducklake_storage": os.getenv("DUCKLAKE_STORAGE"),
-        }
-
         async def run_porter():
-            beansack_db = create_client(**db_kwargs)
+            beansack_db = create_client("pg", pg_connection_string=os.getenv("BEANSACK_CONNECTION_STRING"))
             cupboard_db = Cupboard(os.getenv("CUPBOARD_CONNECTION_STRING"))
             try:
                 async with async_cache:

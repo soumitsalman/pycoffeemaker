@@ -13,9 +13,9 @@ from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pgvector.psycopg import register_vector, Vector
 from icecream import ic
 
-TIMEOUT = 600
-MAX_WORKERS = os.cpu_count() * os.cpu_count()
-BATCH_SIZE = 512
+TIMEOUT = 270
+MAX_WORKERS = 16
+BATCH_SIZE = 128
 
 ##############
 # STATE CACHE
@@ -72,7 +72,7 @@ class StateCache(StateCacheBase):
         self.close()
         return False
 
-    @retry(tries=3, delay=10)
+    @retry(tries=3, delay=15)
     def set(
         self,
         object_type: str,
@@ -90,7 +90,7 @@ class StateCache(StateCacheBase):
                     list(chain.from_iterable(chunk)),
                 ).rowcount
 
-        with self.pool.connection() as conn, ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
             counts = list(exec.map(insert_chunk, batched(rows, BATCH_SIZE)))
         return sum(counts)
 
@@ -100,7 +100,7 @@ class StateCache(StateCacheBase):
         states: str | list[str],
         exclude_states: str | list[str] = NULL_STATE,
         ids: list[str] = None,
-        window: int = DEFAULT_WINDOW,
+        window: int = None,
         limit: int = 0,
         offset: int = 0,
     ):
@@ -169,7 +169,7 @@ class AsyncStateCache(AsyncStateCacheBase):
         await self.close()
         return False
 
-    @retry(tries=3, delay=10)
+    @retry(tries=3, delay=15)
     async def set(
         self,
         object_type: str,
@@ -196,7 +196,7 @@ class AsyncStateCache(AsyncStateCacheBase):
         states: str | list[str],
         exclude_states: str | list[str] = NULL_STATE,
         ids: list[str] = None,
-        window: int = DEFAULT_WINDOW,
+        window: int = None,
         limit: int = 0,
         offset: int = 0,
     ):
@@ -236,15 +236,6 @@ async def _read_async(conn, expr: str, params=None):
     result = await conn.execute(expr, params, binary=True)
     rows = await result.fetchall()
     return [row[0] for row in rows]
-
-# def merge(groups: list[list[dict[str, Any]]]):
-#     merged = []
-#     for gr in groups:
-#         pack = {}
-#         for data in gr:
-#             pack.update({k: v for k, v in data.items() if v})
-#         merged.append(pack)
-#     return merged
 
 def merge(group: list[dict[str, Any]]):
     if not group: return
@@ -405,24 +396,21 @@ _QUERY_SINGLE_STATE_SQL = """
 SELECT data FROM {table}
 WHERE state = %(include_state)s
 AND NOT EXISTS (SELECT 1 FROM {table} t2 WHERE t2.id = {table}.id AND t2.state = %(exclude_state)s)
-AND ts >= CURRENT_TIMESTAMP - INTERVAL '{window} days'
+{ts_expr}
+{ids_expr}
 """
 def _create_single_state_query_expr(
     table: str,
     include_state: str | None,
     exclude_state: str | None,
     ids: list[str] = None,
-    window: int = DEFAULT_WINDOW,
+    window: int = None,
 ):
-    expr = _QUERY_SINGLE_STATE_SQL.format(table=table, window=window)
     params = {
         "include_state": include_state,
         "exclude_state": exclude_state
     }
-    if ids:
-        expr += "\nAND id = ANY(%(ids)s)"
-        params["ids"] = ids
-    return expr, params
+    return _add_ts_and_ids_expr(_QUERY_SINGLE_STATE_SQL, table=table, params=params, window=window, ids=ids)
 
 
 _QUERY_MULTI_STATE_SQL = """
@@ -432,7 +420,7 @@ WHERE state = ANY(%(include_states)s)
         SELECT 1 FROM {table} excl 
         WHERE excl.id = incl.id AND excl.state = ANY(%(exclude_states)s)
     )
-    AND ts >= CURRENT_TIMESTAMP - INTERVAL '{window} days'
+    {ts_expr}
     {ids_expr}
 GROUP BY id
 HAVING COUNT(*) >= %(min_count)s
@@ -442,17 +430,23 @@ def _create_multi_state_query_expr(
     include_states: list[str],
     exclude_states: list[str],
     ids: list[str] = None,
-    window: int = DEFAULT_WINDOW,
+    window: int = None,
 ):
-    ids_expr = f"AND id = ANY(%(ids)s)" if ids else ""
     params = {
         "include_states": include_states,
         "exclude_states": exclude_states,
         "min_count": len(include_states)
     }
+    return _add_ts_and_ids_expr(_QUERY_MULTI_STATE_SQL, table=table, params=params, window=window, ids=ids)
+
+def _add_ts_and_ids_expr(template: str, table: str, params: dict, window: int, ids: list[str]):
+    ts_expr, ids_expr = "", ""
+    if window:
+        ts_expr = f"AND ts >= CURRENT_TIMESTAMP - INTERVAL '{window} days'"
     if ids:
+        ids_expr = f"AND id = ANY(%(ids)s)"
         params["ids"] = ids
-    return _QUERY_MULTI_STATE_SQL.format(table=table, window=window, ids_expr=ids_expr), params
+    return template.format(table=table, ts_expr=ts_expr, ids_expr=ids_expr), params
 
 _EXISTS_SQL = "SELECT id FROM {table} WHERE state = %(state)s AND id = ANY(%(ids)s)"
 _CLEANUP_OLD_SQL = "UPDATE {table} SET data = NULL WHERE ts < %(threshold)s"

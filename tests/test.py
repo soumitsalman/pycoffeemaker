@@ -1,15 +1,11 @@
 import logging
 import os
 import sys
-import time
-
-import requests
 from dotenv import load_dotenv
 from icecream import ic
 
 load_dotenv()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -22,8 +18,8 @@ logging.getLogger("analyzerworker").setLevel(logging.INFO)
 logging.getLogger("porterworker").setLevel(logging.INFO)
 logging.getLogger("processingcache").setLevel(logging.INFO)
 logging.getLogger("jieba").propagate = False
-logging.getLogger("coffeemaker.nlp.digestors").propagate = False
-logging.getLogger("coffeemaker.nlp.embedders").propagate = False
+logging.getLogger("nlp.digestors").propagate = False
+logging.getLogger("nlp.embedders").propagate = False
 logging.getLogger("asyncprawcore").propagate = False
 logging.getLogger("asyncpraw").propagate = False
 logging.getLogger("dammit").propagate = False
@@ -45,11 +41,12 @@ import json
 import random
 import re
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from coffeemaker.orchestrators.utils import log_runtime
 from pybeansack.models import *
 from pybeansack import *
+from pycupboard.pgcupboard import Cupboard
+from pycupboard.models import ID, Sip
 
 os.makedirs(".test", exist_ok=True)
 
@@ -106,7 +103,7 @@ def test_collector():
 
 
 def test_scraper():
-    from ..datacollectors import AsyncWebScraper
+    from datacollectors import AsyncWebScraper
 
     urls = [
         "https://financebuzz.com/retirees-should-buy-at-bjs-4",
@@ -127,8 +124,8 @@ def test_scraper():
 
 
 def test_publisher_scraper():
-    from ..datacollectors import WebScraper
-    from coffeemaker.pybeansack import models, warehouse
+    from datacollectors import AsyncWebScraper
+    from pybeansack.ducklakesack import DuckSack
 
     urls = [
         "https://financebuzz.com/retirees-should-buy-at-bjs-4",
@@ -143,14 +140,13 @@ def test_publisher_scraper():
         "https://aws.amazon.com/blogs/storage/cross-account-disaster-recovery-setup-using-aws-elastic-disaster-recovery-in-secured-networks-part-1-architecture-and-network-setup/",
         "https://aws.amazon.com/blogs/storage/mastering-cross-account-amazon-efs-seamlessly-mount-amazon-efs-on-amazon-eks-cluster/",
     ]
-    db = warehouse.Beansack(
-        catalogdb=os.getenv("PG_CONNECTION_STRING"),
-        storagedb=os.getenv("STORAGE_DATAPATH"),
-        factory_dir="factory",
+    db = DuckSack(
+        catalogdb=os.getenv("DUCKLAKE_CATALOG", os.getenv("PG_CONNECTION_STRING")),
+        storagedb=os.getenv("DUCKLAKE_STORAGE", os.getenv("STORAGE_DATAPATH")),
     )
 
     async def run():
-        async with WebScraper() as scraper:
+        async with AsyncWebScraper() as scraper:
             ic(await scraper.scrape_sites(urls))
             pubs = db.query_publishers(
                 conditions=["rss_feed IS NULL", "favicon IS NULL", "site_name IS NULL"],
@@ -162,7 +158,8 @@ def test_publisher_scraper():
 
 
 def test_fullstack_orch():
-    from coffeemaker.orchestrators.fullstack import Orchestrator
+    raise NotImplementedError("fullstack orchestrator was removed; use run.py worker modes instead")
+    from workers.fullstack import Orchestrator  # noqa: F401
 
     orch = Orchestrator(
         DB_LOCAL_TEST,
@@ -178,12 +175,10 @@ def test_fullstack_orch():
 
 
 def create_test_data_file(output_path):
-    from coffeemaker.pybeansack.mongosack import VALUE_EXISTS
+    from pybeansack.mongosack import VALUE_EXISTS, MongoDB
 
-    from coffeemaker.orchestrators.collectororch import Collector
-
-    orch = Collector(os.getenv("MONGODB_CONN_STR"), "test")
-    beans = orch.db.sample_beans(
+    db = MongoDB(os.getenv("MONGODB_CONN_STR"), "test")
+    beans = db.sample_beans(
         filter={
             K_COLLECTED: {"$gte": (datetime.now() - timedelta(days=10))},
             K_KIND: {"$in": [NEWS, BLOG]},
@@ -210,39 +205,53 @@ def hydrate_test_db():
 
 
 def test_trend_analysis():
-    from coffeemaker.orchestrators.collectororch import Collector
+    from pybeansack.mongosack import MongoDB
 
-    orch = Collector(os.getenv("MONGODB_CONN_STR"), "test")
-    items = orch.db.get_latest_chatters()
+    db = MongoDB(os.getenv("MONGODB_CONN_STR"), "test")
+    items = db.query_aggregated_chatters()
     ic(random.sample(items, 5))
 
 
 def test_static_db():
-    from coffeemaker.nlp import embedders
-    from coffeemaker.pybeansack.staticdb import StaticDB
+    import pandas as pd
+    from nlp import create_embedder
+    from pybeansack import SimpleVectorDB
 
     print("starting")
-    categories = StaticDB("./factory/categories.parquet")
-    sentiments = StaticDB("./factory/sentiments.parquet")
+    categories_df = pd.read_parquet("./factory/categories.parquet")
+    sentiments_df = pd.read_parquet("./factory/sentiments.parquet")
+    db = SimpleVectorDB(
+        ".test/staticdb-test",
+        {},
+        categories=categories_df.to_dict(orient="records"),
+        sentiments=sentiments_df.to_dict(orient="records"),
+    )
     print("db loaded")
-    embedder = embedders.from_path(os.getenv("EMBEDDER_PATH"), 512)
+    embedder = create_embedder(os.getenv("EMBEDDER_PATH"), 512)
     print("embedder loaded")
-    ic(
-        categories.vector_search(
-            embedder.embed("category/domain classification: artificial intelligence"),
-            limit=10,
+    with embedder:
+        ic(
+            db.search(
+                "categories",
+                embedder.embed_query("category/domain classification: artificial intelligence"),
+                distance_func="cosine",
+                limit=10,
+            )
         )
-    )
-    ic(
-        sentiments.vector_search(
-            embedder.embed("sentiment classification: ecstatic"), limit=5
+        ic(
+            db.search(
+                "sentiments",
+                embedder.embed_query("sentiment classification: ecstatic"),
+                distance_func="cosine",
+                limit=5,
+            )
         )
-    )
+    db.close()
 
 
 def test_collector_orch():
-    from coffeemaker.orchestrators.collectororch import Collector
-    from coffeemaker.processingcache.pgcache import AsyncStateCache
+    from workers.collectororch import Collector
+    from processingcache.pgcache import AsyncStateCache
 
     cache_settings = {
         BEANS: {"id_key": K_URL},
@@ -282,7 +291,7 @@ def test_collector_orch():
     
 
 def _analyzer_test_cache():
-    from coffeemaker.processingcache.pgcache import StateCache
+    from processingcache.pgcache import StateCache
 
     return StateCache(
         os.getenv("PROCESSING_CACHE"),
@@ -295,7 +304,7 @@ def _analyzer_test_cache():
 
 
 def _analyzer_cls_cache():
-    from coffeemaker.processingcache.clscache import ClassificationCache
+    from processingcache.clscache import ClassificationCache
 
     return ClassificationCache(
         ".test/clsstore-test",
@@ -308,12 +317,12 @@ def _analyzer_cls_cache():
 
 
 def test_embedder_orch():
-    from coffeemaker.orchestrators.analyzerorch import Embedder
+    from workers.analyzerorch import Embedder
 
     cache = _analyzer_test_cache()
     orch = Embedder(
         cache=cache,
-        embedder_path=os.getenv(
+        embedder_model_path=os.getenv(
             "EMBEDDER_PATH", "vllm://avsolatorio/GIST-small-Embedding-v0"
         ),
         embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
@@ -323,12 +332,12 @@ def test_embedder_orch():
 
 
 def test_extractor_orch():
-    from coffeemaker.orchestrators.analyzerorch import Extractor
+    from workers.analyzerorch import Extractor
 
     cache = _analyzer_test_cache()
     orch = Extractor(
         cache=cache,
-        extractor_path=os.getenv("EXTRACTOR_PATH"),
+        extractor_model_path=os.getenv("EXTRACTOR_PATH"),
         extractor_context_len=int(os.getenv("EXTRACTOR_CONTEXT_LEN", 4096)),
     )
     orch.run(batch_size=16)
@@ -336,12 +345,12 @@ def test_extractor_orch():
 
 
 def test_digestor_orch():
-    from coffeemaker.orchestrators.analyzerorch import Digestor
+    from workers.analyzerorch import Digestor
 
     cache = _analyzer_test_cache()
     orch = Digestor(
         cache=cache,
-        digestor_path=os.getenv(
+        digestor_model_path=os.getenv(
             "DIGESTOR_PATH", "vllm://LiquidAI/LFM2.5-1.2B-Instruct"
         ),
         digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", 32768)),
@@ -351,7 +360,7 @@ def test_digestor_orch():
 
 
 def test_classifier_orch():
-    from coffeemaker.orchestrators.analyzerorch import Classifier
+    from workers.analyzerorch import Classifier
 
     cache = _analyzer_test_cache()
     cls_cache = _analyzer_cls_cache()
@@ -360,14 +369,15 @@ def test_classifier_orch():
     cache.close()
 
 def test_porter_orch(beansack_or_cupboard):
-    from coffeemaker.orchestrators.porterorch import BeansackPorter, CupboardPorter
-    from coffeemaker.processingcache.pgcache import AsyncStateCache
-    from pycupboard.pgcupboard import Cupboard
+    from workers.porterorch import BeansackPorter, CupboardPorter
+    from workers.utils import COMPOSITES
+    from processingcache.pgcache import AsyncStateCache
 
     cache_settings = {
         BEANS: {"id_key": K_URL},
         PUBLISHERS: {"id_key": K_BASE_URL},
-        CHATTERS: {"id_key": "id"}
+        CHATTERS: {"id_key": "id"},
+        COMPOSITES: {"id_key": "id"}
     }
     cache = AsyncStateCache(os.getenv('PROCESSING_CACHE'), cache_settings)    
     
@@ -376,7 +386,7 @@ def test_porter_orch(beansack_or_cupboard):
         async def run():
             porter = CupboardPorter(cache=cache)
             async with cache, db:
-                await porter.hydrate_events(db, "cupboarded-v2")
+                await porter.hydrate_signals(db, "cupboarded")
 
         asyncio.run(run())
 
@@ -392,8 +402,7 @@ def test_porter_orch(beansack_or_cupboard):
 def test_vector_search():
     from pycupboard.pgcupboard import Cupboard
     from pycupboard.models import URL
-    from tqdm import tqdm
-    from nlp import embedders
+    from nlp import create_embedder
     from faker import Faker
 
     fake = Faker()
@@ -401,7 +410,7 @@ def test_vector_search():
     # db = create_client(db_type="pg", pg_connection_string=os.getenv('PG_CONNECTION_STRING'))
     # Cupboard.create_db("/home/soumitsr/codes/pycoffeemaker/.test/cupboard.db")
     db = Cupboard(os.getenv('CUPBOARD_CONNECTION_STRING'))
-    embedder = embedders.from_path("avsolatorio/GIST-small-Embedding-v0", 512)
+    embedder = create_embedder("avsolatorio/GIST-small-Embedding-v0", 512)
 
     queries = fake.sentences(256)
     with embedder:
@@ -423,11 +432,11 @@ def test_vector_search():
 
 
 def test_cache():
-    from coffeemaker.processingcache.base import DEFAULT_WINDOW
-    from coffeemaker.processingcache.clscache import ClassificationCache
+    from processingcache.base import DEFAULT_WINDOW
+    from processingcache.clscache import ClassificationCache
     import pandas as pd
-    from nlp import embedders
-    from coffeemaker.processingcache.pgcache import StateCache
+    from nlp import create_embedder
+    from processingcache.pgcache import StateCache
     from faker import Faker
 
     fake = Faker()
@@ -504,21 +513,21 @@ def test_cache():
         cls_cache.store("sentiments", pd.read_parquet("/home/soumitsr/codes/pycoffeemaker-cache/factory/sentiments.parquet").to_dict(orient="records"))
         
         categories = ["AI", "information security", "software engineering", "cloud computing", "arts and entertainment"]*100
-        with embedders.from_path(os.getenv('EMBEDDER_PATH'), 512) as embedder:        
+        with create_embedder(os.getenv('EMBEDDER_PATH'), 512) as embedder:        
             embs = embedder.embed_documents(categories)
-            ic(cls_cache.batch_search("categories", embs, distance=0.17, topn=5))
+            ic(cls_cache.batch_search("categories", embs, distance=0.17, top_n=5))
         
         cls_cache.close()
 
 
 def test_orch_on_lancesack():
-    from coffeemaker.collectors.collector import APICollector
-    from coffeemaker.nlp.src import Digest, digestors, embedders
-    from coffeemaker.pybeansack.lancesack import Beansack, _Bean
+    from datacollectors import APICollector
+    from nlp import Digest, create_digestor, create_embedder
+    from pybeansack import create_db
+    from pybeansack.lancesack import _Bean
+    from workers.collectororch import parse_sources
 
-    from coffeemaker.orchestrators.collectororch import parse_sources
-
-    db = Beansack.create_db(".beansack/lancesack_v2", "factory")
+    db = create_db("lance", lancedb_storage=".beansack/lancesack_v2")
     if False:
         feeds = parse_sources(f"{os.path.dirname(__file__)}/sources-1.yaml")
         collector = APICollector(batch_size=64)
@@ -537,7 +546,7 @@ def test_orch_on_lancesack():
             )
 
     if True:
-        with embedders.from_path(
+        with create_embedder(
             os.getenv("EMBEDDER_PATH"), EMBEDDER_CONTEXT_LEN
         ) as embedder:
             while beans := db.query_latest_beans(
@@ -555,10 +564,9 @@ def test_orch_on_lancesack():
                 ic(db.update_embeddings(updates))
 
     if False:
-        with digestors.from_path(
+        with create_digestor(
             os.getenv("DIGESTOR_PATH"),
-            max_input_tokens=4096,
-            max_output_tokens=384,
+            context_len=4096,
             output_model=Digest,
         ) as digestor:
             while beans := db.query_latest_beans(
@@ -570,7 +578,10 @@ def test_orch_on_lancesack():
                 digests = digestor.run_batch([bean.content for bean in beans])
                 updates = [
                     Bean(
-                        url=bean.url, gist=d.raw, regions=d.regions, entities=d.entities
+                        url=bean.url,
+                        gist=json.dumps(d.model_dump(exclude_none=True)),
+                        regions=d.regions,
+                        entities=[*d.people, *d.companies, *d.products, *d.stock_tickers],
                     )
                     for bean, d in zip(beans, digests)
                     if d
@@ -593,7 +604,7 @@ def test_orch_on_lancesack():
             for bean in beans
         ]
 
-        with embedders.from_path(
+        with create_embedder(
             os.getenv("EMBEDDER_PATH"), EMBEDDER_CONTEXT_LEN
         ) as embedder:
             vec = embedder.embed_query(
