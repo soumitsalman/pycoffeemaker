@@ -16,6 +16,7 @@ EMBEDDER_BATCH_SIZE="${EMBEDDER_BATCH_SIZE:-192}"
 EXTRACTOR_BATCH_SIZE="${EXTRACTOR_BATCH_SIZE:-32}"
 CLASSIFIER_BATCH_SIZE="${CLASSIFIER_BATCH_SIZE:-128}"
 DIGESTOR_BATCH_SIZE="${DIGESTOR_BATCH_SIZE:-32}"
+CONSOLIDATOR_BATCH_SIZE="${CONSOLIDATOR_BATCH_SIZE:-8}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -35,6 +36,10 @@ while [[ $# -gt 0 ]]; do
             DIGESTOR_BATCH_SIZE="$2"
             shift 2
             ;;
+        --consolidator-batch-size|--consolidator_batch_size)
+            CONSOLIDATOR_BATCH_SIZE="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown argument: $1" >&2
             exit 2
@@ -52,6 +57,10 @@ run_extractor() {
 
 run_digestor() {
     $PYTHON $RUN --mode DIGESTOR --batch_size $DIGESTOR_BATCH_SIZE
+}
+
+run_consolidator() {
+    $PYTHON $RUN --mode CONSOLIDATOR --batch_size $CONSOLIDATOR_BATCH_SIZE
 }
 
 run_classifier() {
@@ -93,6 +102,7 @@ wait
 run_digestor &
 backup_clscache &
 wait
+run_consolidator
 echo "=== [FINISHED] ==="
 
 $PYTHON $WORKING_DIR/machine_ops.py --action stop
