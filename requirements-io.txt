@@ -10,7 +10,6 @@ asyncpraw
 readability-lxml
 icecream
 python-dotenv
-python-slugify
 msgpack
 textcase
 pyturso

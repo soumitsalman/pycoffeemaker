@@ -134,17 +134,16 @@ class Extractor:
 
 
 DIGEST_SYS = """
-TASK=EXTRACT digests FROM content IF specified
-DIGEST_ELEMENTS=
+TASK=EXTRACT target_information FROM content IF specified
+TARGET_INFORMATION=
 {description}
 RULES=
-exclude:unspecified data, implied assessments, assumptions
-remove:N/A,null values, empty fields
-avoid:markdown,prose,code_fences,null_placeholders,implied_information,assumptions
+exclude:unspecified data,implied assessments,assumptions,null,empty fields
+avoid:markdown,prose,code_fences,null_placeholders,implied_information
 RESPONSE=JSON object matching schema
 """
 DIGEST_INST = """
-EXTRACT digests FROM content IF specified
+EXTRACT target_information FROM content IF specified
 === content ===
 {input_text}
 """
@@ -192,14 +191,14 @@ class Digestor:
 
     @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
-        beans = self.cache.get(BEANS, states="collected", exclude_states="digested")
+        beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=DIGESTED)
         log.info("starting digestor", extra={"source": run_id(), "num_items": len(beans)})
         if not beans: return 0
         
         with self.digestor:
             total = 0
             for updates in self.digest_beans(beans, batch_size):
-                count = self.cache.set(BEANS, "digested", updates)
+                count = self.cache.set(BEANS, DIGESTED, updates)
                 total += (count or len(updates))
             log.info("total digested", extra={"source": run_id(), "num_items": total})
             return total
@@ -284,7 +283,7 @@ CONSOLIDATION_MAX_SIZE = int(os.getenv("CONSOLIDATION_MAX_SIZE", 40))
 CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 4))
 
 BRIEFING_SYS = """
-TASK=CREATE consolidated_intelligence_briefing FROM EventStream
+TASK=CREATE intelligence_briefing FROM event_stream
 BRIEFING_ELEMENTS=
 {description}
 RULES=
@@ -295,7 +294,7 @@ avoid:clickbait,sensationalism,ambiguity,vagueness,generic_phrasing,speculative_
 RESPONSE=JSON object matching schema
 """
 BRIEFING_INST = """
-CREATE consolidated_intelligence_briefing FROM EventStream
+CREATE intelligence_briefing FROM event_stream
 STEPS=
 1.DETERMINE relationships between events,entities,domains,datapoints,impacts
 2.DETERMINE causal_chain driving or preceding the events
@@ -362,7 +361,7 @@ class Consolidator:
         return group
 
     def _create_consolidation_groups(self, beans: list[dict]) -> list[dict]:
-        groups = _group_items(beans, CONSOLIDATION_EPS, CONSOLIDATION_MIN_SIZE)        
+        groups = _group_items(beans, CONSOLIDATION_EPS, CONSOLIDATION_MIN_SIZE)       
         log.info("initial groups", extra={"source": run_id(), "num_items": len(groups)})
         with ThreadPoolExecutor(max_workers=32) as exec:
             groups = list(exec.map(self._expand_group, groups))

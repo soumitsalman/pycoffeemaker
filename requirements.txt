@@ -1,9 +1,7 @@
 accelerate
 vllm
-infinity-emb[torch]
 transformers
 sentence-transformers
-lm-format-enforcer
 llama-index
 gliner
 tiktoken
@@ -19,7 +17,6 @@ asyncpraw
 readability-lxml
 icecream
 python-dotenv
-python-slugify
 msgpack
 textcase
 pyturso
