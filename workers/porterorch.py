@@ -2,10 +2,10 @@ import json
 import logging
 import os
 import asyncio
-from itertools import batched, chain
-from typing import Any, Optional
+from itertools import chain
+from typing import Any
 
-from processingcache.base import AsyncStateCacheBase
+from .workercache.base import AsyncStateCacheBase
 from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
 from pybeansack.models import K_BASE_URL, K_CATEGORIES, K_CONTENT, K_CONTENT_LENGTH, K_CREATED, K_EMBEDDING, K_ENTITIES, K_KIND, K_REGIONS, K_RELATED, K_RESTRICTED_CONTENT, K_SENTIMENTS, K_SOURCE, K_SUMMARY, K_SUMMARY_LENGTH, K_TAGS, K_TITLE, K_TITLE_LENGTH, K_URL
 from pycupboard.pgcupboard import Cupboard

@@ -4,8 +4,8 @@ import os
 from datetime import datetime
 from itertools import batched, chain
 from textcase import snake
-from processingcache.base import StateCacheBase
-from processingcache.clscache import ClassificationCache
+from .workercache.base import StateCacheBase
+from .workercache.clscache import ClassificationCache
 from nlp import (
     Digest, 
     Briefing, 

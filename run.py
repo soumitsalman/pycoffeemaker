@@ -53,10 +53,6 @@ logging.getLogger("connectionpool").propagate = False
 # Set up argument parser
 parser = argparse.ArgumentParser(description="Run the coffee maker application")
 parser.add_argument("--batch_size", type=int, help="Batch size for processing")
-# parser.add_argument("--embedder_batch_size", type=int, help="Batch size for processing")
-# parser.add_argument("--extractor_batch_size", type=int, help="Batch size for processing")
-# parser.add_argument("--digestor_batch_size", type=int, help="Batch size for processing")
-# parser.add_argument("--classifier_batch_size", type=int, help="Batch size for processing")
 parser.add_argument(
     "--mode",
     type=str,
@@ -72,7 +68,7 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLASSIFIER, CONSOLIDATOR, PORTER)",
 )
 
-from processingcache.pgcache import AsyncStateCache, StateCache
+from workers.workercache.pgcache import AsyncStateCache, StateCache
 from workers.utils import BEANSACKED, CATEGORIES, CUPBOARDED, SENTIMENTS, COMPOSITES, BEANS, PUBLISHERS, CHATTERS, ID
 from datacollectors import URL, BASE_URL
 from pybeansack import create_client
@@ -116,7 +112,7 @@ if __name__ == "__main__":
 
     elif mode == "CLASSIFIER":
         from workers.analyzerorch import Classifier
-        from processingcache.clscache import ClassificationCache
+        from workers.workercache.clscache import ClassificationCache
         
         cls_cache = ClassificationCache(
             os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/.cache/clsstore'), 

@@ -251,7 +251,7 @@ def test_static_db():
 
 def test_collector_orch():
     from workers.collectororch import Collector
-    from processingcache.pgcache import AsyncStateCache
+    from workers.workercache.pgcache import AsyncStateCache
 
     cache_settings = {
         BEANS: {"id_key": K_URL},
@@ -291,7 +291,7 @@ def test_collector_orch():
     
 
 def _analyzer_test_cache():
-    from processingcache.pgcache import StateCache
+    from workers.workercache.pgcache import StateCache
 
     return StateCache(
         os.getenv("PROCESSING_CACHE"),
@@ -304,7 +304,7 @@ def _analyzer_test_cache():
 
 
 def _analyzer_cls_cache():
-    from processingcache.clscache import ClassificationCache
+    from workers.workercache.clscache import ClassificationCache
 
     return ClassificationCache(
         ".test/clsstore-test",
@@ -371,7 +371,7 @@ def test_classifier_orch():
 def test_porter_orch(beansack_or_cupboard):
     from workers.porterorch import BeansackPorter, CupboardPorter
     from workers.utils import COMPOSITES
-    from processingcache.pgcache import AsyncStateCache
+    from workers.workercache.pgcache import AsyncStateCache
 
     cache_settings = {
         BEANS: {"id_key": K_URL},
@@ -432,11 +432,11 @@ def test_vector_search():
 
 
 def test_cache():
-    from processingcache.base import DEFAULT_WINDOW
-    from processingcache.clscache import ClassificationCache
+    from workers.workercache.base import DEFAULT_WINDOW
+    from workers.workercache.clscache import ClassificationCache
     import pandas as pd
     from nlp import create_embedder
-    from processingcache.pgcache import StateCache
+    from workers.workercache.pgcache import StateCache
     from faker import Faker
 
     fake = Faker()

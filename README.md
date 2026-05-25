@@ -24,9 +24,13 @@ pycoffeemaker/
 │   ├── collectororch.py   # COLLECTOR
 │   ├── analyzerorch.py    # EMBEDDER, EXTRACTOR, DIGESTOR, CLASSIFIER, CONSOLIDATOR
 │   ├── porterorch.py      # PORTER → Beansack + Cupboard
-│   └── utils.py           # State names, field constants
+│   ├── utils.py           # State names, field constants
+│   └── workercache/       # Fault-tolerant state store (pg, sqlite, firebird, surreal)
+│       ├── base.py        # StateCacheBase / AsyncStateCacheBase
+│       ├── pgcache.py     # Default PostgreSQL state cache (PROCESSING_CACHE)
+│       ├── clscache.py    # Classification vector store (CLASSIFICATION_CACHE)
+│       └── extensions/    # Alternate backends (sqlite, firebird, surreal, pg+cls)
 ├── datacollectors/        # RSS, APIs, async web scrapers
-├── processingcache/       # Fault-tolerant state store (pg, sqlite, firebird, surreal)
 ├── nlp/                   # Embeddings, digests, NER (see nlp/README.md)
 ├── pybeansack/            # Bean/Chatter/Publisher models + DB backends (pg, lance, duck, mongo)
 ├── pycupboard/            # Sip/Source models for Cortado (Cupboard)
@@ -46,7 +50,7 @@ pycoffeemaker/
 | Consolidate | `CONSOLIDATOR` | Group related digests into composite briefings/signals |
 | Port | `PORTER` | Push finished beans/chatters/publishers to Beansack (PG) and Cupboard |
 
-Processing is **idempotent**: each item moves through named states in `processingcache`; already-done work is skipped.
+Processing is **idempotent**: each item moves through named states in `workers/workercache`; already-done work is skipped.
 
 Suggested schedule (from `run.py` comments): collector ~2×/day; embedder/extractor/classifier/digestor ~3×/day; porter on demand.
 
@@ -75,9 +79,11 @@ Suggested schedule (from `run.py` comments): collector ~2×/day; embedder/extrac
 
 `APICollectorAsync`, `AsyncWebScraper`—shared field constants (`URL`, `CONTENT`, `SOURCE`, etc.).
 
-### `processingcache/`
+### `workers/workercache/`
 
-`StateCache` / `AsyncStateCache` backed by `PROCESSING_CACHE` connection string. Tracks per-object processing states (`beans`, `publishers`, `chatters`, `composites`).
+Fault-tolerant state machine used by all orchestrators. Default backend: `pgcache.StateCache` / `pgcache.AsyncStateCache` via `PROCESSING_CACHE`. `clscache.ClassificationCache` backs CLASSIFIER (`CLASSIFICATION_CACHE`). Alternate backends live under `extensions/` (sqlite, firebird, surreal). State flow: `workers/workercache/STATEMACHINE.md`.
+
+Tracks per-object processing states (`beans`, `publishers`, `chatters`, `composites`).
 
 ### `nlp/`
 
@@ -102,7 +108,7 @@ Operational config: feed lists, classification taxonomies, migrations—not runt
 - Python 3.10+ (Docker images use 3.10 or 3.13)
 - `.env` at repo root (loaded by `run.py`)
 - Model paths for analyzer modes (`EMBEDDER_PATH`, `EXTRACTOR_PATH`, `DIGESTOR_PATH`, `CONSOLIDATOR_PATH`)
-- `PROCESSING_CACHE` — state DB (e.g. PostgreSQL / Turso / Firebird per your `pgcache` setup)
+- `PROCESSING_CACHE` — state DB connection (default: PostgreSQL via `workers/workercache/pgcache.py`; see `extensions/` for sqlite, firebird, surreal)
 - For `PORTER`: `BEANSACK_CONNECTION_STRING`, `CUPBOARD_CONNECTION_STRING`
 
 ### Install (local)
@@ -146,7 +152,7 @@ python run.py --mode PORTER
 | `EXTRACTOR_PATH`, `EXTRACTOR_CONTEXT_LEN` | EXTRACTOR |
 | `DIGESTOR_PATH`, `DIGESTOR_CONTEXT_LEN` | DIGESTOR |
 | `CONSOLIDATOR_PATH`, `CONSOLIDATOR_BASE_URL`, `CONSOLIDATOR_API_KEY` | CONSOLIDATOR (remote LLM optional) |
-| `CLASSIFICATION_CACHE` | Lance/vector store for CLASSIFIER |
+| `CLASSIFICATION_CACHE` | Vector store for CLASSIFIER (`workers/workercache/clscache.py`, zvec) |
 | `BEANSACK_CONNECTION_STRING` | PORTER |
 | `CUPBOARD_CONNECTION_STRING` | PORTER |
 | `LOG_DIR` | Optional hourly log files |
@@ -205,10 +211,11 @@ python machine_ops.py --provider tensordock --action stop
 - Run **one mode per container/process**; scale collectors and analyzers independently.
 - GPU nodes: `DockerfileGPU` + `DIGESTOR` / `CONSOLIDATOR` with remote API (`base_url`/`api_key`) if no local GPU.
 - IO nodes: `DockerfileIO` + `COLLECTOR` / `PORTER`.
-- Keep `processingcache` and downstream DBs reachable from every worker tier.
+- Keep `PROCESSING_CACHE` (state DB) and downstream DBs reachable from every worker tier.
 
 ## Further reading
 
 - `AGENTS.md` — design overview for agents/tools
+- `workers/workercache/STATEMACHINE.md` — state machine schema and worker read/write flow
 - `nlp/README.md` — model backends and API
 - `pybeansack/` — data model and DB adapters

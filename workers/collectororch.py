@@ -36,7 +36,7 @@ from datacollectors import (
     URL,
     POST
 )
-from processingcache.base import AsyncStateCacheBase
+from .workercache.base import AsyncStateCacheBase
 from .utils import *
 from icecream import ic
 
