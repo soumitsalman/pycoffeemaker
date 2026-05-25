@@ -9,7 +9,7 @@ from .workercache.base import AsyncStateCacheBase
 from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
 from pybeansack.models import K_BASE_URL, K_CATEGORIES, K_CONTENT, K_CONTENT_LENGTH, K_CREATED, K_EMBEDDING, K_ENTITIES, K_KIND, K_REGIONS, K_RELATED, K_RESTRICTED_CONTENT, K_SENTIMENTS, K_SOURCE, K_SUMMARY, K_SUMMARY_LENGTH, K_TAGS, K_TITLE, K_TITLE_LENGTH, K_URL
 from pycupboard.pgcupboard import Cupboard
-from pycupboard.models import SOURCE, URL, Sip, Source, DEFAULT_SOURCE, KIND, generate_id
+from pycupboard.models import SOURCE, TAGS, URL, Sip, Source, DEFAULT_SOURCE, KIND, generate_id
 
 from .utils import *
 from icecream import ic
@@ -75,7 +75,7 @@ class BeansackPorter:
 
     async def hydrate_related(self, db: Beansack, target_state: str):
         target = target_state+":link"
-        if related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target):
+        while related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target, limit=50000):
             log.info("porting", extra={"source": "beansack:related_beans", "num_items": len(related_beans)})
             count = await asyncio.to_thread(db.store_related, self.prep_related(related_beans))
             log.info("ported", extra={"source": "beansack:related_beans", "num_items": count})
@@ -124,7 +124,8 @@ class CupboardPorter:
 
     @classmethod
     def prep_events(cls, beans: list[dict[str, Any]]):
-        for bean in beans:
+        beans = [bean for bean in beans if bean.get(DIGEST)]
+        for bean in beans:            
             bean.pop(K_SOURCE)
             bean[K_KIND] = "event:"+bean[K_KIND]
             bean[K_TAGS] = merge_tags(bean.get(K_CATEGORIES), bean.get(K_SENTIMENTS), bean.get(DIGEST, {}).get(TAGS))
@@ -162,7 +163,7 @@ class CupboardPorter:
         # related bean is pulling from the same well so distinguishing related vs regular
         target = target_state+":link"
         count = 0
-        if related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target):
+        while related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target, limit=50000):
             log.info("porting", extra={"source": "cupboard:event_links", "num_items": len(related_beans)})
             count = await db.link_sips(related_beans, "SAME_AS")
             log.info("ported", extra={"source": "cupboard:event_links", "num_items": count})

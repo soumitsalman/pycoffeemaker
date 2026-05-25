@@ -277,7 +277,7 @@ class Classifier:
 
 
 CONSOLIDATION_EPS = float(os.getenv("CONSOLIDATION_EPS", 0.5))
-CONSOLIDATION_WINDOW = int(os.getenv("CONSOLIDATION_WINDOW", 1))
+# CONSOLIDATION_WINDOW = int(os.getenv("CONSOLIDATION_WINDOW", 1))
 CONSOLIDATION_RELATED_WINDOW = int(os.getenv("CONSOLIDATION_RELATED_WINDOW", 30))
 CONSOLIDATION_MAX_SIZE = int(os.getenv("CONSOLIDATION_MAX_SIZE", 40))
 CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 4))
@@ -345,7 +345,6 @@ class Consolidator:
             related = self._get_beans(
                 states=[COLLECTED, EMBEDDED, DIGESTED], 
                 ids=ids_to_fetch, 
-                window=CONSOLIDATION_RELATED_WINDOW, 
                 limit=CONSOLIDATION_MAX_SIZE
             )
             group["data"].extend(related)
@@ -397,7 +396,7 @@ class Consolidator:
                 )
 
     def run(self, batch_size: int = BATCH_SIZE):
-        beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED, window=CONSOLIDATION_WINDOW)
+        beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED)
         log.info("starting consolidator", extra={"source": run_id(), "num_items": len(beans)})
 
         groups = self._create_consolidation_groups(beans)

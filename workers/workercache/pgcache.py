@@ -17,6 +17,8 @@ TIMEOUT = 270
 MAX_WORKERS = 16
 BATCH_SIZE = 128
 
+PROCESSING_WINDOW = int(os.getenv('PROCESSING_WINDOW', 60))
+
 ##############
 # STATE CACHE
 ##############
@@ -100,7 +102,7 @@ class StateCache(StateCacheBase):
         states: str | list[str],
         exclude_states: str | list[str] = NULL_STATE,
         ids: list[str] = None,
-        window: int = None,
+        window: int = PROCESSING_WINDOW,
         limit: int = 0,
         offset: int = 0,
     ):
@@ -196,7 +198,7 @@ class AsyncStateCache(AsyncStateCacheBase):
         states: str | list[str],
         exclude_states: str | list[str] = NULL_STATE,
         ids: list[str] = None,
-        window: int = None,
+        window: int = PROCESSING_WINDOW,
         limit: int = 0,
         offset: int = 0,
     ):
