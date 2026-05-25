@@ -29,15 +29,16 @@ class BeansackPorter:
         """Merges beans, replaces content with cdn url"""
         for bean in beans:
             if entities := bean.get(ENTITIES):
-                bean.update({
-                    K_ENTITIES: merge_tags(
-                        entities.get('people'),
-                        entities.get('companies'),
-                        entities.get('products'),
-                        entities.get('stock_tickers'),
-                    ),
-                    K_REGIONS: entities.get('regions')  
-                })
+                if isinstance(entities, dict):
+                    bean.update({
+                        K_ENTITIES: merge_tags(
+                            entities.get('people'),
+                            entities.get('companies'),
+                            entities.get('products'),
+                            entities.get('stock_tickers'),
+                        ),
+                        K_REGIONS: entities.get('regions')  
+                    })
         return [Bean(**bean) for bean in beans]
 
     @classmethod
