@@ -97,12 +97,10 @@ echo "=== [STARTING] ==="
 run_embedder
 
 run_extractor &
-extractor_pid=$!
 run_classifier &
-classifier_pid=$!
-
-( wait "$extractor_pid"; run_digestor ) &
-( wait "$classifier_pid"; backup_clscache ) &
+wait
+run_digestor &
+backup_clscache &
 wait
 # run_consolidator
 echo "=== [FINISHED] ==="
