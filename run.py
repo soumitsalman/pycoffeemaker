@@ -158,6 +158,7 @@ if __name__ == "__main__":
             ),
             base_url=os.getenv("CONSOLIDATOR_BASE_URL"),
             api_key=os.getenv("CONSOLIDATOR_API_KEY"),
+            extra_body={"reasoning_budget":16384,"chat_template_kwargs":{"enable_thinking":True}}
         ).run(batch_size=batch_size)
 
     elif mode == "PORTER":

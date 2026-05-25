@@ -12,6 +12,6 @@ icecream
 python-dotenv
 msgpack
 textcase
-pyturso
 zvec
-firebird-driver
+scikit-learn
+openai

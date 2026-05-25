@@ -338,26 +338,17 @@ class Consolidator:
         return beans        
 
     def _expand_group(self, group: dict) -> dict:
-        # no need to do anything since we have enough beans in the group
-        if len(group["data"]) >= CONSOLIDATION_MAX_SIZE: 
-            group["data"] = group["data"][:CONSOLIDATION_MAX_SIZE]
-            return group
-
+        # fetch and expand only if we don't have enough beans and 
+        # we can make enough beans by fetching
         ids_to_fetch = list(chain.from_iterable(b.get(RELATED, []) for b in group["data"]))
-        # no need to fetch related beans if we don't have enough beans to consolidate
-        if len(ids_to_fetch) + len(group["data"]) < CONSOLIDATION_MIN_SIZE: return group
-
-        related = self._get_beans(
-            states=[COLLECTED, EMBEDDED, DIGESTED], 
-            ids=ids_to_fetch, 
-            window=CONSOLIDATION_RELATED_WINDOW, 
-            limit=CONSOLIDATION_MAX_SIZE
-        )
-        # no need to expand group if we don't have enough beans to consolidate
-        if len(related) + len(group["data"]) < CONSOLIDATION_MIN_SIZE: return group
-
-        group["data"].extend(related[:CONSOLIDATION_MAX_SIZE - len(group["data"])])       
-        group["embedding"] = np.median([b[EMBEDDING] for b in group["data"]], axis=0).tolist()
+        if len(group["data"]) < CONSOLIDATION_MAX_SIZE and len(ids_to_fetch) > 0 and len(ids_to_fetch) + len(group["data"]) >= CONSOLIDATION_MIN_SIZE:
+            related = self._get_beans(
+                states=[COLLECTED, EMBEDDED, DIGESTED], 
+                ids=ids_to_fetch, 
+                window=CONSOLIDATION_RELATED_WINDOW, 
+                limit=CONSOLIDATION_MAX_SIZE
+            )
+            group["data"].extend(related)
         return group
 
     def _create_consolidation_groups(self, beans: list[dict]) -> list[dict]:
@@ -365,14 +356,18 @@ class Consolidator:
         log.info("initial groups", extra={"source": run_id(), "num_items": len(groups)})
         with ThreadPoolExecutor(max_workers=32) as exec:
             groups = list(exec.map(self._expand_group, groups))
+
         groups = [group for group in groups if len(group["data"]) >= CONSOLIDATION_MIN_SIZE]   
+        for group in groups:
+            group["data"] = group["data"][:CONSOLIDATION_MAX_SIZE]
+            group["embedding"] = np.median([b[EMBEDDING] for b in group["data"]], axis=0).tolist()
+        
         log.info("consolidation groups", extra={"source": run_id(), "num_items": len(groups)}) 
         return groups
 
     def consolidate_bean_groups(self, groups: list[dict], batch_size: int):
         for chunk in batched(groups, batch_size):
             try:
-                [print(len(gr['data'])) for gr in chunk]
                 briefings = self.consolidator.run_batch(list(map(_group_to_str, chunk)))
 
                 composite_updates, bean_updates = [], []
