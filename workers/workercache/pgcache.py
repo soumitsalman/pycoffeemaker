@@ -15,7 +15,7 @@ from icecream import ic
 
 TIMEOUT = 270
 MAX_WORKERS = 16
-BATCH_SIZE = 128
+BATCH_SIZE = 1024
 
 PROCESSING_WINDOW = int(os.getenv('PROCESSING_WINDOW', 60))
 
@@ -85,16 +85,16 @@ class StateCache(StateCacheBase):
         if not rows:
             return
 
-        def insert_chunk(chunk: list):
-            with self.pool.connection() as conn:
-                return conn.execute(
+        with self.pool.connection() as conn:
+            results = [
+                conn.execute(
                     _insert_state_multivalues_sql(object_type, len(chunk)),
                     list(chain.from_iterable(chunk)),
-                ).rowcount
-
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
-            counts = list(exec.map(insert_chunk, batched(rows, BATCH_SIZE)))
-        return sum(counts)
+                )
+                for chunk in batched(rows, BATCH_SIZE)
+            ]
+            count = sum(result.rowcount for result in results)            
+        return count
 
     def get(
         self,

@@ -369,10 +369,6 @@ class Consolidator:
             elif len(group["data"]) >= CONSOLIDATION_MIN_SIZE:
                 resized_groups.append(group)
         log.info("consolidation groups", extra={"source": run_id(), "num_items": len(resized_groups)})
-
-        # ic([len(gr['data']) for gr in resized_groups]) 
-        # text_lens = [len(_group_to_str(gr)) for gr in resized_groups if len(gr['data']) >= CONSOLIDATION_MAX_SIZE]
-        # ic(sum(text_lens) / len(text_lens), max(text_lens))
         return resized_groups
 
     def consolidate_bean_groups(self, groups: list[dict], batch_size: int):
@@ -417,10 +413,8 @@ class Consolidator:
             total_composites, total_beans = 0, 0
 
             for composite_updates, bean_updates in self.consolidate_bean_groups(groups, batch_size):
-                count = self.cache.set(COMPOSITES, COLLECTED, composite_updates)
-                total_composites += (count or len(composite_updates))
-                count = self.cache.set(BEANS, CONSOLIDATED, bean_updates)
-                total_beans += (count or len(bean_updates))
+                total_composites += self.cache.set(COMPOSITES, COLLECTED, composite_updates)
+                total_beans += self.cache.set(BEANS, CONSOLIDATED, bean_updates)
 
             log.info("total consolidated composites", extra={"source": run_id(), "num_items": total_composites})
             log.info("total consolidated beans", extra={"source": run_id(), "num_items": total_beans})

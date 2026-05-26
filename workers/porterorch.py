@@ -198,7 +198,7 @@ class CupboardPorter:
                 db.link_sips(composites, "DERIVED_FROM"),
             ])
             log.info("ported", extra={"source": "cupboard:signals", "num_items": counts[0]})
-            log.info("ported", extra={"source": "cupboard:singal_links", "num_items": counts[1]})
+            log.info("ported", extra={"source": "cupboard:signal_links", "num_items": counts[1]})
             await self.cache.set(COMPOSITES, target_state, ids)
             count = sum(counts)
         return count
