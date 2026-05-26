@@ -74,5 +74,6 @@ class ClassificationCache:
         return list(ThreadPoolExecutor().map(lambda emb: self.search(object_type, emb, distance, top_n), embeddings))        
 
     def close(self):
-        [coll.optimize() for coll in self.collections.values()]
+        try: [coll.optimize() for coll in self.collections.values()]
+        except Exception as e: print("ERROR: CLASSIFICATION CACHE OPTIMIZE", e)
         self.collections.clear()
