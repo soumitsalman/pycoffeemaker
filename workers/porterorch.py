@@ -75,13 +75,14 @@ class BeansackPorter:
 
     async def hydrate_related(self, db: Beansack, target_state: str):
         target = target_state+":link"
+        total = 0
         while related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target, limit=50000):
-            log.info("porting", extra={"source": "beansack:related_beans", "num_items": len(related_beans)})
+            log.info("porting", extra={"source": "beansack:bean_links", "num_items": len(related_beans)})
             count = await asyncio.to_thread(db.store_related, self.prep_related(related_beans))
-            log.info("ported", extra={"source": "beansack:related_beans", "num_items": count})
+            log.info("ported", extra={"source": "beansack:bean_links", "num_items": count})
             await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
-            return count
-        return 0
+            total += count
+        return total
 
     async def hydrate_chatters(self, db: Beansack, target_state: str):
         if chatters := await self.cache.get(CHATTERS, states=COLLECTED, exclude_states=target_state):
@@ -102,7 +103,7 @@ class BeansackPorter:
                 self.hydrate_related(db, target_state), 
                 self.hydrate_chatters(db, target_state)
             ))
-            await asyncio.to_thread(db.optimize)
+            if sum(counts): db.optimize()
             return sum(counts)
 
         counts = await asyncio.gather(*[
@@ -162,13 +163,14 @@ class CupboardPorter:
     async def hydrate_related(self, db: Cupboard, target_state: str):
         # related bean is pulling from the same well so distinguishing related vs regular
         target = target_state+":link"
-        count = 0
+        total = 0
         while related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target, limit=50000):
             log.info("porting", extra={"source": "cupboard:event_links", "num_items": len(related_beans)})
             count = await db.link_sips(related_beans, "SAME_AS")
             log.info("ported", extra={"source": "cupboard:event_links", "num_items": count})
             await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
-        return count
+            total += count
+        return total
 
     @classmethod
     def prep_signals(cls, composites: list[dict]):

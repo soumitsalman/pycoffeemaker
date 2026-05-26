@@ -323,12 +323,12 @@ class Consolidator:
             instruction=BRIEFING_SYS.format(description=Briefing.model_text_schema()),
             input_template=BRIEFING_INST,
             output_model=Briefing,
-            max_tokens=4096,
+            max_tokens=32768,
             **consolidator_kwargs
         )
 
-    def _get_beans(self, states: list[str], exclude_states: list[str] = None, ids: list[str] = None, window: int = None, limit: int = None) -> list[dict]:
-        beans = self.cache.get(BEANS, states=states, exclude_states=exclude_states, ids=ids, window=window, limit=limit)
+    def _get_beans(self, **kwargs) -> list[dict]:
+        beans = self.cache.get(BEANS, **{k:v for k,v in kwargs.items() if v})
         # remove content, summary, and title from beans to save memory
         beans = [b for b in beans if b.get(EMBEDDING) and b.get(DIGEST)]
         for bean in beans:
@@ -345,7 +345,8 @@ class Consolidator:
             related = self._get_beans(
                 states=[COLLECTED, EMBEDDED, DIGESTED], 
                 ids=ids_to_fetch, 
-                limit=CONSOLIDATION_MAX_SIZE
+                limit=CONSOLIDATION_MAX_SIZE,
+                window=CONSOLIDATION_RELATED_WINDOW
             )
             group["data"].extend(related)
         return group
@@ -356,13 +357,23 @@ class Consolidator:
         with ThreadPoolExecutor(max_workers=32) as exec:
             groups = list(exec.map(self._expand_group, groups))
 
-        groups = [group for group in groups if len(group["data"]) >= CONSOLIDATION_MIN_SIZE]   
+        # split oversized groups into smaller groups
+        resized_groups = []
         for group in groups:
-            group["data"] = group["data"][:CONSOLIDATION_MAX_SIZE]
-            group["embedding"] = np.median([b[EMBEDDING] for b in group["data"]], axis=0).tolist()
-        
-        log.info("consolidation groups", extra={"source": run_id(), "num_items": len(groups)}) 
-        return groups
+            if len(group["data"]) >= CONSOLIDATION_MAX_SIZE:
+                resized_groups.extend(
+                    {"data": gr_data, "embedding": np.median([b[EMBEDDING] for b in gr_data], axis=0).tolist()} 
+                    for gr_data in batched(group["data"], CONSOLIDATION_MAX_SIZE)
+                    if len(gr_data) >= CONSOLIDATION_MIN_SIZE
+                )
+            elif len(group["data"]) >= CONSOLIDATION_MIN_SIZE:
+                resized_groups.append(group)
+        log.info("consolidation groups", extra={"source": run_id(), "num_items": len(resized_groups)})
+
+        # ic([len(gr['data']) for gr in resized_groups]) 
+        # text_lens = [len(_group_to_str(gr)) for gr in resized_groups if len(gr['data']) >= CONSOLIDATION_MAX_SIZE]
+        # ic(sum(text_lens) / len(text_lens), max(text_lens))
+        return resized_groups
 
     def consolidate_bean_groups(self, groups: list[dict], batch_size: int):
         for chunk in batched(groups, batch_size):
@@ -406,7 +417,6 @@ class Consolidator:
             total_composites, total_beans = 0, 0
 
             for composite_updates, bean_updates in self.consolidate_bean_groups(groups, batch_size):
-                [print({k:v for k,v in update.items() if k != EMBEDDING}) for update in composite_updates]
                 count = self.cache.set(COMPOSITES, COLLECTED, composite_updates)
                 total_composites += (count or len(composite_updates))
                 count = self.cache.set(BEANS, CONSOLIDATED, bean_updates)
