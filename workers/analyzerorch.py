@@ -304,6 +304,7 @@ STEPS=
 {input_text}
 """
 
+IGNORE_WORD_GAMES = ['word_game', 'daily_puzzle', 'nyt', 'wordle']
 class Consolidator:
     """Consolidates events and data to create consolidated briefings and signals"""
     cache: StateCacheBase
@@ -330,7 +331,7 @@ class Consolidator:
     def _get_beans(self, **kwargs) -> list[dict]:
         beans = self.cache.get(BEANS, **{k:v for k,v in kwargs.items() if v})
         # remove content, summary, and title from beans to save memory
-        beans = [b for b in beans if b.get(EMBEDDING) and b.get(DIGEST)]
+        beans = [b for b in beans if b.get(EMBEDDING) and b.get(DIGEST) and not any(tag in IGNORE_WORD_GAMES for tag in b.get(TAGS, []))]
         for bean in beans:
             bean.pop(CONTENT, None)
             bean.pop(SUMMARY, None)
