@@ -13,7 +13,7 @@ from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pgvector.psycopg import register_vector, Vector
 from icecream import ic
 
-TIMEOUT = 270
+TIMEOUT = 600
 MAX_WORKERS = 16
 BATCH_SIZE = 1024
 
