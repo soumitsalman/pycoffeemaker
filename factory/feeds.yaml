@@ -219,7 +219,6 @@ sources:
   - https://andreyor.st/feed.xml
   - https://androidoffsec.withgoogle.com/index.xml
   - https://andymaleh.blogspot.com/feeds/posts/default?alt=rss
-  - https://aneeshsathe.com/feed/
   - https://angusreid.org/feed/
   - https://animalecologyinfocus.com/feed/
   - https://animehunch.com/feed/
@@ -405,7 +404,6 @@ sources:
   - https://blog.briankitano.com/feed/?type=rss
   - https://blog.brixit.nl/rss/
   - https://blog.broulik.de/feed/
-  - https://blog.buildstash.com/rss/
   - https://blog.burntsushi.net/index.xml
   - https://blog.bymitch.com/index.xml
   - https://blog.bytebytego.com/feed
@@ -472,7 +470,6 @@ sources:
   - https://blog.google/rss/
   - https://blog.gravatar.com/feed/
   - https://blog.gripdev.xyz/feed.xml
-  - https://blog.growthbook.io/rss/
   - https://blog.gtk.org/feed/
   - https://blog.hartwork.org/rss.xml
   - https://blog.hayman.net/feed.xml
@@ -506,7 +503,6 @@ sources:
   - https://blog.leansystems.org/feeds/posts/default?alt=rss
   - https://blog.library.si.edu/feed/
   - https://blog.littlepolygon.com/index.xml
-  - https://blog.livekit.io/rss/
   - https://blog.livenearfriends.com/rss/
   - https://blog.llvm.org/index.xml
   - https://blog.lobelia.earth/feed
@@ -566,7 +562,7 @@ sources:
   - https://blog.run.claw.cloud/feed/
   - https://blog.runbox.com/feed/
   - https://blog.runevision.com/feeds/posts/default?alt=rss
-  - https://blog.runpod.io/rss/
+  - https://www.runpod.io/blog/rss.xml
   - https://blog.runreveal.com/rss/
   - https://blog.rust-lang.org/feed.xml
   - https://blog.rust-lang.org/inside-rust/feed.xml
@@ -678,7 +674,6 @@ sources:
   - https://brilliantcrank.com/rss/
   - https://brilliantlightpower.com/feed/
   - https://brilliantmaps.com/feed/
-  - https://bringin.xyz/feed/
   - https://britishartjournal.co.uk/feed/
   - https://broadbandbreakfast.com/rss/
   - https://brodzinski.com/feed
@@ -711,7 +706,6 @@ sources:
   - https://caliban.org/wp/feed/
   - https://calibre-ebook.com/changelog.rss
   - https://calmatters.org/feed/
-  - https://calypsoai.com/sample-page/feed/
   - https://cameroncounts.wordpress.com/feed/
   - https://camillovisini.com/feed.xml
   - https://canadianjournalist.ca/feed/
@@ -719,12 +713,11 @@ sources:
   - https://canetwork.com/feed/
   - https://capitalandmain.com/feed
   - https://capsul.bearblog.dev/feed/?type=rss
-  - https://caracal.website/feed/
   - https://cardinalnews.org/feed/
   - https://careers.vergence.tech/blog/posts.rss
   - https://carlalexander.ca/feed/
   - https://carlosn.com.br/blog/rss.xml
-  - https://cartanza.com/blog/rss/
+  - https://cartanza.com/rss/
   - https://caseyhandmer.wordpress.com/feed/
   - https://caseysoftware.com/feed
   - https://cassidoo.co/rss.xml
@@ -822,7 +815,6 @@ sources:
   - https://cognifix.com/feed.xml
   - https://coinpaper.com/feed
   - https://cointelegraph.com/feed
-  - https://cointelegraph.com/magazine/feed/
   - https://cointelegraph.com/rss
   - https://colintoh.com/blog/feed
   - https://coliss.com/feed
@@ -840,7 +832,6 @@ sources:
   - https://concretedog.blogspot.com/feeds/posts/default?alt=rss
   - https://configberry.com/rss.xml
   - https://congress.net/feed/
-  - https://conradlotz.com/feed/
   - https://consciousdigital.org/feed/
   - https://conservativehome.com/feed/
   - https://consortiumnews.com/feed/
@@ -850,7 +841,6 @@ sources:
   - https://controlguru.com/feed/
   - https://conversableeconomist.com/feed/
   - https://conversationswithtyler.com/home/feed/
-  - https://corecursive.com/feed
   - https://coriana.github.io/feed.xml
   - https://correlatesofwar.org/feed/
   - https://corrode.dev/rss.xml
@@ -1044,7 +1034,6 @@ sources:
   - https://e360.yale.edu/feed.xml
   - https://eaglepubs.erau.edu/introductiontoaerospaceflightvehicles/feed/
   - https://eamag.me/index.xml
-  - https://earthmover.io/blog/tensors-vs-tables/feed/
   - https://easel.games/blog/rss.xml
   - https://easternherald.com/feed/
   - https://easydns.com/feed/
@@ -1086,7 +1075,6 @@ sources:
   - https://endler.dev/rss.xml
   - https://energyandcleanair.org/feed/
   - https://energynews.pro/en/feed/
-  - https://energynews.pro/feed/
   - https://energynow.com/feed/
   - https://eng.aurelienpierre.com/feed.xml
   - https://eng.wealthfront.com/feed/
@@ -1100,7 +1088,6 @@ sources:
   - https://ente.io/rss.xml
   - https://enterprisecraftsmanship.com/index.xml
   - https://eos.org/feed
-  - https://epoch.ai/atom.xml
   - https://eprint.iacr.org/rss/rss.xml
   - https://er4hn.info/index.xml
   - https://eranfeit.net/feed/
@@ -1142,7 +1129,6 @@ sources:
   - https://externals.io/rss
   - https://extinctionrebellion.uk/feed/
   - https://extra.ie/feed
-  - https://extraordinaryroutines.com/musings?format=rss
   - https://extremq.com/feed/?type=rss
   - https://ezhik.jp/feed.xml
   - https://ezyang.github.io/ai-blindspots/index.xml
@@ -1155,7 +1141,6 @@ sources:
   - https://fadeevab.com/rss/
   - https://fadmagazine.com/feed/
   - https://failfastmoveon.blogspot.com/feeds/posts/default?alt=rss
-  - https://fakedup.org/rss/
   - https://fakehistoryhunter.net/feed/
   - https://fanaticcook.com/feed/
   - https://fangpenlin.com/feed.xml
@@ -1382,7 +1367,6 @@ sources:
   - https://golangbot.com/index.xml
   - https://golangtutorial.dev/index.xml
   - https://golangweekly.com/rss/
-  - https://goldwire.io/feed/
   - https://gomakethings.com/feed/index.xml
   - https://goodenough.us/feed.xml
   - https://goodereader.com/blog/feed/podcast
@@ -1390,7 +1374,6 @@ sources:
   - https://goperf.dev/feed_rss_created.xml
   - https://goughlui.com/feed/
   - https://gpanders.com/index.xml
-  - https://gptimage.ai/feed
   - https://gpuopen.com/feed/
   - https://gradientscience.org/feed.xml
   - https://graniar.wordpress.com/feed/
@@ -1724,7 +1707,6 @@ sources:
   - https://kojo.blog/rss/
   - https://kokruiwo.ng/index.xml
   - https://kolyder.com/feed/
-  - https://kordon.app/feed/
   - https://kotaku.com/rss
   - https://kpfa.org/home/feed/
   - https://krausefx.com/feed.xml
@@ -1785,7 +1767,6 @@ sources:
   - https://lethain.com/feeds.xml
   - https://letsencrypt.org/feed.xml
   - https://letter.palladiummag.com/feed
-  - https://letter.palladiummag.com/feed?sectionId=85403
   - https://levels.dev/feed
   - https://levels.io/rss/
   - https://lflank.wordpress.com/feed/
@@ -1801,12 +1782,10 @@ sources:
   - https://library.ulisp.com/rss?2S7B+3
   - https://librearts.org/index.xml
   - https://libreboot.org/feed.xml
-  - https://libreqos.io/feed/
   - https://lichvanwinkle.blogspot.com/feeds/posts/default?alt=rss
   - https://lifehacker.com/feed/rss
   - https://lilianweng.github.io/index.xml
   - https://liliputing.com/feed/
-  - https://limblecmms.com/feed/
   - https://limitededitionsclub.com/contact/feed/
   - https://lincolnloop.com/blog/feed/
   - https://linisnil.com/feed/
@@ -1884,7 +1863,6 @@ sources:
   - https://markentier.tech/feed.rss.xml
   - https://markessien.com/index.xml
   - https://market-ticker.org/akcs-www?rss=
-  - https://marketrealist.com/home.rss/
   - https://marketrealist.com/stocks-and-markets/rss/
   - https://markgreville.ie/feed/
   - https://markmanson.net/feed
@@ -2158,7 +2136,6 @@ sources:
   - https://nolanlawson.com/feed/
   - https://notes.eatonphil.com/rss.xml
   - https://notes.stlartsupply.com/rss/
-  - https://notes.willhackett.com/index.xml
   - https://notesfrompoland.com/feed/
   - https://notrickszone.com/feed/
   - https://novice.media/feed
@@ -2222,7 +2199,6 @@ sources:
   - https://original.antiwar.com/feed/
   - https://orthocell.com/feed/
   - https://osmand.net/blog/rss.xml
-  - https://oss.silitics.com/rugix/blog/rss.xml
   - https://osservatorionessuno.org/blog/index.xml
   - https://osteophage.dreamwidth.org/data/rss
   - https://ottawacitizen.com/feed/atom
@@ -2251,7 +2227,6 @@ sources:
   - https://patrickarmstrong.ca/feed/
   - https://patrickod.com/index.xml
   - https://patrykkalinowski.com/blog/index.xml
-  - https://pawakalabs.com/feed/
   - https://pembrokeshire-herald.com/feed/
   - https://pen.org/feed/
   - https://peoplesdispatch.org/feed/
@@ -2425,7 +2400,6 @@ sources:
   - https://reproducible-builds.org/feed.xml
   - https://research.checkpoint.com/feed/
   - https://research.colfax-intl.com/feed/
-  - https://research.securitum.com/feed/
   - https://researchblog.duke.edu/feed/
   - https://responsiblestatecraft.org/feeds/feed.rss
   - https://responsiblestatecraft.org/feeds/regions/middle-east.rss
@@ -2656,7 +2630,6 @@ sources:
   - https://snix.dev/index.xml
   - https://sno.ws/index.xml
   - https://snook.ca/jonathan/index.rdf
-  - https://soapbox.pub/rss/feed.xml
   - https://soatok.blog/feed/
   - https://socialistworker.co.uk/feed/
   - https://societysbackend.com/feed
@@ -2805,7 +2778,6 @@ sources:
   - https://technicshistory.com/feed/
   - https://technode.global/feed/
   - https://technologizer.com/home/feed/
-  - https://techoreon.com/feed/
   - https://techpulse.be/feed/
   - https://techraptor.net/feed
   - https://techrights.org/feed.xml
@@ -2862,7 +2834,6 @@ sources:
   - https://thecuberesearch.com/feed/
   - https://thecurrentga.org/feed/
   - https://thecybersecguru.com/feed/
-  - https://thedaily.case.edu/feed/
   - https://thedailyeconomy.org/feed/
   - https://thedailyrenter.com/feed/
   - https://thedanishdream.com/feed/
@@ -2889,7 +2860,6 @@ sources:
   - https://thelocal.to/feed/
   - https://thelogic.co/feed/
   - https://thelogicaloptimist.com/index.php/feed/
-  - https://thelondoninsider.com/feed/
   - https://themaister.net/blog/feed/
   - https://themarijuanaherald.com/feed/
   - https://themarkup.org/feeds/rss.xml
@@ -2945,7 +2915,6 @@ sources:
   - https://tisiphone.net/feed/
   - https://tl.net/rss/news.xml
   - https://todd.ginsberg.com/index.xml
-  - https://tokilabs.co/rss.xml
   - https://tomasp.net/rss.xml
   - https://tomasvotruba.com/rss
   - https://tombengine.com/feed/
@@ -2967,7 +2936,6 @@ sources:
   - https://transitiverobotics.com/blog/rss.xml
   - https://travelinyourownway.com/feed/
   - https://traverseda.github.io/index.xml
-  - https://trebaud.github.io/index.xml
   - https://trendingpoliticsnews.com/feed/
   - https://trends.uxdesign.cc/2025?format=rss
   - https://tressiemc.com/feed/
@@ -3050,7 +3018,6 @@ sources:
   - https://virtualize.sh/blog/rss/
   - https://vish0l.com/feed/
   - https://vitalik.eth.limo/feed.xml
-  - https://vitodeploy.com/blog/rss.xml
   - https://vittorioromeo.com/index.rss
   - https://vivaldi.com/feed/
   - https://vladfeinberg.com/feed.xml
@@ -3310,7 +3277,6 @@ sources:
   - https://www.bmi.bund.de/DE/service/rss-newsfeed/function/rssnewsfeed-bildergalerien.xml
   - https://www.bookofjoe.com/index.rdf
   - https://www.boredpanda.com/feed/
-  - https://www.bosshunting.com.au/feed/
   - https://www.boston.com/feed/
   - https://www.bostonherald.com/feed/
   - https://www.bostonreview.net/feed/
@@ -3444,7 +3410,6 @@ sources:
   - https://www.courthousenews.com/feed/
   - https://www.cppstories.com/index.xml
   - https://www.creativebloq.com/feed
-  - https://www.creativeboom.com/feed/
   - https://www.cremieux.xyz/feed
   - https://www.crikey.com.au/feed/
   - https://www.crisesnotes.com/rss/
@@ -3601,8 +3566,6 @@ sources:
   - https://www.eno-writer.com/feed/?type=rss
   - https://www.entrepreneur.com/latest.rss
   - https://www.epj.org/?format=feed&type=rss
-  - https://www.epsilontheory.com/feed/
-  - https://www.equal1.com/blog-feed.xml
   - https://www.ericbutton.co/feed
   - https://www.ericdaigle.ca/index.xml
   - https://www.erininthemorning.com/feed
@@ -3648,7 +3611,6 @@ sources:
   - https://www.filfre.net/feed/
   - https://www.filipe.computer/index.xml
   - https://www.financial-world.org/world/rss.php
-  - https://www.firebird-technologies.com/feed
   - https://www.firegiant.com/blog/rss.xml
   - https://www.flamme.app/blog-feed.xml
   - https://www.flatpanelshd.com/rss/news.xml
@@ -3703,7 +3665,6 @@ sources:
   - https://www.gamesradar.com/uk/feeds/articletype/news/
   - https://www.gamingonlinux.com/article_rss.php
   - https://www.gammon.com.au/rss/forum.xml
-  - https://www.gapingvoid.com/feed/
   - https://www.gardinercolin.com/feed
   - https://www.gatechecked.com/feed
   - https://www.gbnews.com/feeds/feed.rss
@@ -3816,7 +3777,6 @@ sources:
   - https://www.infinitelymore.xyz/feed
   - https://www.infostealers.com/feed/
   - https://www.infoworld.com/feed/
-  - https://www.infracost.io/feed/
   - https://www.injusticewatch.org/feed/
   - https://www.insidehighered.com/rss.xml
   - https://www.insidehook.com/feed
@@ -4083,7 +4043,6 @@ sources:
   - https://www.newscientist.com/subject/earth/feed/
   - https://www.newsguardrealitycheck.com/feed
   - https://www.newsnationnow.com/feed/
-  - https://www.newsweek.com/rss
   - https://www.newyorker.com/feed/rss
   - https://www.next9.ai/blog-feed.xml
   - https://www.nextbigfuture.com/feed
@@ -4218,7 +4177,6 @@ sources:
   - https://www.prefabcontainerhomes.org/feeds/posts/default?alt=rss
   - https://www.princeton.edu/feed/
   - https://www.privacyguides.org/articles/feed_rss_created.xml
-  - https://www.prizmlabs.io/blog-feed.xml
   - https://www.prnewswire.com/rss/energy-latest-news/energy-latest-news-list.rss
   - https://www.prnewswire.com/rss/environment-latest-news/environment-latest-news-list.rss
   - https://www.prnewswire.com/rss/heavy-industry-manufacturing-latest-news/heavy-industry-manufacturing-latest-news-list.rss
@@ -4277,7 +4235,6 @@ sources:
   - https://www.regenerator1.com/feed
   - https://www.reimagine-energy.ai/feed
   - https://www.reinvestwealth.com/blog-feed.xml
-  - https://www.rendi.dev/blog-feed.xml
   - https://www.renehersecycles.com/feed/
   - https://www.repaircafe.org/feed/
   - https://www.resecurity.com/feed
@@ -4330,7 +4287,6 @@ sources:
   - https://www.satisfice.com/feed
   - https://www.saturnflyer.com/blog?format=rss
   - https://www.scalarlm.com/rss/
-  - https://www.scanoss.com/blog-feed.xml
   - https://www.scenelift.com/feed
   - https://www.scentianbio.com/blog-news?format=rss
   - https://www.schneier.com/feed/
@@ -4367,14 +4323,12 @@ sources:
   - https://www.shayon.dev/index.xml
   - https://www.sheffieldtribune.co.uk/rss/
   - https://www.shirtpocket.com/blog/index.php/shadedgrey/rss_2.0/
-  - https://www.sidharthramachandran.com/blog-feed.xml
   - https://www.sigarch.org/feed/
   - https://www.signalbloom.ai/news/rss.xml
   - https://www.silentpush.com/feed/
   - https://www.silive.com/arc/outboundfeeds/rss/?outputType=xml
   - https://www.silverwars.com/rss/
   - https://www.simonberens.com/feed
-  - https://www.simplyblock.io/feed/
   - https://www.singlestore.com/blog/feed.xml
   - https://www.siouxlandproud.com/feed/
   - https://www.sitepoint.com/sitepoint.rss
@@ -4485,8 +4439,6 @@ sources:
   - https://www.thecanary.co/feed/
   - https://www.thecaringtechie.com/feed
   - https://www.theclimatebrink.com/feed
-  - https://www.thecoder.cafe/feed
-  - https://www.thecoder.cafe/feed?sectionId=206570
   - https://www.thecooldown.com/feed/
   - https://www.thecorsaironline.com/corsair?format=rss
   - https://www.thedarkmod.com/feed/
@@ -4808,7 +4760,6 @@ sources:
   - http://feeds.wnyc.org/radiolab
   - http://feeds2.feedburner.com/AndroidPhoneFans
   - http://joythebaker.com/feed/
-  - http://myanmargazette.net/feed
   - http://newsfeed.zeit.de/index
   - http://ohhappyday.com/feed/
   - http://phdcomics.com/gradfeed.php
@@ -5168,7 +5119,6 @@ sources:
   - https://www.jagonews24.com/rss/rss.xml
   - https://www.japantimes.co.jp/feed/topstories/
   - https://www.jugantor.com/feed/rss.xml
-  - https://www.kalerkantho.com/rss.xml
   - https://www.khabaronline.ir/rss
   - https://www.kirkusreviews.com/feeds/rss/
   - https://www.ladepeche.fr/rss.xml
@@ -5234,7 +5184,6 @@ sources:
   - https://www.roboticmagazine.com/feed
   - https://www.therobotreport.com/feed/
   - https://www.roboticstomorrow.com/rss/news
-  - https://www.tm-robot.com/en/feed/
   - https://www.rp.pl/rss/1019
   - https://www.rt.com/rss/
   - https://www.savingadvice.com/feed/
@@ -5351,7 +5300,6 @@ sources:
   - https://blog.innmind.com/rss/
   - https://feeds.feedburner.com/siliconflorist
   - https://futurestartup.com/feed/
-  - https://feld.com/blog/feed/
   - https://startupnews.com.au/feed/
   - https://startupbeat.com/feed/
   - https://www.startupcan.ca/feed/

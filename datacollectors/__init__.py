@@ -1,3 +1,7 @@
+__author__ = "Soumit Salman Rahman"
+__license__ = "MIT"
+__version__ = "1.0.0"
+
 from .apicollectors import APICollector, APICollectorAsync
 from .scrapers import WebCrawler, AsyncWebScraper
 from .utils import (

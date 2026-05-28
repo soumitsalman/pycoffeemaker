@@ -250,15 +250,12 @@ class Collector:
 
     async def _collect(self, collect_func, *args, **kwargs):
         try: await self._triage(await collect_func(*args, **kwargs), scrape_on_fail=True)
-        except Exception as e: log.warning(f"{collect_func.__name__}{args} failed", extra={"source": f"{e.__class__.__name__}: {e}", "num_items": 1})
+        except Exception as e: log.warning(f"{collect_func.__name__}{args} failed", extra={"source": f"{e.__class__.__name__}: {e}", "num_items": 1}, exc_info=True)
 
     def _create_collection_funcs(self, sources):
         funcs = []
         for source_type, source_paths in parse_sources(sources).items():
-            log.info(
-                "collecting",
-                extra={"source": source_type, "num_items": len(source_paths)},
-            )
+            log.info("collecting", extra={"source": source_type, "num_items": len(source_paths)})
             if source_type == "ychackernews":
                 func = self.apicollector.collect_ychackernews
             elif source_type == "reddit":
