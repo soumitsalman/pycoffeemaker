@@ -1,4 +1,4 @@
-retry
+tenacity
 requests
 beautifulsoup4
 lxml_html_clean

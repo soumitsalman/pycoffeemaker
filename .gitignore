@@ -25,6 +25,7 @@
 .ruff_cache
 .codex
 .opencode
+.cursor
 *.env
 history.txt
 graphify*

@@ -4,7 +4,6 @@ import threading
 from typing import Any
 from duckdb import execute
 from pydantic import BaseModel
-from retry import retry
 import turso
 import asyncio
 import aiosqlite
@@ -71,7 +70,6 @@ class StateCache(StateCacheBase):
         ))
     
     def _run_write(self):
-        # @retry(tries=20, jitter=DB_JITTER)
         def start_write(items):
             expr, rows = items
 
@@ -196,7 +194,6 @@ class AsyncStateCache(AsyncStateCacheBase):
         self.write_queue.put_nowait((_create_insert_state_multivalues_sql(object_type, len(items)), create_rows(self.id_keys[object_type], state, items)))
     
     async def _run_write(self):
-        # @retry(tries=20, jitter=DB_JITTER)
         async def start_write(items):
             expr, rows = items
 

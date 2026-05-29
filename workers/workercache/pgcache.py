@@ -3,7 +3,6 @@ from itertools import batched, chain
 import os
 import queue
 import threading
-from retry import retry
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -12,10 +11,13 @@ from .base import *
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pgvector.psycopg import register_vector, Vector
 from icecream import ic
+from tenacity import retry, stop_after_attempt, wait_fixed, wait_random
 
 TIMEOUT = 600
-MAX_WORKERS = 16
+MAX_WORKERS = 4
 BATCH_SIZE = 1024
+RETRY_COUNT = 3
+RETRY_DELAY = 15
 
 PROCESSING_WINDOW = int(os.getenv('PROCESSING_WINDOW', 60))
 
@@ -57,7 +59,7 @@ class StateCache(StateCacheBase):
             min_size=0,
             max_size=16,
             timeout=TIMEOUT,
-            max_idle=TIMEOUT,
+            max_idle=240,
             num_workers=MAX_WORKERS,
         )
         self.pool.open()
@@ -74,7 +76,7 @@ class StateCache(StateCacheBase):
         self.close()
         return False
 
-    @retry(tries=3, delay=15)
+    @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
     def set(
         self,
         object_type: str,
@@ -96,6 +98,7 @@ class StateCache(StateCacheBase):
             count = sum(result.rowcount for result in results)            
         return count
 
+    @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
     def get(
         self,
         object_type: str,
@@ -111,6 +114,7 @@ class StateCache(StateCacheBase):
             rows = _read(conn, expr, params)
         return deserialize_data_rows(rows) 
 
+    @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
     def deduplicate(self, object_type: str, state: str, items: list):
         if not items:
             return items
@@ -123,7 +127,7 @@ class StateCache(StateCacheBase):
             item for item, item_id in zip(items, ids) if item_id not in existing_ids
         ]
 
-    def optimize(self, cleanup_older_than: int = 7):
+    def optimize(self, cleanup_older_than: int = PROCESSING_WINDOW):
         threshold = datetime.now(tz=timezone.utc) - timedelta(days=cleanup_older_than)
         with self.pool.connection() as conn:
             [conn.execute(_CLEANUP_OLD_SQL.format(table=table), {"threshold": threshold}) for table in self.id_keys]
@@ -158,9 +162,9 @@ class AsyncStateCache(AsyncStateCacheBase):
         self.pool = AsyncConnectionPool(
             self.conn_str,
             min_size=0,
-            max_size=32,
+            max_size=48,
             timeout=TIMEOUT,
-            max_idle=TIMEOUT,
+            max_idle=240,
             num_workers=MAX_WORKERS,
         )
         await self.pool.open()
@@ -171,7 +175,7 @@ class AsyncStateCache(AsyncStateCacheBase):
         await self.close()
         return False
 
-    @retry(tries=3, delay=15)
+    @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
     async def set(
         self,
         object_type: str,
@@ -182,16 +186,18 @@ class AsyncStateCache(AsyncStateCacheBase):
         if not rows:
             return
 
-        async with self.pool.connection() as conn:
-            results = await asyncio.gather(*(
-                conn.execute(
+        async with self.pool.connection() as conn:            
+            results = [
+                await conn.execute(
                     _insert_state_multivalues_sql(object_type, len(chunk)),
                     list(chain.from_iterable(chunk)),
                 )
                 for chunk in batched(rows, BATCH_SIZE)
-            ))
-            return sum(result.rowcount for result in results)
+            ]
+            count = sum(result.rowcount for result in results)
+        return count
 
+    @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
     async def get(
         self,
         object_type: str,
@@ -207,6 +213,7 @@ class AsyncStateCache(AsyncStateCacheBase):
             rows = await _read_async(conn, expr, params)
         return deserialize_data_rows(rows)         
 
+    @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
     async def deduplicate(self, object_type: str, state: str, items: list):
         if not items:
             return items
@@ -219,12 +226,10 @@ class AsyncStateCache(AsyncStateCacheBase):
             item for item, item_id in zip(items, ids) if item_id not in existing_ids
         ]
 
-    async def optimize(self, cleanup_older_than: int = 7):
+    async def optimize(self, cleanup_older_than: int = PROCESSING_WINDOW):
         threshold = datetime.now(tz=timezone.utc) - timedelta(days=cleanup_older_than)
-        for table in self.id_keys:
-            expr = _CLEANUP_OLD_SQL.format(table=table)
-            async with self.pool.connection() as conn:
-                await conn.execute(expr, {"threshold": threshold})
+        with self.pool.connection() as conn:
+            [await conn.execute(_CLEANUP_OLD_SQL.format(table=table), {"threshold": threshold}) for table in self.id_keys]
 
     async def close(self):
         await self.pool.close()

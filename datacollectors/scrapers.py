@@ -6,15 +6,11 @@ import logging
 from itertools import chain
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
-from retry import retry
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random
 from .utils import *
 from icecream import ic
 
 log = logging.getLogger(__name__)
-
-BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()*os.cpu_count()))
-RETRY_COUNT = 3
-RETRY_JITTER = (1, 10)
 
 _METADATA_SELECTORS = {
     'site_name': "meta[property='og:site_name'], meta[property='sitename'], meta[itemprop='name']",
@@ -40,12 +36,13 @@ class AsyncWebScraper:
     throttle: asyncio.Semaphore = None
 
     def __init__(self, batch_size: int = BATCH_SIZE):
+        self.batch_size = batch_size
         self.throttle = asyncio.Semaphore(batch_size)
         
     async def __aenter__(self):
         """Async context manager enter"""
         self.session = aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit=BATCH_SIZE, limit_per_host=os.cpu_count()),
+            connector=aiohttp.TCPConnector(limit=self.batch_size, limit_per_host=1),
             headers=_HTML_REQUEST_HEADERS, 
             timeout=aiohttp.ClientTimeout(total=TIMEOUT),
             raise_for_status=True
@@ -72,13 +69,23 @@ class AsyncWebScraper:
         if 'rss_feed' in metadata: metadata[RSS_FEED] = full_url(url, metadata['rss_feed'])
         return metadata
 
-    @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
+    @retry(
+        retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
+        stop=stop_after_attempt(RETRY_COUNT),
+        wait=wait_random(*RETRY_JITTER),
+        reraise=True,
+    )
     async def _scrape_html(self, url: str) -> str:
         async with self.throttle, self.session.get(url) as response:
             html = await response.text()
         return html
 
-    @retry(exceptions=[TimeoutError, aiohttp.ConnectionTimeoutError], tries=RETRY_COUNT, jitter=RETRY_JITTER)
+    @retry(
+        retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
+        stop=stop_after_attempt(RETRY_COUNT),
+        wait=wait_random(*RETRY_JITTER),
+        reraise=True,
+    )
     async def _scrape_favicon(self, base_url: str):
         async with self.throttle, self.session.get("https://www.google.com/s2/favicons?domain="+base_url) as response:
             if response.status == 200: return response.headers.get('Content-Location')

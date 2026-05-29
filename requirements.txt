@@ -6,7 +6,7 @@ llama-index
 gliner
 tiktoken
 pyyaml
-retry
+tenacity
 requests
 beautifulsoup4
 lxml_html_clean

@@ -3,7 +3,6 @@ from itertools import batched, chain
 import os
 import queue
 import threading
-from retry import retry
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -12,6 +11,7 @@ from .base import *
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pgvector.psycopg import register_vector, Vector
 from icecream import ic
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 TIMEOUT = 600
 MAX_WORKERS = os.cpu_count() * os.cpu_count()
@@ -168,7 +168,7 @@ class AsyncStateCache(AsyncStateCacheBase):
         await self.close()
         return False
 
-    @retry(tries=3, delay=10)
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(10), reraise=True)
     async def set(
         self,
         object_type: str,
@@ -489,13 +489,13 @@ class ClassificationCache(ClassificationCacheBase):
     def distance_op(self, object_type):
         return _DISTANCE_OPS[self.distance_funcs.get(object_type, "l2")]
 
-    @retry(tries=5, delay=2)
+    @retry(stop=stop_after_attempt(5), wait=wait_fixed(2), reraise=True)
     def search(self, object_type: str, embedding: list[float], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN):        
         expr, params = create_vector_search_expr(object_type, self.id_keys[object_type], embedding, self.distance_op(object_type), distance, top_n)
         with self.pool.connection() as conn:
             return _read(conn, expr, params)
     
-    @retry(tries=5, delay=2)
+    @retry(stop=stop_after_attempt(5), wait=wait_fixed(2), reraise=True)
     def batch_search(self, object_type: str, embeddings: list[list[float]], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN):
         expr_and_params = [create_vector_search_expr(object_type, self.id_keys[object_type], embedding, self.distance_op(object_type), distance, top_n) for embedding in embeddings]
         with self.pool.connection() as conn:            

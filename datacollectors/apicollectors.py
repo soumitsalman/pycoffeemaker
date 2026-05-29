@@ -13,7 +13,7 @@ import yaml
 import time
 from datetime import datetime, timezone
 from typing import Callable
-from retry import retry
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed, wait_random
 from io import BytesIO
 from itertools import chain
 from concurrent.futures import ThreadPoolExecutor
@@ -21,9 +21,6 @@ from .utils import *
 from icecream import ic
 
 log = logging.getLogger(__name__)
-
-# assigning 16 io threads per cpu
-BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()))
 
 _RSS_REQUEST_HEADERS = {
     "User-Agent": USER_AGENT,
@@ -296,7 +293,12 @@ class APICollector:
             )
 
     def collect_subreddit(self, subreddit_name, default_kind: str = NEWS):
-        @retry(exceptions=(prawcore.exceptions.ResponseException), tries=2, delay=10, jitter=(5, 10))
+        @retry(
+            retry=retry_if_exception_type(prawcore.exceptions.ResponseException),
+            stop=stop_after_attempt(RETRY_COUNT),
+            wait=wait_random(*RETRY_JITTER),
+            reraise=True,
+        )
         def _collect():
             sr = self.reddit_client.subreddit(subreddit_name)
             return [_build_reddit_item(post, subreddit_name, default_kind) for post in sr.hot(limit=25) if not excluded_url(post.url)]
@@ -317,13 +319,15 @@ class APICollectorAsync:
     reddit_client = None
     session = None
 
-    def __init__(self, batch_size: int = BATCH_SIZE, collect_callback: Callable = None,):
+    def __init__(self, batch_size: int = BATCH_SIZE, collect_callback: Callable = None):
         self.collect_callback = collect_callback
+        self.batch_size = batch_size
         self.throttle = asyncio.Semaphore(batch_size)
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit=BATCH_SIZE, limit_per_host=os.cpu_count()),
+            connector=aiohttp.TCPConnector(limit=self.batch_size, limit_per_host=1),
+            headers={"User-Agent": USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=TIMEOUT),
             raise_for_status=True,
         )
@@ -366,7 +370,11 @@ class APICollectorAsync:
         )
 
     async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[dict]:
-        @retry(tries=2, delay=10, jitter=(5, 10))
+        @retry(
+            stop=stop_after_attempt(RETRY_COUNT),
+            wait=wait_random(*RETRY_JITTER),
+            reraise=True,
+        )
         async def _collect():
             async with self.throttle:
                 sr = await self.reddit_client.subreddit(subreddit_name)

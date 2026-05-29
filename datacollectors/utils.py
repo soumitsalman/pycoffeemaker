@@ -8,9 +8,12 @@ from urllib.parse import urljoin, urlparse, urlunparse
 from dateutil.parser import parse as date_parser
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
-USER_AGENT = "Cafecito-Coffeemaker/v0..0+https://github.com/soumitsalman/pycoffeemaker"
-TIMEOUT =  360 # 4 minutes
+USER_AGENT = "Cafecito-Coffeemaker/v0.9.3+https://github.com/soumitsalman/pycoffeemaker"
+TIMEOUT =  300 # 5 minutes
 RATELIMIT_WAIT = 600 # 600 seconds / 10 minutes
+BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()*os.cpu_count()))
+RETRY_COUNT = 3
+RETRY_JITTER = (15, 30)
 
 # content types
 POST = "post"

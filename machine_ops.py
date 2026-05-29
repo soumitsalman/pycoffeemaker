@@ -1,13 +1,11 @@
 import os
 import requests
-import retry
 import argparse
 from dotenv import load_dotenv
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(CURR_DIR + "/.env")
 
-# @retry(tries=3, delay=60)
 def shutdown_td(instance_id, api_key):
     url = f"https://dashboard.tensordock.com/api/v2/instances/{instance_id}/stop"
     res = requests.post(url, headers={"Authorization": f"Bearer {api_key}"})

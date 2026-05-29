@@ -400,7 +400,6 @@ class Consolidator:
                     "failed consolidating",
                     extra={"source": chunk[0]['data'][0][SOURCE], "num_items": len(chunk)},
                     exc_info=True,
-                    stack_info=True,
                 )
 
     def run(self, batch_size: int = BATCH_SIZE):
