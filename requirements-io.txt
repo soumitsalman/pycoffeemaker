@@ -15,3 +15,5 @@ textcase
 zvec
 scikit-learn
 openai
+persistqueue
+aiofiles

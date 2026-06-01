@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
-import logging
+from utils.dates import now
+from utils.logs import get_logger, log_runtime
 import os
 from datetime import datetime
 from itertools import batched, chain
@@ -25,7 +26,7 @@ from icecream import ic
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
 
-log = logging.getLogger("analyzerworker")
+log = get_logger("analyzerworker")
 clean_updates = lambda packlist: [{k:v for k,v in pack.items() if v} for pack in packlist if pack]
 
 VECTOR_LEN = int(os.getenv("VECTOR_LEN", 384))
@@ -52,32 +53,31 @@ class Embedder:
                     for b, vec in zip(chunk, vectors)
                     if vec and len(vec) == VECTOR_LEN
                 ])
-                log.info(
-                    "embedded",
-                    extra={"source": chunk[0][SOURCE], "num_items": len(updates)},
-                )
+                log.info(event="embedded", source=chunk[0][SOURCE], num_items=len(updates))
                 yield updates
-            except Exception:
-                log.error(
-                    "failed embedding",
-                    extra={"source": chunk[0][SOURCE], "num_items": len(chunk)},
+            except Exception as e:
+                log.error(event="failed embedding",
+                    source=chunk[0][SOURCE],
+                    num_items=len(chunk),
+                    error_type=e.__class__.__name__,
+                    error_details=str(e),
                     exc_info=True,
                     stack_info=True,
                 )
 
     @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
-        beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=EMBEDDED)
-        log.info("starting embedder", extra={"source": run_id(), "num_items": len(beans)})
+        beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=EMBEDDED, limit=100)
+        log.info(event="starting embedder", num_items=len(beans))
         if not beans: return 0
         
+        total = 0
         with self.embedder:
-            total = 0
             for updates in self.embed_beans(beans, batch_size):
                 count = self.cache.set(BEANS, EMBEDDED, updates)
                 total += (count or len(updates))
-            log.info("total embedded", extra={"source": run_id(), "num_items": total})
-            return total
+        log.info(event="total embedded", num_items=total)
+        return total
 
 
 class Extractor:
@@ -108,12 +108,14 @@ class Extractor:
                     } if ents else {URL:b[URL]}
                     for b, ents in zip(chunk, extractions)
                 ])
-                log.info("extracted", extra={"source": chunk[0][SOURCE], "num_items": len(updates)})
+                log.info(event="extracted", source=chunk[0][SOURCE], num_items=len(updates))
                 yield updates
-            except Exception:
-                log.error(
-                    "failed extracting",
-                    extra={"source": chunk[0][SOURCE], "num_items": len(chunk)},
+            except Exception as e:
+                log.error(event="failed extracting",
+                    source=chunk[0][SOURCE],
+                    num_items=len(chunk),
+                    error_type=e.__class__.__name__,
+                    error_details=str(e),
                     exc_info=True,
                     stack_info=True,
                 )
@@ -121,16 +123,16 @@ class Extractor:
     @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
         beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=EXTRACTED)
-        log.info("starting extractor", extra={"source": run_id(), "num_items": len(beans)})
+        log.info(event="starting extractor", num_items=len(beans))
         if not beans: return 0
         
+        total = 0
         with self.extractor:
-            total = 0
             for updates in self.extract_beans(beans, batch_size):
                 count = self.cache.set(BEANS, EXTRACTED, updates)
                 total += (count or len(updates))
-            log.info("total extracted", extra={"source": run_id(), "num_items": total})
-            return total
+        log.info(event="total extracted", num_items=total)
+        return total
 
 
 DIGEST_SYS = """
@@ -179,12 +181,14 @@ class Digestor:
                     for b, d in zip(chunk, digests)
                     if d
                 ])
-                log.info("digested", extra={"source": chunk[0][SOURCE], "num_items": len(updates)})
+                log.info(event="digested", source=chunk[0][SOURCE], num_items=len(updates))
                 yield updates
-            except Exception:
-                log.error(
-                    "failed digesting",
-                    extra={"source": chunk[0][SOURCE], "num_items": len(chunk)},
+            except Exception as e:
+                log.error(event="failed digesting",
+                    source=chunk[0][SOURCE],
+                    num_items=len(chunk),
+                    error_type=e.__class__.__name__,
+                    error_details=str(e),
                     exc_info=True,
                     stack_info=True,
                 )
@@ -192,16 +196,16 @@ class Digestor:
     @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
         beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=DIGESTED)
-        log.info("starting digestor", extra={"source": run_id(), "num_items": len(beans)})
+        log.info(event="starting digestor", num_items=len(beans))
         if not beans: return 0
         
+        total = 0
         with self.digestor:
-            total = 0
             for updates in self.digest_beans(beans, batch_size):
                 count = self.cache.set(BEANS, DIGESTED, updates)
                 total += (count or len(updates))
-            log.info("total digested", extra={"source": run_id(), "num_items": total})
-            return total
+        log.info(event="total digested", num_items=total)
+        return total
 
 
 CLASSIFICATION_LIMIT = int(os.getenv("CLASSIFICATION_LIMIT", 2))
@@ -230,11 +234,11 @@ class Classifier:
                 for bean, cats, sents in zip(chunk, categories, sentiments)
                 if cats and sents
             ])
-            log.info("classified", extra={"source": chunk[0][URL], "num_items": len(updates)})
+            log.info(event="classified", source=chunk[0][URL], num_items=len(updates))
             # debug
-            print("# MISSING CATEGORIES AND SENTIMENTS")
-            [print(bean[URL], len(embs), cats, sents) for bean, embs, cats, sents in zip(chunk, embeddings, categories, sentiments) if not cats or not sents]
-            print("# END MISSING CATEGORIES AND SENTIMENTS")
+            # print("# MISSING CATEGORIES AND SENTIMENTS")
+            # [print(bean[URL], len(embs), cats, sents) for bean, embs, cats, sents in zip(chunk, embeddings, categories, sentiments) if not cats or not sents]
+            # print("# END MISSING CATEGORIES AND SENTIMENTS")
             yield updates
 
     def cluster_beans(self, beans: list[dict], batch_size: int):
@@ -249,30 +253,30 @@ class Classifier:
                 }
                 for bean, related in zip(chunk, related_list)
             ])
-            log.info("clustered", extra={"source": chunk[0][URL], "num_items": len(updates)})
+            log.info(event="clustered", source=chunk[0][URL], num_items=len(updates))
             yield updates
 
     @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
         # run classification before clustering
         beans = self.cache.get(BEANS, states=EMBEDDED, exclude_states=CLASSIFIED)
-        log.info("starting classifier", extra={"source": run_id(), "num_items": len(beans)})
+        log.info(event="starting classifier", num_items=len(beans))
         classified = 0
         embedded = [b for b in beans if EMBEDDING in b]
         for updates in self.classify_beans(embedded, batch_size):
             count = self.cache.set(BEANS, CLASSIFIED, updates)
             classified += (count or len(updates))
-        log.info("total classified", extra={"source": run_id(), "num_items": classified})
+        log.info(event="total classified", num_items=classified)
 
         # run clustering after classification
         beans = self.cache.get(BEANS, states=EMBEDDED, exclude_states=CLUSTERED)
-        log.info("starting clusterer", extra={"source": run_id(), "num_items": len(beans)})
+        log.info(event="starting clusterer", num_items=len(beans))
         clustered = 0
         embedded = [b for b in beans if EMBEDDING in b]
         for updates in self.cluster_beans(embedded, batch_size):
             count = self.cache.set(BEANS, CLUSTERED, updates)
             clustered += (count or len(updates))
-        log.info("total clustered", extra={"source": run_id(), "num_items": clustered})
+        log.info(event="total clustered", num_items=clustered)
         return classified, clustered
 
 
@@ -354,7 +358,7 @@ class Consolidator:
 
     def _create_consolidation_groups(self, beans: list[dict]) -> list[dict]:
         groups = _group_items(beans, CONSOLIDATION_EPS, CONSOLIDATION_MIN_SIZE)       
-        log.info("initial groups", extra={"source": run_id(), "num_items": len(groups)})
+        log.info(event="initial groups", num_items=len(groups))
         with ThreadPoolExecutor(max_workers=32) as exec:
             groups = list(exec.map(self._expand_group, groups))
 
@@ -369,7 +373,7 @@ class Consolidator:
                 )
             elif len(group["data"]) >= CONSOLIDATION_MIN_SIZE:
                 resized_groups.append(group)
-        log.info("consolidation groups", extra={"source": run_id(), "num_items": len(resized_groups)})
+        log.info(event="consolidation groups", num_items=len(resized_groups))
         return resized_groups
 
     def consolidate_bean_groups(self, groups: list[dict], batch_size: int):
@@ -391,34 +395,34 @@ class Consolidator:
                     })
                     bean_updates.extend({URL: b[URL]} for b in group['data'])
 
-                log.info("consolidated composites", extra={"source": run_id(), "num_items": len(composite_updates)})
-                log.info("consolidated beans", extra={"source": run_id(), "num_items": len(bean_updates)})
+                log.info(event="consolidated composites", composites=len(composite_updates), beans=len(bean_updates))
                 yield composite_updates, bean_updates
 
-            except Exception:
-                log.error(
-                    "failed consolidating",
-                    extra={"source": chunk[0]['data'][0][SOURCE], "num_items": len(chunk)},
+            except Exception as e:
+                log.error(event="failed consolidating",
+                    source=chunk[0]["data"][0][SOURCE],
+                    num_items=len(chunk),
+                    error_type=e.__class__.__name__,
+                    error_details=str(e),
                     exc_info=True,
                 )
 
+    @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
         beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED)
-        log.info("starting consolidator", extra={"source": run_id(), "num_items": len(beans)})
+        log.info(event="starting consolidator", num_items=len(beans))
 
         groups = self._create_consolidation_groups(beans)
         if not groups: return 0
 
+        total_composites, total_beans = 0, 0
         with self.consolidator:
-            total_composites, total_beans = 0, 0
-
             for composite_updates, bean_updates in self.consolidate_bean_groups(groups, batch_size):
                 total_composites += self.cache.set(COMPOSITES, COLLECTED, composite_updates)
                 total_beans += self.cache.set(BEANS, CONSOLIDATED, bean_updates)
 
-            log.info("total consolidated composites", extra={"source": run_id(), "num_items": total_composites})
-            log.info("total consolidated beans", extra={"source": run_id(), "num_items": total_beans})
-            return total_composites + total_beans
+        log.info(event="total consolidated", composites=total_composites, beans=total_beans)
+        return total_composites + total_beans
 
 def _value_to_str(value) -> str:
     if isinstance(value, list): return ",".join(_value_to_str(v) for v in value)

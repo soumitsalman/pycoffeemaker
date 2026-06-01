@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-import logging
 import os
 from datetime import datetime as dt
 
@@ -21,28 +20,10 @@ if log_dir:
     os.makedirs(log_dir, exist_ok=True)
     log_file = f"{log_dir}/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log"
 
-logging.basicConfig(
-    level=logging.WARNING,
-    filename=log_file,
-    format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s",
-)
+from utils.logs import configure_logging, get_logger
 
-log = logging.getLogger("app")
-log.setLevel(logging.INFO)
-logging.getLogger("collectorworker").setLevel(logging.INFO)
-logging.getLogger("analyzerworker").setLevel(logging.INFO)
-logging.getLogger("porterworker").setLevel(logging.INFO)
-logging.getLogger("processingcache").setLevel(logging.INFO)
-logging.getLogger("jieba").propagate = False
-logging.getLogger("nlp.digestors").propagate = False
-logging.getLogger("nlp.embedders").propagate = False
-logging.getLogger("asyncprawcore").propagate = False
-logging.getLogger("asyncpraw").propagate = False
-logging.getLogger("dammit").propagate = False
-logging.getLogger("UnicodeDammit").propagate = False
-logging.getLogger("urllib3").propagate = False
-logging.getLogger("connectionpool").propagate = False
-# logging.getLogger("asyncio").propagate = False
+configure_logging(log_file=log_file)
+log = get_logger("app")
 
 ### WORKER SCHEDULING ###
 # Collector can run 2 times a day for 1-1.5 hours -- 6 AM / 6 PM
@@ -171,8 +152,8 @@ if __name__ == "__main__":
             try:
                 async with async_cache:
                     await asyncio.gather(
-                        BeansackPorter(cache=async_cache).hydrate_beansack(beansack_db, BEANSACKED),
-                        CupboardPorter(cache=async_cache).hydrate_cupboard(cupboard_db, CUPBOARDED)
+                        BeansackPorter(cache=async_cache).run(beansack_db, BEANSACKED),
+                        CupboardPorter(cache=async_cache).run(cupboard_db, CUPBOARDED)
                     )
             finally:
                 beansack_db.close()

@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import aiohttp
-import logging
+from utils.logs import get_logger
 from itertools import chain
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
@@ -10,7 +10,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ra
 from .utils import *
 from icecream import ic
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _METADATA_SELECTORS = {
     'site_name': "meta[property='og:site_name'], meta[property='sitename'], meta[itemprop='name']",
@@ -105,7 +105,12 @@ class AsyncWebScraper:
             body.update(self._get_metadata(url, html))
             return body
         except Exception as e: 
-            log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": url, "num_items": 1})
+            log.debug(event=f"scraping failed - {e.__class__.__name__} {e}",
+                source=url,
+                num_items=1,
+                error_type=e.__class__.__name__,
+                error_details=str(e),
+            )
             return None
 
     async def _scrape_site(self, base_url: str):
@@ -133,7 +138,12 @@ class AsyncWebScraper:
             meta[COLLECTED] = now()
             return meta
         except Exception as e: 
-            log.debug(f"scraping failed - {e.__class__.__name__} {e}", extra={"source": base_url, "num_items": 1})
+            log.debug(event=f"scraping failed - {e.__class__.__name__} {e}",
+                source=base_url,
+                num_items=1,
+                error_type=e.__class__.__name__,
+                error_details=str(e),
+            )
             return None
 
     def _prep_page_result(self, bean: dict, result) -> dict:
@@ -192,10 +202,14 @@ class AsyncWebScraper:
             }, result) for url, result in zip(urls, results)
         ]
     
-    async def scrape_beans(self, beans: list[dict], collect_metadata: bool = True):
+    async def scrape_beans(self, beans: list[dict]):
         """Augment existing beans with scraped data."""
-        results = await asyncio.gather(*[self._scrape_page(bean.get(URL)) for bean in beans])
-        return [self._prep_page_result(bean, result) for bean, result in zip(beans, results)]
+        return await asyncio.gather(*[self.scrape_bean(bean) for bean in beans])
+        
+    async def scrape_bean(self, bean: dict):
+        """Scrape a single bean for page data."""
+        result = await self._scrape_page(bean.get(URL))
+        return self._prep_page_result(bean, result)
 
     async def scrape_site(self, url: str):
         """Scrape a site for publisher data."""
@@ -209,7 +223,14 @@ class AsyncWebScraper:
         publishers = await asyncio.gather(*[self._scrape_site(base_url) for base_url in list(set(base_urls.values()))])
         publishers = {publisher.get(BASE_URL): publisher for publisher in publishers if publisher}
         return [cleanup_item(publishers.get(base_urls[url])) if publishers.get(base_urls[url]) else None for url in urls]
-    
+  
+
+    async def scrape_publisher(self, publisher: dict):
+        """Scrape a single publisher for publisher data."""
+        base_url = extract_base_url(publisher.get(BASE_URL))
+        result = await self._scrape_site(base_url)
+        return cleanup_item(result) if result else None
+
     async def scrape_publishers(self, publishers: list[dict]):
         """Augment existing publishers with scraped data."""
         base_urls = [publisher.get(BASE_URL) for publisher in publishers]

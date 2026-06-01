@@ -17,7 +17,10 @@ asyncpraw
 readability-lxml
 icecream
 python-dotenv
+structlog
 msgpack
 textcase
 zvec
 scikit-learn
+persistqueue
+aiofiles

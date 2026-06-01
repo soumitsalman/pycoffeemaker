@@ -1,4 +1,3 @@
-import logging
 import os
 import sys
 from dotenv import load_dotenv
@@ -7,26 +6,10 @@ from icecream import ic
 load_dotenv()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s",
-)
-logger = logging.getLogger("test")
-logger.setLevel(logging.INFO)
-logging.getLogger("collectorworker").setLevel(logging.INFO)
-logging.getLogger("analyzerworker").setLevel(logging.INFO)
-logging.getLogger("porterworker").setLevel(logging.INFO)
-logging.getLogger("processingcache").setLevel(logging.INFO)
-logging.getLogger("jieba").propagate = False
-logging.getLogger("nlp.digestors").propagate = False
-logging.getLogger("nlp.embedders").propagate = False
-logging.getLogger("asyncprawcore").propagate = False
-logging.getLogger("asyncpraw").propagate = False
-logging.getLogger("dammit").propagate = False
-logging.getLogger("UnicodeDammit").propagate = False
-logging.getLogger("urllib3").propagate = False
-logging.getLogger("connectionpool").propagate = False
-logging.getLogger("asyncio").propagate = False
+from utils.logs import configure_logging, get_logger
+
+configure_logging()
+logger = get_logger("test")
 
 DB_LOCAL_TEST = "mongodb://localhost:27017/"
 DB_NAME_TEST = "test3"

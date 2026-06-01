@@ -4,13 +4,13 @@ from typing import Any, Optional
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 import msgpack
-import logging
+from utils.logs import get_logger
 
 NOT_IMPLEMENTED = NotImplementedError("Method not implemented")
 NULL_STATE = "__NULL__"
 
-log = logging.getLogger("processingcache")
-logset = lambda total: log.info("state set", extra={"num_items": total, "source": "__default__"})
+log = get_logger("processingcache")
+logset = lambda total: log.info(event="state set", num_items=total, source="__default__")
 
 DEFAULT_WINDOW = 7
 

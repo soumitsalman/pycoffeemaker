@@ -1,6 +1,6 @@
 import asyncio
 import json
-import logging
+from utils.logs import get_logger
 import os
 from urllib.parse import urljoin
 import aiohttp
@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .utils import *
 from icecream import ic
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _RSS_REQUEST_HEADERS = {
     "User-Agent": USER_AGENT,
@@ -108,11 +108,16 @@ def _fetch_json(url: str):
         resp.raise_for_status()
         return resp.json()
     except Exception as e: 
-        log.warning(f"collection failed - {e.__class__.__name__}: {e}", extra={"source": url, "num_items": 1})
+        log.warning(event=f"collection failed - {e.__class__.__name__}: {e}",
+            source=url,
+            num_items=1,
+            error_type=e.__class__.__name__,
+            error_details=str(e),
+        )
 
 def _return_collected(source, collected: list|None):
-    if collected: log.debug("collected", extra={"source": source, "num_items": len(collected)})
-    else: log.debug("collection failed", extra={"source": source, "num_items": 1})
+    if collected: log.debug(event="collected", source=source, num_items=len(collected))
+    else: log.debug(event="collection failed", source=source, num_items=1)
     return collected
 
 merge_lists = lambda results: list(chain(*(r for r in results if r))) 
@@ -355,7 +360,13 @@ class APICollectorAsync:
             async with self.throttle, self.session.get(url, headers=_JSON_REQUEST_HEADERS) as resp:
                 return await resp.json()
         except Exception as e:
-            log.warning(f"collection failed - {e.__class__.__name__}: {e}", extra={"source": url, "num_items": 1})
+            log.warning(
+                event=f"collection failed - {e.__class__.__name__}: {e}",
+                source=url,
+                num_items=1,
+                error_type=e.__class__.__name__,
+                error_details=str(e),
+            )
 
     async def collect_rssfeed(self, url: str, default_kind: str = NEWS) -> list[dict]:
         async with self.throttle, self.session.get(url, headers=_RSS_REQUEST_HEADERS) as resp:
