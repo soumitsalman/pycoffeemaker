@@ -57,18 +57,18 @@ class BeansackPorter:
             states=[COLLECTED, EMBEDDED, CLASSIFIED, EXTRACTED],
             exclude_states=target_state,
         ):  
-            log.info(event="porting", source="beansack", beans=len(beans))  
+            log.info(event="porting", source="beansack:beans", num_items=len(beans))  
             count = await asyncio.to_thread(db.store_beans, self.prep_beans(beans))
-            log.info(event="ported", source="beansack", beans=count)                
+            log.info(event="ported", source="beansack:beans", num_items=count)                
             await self.cache.set(BEANS, target_state, [{K_URL: b[K_URL]} for b in beans])
             return count
         return 0
 
     async def hydrate_publishers(self, db: Beansack, target_state: str):
         if publishers := await self.cache.get(PUBLISHERS, states=COLLECTED, exclude_states=target_state):
-            log.info(event="porting", source="beansack", publishers=len(publishers))
+            log.info(event="porting", source="beansack:publishers", num_items=len(publishers))
             count = await asyncio.to_thread(db.store_publishers, [Publisher(**pub) for pub in publishers])
-            log.info(event="ported", source="beansack", publishers=count)
+            log.info(event="ported", source="beansack:publishers", num_items=count)
             await self.cache.set(PUBLISHERS, target_state, [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
             return count
         return 0
@@ -77,9 +77,9 @@ class BeansackPorter:
         target = target_state+":link"
         total = 0
         while related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target, limit=50000):
-            log.info(event="porting", source="beansack", bean_links=len(related_beans))
+            log.info(event="porting", source="beansack:bean_links", num_items=len(related_beans))
             count = await asyncio.to_thread(db.store_related, self.prep_related(related_beans))
-            log.info(event="ported", source="beansack", bean_links=count)
+            log.info(event="ported", source="beansack:bean_links", num_items=count)
             await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
             total += count
         return total
@@ -89,9 +89,9 @@ class BeansackPorter:
             # save the ids for cache resetting
             ids = [{"id": pkg['id']} for pkg in chatters]
             chatters = list(chain(*(pkg['chatters'] for pkg in chatters)))
-            log.info(event="porting", source="beansack", chatters=len(chatters))
+            log.info(event="porting", source="beansack:chatters", num_items=len(chatters))
             count = await asyncio.to_thread(db.store_chatters, [Chatter(**ch) for ch in chatters])
-            log.info(event="ported", source="beansack", chatters=count)
+            log.info(event="ported", source="beansack:chatters", num_items=count)
             await self.cache.set(CHATTERS, target_state, ids)
             return count
         return 0    
@@ -112,8 +112,9 @@ class BeansackPorter:
             hydrate_trends(),
         ])
         total_ported = sum(counts)
-        log.info(event="hydration complete", source="beansack", num_items=total_ported)
+        log.info(event=f"total {target_state}", num_items=total_ported)
         return total_ported
+
 
 CUPBOARD_SIGNAL_KIND = "signal"
 CUPBOARD_SIGNAL_URL_PREFIX = "https://api.cafecito.tech/espresso/signals/"
@@ -154,9 +155,9 @@ class CupboardPorter:
         count = 0
         if sources := await self.cache.get(PUBLISHERS, states=COLLECTED, exclude_states=target_state):
             sources = self.prep_sources(sources)
-            log.info(event="porting", source="cupboard", sources=len(sources))
+            log.info(event="porting", source="cupboard:sources", num_items=len(sources))
             count = await db.store_sources(sources)
-            log.info(event="ported", source="cupboard", sources=count)
+            log.info(event="ported", source="cupboard:sources", num_items=count)
             await self.cache.set(PUBLISHERS, target_state, [{K_BASE_URL: p.base_url} for p in sources])
         return count
 
@@ -165,9 +166,9 @@ class CupboardPorter:
         target = target_state+":link"
         total = 0
         while related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target, limit=50000):
-            log.info(event="porting", source="cupboard", event_links=len(related_beans))
+            log.info(event="porting", source="cupboard:event_links", num_items=len(related_beans))
             count = await db.link_sips(related_beans, "SAME_AS")
-            log.info(event="ported", source="cupboard", event_links=count)
+            log.info(event="ported", source="cupboard:event_links", num_items=count)
             await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
             total += count
         return total
@@ -189,7 +190,7 @@ class CupboardPorter:
     async def hydrate_signals(self, db: Cupboard, target_state: str):
         count = 0
         if composites := await self.cache.get(COMPOSITES, states=COLLECTED, exclude_states=target_state):
-            log.info(event="porting", source="cupboard", signals=len(composites))
+            log.info(event="porting", source="cupboard:signals", num_items=len(composites))
             # saving this for cache resetting
             ids = [{ID: comp[ID]} for comp in composites]
             composites = self.prep_signals(composites)
@@ -197,7 +198,7 @@ class CupboardPorter:
                 db.store_sips([Sip(**comp) for comp in composites]),
                 db.link_sips(composites, "DERIVED_FROM"),
             ])
-            log.info(event="ported", source="cupboard", signals=counts[0], signal_links=counts[1])
+            log.info(event="ported", source="cupboard:signals", num_items=counts[0], links=counts[1])
             await self.cache.set(COMPOSITES, target_state, ids)
             count = sum(counts)
         return count
@@ -212,7 +213,7 @@ class CupboardPorter:
             )
             await db.optimize()
             total_ported = sum(counts)
-            log.info(event="hydration complete", source="cupboard", num_items=total_ported)
+            log.info(event=f"total {target_state}", num_items=total_ported)
             return total_ported
         
         
