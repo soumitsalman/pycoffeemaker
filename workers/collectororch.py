@@ -293,7 +293,7 @@ class Collector:
                 data_type, to_scrape = item
                 await scrape_and_triage(data_type, to_scrape)
 
-        await asyncio.gather(*(work() for _ in range(batch_size)))
+        await asyncio.gather(*(work() for _ in range(batch_size>>1)))
         log.info(event="scraping completed")
 
 
