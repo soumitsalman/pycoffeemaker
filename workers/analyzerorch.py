@@ -67,7 +67,7 @@ class Embedder:
 
     @log_runtime(logger=log)
     def run(self, batch_size: int = BATCH_SIZE):
-        beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=EMBEDDED, limit=100)
+        beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=EMBEDDED)
         log.info(event="starting embedder", num_items=len(beans))
         if not beans: return 0
         

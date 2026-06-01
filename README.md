@@ -155,7 +155,7 @@ python run.py --mode PORTER
 | `CLASSIFICATION_CACHE` | Vector store for CLASSIFIER (`workers/workercache/clscache.py`, zvec) |
 | `BEANSACK_CONNECTION_STRING` | PORTER |
 | `CUPBOARD_CONNECTION_STRING` | PORTER |
-| `LOG_DIR` | Optional hourly logfmt file; stderr always uses structlog console renderer |
+| `LOG_DIR` | Optional hourly logfmt log file; otherwise logfmt to stderr |
 | `WORDS_THRESHOLD_FOR_STORING` | Min words before full scrape (collector) |
 
 ### Processing states (beans)

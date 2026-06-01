@@ -1,4 +1,4 @@
-"""structlog: console on stderr, optional logfmt file (LOG_DIR)."""
+"""structlog logfmt logging: file when LOG_DIR set, else stderr."""
 
 from __future__ import annotations
 
@@ -27,18 +27,15 @@ _NOISY_LOGGERS = (
 )
 _APP_LOGGERS = ("app", "collectorworker", "analyzerworker", "porterworker", "processingcache")
 
-# Field order after core keys (timestamp, level, logger, event); remainder sorted alphabetically.
 PREFERRED_KEY_ORDER = ("source", "num_items", "links", "error_type", "error_details")
-_LOG_KEY_ORDER = ("timestamp", "level", "logger", "event", *PREFERRED_KEY_ORDER)
-
-
-def _logfmt_renderer() -> structlog.processors.LogfmtRenderer:
-    return structlog.processors.LogfmtRenderer(key_order=_LOG_KEY_ORDER, sort_keys=True)
-
-
-def _handler(handler: logging.Handler, renderer: Any) -> logging.Handler:
-    handler.setFormatter(ProcessorFormatter(processor=renderer, foreign_pre_chain=PRE_CHAIN))
-    return handler
+LOGFMT = ProcessorFormatter(
+    processor=structlog.processors.LogfmtRenderer(
+        key_order=("timestamp", "level", "logger", "event", *PREFERRED_KEY_ORDER),
+        sort_keys=True,
+        drop_missing=True,
+    ),
+    foreign_pre_chain=PRE_CHAIN,
+)
 
 
 def configure_logging(log_file: str | None = None) -> None:
@@ -53,12 +50,9 @@ def configure_logging(log_file: str | None = None) -> None:
     root.handlers.clear()
     root.setLevel(logging.WARNING)
 
-    handlers: list[logging.Handler] = [
-        _handler(logging.StreamHandler(sys.stderr), structlog.dev.ConsoleRenderer(pad_event_to=20)),
-    ]
-    if log_file:
-        handlers.append(_handler(logging.FileHandler(log_file), _logfmt_renderer()))
-    root.handlers.extend(handlers)
+    sink = logging.FileHandler(log_file) if log_file else logging.StreamHandler(sys.stderr)
+    sink.setFormatter(LOGFMT)
+    root.addHandler(sink)
 
     for name in _APP_LOGGERS:
         logging.getLogger(name).setLevel(logging.INFO)
@@ -66,12 +60,10 @@ def configure_logging(log_file: str | None = None) -> None:
         logging.getLogger(name).propagate = False
 
 
-def get_logger(name: str) -> structlog.stdlib.BoundLogger:
-    return structlog.stdlib.get_logger(name)
-
-
+get_logger = structlog.stdlib.get_logger
 bind_run_context = structlog.contextvars.bind_contextvars
 clear_run_context = structlog.contextvars.clear_contextvars
+
 
 def _log_execution(logger: structlog.stdlib.BoundLogger, source: str, result: Any, start: datetime) -> None:
     num_items = result if isinstance(result, int) else len(result) if isinstance(result, list) else 1
