@@ -28,7 +28,6 @@
 .cursor
 *.env
 history.txt
-graphify*
 zvec
 __azurite*
 __queuestorage__
