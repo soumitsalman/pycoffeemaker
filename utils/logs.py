@@ -64,7 +64,6 @@ get_logger = structlog.stdlib.get_logger
 bind_run_context = structlog.contextvars.bind_contextvars
 clear_run_context = structlog.contextvars.clear_contextvars
 
-
 def _log_execution(logger: structlog.stdlib.BoundLogger, source: str, result: Any, start: datetime) -> None:
     num_items = result if isinstance(result, int) else len(result) if isinstance(result, list) else 1
     duration = (datetime.now() - start).total_seconds()
@@ -73,7 +72,7 @@ def _log_execution(logger: structlog.stdlib.BoundLogger, source: str, result: An
         source=source,
         num_items=num_items,
         duration=int(duration),
-        average_duration=duration / num_items,
+        average_duration=duration / num_items if num_items else 0,
     )
 
 
