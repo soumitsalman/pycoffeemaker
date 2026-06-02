@@ -1,13 +1,10 @@
 import asyncio
 from itertools import batched
-from utils import log_runtime_async
-from utils.dates import now
-from utils.logs import get_logger
+from utils.logs import get_logger, log_runtime_async
 import os
 import random
 import uuid
 import yaml
-from datetime import datetime
 from datacollectors import (
     APICollectorAsync,
     AsyncWebScraper,
@@ -41,7 +38,7 @@ from datacollectors import (
 )
 from .workercache.base import AsyncStateCacheBase
 from .utils import *
-from persistqueue import AsyncQueue
+from asyncio import Queue
 from icecream import ic
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count()))
@@ -59,12 +56,11 @@ scrapable_beans = (
     else beans
 )
 storable_beans = lambda beans: list(filter(is_bean_storable, beans)) if beans else beans
+
 is_publisher_storable = lambda publisher: publisher and any(field in publisher for field in [SITE_NAME, FAVICON, DESCRIPTION])
-storable_publishers = (
-    lambda publishers: list(filter(is_publisher_storable, publishers))
-    if publishers
-    else publishers
-)
+scrapable_publishers = lambda publishers: [publisher for publisher in publishers if not is_publisher_storable(publisher)] if publishers else publishers
+storable_publishers = lambda publishers: list(filter(is_publisher_storable, publishers)) if publishers else publishers
+
 
 def validate_bean_item(item: dict) -> bool:
     if not item:
@@ -180,32 +176,26 @@ class Collector:
 
         return beans, chatters, publishers
 
-    async def _triage(self, items: list[dict], scrape_on_fail: bool):
+    async def _triage(self, items: list[dict]):
         """Store storable collection results and persist the rest for scraping."""
-        if not items:
-            return
+        if not items: return
 
         beans, chatters, publishers = self._split_items(items)
 
         async with asyncio.TaskGroup() as tg:
             if chatters:
                 tg.create_task(self._cache_chatters(chatters))
-            if beans:
-                to_store = storable_beans(beans)
-                to_scrape = scrapable_beans(beans)
-                if to_store:
-                    tg.create_task(self._cache_beans(to_store))
-                if scrape_on_fail and to_scrape:
-                    tg.create_task(self._queue_bean_scraping(to_scrape))
+            if beans:                
+                tg.create_task(self._cache_beans(storable_beans(beans)))
+                tg.create_task(self._scrape_beans(scrapable_beans(beans)))
             if publishers:
-                to_store = storable_publishers(publishers)
-                to_scrape = [pub for pub in publishers if not is_publisher_storable(pub)]
-                if to_store:
-                    tg.create_task(self._cache_publishers(to_store))
-                if scrape_on_fail and to_scrape:
-                    tg.create_task(self._queue_publisher_scraping(to_scrape))
+                tg.create_task(self._cache_publishers(storable_publishers(publishers)))
+                tg.create_task(self._scrape_publishers(scrapable_publishers(publishers)))
+
 
     async def _cache_beans(self, beans: list[dict]):
+        if not beans: return
+
         count = await self.cache.set(BEANS, COLLECTED, beans)
         if count is not None: 
             log.info(event="cached beans", source=beans[0][SOURCE], num_items=count)
@@ -214,6 +204,8 @@ class Collector:
             log.info(event="caching beans", source=beans[0][SOURCE], num_items=len(beans))
         
     async def _cache_publishers(self, publishers: list[dict]):
+        if not publishers: return
+
         count = await self.cache.set(PUBLISHERS, COLLECTED, publishers)
         if count is not None: 
             log.info(event="cached publishers", source=publishers[0][SOURCE], num_items=count)
@@ -222,21 +214,31 @@ class Collector:
             log.info(event="caching publishers", source=publishers[0][SOURCE], num_items=len(publishers))
 
     async def _cache_chatters(self, chatters: list[dict]):
+        if not chatters: return
+
         pkg = [{"id": str(uuid.uuid4()), "chatters": chatters}]
         count = await self.cache.set(CHATTERS, COLLECTED, pkg)
         if count is not None: log.info(event="cached chatters", source=chatters[0][SOURCE], num_items=count)
         else: log.info(event="caching chatters", source=chatters[0][SOURCE], num_items=len(chatters))
 
-    async def _queue_bean_scraping(self, beans: list[dict]):
-        to_scrape = await self.cache.deduplicate(BEANS, COLLECTED, beans)
-        if not to_scrape: return
-        await self.scrape_queue.put((BEANS, to_scrape))
+    async def _scrape_beans(self, beans: list[dict]):
+        if not beans: return
 
-    async def _queue_publisher_scraping(self, publishers: list[dict]):
-        to_scrape = await self.cache.deduplicate(PUBLISHERS, COLLECTED, publishers)
-        if not to_scrape: return
-        await self.scrape_queue.put((PUBLISHERS, to_scrape))
-    
+        beans = await self.cache.deduplicate(BEANS, COLLECTED, beans)
+        beans = await self.webscraper.scrape_beans(beans)
+        if beans := storable_beans(beans):
+            log.info(event="scraped beans", source=beans[0][SOURCE], num_items=len(beans))
+            await self._cache_beans(beans)
+
+    async def _scrape_publishers(self, publishers: list[dict]):        
+        if not publishers: return
+
+        publishers = await self.cache.deduplicate(PUBLISHERS, COLLECTED, publishers)
+        publishers = await self.webscraper.scrape_publishers(publishers)
+        if publishers := storable_publishers(publishers): 
+            log.info(event="scraped publishers", source=publishers[0][SOURCE], num_items=len(publishers))
+            await self._cache_publishers(publishers)
+
     def _get_collector_funcs(self, sources):
         # shuffling the sources to introduce randomness in failures
         funcs = []
@@ -244,7 +246,11 @@ class Collector:
             log.info(event="collecting", source=source_type, num_items=len(source_paths))            
             funcs.extend((source_type, source) for source in source_paths)
         random.shuffle(funcs)
-        return funcs
+
+        collector_queue = Queue()
+        for func in funcs:
+            collector_queue.put_nowait(func)        
+        return collector_queue
 
     async def _collect(self, source_type, source):
         to_triage = None
@@ -259,54 +265,34 @@ class Collector:
                 error_type=e.__class__.__name__,
                 error_details=str(e),
             )
-        if to_triage: await self._triage(to_triage, scrape_on_fail=True)
+        if to_triage: await self._triage(to_triage)
 
     async def _run_collectors(self, sources, batch_size: int):
-        """Run the collectors"""
-        async def work(funcs: list[tuple[str, str]]):
-            for func, source in funcs:
-                await self._collect(func, source)
-            await self.scrape_queue.put(None)
-        
-        await asyncio.gather(*(
-            work(funcs) 
-            for funcs in batched(
-                self._get_collector_funcs(sources), 
-                batch_size
-            )
-        ))
-        log.info(event="collection completed")
+        """Run the collectors""" 
+        # set up the queue      
+        collector_queue = self._get_collector_funcs(sources)
 
-    async def _scrape(self, data_type, to_scrape):            
-        to_triage = None
-        if data_type == BEANS: to_triage = await self.webscraper.scrape_beans(to_scrape)
-        elif data_type == PUBLISHERS: to_triage = await self.webscraper.scrape_publishers(to_scrape)
-        if not to_triage: return
-
-        if data_type == BEANS: log.info(event="scraped beans", source=to_scrape[0][SOURCE], num_items=len(to_triage))
-        elif data_type == PUBLISHERS: log.info(event="scraped publishers", source=to_scrape[0][SOURCE], num_items=len(to_triage))
-        await self._triage(to_triage, scrape_on_fail=False)
-
-    async def _run_scrapers(self, batch_size: int):
-        """Run the scrap functions"""
         async def work():
-            while (item := await self.scrape_queue.get()):
-                data_type, to_scrape = item
-                await self._scrape(data_type, to_scrape)
-        await asyncio.gather(*(work() for _ in range(batch_size>>2)))
-        # empty out any remaining None
-        while (await self.scrape_queue.empty()):
-            await self.scrape_queue.get()
-        log.info(event="scraping completed")
+            while not collector_queue.empty():               
+                await self._collect(*(await collector_queue.get()))
+
+        await asyncio.gather(*(work() for _ in range(batch_size)))
+        
+    # async def _run_scrapers(self, batch_size: int):
+    #     """Run the scrap functions"""
+    #     async def work():
+    #         while (item := await self.scrape_queue.get()):
+    #             data_type, to_scrape = item
+    #             await self._scrape(data_type, to_scrape)
+    #     await asyncio.gather(*(work() for _ in range(batch_size>>2)))
+    #     # empty out any remaining None
+    #     while (await self.scrape_queue.empty()):
+    #         await self.scrape_queue.get()
+    #     log.info(event="scraping completed")
 
     def _init_run(self, batch_size: int):
-        DIR = ".cache"
-        os.makedirs(DIR, exist_ok=True)
-        # self.collect_queue = AsyncQueue(f"{DIR}/collect-{now().strftime('%Y-%m-%d-%H-%M-%S')}", tempdir=DIR)
-        self.scrape_queue = AsyncQueue(f"{DIR}/scrape", tempdir=DIR)
-
-        self.apicollector = APICollectorAsync(batch_size<<1)
-        self.webscraper = AsyncWebScraper(batch_size<<1)
+        self.apicollector = APICollectorAsync(batch_size<<2)
+        self.webscraper = AsyncWebScraper(batch_size<<2)
 
         self.beans_collected, self.publishers_collected = 0, 0
 
@@ -315,10 +301,8 @@ class Collector:
         """Main entry point for collector orchestrator. Runs the complete bean collection pipeline and refreshes chatter data."""
         log.info(event="starting collectors")
 
-        self._init_run(batch_size)
+        self._init_run(batch_size)        
         async with self.cache, self.apicollector, self.webscraper:
-            await asyncio.gather(
-                self._run_collectors(sources, batch_size),
-                self._run_scrapers(batch_size)
-            )
+            await self._run_collectors(sources, batch_size)
+
         log.info(event="total collected", beans=self.beans_collected, publishers=self.publishers_collected)

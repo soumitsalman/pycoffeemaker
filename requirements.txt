@@ -22,5 +22,4 @@ msgpack
 textcase
 zvec
 scikit-learn
-persistqueue
 aiofiles
