@@ -224,21 +224,19 @@ class Collector:
         if not beans: return
 
         beans = await self.cache.deduplicate(BEANS, COLLECTED, beans)
-        for chunk in batched(beans, self.batch_size):
-            scraped = await self.webscraper.scrape_beans(chunk)
-            if scraped := storable_beans(scraped): 
-                log.info(event="scraped beans", source=scraped[0][SOURCE], num_items=len(scraped))
-                await self._cache_beans(scraped)
+        beans = await self.webscraper.scrape_beans(beans)
+        if beans := storable_beans(beans): 
+            log.info(event="scraped beans", source=beans[0][SOURCE], num_items=len(beans))
+            await self._cache_beans(beans)
 
     async def _scrape_publishers(self, publishers: list[dict]):        
         if not publishers: return
 
         publishers = await self.cache.deduplicate(PUBLISHERS, COLLECTED, publishers)
-        for chunk in batched(publishers, self.batch_size):
-            scraped = await self.webscraper.scrape_publishers(chunk)
-            if scraped := storable_publishers(scraped): 
-                log.info(event="scraped publishers", source=scraped[0][SOURCE], num_items=len(scraped))
-                await self._cache_publishers(scraped)
+        publishers = await self.webscraper.scrape_publishers(publishers)
+        if publishers := storable_publishers(publishers): 
+            log.info(event="scraped publishers", source=publishers[0][SOURCE], num_items=len(publishers))
+            await self._cache_publishers(publishers)
 
     def _get_collector_funcs(self, sources):
         # shuffling the sources to introduce randomness in failures
@@ -281,8 +279,8 @@ class Collector:
 
     def _init_run(self, batch_size: int):
         self.batch_size = batch_size
-        self.apicollector = APICollectorAsync(batch_size<<3)
-        self.webscraper = AsyncWebScraper(batch_size<<3)
+        self.apicollector = APICollectorAsync(batch_size)
+        self.webscraper = AsyncWebScraper(batch_size<<4)
         self.beans_collected = 0
         self.publishers_collected = 0        
 
