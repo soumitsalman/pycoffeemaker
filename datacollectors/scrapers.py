@@ -42,7 +42,7 @@ class AsyncWebScraper:
     async def __aenter__(self):
         """Async context manager enter"""
         self.session = aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit=self.batch_size, limit_per_host=(self.batch_size>>2) or 1),
+            connector=aiohttp.TCPConnector(limit=self.batch_size, limit_per_host=(self.batch_size>>1) or 1),
             headers=_HTML_REQUEST_HEADERS, 
             timeout=aiohttp.ClientTimeout(total=TIMEOUT),
             raise_for_status=True

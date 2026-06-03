@@ -331,7 +331,7 @@ class APICollectorAsync:
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit=self.batch_size, limit_per_host=1),
+            connector=aiohttp.TCPConnector(limit=self.batch_size, limit_per_host=(self.batch_size>>1) or 1),
             headers={"User-Agent": USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=TIMEOUT),
             raise_for_status=True,
