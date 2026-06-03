@@ -192,7 +192,6 @@ class Collector:
                 tg.create_task(self._cache_publishers(storable_publishers(publishers)))
                 tg.create_task(self._scrape_publishers(scrapable_publishers(publishers)))
 
-
     async def _cache_beans(self, beans: list[dict]):
         if not beans: return
 
@@ -225,19 +224,21 @@ class Collector:
         if not beans: return
 
         beans = await self.cache.deduplicate(BEANS, COLLECTED, beans)
-        beans = await self.webscraper.scrape_beans(beans)
-        if beans := storable_beans(beans):
-            log.info(event="scraped beans", source=beans[0][SOURCE], num_items=len(beans))
-            await self._cache_beans(beans)
+        for chunk in batched(beans, self.batch_size):
+            scraped = await self.webscraper.scrape_beans(chunk)
+            if scraped := storable_beans(scraped): 
+                log.info(event="scraped beans", source=scraped[0][SOURCE], num_items=len(scraped))
+                await self._cache_beans(scraped)
 
     async def _scrape_publishers(self, publishers: list[dict]):        
         if not publishers: return
 
         publishers = await self.cache.deduplicate(PUBLISHERS, COLLECTED, publishers)
-        publishers = await self.webscraper.scrape_publishers(publishers)
-        if publishers := storable_publishers(publishers): 
-            log.info(event="scraped publishers", source=publishers[0][SOURCE], num_items=len(publishers))
-            await self._cache_publishers(publishers)
+        for chunk in batched(publishers, self.batch_size):
+            scraped = await self.webscraper.scrape_publishers(chunk)
+            if scraped := storable_publishers(scraped): 
+                log.info(event="scraped publishers", source=scraped[0][SOURCE], num_items=len(scraped))
+                await self._cache_publishers(scraped)
 
     def _get_collector_funcs(self, sources):
         # shuffling the sources to introduce randomness in failures
@@ -267,7 +268,7 @@ class Collector:
             )
         if to_triage: await self._triage(to_triage)
 
-    async def _run_collectors(self, sources, batch_size: int):
+    async def _run_collectors(self, sources):
         """Run the collectors""" 
         # set up the queue      
         collector_queue = self._get_collector_funcs(sources)
@@ -276,25 +277,14 @@ class Collector:
             while not collector_queue.empty():               
                 await self._collect(*(await collector_queue.get()))
 
-        await asyncio.gather(*(work() for _ in range(batch_size)))
-        
-    # async def _run_scrapers(self, batch_size: int):
-    #     """Run the scrap functions"""
-    #     async def work():
-    #         while (item := await self.scrape_queue.get()):
-    #             data_type, to_scrape = item
-    #             await self._scrape(data_type, to_scrape)
-    #     await asyncio.gather(*(work() for _ in range(batch_size>>2)))
-    #     # empty out any remaining None
-    #     while (await self.scrape_queue.empty()):
-    #         await self.scrape_queue.get()
-    #     log.info(event="scraping completed")
+        await asyncio.gather(*(work() for _ in range(self.batch_size)))
 
     def _init_run(self, batch_size: int):
-        self.apicollector = APICollectorAsync(batch_size<<2)
-        self.webscraper = AsyncWebScraper(batch_size<<2)
-
-        self.beans_collected, self.publishers_collected = 0, 0
+        self.batch_size = batch_size
+        self.apicollector = APICollectorAsync(batch_size<<3)
+        self.webscraper = AsyncWebScraper(batch_size<<3)
+        self.beans_collected = 0
+        self.publishers_collected = 0        
 
     @log_runtime_async(logger=log)
     async def run(self, sources, batch_size: int = BATCH_SIZE):
@@ -303,6 +293,6 @@ class Collector:
 
         self._init_run(batch_size)        
         async with self.cache, self.apicollector, self.webscraper:
-            await self._run_collectors(sources, batch_size)
+            await self._run_collectors(sources)
 
         log.info(event="total collected", beans=self.beans_collected, publishers=self.publishers_collected)
