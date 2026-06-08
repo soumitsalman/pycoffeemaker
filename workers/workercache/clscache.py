@@ -40,7 +40,10 @@ class ClassificationCache:
                         dimension=setting["vector_length"],
                         index_param=zvec.HnswIndexParam(_METRIC_MAP.get(setting.get("distance_func"), zvec.MetricType.L2))
                     ),
-                    fields=[zvec.FieldSchema(setting["id_key"], zvec.DataType.STRING)],
+                    fields=[
+                        zvec.FieldSchema(setting["id_key"], zvec.DataType.STRING),
+                        zvec.FieldSchema("ts", zvec.DataType.FLOAT)
+                    ],
                 )                
                 coll = zvec.create_and_open(path=path, schema=schema)
             self.collections[tab] = coll
@@ -49,11 +52,12 @@ class ClassificationCache:
         if not items:
             return 0
         id_key = self.id_keys[object_type]
+        ts = datetime.now(tz=timezone.utc).timestamp()
         docs = [
             zvec.Doc(
                 id=hashlib.sha256(item[id_key].encode('utf-8')).hexdigest(),
                 vectors={"embedding": item["embedding"]},
-                fields={id_key: item[id_key]},
+                fields={id_key: item[id_key], "ts": ts},
             )
             for item in items
         ]

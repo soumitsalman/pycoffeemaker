@@ -280,7 +280,7 @@ class Collector:
     def _init_run(self, batch_size: int):
         self.batch_size = batch_size
         self.apicollector = APICollectorAsync(batch_size)
-        self.webscraper = AsyncWebScraper(batch_size<<4)
+        self.webscraper = AsyncWebScraper(batch_size<<2)
         self.beans_collected = 0
         self.publishers_collected = 0        
 

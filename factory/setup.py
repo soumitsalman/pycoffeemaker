@@ -14,14 +14,14 @@ from pybeansack import BEANS, CHATTERS, PUBLISHERS, K_URL, K_BASE_URL
 def create_classification_embeddings():
     import yaml
     import pandas as pd
-    from nlp import embedders
+    from nlp import create_embedder
 
     dir_name = os.path.dirname(__file__)
     
     with open(f"{dir_name}/classifications.yaml", "r") as file:
         classifications = yaml.safe_load(file)
 
-    with embedders.from_path(os.getenv('EMBEDDER_PATH'), 512) as embedder:
+    with create_embedder(os.getenv('EMBEDDER_PATH'), 512) as embedder:
         categories = pd.DataFrame(
             {
                 "category": classifications[K_CATEGORIES],
@@ -59,10 +59,10 @@ def create_processing_cache(db_path: str):
         }
     ).close()
 
-def create_classification_cache(db_path: str):
-    from coffeemaker.processingcache.firecache import ClassificationCache
+def create_classification_cache():
+    from workers.workercache.clscache import ClassificationCache
     cls_cache = ClassificationCache(
-        db_path, 
+        os.getenv('CLASSIFICATION_CACHE'), 
         {
             BEANS: {"id_key": K_URL, "vector_length": 384, "distance_func": "l2"},
             "categories": {"id_key": "category", "vector_length": 384, "distance_func": "cosine"},
@@ -75,13 +75,19 @@ def create_classification_cache(db_path: str):
     cls_cache.close()
     
 
-# def update_db(db_type: str):
-#     from pybeansack import LanceDB
+def hydrate_classification_cache():
+    from workers.workercache.pgcache import StateCache
+    from workers.workercache.clscache import ClassificationCache
 
-#     if db_type in ["lancedb", "lancesack", "lance"]:
-#         db = LanceDB(os.getenv('LANCEDB_STORAGE'))
-#         db.allpublishers.alter_columns({"path": K_COLLECTED, "nullable": True})
-#         db.allchatters.drop_columns([K_SHARES, K_UPDATED])
+    proc_cache = StateCache(os.getenv('PROCESSING_CACHE'), {BEANS: {"id_key": K_URL}})
+    cls_cache = ClassificationCache(os.getenv('CLASSIFICATION_CACHE'), {BEANS: {"id_key": K_URL}})
+    
+    if beans := proc_cache.get(BEANS, states="embedded", window=60):
+        beans = [bean for bean in beans if bean.get("embedding")]
+        print("hydrating:cls_cache", len(beans))
+        print("hydrated:cls_cache", cls_cache.store(BEANS, beans))
+    cls_cache.close()
+
 
 def create_db(db_type: str):
     from pybeansack import create_db
@@ -105,12 +111,14 @@ parser = argparse.ArgumentParser(description="Setup coffeemaker and beansack")
 parser.add_argument('--create', type=str, help='Type of database to create')
 parser.add_argument('--update', type=str, help='Update the lancedb')
 parser.add_argument('--pg_pcache', type=str, help='Initialize PG State Cache')
-parser.add_argument('--local_clscache', type=str, help='Initialize Classification Cache with Seed Value')
+parser.add_argument('--create_clscache', action='store_true', help='Initialize Classification Cache with Seed Value')
+parser.add_argument('--hydrate_clscache', action='store_true', help='Hydrate Classification Cache with Seed Value')
 parser.add_argument('--cls_files', action='store_true', help='Create classification files with embeddings for categories and sentiments')
 
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.create: create_db(args.create)
     if args.pg_pcache: create_processing_cache(args.pg_pcache)
-    if args.local_clscache: create_classification_cache(args.local_clscache)
+    if args.create_clscache: create_classification_cache()
+    if args.hydrate_clscache: hydrate_classification_cache()
     if args.cls_files: create_classification_files()
