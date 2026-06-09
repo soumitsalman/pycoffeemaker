@@ -1,15 +1,16 @@
 import re
 import os
-import warnings
+import gc
+import ctypes
 import tldextract
+import lxml.html
 from datetime import datetime, timezone
-from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from urllib.parse import urljoin, urlparse, urlunparse
 from dateutil.parser import parse as date_parser
-warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 USER_AGENT = "Cafecito-Coffeemaker/v0.9.3+https://github.com/soumitsalman/pycoffeemaker"
-TIMEOUT =  60 # 5 minutes
+BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+TIMEOUT =  60 # 1 minute
 RATELIMIT_WAIT = 300 # 300 seconds / 5 minutes
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()*os.cpu_count()))
 RETRY_COUNT = 3
@@ -72,6 +73,17 @@ EXCLUDED_URL_PATTERNS = [
     r'\/image(s)?\/',
 ]
 
+# content types worth parsing for text; everything else (media, binaries, archives) is excluded
+SCRAPABLE_CONTENT_TYPES = (
+    "text/html",
+    "application/xhtml+xml",
+    "text/xml",
+    "application/xml",
+    "application/rss+xml",
+    "application/atom+xml",
+    "text/plain",
+)
+
 # heuristic invalid author names to exclude
 EXCLUDED_AUTHORS = ["[no-author]", "noreply", "hidden", "admin", "isbpostadmin", "unknown", "anonymous"]
 
@@ -127,8 +139,18 @@ def guess_article_type(bean: dict) -> str | None:
     return None
 
 # general utilities
+def excluded_content(url: str = None, content_type: str = None) -> bool:
+    """True if the url pattern or the response content-type indicates non-scrapable content."""
+    if url and any(re.search(pattern, url) for pattern in EXCLUDED_URL_PATTERNS):
+        return True
+    if content_type:
+        mime = content_type.split(";")[0].strip().lower()
+        if mime and mime not in SCRAPABLE_CONTENT_TYPES:
+            return True
+    return False
+
 def excluded_url(url: str):
-    return (not url) or any(re.search(pattern, url) for pattern in EXCLUDED_URL_PATTERNS)
+    return (not url) or excluded_content(url=url)
 
 def extract_base_url(url: str) -> str:
     try: return urlparse(url).netloc
@@ -147,14 +169,36 @@ def parse_int(val: str) -> int:
     except: return 0
 
 def strip_html_tags(html):
-    if html: return BeautifulSoup(html, "lxml").get_text(separator=" ", strip=True)
+    if not html: return None
+    try: text = lxml.html.fromstring(html).text_content()
+    except Exception: text = re.sub(r"<[^>]+>", " ", html)
+    return " ".join(text.split())
 
 def full_url(base_url: str, target_url: str) -> str:
     return urljoin(base_url, target_url)
 
+try: _LIBC = ctypes.CDLL("libc.so.6")
+except OSError: _LIBC = None
+
+def trim_memory():
+    """Collect cyclic garbage (lxml trees) and return freed heap pages to the OS (glibc only)."""
+    gc.collect()
+    if _LIBC:
+        try: _LIBC.malloc_trim(0)
+        except Exception: pass
+
 def remove_query_params(url: str) -> str:
     try: return urlunparse(urlparse(url)._replace(query="", fragment=""))
     except: return url
+
+def with_www(url: str) -> str | None:
+    """Return the url with a 'www.' host prefix, or None if it already has one / can't be parsed."""
+    try:
+        parts = urlparse(url)
+        if parts.netloc and not parts.netloc.startswith("www."):
+            return urlunparse(parts._replace(netloc="www." + parts.netloc))
+    except Exception: pass
+    return None
 
 now = lambda: datetime.now(timezone.utc)
 extract_source = lambda url: (extract_domain(url) or extract_base_url(url)).strip().lower()

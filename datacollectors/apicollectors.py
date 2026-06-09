@@ -13,7 +13,7 @@ import yaml
 import time
 from datetime import datetime, timezone
 from typing import Callable
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed, wait_random
+from tenacity import retry, retry_if_exception, retry_if_exception_type, stop_after_attempt, wait_fixed, wait_random
 from io import BytesIO
 from itertools import chain
 from concurrent.futures import ThreadPoolExecutor
@@ -22,9 +22,11 @@ from icecream import ic
 
 log = get_logger(__name__)
 
+# browser-like headers: many WAFs 403 the custom bot User-Agent
 _RSS_REQUEST_HEADERS = {
-    "User-Agent": USER_AGENT,
+    "User-Agent": BROWSER_USER_AGENT,
     'Accept-encoding': 'gzip, deflate',
+    'Accept-Language': 'en-US,en;q=0.9',
     'A-IM': 'feed',
     'Accept': "application/atom+xml,application/rdf+xml,application/rss+xml,application/x-netcdf,application/xml;q=0.9,text/xml;q=0.2,*/*;q=0.1"
 }
@@ -121,6 +123,11 @@ def _return_collected(source, collected: list|None):
     return collected
 
 merge_lists = lambda results: list(chain(*(r for r in results if r))) 
+
+def _transient_fetch_error(e: BaseException) -> bool:
+    """Server-side 5xx, truncated payloads and timeouts are worth retrying."""
+    if isinstance(e, aiohttp.ClientResponseError): return e.status >= 500
+    return isinstance(e, (aiohttp.ClientPayloadError, aiohttp.ConnectionTimeoutError, TimeoutError))
 
 def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedParserDict, default_kind: str):
     current_time = now()
@@ -368,9 +375,24 @@ class APICollectorAsync:
                 error_details=str(e),
             )
 
-    async def collect_rssfeed(self, url: str, default_kind: str = NEWS) -> list[dict]:
+    @retry(
+        retry=retry_if_exception(_transient_fetch_error),
+        stop=stop_after_attempt(RETRY_COUNT),
+        wait=wait_random(*RETRY_JITTER),
+        reraise=True,
+    )
+    async def _fetch_rss(self, url: str) -> str:
         async with self.throttle, self.session.get(url, headers=_RSS_REQUEST_HEADERS) as resp:
-            feed = feedparser.parse(await resp.text())
+            return await resp.text()
+
+    async def collect_rssfeed(self, url: str, default_kind: str = NEWS) -> list[dict]:
+        try:
+            text = await self._fetch_rss(url)
+        except aiohttp.ClientConnectorCertificateError:
+            # cert often only covers the www. host; retry once with the prefix
+            if not (www_url := with_www(url)): raise
+            text = await self._fetch_rss(www_url)
+        feed = feedparser.parse(text)
 
         if not feed.entries: return
 

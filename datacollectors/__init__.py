@@ -40,6 +40,8 @@ from .utils import (
     SITE_LANGUAGE,
     TAGS,
     AUTHOR_EMAIL,
+    excluded_content,
+    trim_memory,
 )
 
 __all__ = [
@@ -50,4 +52,5 @@ __all__ = [
     'IMAGEURL', 'CHATTER_URL', 'BASE_URL', 'SITE_NAME', 'DESCRIPTION',
     'FAVICON', 'RSS_FEED', 'LIKES', 'COMMENTS', 'FORUM', 'RESTRICTED_CONTENT',
     'LANGUAGE', 'ARTICLE_LANGUAGE', 'SITE_LANGUAGE', 'TAGS', 'AUTHOR_EMAIL',
+    'excluded_content', 'trim_memory',
 ]  # Specify modules to be exported

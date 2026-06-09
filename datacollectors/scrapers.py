@@ -2,15 +2,19 @@ import os
 import json
 import asyncio
 import aiohttp
+import lxml.html
+from lxml.cssselect import CSSSelector
 from utils.logs import get_logger
 from itertools import chain
 from urllib.parse import urljoin
-from bs4 import BeautifulSoup
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random
 from .utils import *
 from icecream import ic
 
 log = get_logger(__name__)
+
+MAX_HTML_SIZE = int(os.getenv("MAX_HTML_SIZE", 4 << 20))  # hard cap per response; article content lives in the first few MB
+PARSE_CONCURRENCY = int(os.getenv("PARSE_CONCURRENCY", min(4, os.cpu_count())))  # max DOM trees in memory at once
 
 _METADATA_SELECTORS = {
     'site_name': "meta[property='og:site_name'], meta[property='sitename'], meta[itemprop='name']",
@@ -25,6 +29,7 @@ _METADATA_SELECTORS = {
     'language': "meta[http-equiv='content-language'], meta[name='language'], html[lang]",
     'keywords': "meta[name='keywords']"
 }
+_METADATA_CSS = {key: [CSSSelector(sel) for sel in selector.split(", ")] for key, selector in _METADATA_SELECTORS.items()}
 _HTML_REQUEST_HEADERS = {
     "User-Agent": USER_AGENT,
     # 'Accept-encoding': 'gzip, deflate',
@@ -38,6 +43,7 @@ class AsyncWebScraper:
     def __init__(self, batch_size: int = BATCH_SIZE):
         self.batch_size = batch_size
         self.throttle = asyncio.Semaphore(batch_size)
+        self.parse_throttle = asyncio.Semaphore(PARSE_CONCURRENCY)
         
     async def __aenter__(self):
         """Async context manager enter"""
@@ -55,13 +61,12 @@ class AsyncWebScraper:
             await self.session.close()
             self.session = None
 
-    def _get_metadata(self, url: str, html: str):
-        soup = BeautifulSoup(html, 'lxml')
+    def _get_metadata(self, url: str, tree: lxml.html.HtmlElement):
         metadata = {}
-        for key, selector in _METADATA_SELECTORS.items():
-            for sel in selector.split(", "):
-                if tag := soup.select_one(sel):
-                    metadata[key] = tag.get('content') or tag.get('href')
+        for key, selectors in _METADATA_CSS.items():
+            for select in selectors:
+                if tags := select(tree):
+                    metadata[key] = tags[0].get('content') or tags[0].get('href') or tags[0].get('lang')
                     break
 
         if 'published_time' in metadata: metadata[CREATED] = parse_date(metadata['published_time'])
@@ -69,16 +74,40 @@ class AsyncWebScraper:
         if 'rss_feed' in metadata: metadata[RSS_FEED] = full_url(url, metadata['rss_feed'])
         return metadata
 
+    def _parse_metadata(self, url: str, html: str) -> dict:
+        """Sync: single lxml parse for metadata only."""
+        return self._get_metadata(url, lxml.html.fromstring(html))
+
+    def _parse_page(self, url: str, html: str) -> dict:
+        """Sync: parse html into metadata + readable content. Runs in a worker thread."""
+        from readability import Document
+
+        metadata = self._get_metadata(url, lxml.html.fromstring(html))
+        doc = Document(html)
+        body = {
+            TITLE: doc.short_title() or doc.title(),
+            AUTHOR: doc.author(),
+            CONTENT: strip_html_tags(doc.summary(html_partial=True))
+        }
+        body.update(metadata)
+        return body
+
     @retry(
         retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
         stop=stop_after_attempt(RETRY_COUNT),
         wait=wait_random(*RETRY_JITTER),
         reraise=True,
     )
-    async def _scrape_html(self, url: str) -> str:
+    async def _scrape_html(self, url: str) -> str | None:
         async with self.throttle, self.session.get(url) as response:
-            html = await response.text()
-        return html
+            # check final url (post-redirect) and content-type before buffering anything
+            if excluded_content(url=str(response.url), content_type=response.content_type): return None
+            if (response.content_length or 0) > MAX_HTML_SIZE: return None
+            body = bytearray()
+            async for chunk in response.content.iter_chunked(1 << 16):
+                body.extend(chunk)
+                if len(body) >= MAX_HTML_SIZE: break  # truncate oversized/streaming responses instead of buffering them whole
+            return body.decode(response.charset or "utf-8", errors="replace")
 
     @retry(
         retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
@@ -92,18 +121,13 @@ class AsyncWebScraper:
 
     async def _scrape_page(self, url: str):
         """Scrape a single page for both bean and publisher data."""
-        from readability import Document
         if excluded_url(url): return None
         try:    
             html = await self._scrape_html(url)
-            doc = Document(html)
-            body = {
-                TITLE: doc.short_title() or doc.title(),
-                AUTHOR: doc.author(), 
-                CONTENT: strip_html_tags(doc.summary(html_partial=True))
-            }
-            body.update(self._get_metadata(url, html))
-            return body
+            if not html: return None
+            # parsing builds large DOM trees and is CPU-bound; throttle it and keep it off the event loop
+            async with self.parse_throttle:
+                return await asyncio.to_thread(self._parse_page, url, html)
         except Exception as e: 
             log.debug(event=f"scraping failed - {e.__class__.__name__} {e}",
                 source=url,
@@ -127,7 +151,9 @@ class AsyncWebScraper:
         
         try:                  
             html = await self._scrape_html(url)
-            meta.update(self._get_metadata(url, html))
+            if not html: return None
+            async with self.parse_throttle:
+                meta.update(await asyncio.to_thread(self._parse_metadata, url, html))
             meta[SITE_NAME] = meta.get(SITE_NAME) or meta.get('meta_title')
             meta[DESCRIPTION] = meta.get(DESCRIPTION)
             meta[SITE_LANGUAGE] = meta.get(LANGUAGE)
@@ -162,7 +188,7 @@ class AsyncWebScraper:
             SITE_LANGUAGE: result.get(LANGUAGE),
             TAGS: [tag.strip() for tag in result.get('keywords', '').split(',')] if result.get('keywords') else None,
             AUTHOR_EMAIL: None,
-            CREATED: min(result.get(CREATED) or bean.get(CREATED), bean.get(COLLECTED)),
+            CREATED: min(result.get(CREATED) or bean.get(CREATED) or now(), bean.get(COLLECTED)),
             RESTRICTED_CONTENT: True,
             SITE_NAME: result.get('site_name'),
             DESCRIPTION: result.get('description'),
@@ -179,7 +205,7 @@ class AsyncWebScraper:
 
         return cleanup_item(item)
 
-    async def scrape_page(self, url: str, collect_metadata: bool = True):
+    async def scrape_page(self, url: str):
         """Scrape a single URL for both bean and publisher data."""
         result = await self._scrape_page(url)
         if not result:
@@ -191,7 +217,7 @@ class AsyncWebScraper:
             COLLECTED: now()
         }, result)
 
-    async def scrape_pages(self, urls: list[str], collect_metadata: bool = True):
+    async def scrape_pages(self, urls: list[str]):
         """Scrape multiple URLs in parallel for bean and publisher data."""
         results = await asyncio.gather(*[self._scrape_page(url) for url in urls])
         return [

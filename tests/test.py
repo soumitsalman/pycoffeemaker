@@ -93,7 +93,7 @@ def test_scraper():
     async def run():
         async with AsyncWebScraper() as scraper:
             for url in urls:
-                ic(await scraper.scrape_page(url, False))
+                ic(await scraper.scrape_page(url))
 
     asyncio.run(run())
 
