@@ -1,15 +1,7 @@
 import os
-import sys
-from dotenv import load_dotenv
+
+import pytest
 from icecream import ic
-
-load_dotenv()
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from utils.logs import configure_logging, get_logger
-
-configure_logging()
-logger = get_logger("test")
 
 DB_LOCAL_TEST = "mongodb://localhost:27017/"
 DB_NAME_TEST = "test3"
@@ -23,16 +15,12 @@ import asyncio
 import json
 import random
 import re
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 from pybeansack.models import *
 from pybeansack import *
 from pycupboard.pgcupboard import Cupboard
 from pycupboard.models import ID, Sip
-
-os.makedirs(".test", exist_ok=True)
-
 
 def url_to_filename(url: str) -> str:
     return "./.test/" + re.sub(r"[^a-zA-Z0-9]", "-", url)
@@ -73,6 +61,8 @@ def save_models(items: list[Bean | Chatter], file_name: str = None):
         return ic(items)
 
 
+@pytest.mark.integration
+@pytest.mark.collect
 def test_collector():
     from datacollectors import APICollectorAsync
 
@@ -85,6 +75,8 @@ def test_collector():
     asyncio.run(run())
 
 
+@pytest.mark.integration
+@pytest.mark.scrape
 def test_scraper():
     from datacollectors import AsyncWebScraper
 
@@ -106,6 +98,8 @@ def test_scraper():
     asyncio.run(run())
 
 
+@pytest.mark.integration
+@pytest.mark.scrapepubs
 def test_publisher_scraper():
     from datacollectors import AsyncWebScraper
     from pybeansack.ducklakesack import DuckSack
@@ -140,6 +134,8 @@ def test_publisher_scraper():
     asyncio.run(run())
 
 
+@pytest.mark.integration
+@pytest.mark.skip(reason="fullstack orchestrator removed; use run.py worker modes")
 def test_fullstack_orch():
     raise NotImplementedError("fullstack orchestrator was removed; use run.py worker modes instead")
     from workers.fullstack import Orchestrator  # noqa: F401
@@ -187,6 +183,13 @@ def hydrate_test_db():
     )
 
 
+@pytest.mark.integration
+@pytest.mark.hydrate
+def test_hydrate_db():
+    hydrate_test_db()
+
+
+@pytest.mark.integration
 def test_trend_analysis():
     from pybeansack.mongosack import MongoDB
 
@@ -195,6 +198,7 @@ def test_trend_analysis():
     ic(random.sample(items, 5))
 
 
+@pytest.mark.integration
 def test_static_db():
     import pandas as pd
     from nlp import create_embedder
@@ -232,6 +236,8 @@ def test_static_db():
     db.close()
 
 
+@pytest.mark.integration
+@pytest.mark.orch_collector
 def test_collector_orch():
     from workers.collectororch import Collector
     from workers.workercache.pgcache import AsyncStateCache
@@ -310,6 +316,8 @@ def _analyzer_cls_cache():
     )
 
 
+@pytest.mark.integration
+@pytest.mark.orch_embedder
 def test_embedder_orch():
     from workers.analyzerorch import Embedder
 
@@ -325,6 +333,8 @@ def test_embedder_orch():
     cache.close()
 
 
+@pytest.mark.integration
+@pytest.mark.orch_extractor
 def test_extractor_orch():
     from workers.analyzerorch import Extractor
 
@@ -338,6 +348,8 @@ def test_extractor_orch():
     cache.close()
 
 
+@pytest.mark.integration
+@pytest.mark.orch_digestor
 def test_digestor_orch():
     from workers.analyzerorch import Digestor
 
@@ -353,6 +365,8 @@ def test_digestor_orch():
     cache.close()
 
 
+@pytest.mark.integration
+@pytest.mark.orch_classifier
 def test_classifier_orch():
     from workers.analyzerorch import Classifier
 
@@ -362,6 +376,9 @@ def test_classifier_orch():
     cls_cache.close()
     cache.close()
 
+@pytest.mark.integration
+@pytest.mark.orch_porter
+@pytest.mark.parametrize("beansack_or_cupboard", ["beansack", "cupboard"])
 def test_porter_orch(beansack_or_cupboard):
     from workers.porterorch import BeansackPorter, CupboardPorter
     from workers.utils import COMPOSITES
@@ -393,6 +410,8 @@ def test_porter_orch(beansack_or_cupboard):
 
         asyncio.run(run())
 
+@pytest.mark.integration
+@pytest.mark.vector
 def test_vector_search():
     from pycupboard.pgcupboard import Cupboard
     from pycupboard.models import URL
@@ -425,6 +444,8 @@ def test_vector_search():
     asyncio.run(run())
 
 
+@pytest.mark.integration
+@pytest.mark.cache
 def test_cache():
     from workers.workercache.base import DEFAULT_WINDOW
     from workers.workercache.clscache import ClassificationCache
@@ -514,6 +535,7 @@ def test_cache():
         cls_cache.close()
 
 
+@pytest.mark.integration
 def test_orch_on_lancesack():
     from datacollectors import APICollector
     from nlp import Digest, create_digestor, create_embedder
@@ -620,76 +642,3 @@ def test_orch_on_lancesack():
                 for bean in beans
             ]
 
-
-import argparse
-import subprocess
-
-parser = argparse.ArgumentParser(description="Run pycoffeemaker tests")
-parser.add_argument(
-    "--hydrate", action="store_true", help="Hydrate local gobeansack database"
-)
-# parser.add_argument("--hydrate-test-db", action="store_true", help="Hydrate test database")
-# parser.add_argument("--test-static-db", action="store_true", help="Test static database")
-# parser.add_argument("--test-trend-analysis", action="store_true", help="Test trend analysis")
-parser.add_argument("--collect", action="store_true", help="Test collector and scraper")
-parser.add_argument("--scrapepubs", action="store_true", help="Test publisher scraper")
-parser.add_argument("--scrape", action="store_true", help="Test web scraper")
-parser.add_argument(
-    "--runcollector", action="store_true", help="Test collector orchestrator"
-)
-parser.add_argument(
-    "--runembedder", action="store_true", help="Test embedder orchestrator"
-)
-parser.add_argument(
-    "--runextractor", action="store_true", help="Test extractor orchestrator"
-)
-parser.add_argument(
-    "--rundigestor", action="store_true", help="Test digestor orchestrator"
-)
-parser.add_argument(
-    "--runclassifier", action="store_true", help="Test classifier orchestrator"
-)
-parser.add_argument("--runporter", type=str, help="Test porter")
-parser.add_argument(
-    "--runrefresher", action="store_true", help="Test refresher orchestrator"
-)
-parser.add_argument("--cache", action="store_true", help="Test cache implementation")
-parser.add_argument("--vector", action="store_true", help="Test vector search implementation")
-parser.add_argument("--readonly", action="store_true", help="Test readonly warehouse")
-parser.add_argument("--warehouse", action="store_true", help="Test warehouse v2")
-parser.add_argument(
-    "--cupboard", action="store_true", help="Test cupboard orchestrator"
-)
-parser.add_argument(
-    "--orchonlance", action="store_true", help="Test lancesack orchestrator"
-)
-
-def main():
-
-    args = parser.parse_args()
-
-    if args.hydrate:
-        hydrate_test_db()
-    if args.collect:
-        test_collector()
-    if args.scrape:
-        test_scraper()
-    if args.scrapepubs:
-        test_publisher_scraper()
-    
-    if args.runcollector: test_collector_orch()
-    if args.runembedder: test_embedder_orch()
-    if args.runextractor: test_extractor_orch()
-    if args.rundigestor: test_digestor_orch()
-    if args.runclassifier: test_classifier_orch()
-    if args.runporter: test_porter_orch(args.runporter)
-    if args.cache: test_cache()
-    if args.vector: test_vector_search()
-    # if args.test_fullstack_orch:
-    #     test_fullstack_orch()
-    # if args.create_test_data_file:
-    #     create_test_data_file(args.create_test_data_file)
-
-
-if __name__ == "__main__":
-    main()
