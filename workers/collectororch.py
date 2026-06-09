@@ -326,7 +326,7 @@ class Collector:
 
         async with self.cache, self.apicollector, self.webscraper:
             await asyncio.gather(
-                # self._run_collectors(sources), 
+                self._run_collectors(sources),
                 self._run_scraper(),
                 return_exceptions=True
             )
