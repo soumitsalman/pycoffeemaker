@@ -75,14 +75,14 @@ def create_classification_cache():
     cls_cache.close()
     
 
-def hydrate_classification_cache():
+def hydrate_classification_cache(window: int = 90):
     from workers.workercache.pgcache import StateCache
     from workers.workercache.clscache import ClassificationCache
 
     proc_cache = StateCache(os.getenv('PROCESSING_CACHE'), {BEANS: {"id_key": K_URL}})
     cls_cache = ClassificationCache(os.getenv('CLASSIFICATION_CACHE'), {BEANS: {"id_key": K_URL}})
     
-    if beans := proc_cache.get(BEANS, states="embedded", window=60):
+    if beans := proc_cache.get(BEANS, states="embedded", window=window):
         beans = [bean for bean in beans if bean.get("embedding")]
         print("hydrating:cls_cache", len(beans))
         print("hydrated:cls_cache", cls_cache.store(BEANS, beans))
@@ -112,7 +112,7 @@ parser.add_argument('--create', type=str, help='Type of database to create')
 parser.add_argument('--update', type=str, help='Update the lancedb')
 parser.add_argument('--pg_pcache', type=str, help='Initialize PG State Cache')
 parser.add_argument('--create_clscache', action='store_true', help='Initialize Classification Cache with Seed Value')
-parser.add_argument('--hydrate_clscache', action='store_true', help='Hydrate Classification Cache with Seed Value')
+parser.add_argument('--hydrate_clscache', type=int, default=90, help='Hydrate Classification Cache with Seed Value')
 parser.add_argument('--cls_files', action='store_true', help='Create classification files with embeddings for categories and sentiments')
 
 if __name__ == "__main__":
@@ -120,5 +120,5 @@ if __name__ == "__main__":
     if args.create: create_db(args.create)
     if args.pg_pcache: create_processing_cache(args.pg_pcache)
     if args.create_clscache: create_classification_cache()
-    if args.hydrate_clscache: hydrate_classification_cache()
+    if args.hydrate_clscache: hydrate_classification_cache(args.hydrate_clscache)
     if args.cls_files: create_classification_files()
