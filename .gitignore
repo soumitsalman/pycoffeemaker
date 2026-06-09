@@ -27,6 +27,7 @@
 .opencode
 .cursor
 *.env
+graph.html
 history.txt
 zvec
 __azurite*

@@ -301,7 +301,7 @@ class APICollector:
         @retry(
             retry=retry_if_exception_type(prawcore.exceptions.ResponseException),
             stop=stop_after_attempt(RETRY_COUNT),
-            wait=wait_random(*RETRY_JITTER),
+            wait=wait_fixed(RATELIMIT_WAIT),
             reraise=True,
         )
         def _collect():
@@ -383,7 +383,7 @@ class APICollectorAsync:
     async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[dict]:
         @retry(
             stop=stop_after_attempt(RETRY_COUNT),
-            wait=wait_random(*RETRY_JITTER),
+            wait=wait_fixed(RATELIMIT_WAIT),
             reraise=True,
         )
         async def _collect():

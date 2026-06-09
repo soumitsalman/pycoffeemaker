@@ -16,4 +16,5 @@ zvec
 scikit-learn
 openai
 aiofiles
+persist-queue
 structlog
