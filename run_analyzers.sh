@@ -7,7 +7,7 @@ fi
 PYTHON="$WORKING_DIR/.venv/bin/python"
 RUN="$WORKING_DIR/run.py"
 
-LOCAL_CLSCACHE="$WORKING_DIR/.cache/clsstore"
+LOCAL_CLSCACHE="$WORKING_DIR/.cache/clscache"
 S5CMD_BIN="$HOME/go/bin/s5cmd"
 S5CMD_ARGS=(--credentials-file "$HOME/.aws/credentials" --endpoint-url https://t3.storage.dev)
 BACKUP_BUCKET="s3://cafecito-archives-new/processingcache"
