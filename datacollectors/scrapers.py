@@ -126,8 +126,8 @@ class AsyncWebScraper:
             html = await self._scrape_html(url)
             if not html: return None
             # parsing builds large DOM trees and is CPU-bound; throttle it and keep it off the event loop
-            async with self.parse_throttle:
-                return await asyncio.to_thread(self._parse_page, url, html)
+            # async with self.parse_throttle:
+            return await asyncio.to_thread(self._parse_page, url, html)
         except Exception as e: 
             log.debug(event=f"scraping failed - {e.__class__.__name__} {e}",
                 source=url,
@@ -152,8 +152,8 @@ class AsyncWebScraper:
         try:                  
             html = await self._scrape_html(url)
             if not html: return None
-            async with self.parse_throttle:
-                meta.update(await asyncio.to_thread(self._parse_metadata, url, html))
+            # async with self.parse_throttle:
+            meta.update(await asyncio.to_thread(self._parse_metadata, url, html))
             meta[SITE_NAME] = meta.get(SITE_NAME) or meta.get('meta_title')
             meta[DESCRIPTION] = meta.get(DESCRIPTION)
             meta[SITE_LANGUAGE] = meta.get(LANGUAGE)
