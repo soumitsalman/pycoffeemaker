@@ -1,6 +1,7 @@
 accelerate
 vllm
 transformers
+lm-format-enforcer
 sentence-transformers
 llama-index
 gliner

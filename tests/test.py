@@ -356,10 +356,10 @@ def test_digestor_orch():
     cache = _analyzer_test_cache()
     orch = Digestor(
         cache=cache,
-        digestor_model_path=os.getenv(
+        model_path=os.getenv(
             "DIGESTOR_PATH", "vllm://LiquidAI/LFM2.5-1.2B-Instruct"
         ),
-        digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", 32768)),
+        context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", 32768)),
     )
     orch.run(batch_size=16)
     cache.close()

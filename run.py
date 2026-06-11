@@ -122,10 +122,14 @@ if __name__ == "__main__":
 
         Digestor(
             cache=cache,
-            digestor_model_path=os.environ["DIGESTOR_PATH"],
-            digestor_context_len=int(
+            model_path=os.environ["DIGESTOR_PATH"],
+            context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
+            # base_url="http://localhost:8000/v1",
+            # api_key="EMPTY",
+            temperature=1.0, top_p=0.95, top_k=50,
+            repetition_penalty=1.0
         ).run(batch_size=batch_size)     
 
     elif mode == "CONSOLIDATOR":
@@ -133,8 +137,8 @@ if __name__ == "__main__":
         
         Consolidator(
             cache=cache,
-            consolidator_model_path=os.environ["CONSOLIDATOR_PATH"],
-            consolidator_context_len=int(
+            model_path=os.environ["CONSOLIDATOR_PATH"],
+            context_len=int(
                 os.getenv("CONSOLIDATOR_CONTEXT_LEN", CONSOLIDATOR_CONTEXT_LEN)
             ),
             base_url=os.getenv("CONSOLIDATOR_BASE_URL"),

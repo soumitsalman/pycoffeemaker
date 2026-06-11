@@ -12,10 +12,10 @@ from nlp import (
     Briefing, 
     EntityExtractor, 
     EmbedderBase,
-    MicroAgentBase, 
+    TextAnalystBase, 
     valid_tags, 
     create_embedder, 
-    create_micro_agent
+    create_text_analyst
 )
 from datacollectors import (
     CONTENT, CREATED, SUMMARY, TAGS, TITLE, URL, SOURCE
@@ -58,11 +58,9 @@ class Embedder:
             except Exception as e:
                 log.error(event="failed embedding",
                     source=chunk[0][SOURCE],
-                    num_items=len(chunk),
-                    error_type=e.__class__.__name__,
-                    error_details=str(e),
+                    num_items=len(chunk),                    
                     exc_info=True,
-                    stack_info=True,
+                    
                 )
 
     @log_runtime(logger=log)
@@ -114,10 +112,7 @@ class Extractor:
                 log.error(event="failed extracting",
                     source=chunk[0][SOURCE],
                     num_items=len(chunk),
-                    error_type=e.__class__.__name__,
-                    error_details=str(e),
                     exc_info=True,
-                    stack_info=True,
                 )
 
     @log_runtime(logger=log)
@@ -136,43 +131,45 @@ class Extractor:
 
 
 DIGEST_SYS = """
-TASK=EXTRACT target_information FROM content IF specified
-TARGET_INFORMATION=
-{description}
+TASK=DERIVE target_information FROM content IF specified
 RULES=
 exclude:unspecified data,implied assessments,assumptions,null,empty fields
 avoid:markdown,prose,code_fences,null_placeholders,implied_information
 RESPONSE=JSON object matching schema
 """
 DIGEST_INST = """
-EXTRACT target_information FROM content IF specified
-=== content ===
+DERIVE target_information FROM content
+TARGET_INFORMATION=
+{description}
+CONTENT=
 {input_text}
 """
 
 class Digestor:
     cache: StateCacheBase
-    digestor: MicroAgentBase
+    digestor: TextAnalystBase
 
     def __init__(
         self,
         cache: StateCacheBase,
-        digestor_model_path: str,
-        digestor_context_len: int,
+        model_path: str,
+        context_len: int,
+        **model_kwargs
     ):
         self.cache = cache
-        self.digestor = create_micro_agent(
-            model_path=digestor_model_path,
-            context_len=digestor_context_len,
-            instruction=DIGEST_SYS.format(description=Digest.model_text_schema()),
+        self.digestor = create_text_analyst(
+            model_path=model_path,
+            context_len=context_len,
+            instruction=DIGEST_SYS,
             input_template=DIGEST_INST,
             output_model=Digest,
+            **model_kwargs
         )
 
     def digest_beans(self, beans: list[dict], batch_size: int):
         for chunk in batched(beans, batch_size):
             try:
-                digests = self.digestor.run_batch([bean[CONTENT] for bean in chunk])
+                digests = self.digestor.run_batch([f"reported on: {bean[CREATED].strftime('%Y-%m-%d')}\n{bean[CONTENT]}" for bean in chunk])
                 updates = clean_updates([
                     {
                         URL: b[URL],
@@ -187,10 +184,7 @@ class Digestor:
                 log.error(event="failed digesting",
                     source=chunk[0][SOURCE],
                     num_items=len(chunk),
-                    error_type=e.__class__.__name__,
-                    error_details=str(e),
                     exc_info=True,
-                    stack_info=True,
                 )
 
     @log_runtime(logger=log)
@@ -201,9 +195,15 @@ class Digestor:
         
         total = 0
         with self.digestor:
-            for updates in self.digest_beans(beans, batch_size):
+            # results = []
+            for updates in self.digest_beans(beans, batch_size):                
                 count = self.cache.set(BEANS, DIGESTED, updates)
                 total += (count or len(updates))
+
+                # results.extend(updates)
+                # import json
+                # with open(".tmp/digests.json", "w") as f:
+                #     json.dump(results, f)
         log.info(event="total digested", num_items=total)
         return total
 
@@ -288,8 +288,6 @@ CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 4))
 
 BRIEFING_SYS = """
 TASK=CREATE intelligence_briefing FROM event_stream
-BRIEFING_ELEMENTS=
-{description}
 RULES=
 grounding:normative,multi_events,strict_tracing
 phrasing:structured,dynamic,specific,granular,direct
@@ -299,6 +297,8 @@ RESPONSE=JSON object matching schema
 """
 BRIEFING_INST = """
 CREATE intelligence_briefing FROM event_stream
+BRIEFING_ELEMENTS=
+{description}
 STEPS=
 1.DETERMINE relationships between events,entities,domains,datapoints,impacts
 2.DETERMINE causal_chain driving or preceding the events
@@ -312,24 +312,24 @@ IGNORE_WORD_GAMES = ['word_game', 'daily_puzzle', 'nyt', 'wordle']
 class Consolidator:
     """Consolidates events and data to create consolidated briefings and signals"""
     cache: StateCacheBase
-    consolidator: MicroAgentBase
+    consolidator: TextAnalystBase
 
     def __init__(
         self,
         cache: StateCacheBase,
-        consolidator_model_path: str,
-        consolidator_context_len: int,
-        **consolidator_kwargs
+        model_path: str,
+        context_len: int,
+        **model_kwargs
     ):
         self.cache = cache
-        self.consolidator = create_micro_agent(
-            model_path=consolidator_model_path,
-            context_len=consolidator_context_len,
-            instruction=BRIEFING_SYS.format(description=Briefing.model_text_schema()),
+        self.consolidator = create_text_analyst(
+            model_path=model_path,
+            context_len=context_len,
+            instruction=BRIEFING_SYS,
             input_template=BRIEFING_INST,
             output_model=Briefing,
             max_tokens=32768,
-            **consolidator_kwargs
+            **model_kwargs
         )
 
     def _get_beans(self, **kwargs) -> list[dict]:
@@ -402,8 +402,6 @@ class Consolidator:
                 log.error(event="failed consolidating",
                     source=chunk[0]["data"][0][SOURCE],
                     num_items=len(chunk),
-                    error_type=e.__class__.__name__,
-                    error_details=str(e),
                     exc_info=True,
                 )
 
