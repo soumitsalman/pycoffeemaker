@@ -16,6 +16,7 @@
 .tmp
 .vscode
 .logs
+.webui_secret_key
 *.git
 *docker-compose.yaml
 .deploy.sh

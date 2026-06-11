@@ -26,6 +26,7 @@
 .codex
 .opencode
 .cursor
+.webui_secret_key
 *.env
 graph.html
 history.txt

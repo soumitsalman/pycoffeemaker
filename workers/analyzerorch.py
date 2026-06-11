@@ -163,13 +163,19 @@ class Digestor:
             instruction=DIGEST_SYS,
             input_template=DIGEST_INST,
             output_model=Digest,
+            temperature=0.6, 
+            top_p=1, 
+            top_k=50,
+            repetition_penalty=1.15,            
+            max_tokens=4096,
+            enable_thinking=False,
             **model_kwargs
         )
 
     def digest_beans(self, beans: list[dict], batch_size: int):
         for chunk in batched(beans, batch_size):
             try:
-                digests = self.digestor.run_batch([f"reported on: {bean[CREATED].strftime('%Y-%m-%d')}\n{bean[CONTENT]}" for bean in chunk])
+                digests = self.digestor.run_batch([bean[CONTENT] for bean in chunk])
                 updates = clean_updates([
                     {
                         URL: b[URL],
@@ -194,16 +200,10 @@ class Digestor:
         if not beans: return 0
         
         total = 0
-        with self.digestor:
-            # results = []
+        with self.digestor:            
             for updates in self.digest_beans(beans, batch_size):                
                 count = self.cache.set(BEANS, DIGESTED, updates)
                 total += (count or len(updates))
-
-                # results.extend(updates)
-                # import json
-                # with open(".tmp/digests.json", "w") as f:
-                #     json.dump(results, f)
         log.info(event="total digested", num_items=total)
         return total
 
@@ -235,10 +235,6 @@ class Classifier:
                 if cats and sents
             ])
             log.info(event="classified", source=chunk[0][URL], num_items=len(updates))
-            # debug
-            # print("# MISSING CATEGORIES AND SENTIMENTS")
-            # [print(bean[URL], len(embs), cats, sents) for bean, embs, cats, sents in zip(chunk, embeddings, categories, sentiments) if not cats or not sents]
-            # print("# END MISSING CATEGORIES AND SENTIMENTS")
             yield updates
 
     def cluster_beans(self, beans: list[dict], batch_size: int):
@@ -281,7 +277,6 @@ class Classifier:
 
 
 CONSOLIDATION_EPS = float(os.getenv("CONSOLIDATION_EPS", 0.5))
-# CONSOLIDATION_WINDOW = int(os.getenv("CONSOLIDATION_WINDOW", 1))
 CONSOLIDATION_RELATED_WINDOW = int(os.getenv("CONSOLIDATION_RELATED_WINDOW", 30))
 CONSOLIDATION_MAX_SIZE = int(os.getenv("CONSOLIDATION_MAX_SIZE", 40))
 CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 4))
@@ -289,10 +284,11 @@ CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 4))
 BRIEFING_SYS = """
 TASK=CREATE intelligence_briefing FROM event_stream
 RULES=
-grounding:normative,multi_events,strict_tracing
-phrasing:structured,dynamic,specific,granular,direct
+selection:identify_dominant_theme_from_most_common_related_items;exclude_outliers
+grounding:only_items_linked_to_thesis;strict_tracing;no_synthesis_of_unrelated_items
+phrasing:plain_sentences,structured,dynamic,specific,granular,direct
 tone:informative,objective,concrete,analytical,data_driven
-avoid:clickbait,sensationalism,ambiguity,vagueness,generic_phrasing,speculative_narrative,emotive_language,technical_inconsistencies,political_biases
+avoid:forced_unification,clickbait,sensationalism,ambiguity,vagueness,generic_phrasing,speculative_narrative,emotive_language,technical_inconsistencies,political_biases
 RESPONSE=JSON object matching schema
 """
 BRIEFING_INST = """
@@ -300,11 +296,16 @@ CREATE intelligence_briefing FROM event_stream
 BRIEFING_ELEMENTS=
 {description}
 STEPS=
-1.DETERMINE relationships between events,entities,domains,datapoints,impacts
-2.DETERMINE causal_chain driving or preceding the events
-3.DETERMINE impacts,implications,target_groups of the events sequence
-4.DETERMINE forecast FROM impacts,implications
-=== EVENT STREAM ===
+0.CLUSTER event_items BY shared actors,entities,domains,tags,datapoints,impacts FROM event_stream
+1.CREATE dominant_theme_or_main_thesis FROM the largest/most_coherent cluster WHERE items CONTAIN SAME(subject OR actor OR domain OR causal link)
+2.FILTER event_items FROM event_stream BY relation TO dominant_theme
+3.DISCARD item WHERE NOT EXIST IN (dominant_theme OR retained_items)
+4.DETERMINE relationships between events,entities,domains,datapoints,impacts FROM retained_items
+5.DETERMINE causal_chain driving or preceding the retained events FROM retained_items
+6.DETERMINE impacts,implications,target_groups of the retained sequence FROM retained_items
+7.DETERMINE forecast FROM impacts,implications FROM retained_items
+CONSTRAINTS=use only retained_items in events,drivers,impacts,impacted_domains,forecast,briefing,tags,entities
+EVENT_STREAM=
 {input_text}
 """
 
@@ -328,7 +329,12 @@ class Consolidator:
             instruction=BRIEFING_SYS,
             input_template=BRIEFING_INST,
             output_model=Briefing,
-            max_tokens=32768,
+            temperature=1, 
+            top_p=1, 
+            top_k=50,
+            repetition_penalty=1,         
+            max_tokens=4096,
+            enable_thinking=True,
             **model_kwargs
         )
 
@@ -415,9 +421,18 @@ class Consolidator:
 
         total_composites, total_beans = 0, 0
         with self.consolidator:
+            results = []
             for composite_updates, bean_updates in self.consolidate_bean_groups(groups, batch_size):
+                results.extend([c[DIGEST] for c in composite_updates])
+                import json
+                with open(".tmp/consolidated.json", "w") as f:
+                    json.dump(results, f)
+
+
                 total_composites += self.cache.set(COMPOSITES, COLLECTED, composite_updates)
                 total_beans += self.cache.set(BEANS, CONSOLIDATED, bean_updates)
+
+                
 
         log.info(event="total consolidated", composites=total_composites, beans=total_beans)
         return total_composites + total_beans

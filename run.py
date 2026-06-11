@@ -126,10 +126,6 @@ if __name__ == "__main__":
             context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
-            # base_url="http://localhost:8000/v1",
-            # api_key="EMPTY",
-            temperature=1.0, top_p=0.95, top_k=50,
-            repetition_penalty=1.0
         ).run(batch_size=batch_size)     
 
     elif mode == "CONSOLIDATOR":
@@ -143,7 +139,6 @@ if __name__ == "__main__":
             ),
             base_url=os.getenv("CONSOLIDATOR_BASE_URL"),
             api_key=os.getenv("CONSOLIDATOR_API_KEY"),
-            extra_body={"reasoning_budget":16384,"chat_template_kwargs":{"enable_thinking":True}}
         ).run(batch_size=batch_size)
 
     elif mode == "PORTER":

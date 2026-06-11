@@ -59,7 +59,8 @@ class StateCache(StateCacheBase):
             min_size=0,
             max_size=16,
             timeout=TIMEOUT,
-            max_idle=240,
+            max_idle=120,
+            max_lifetime=180,
             num_workers=MAX_WORKERS,
         )
         self.pool.open()
