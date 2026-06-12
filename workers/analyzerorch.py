@@ -25,6 +25,7 @@ from .utils import *
 from icecream import ic
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
+MAX_DOCUMENT_LEN = int(os.getenv("MAX_DOCUMENT_LEN", 4096)) # 16KB
 
 log = get_logger("analyzerworker")
 clean_updates = lambda packlist: [{k:v for k,v in pack.items() if v} for pack in packlist if pack]
@@ -38,16 +39,18 @@ class Embedder:
     def __init__(
         self,
         cache: StateCacheBase,
-        embedder_model_path: str,
-        embedder_context_len: int,
+        model_path: str,
+        context_len: int,
+        batch_size: int = BATCH_SIZE,
     ):
         self.cache = cache
-        self.embedder = create_embedder(model_path=embedder_model_path, context_len=embedder_context_len)
+        self.embedder = create_embedder(model_path=model_path, context_len=context_len)
+        self.batch_size = batch_size
 
-    def embed_beans(self, beans: list[dict], batch_size: int):
-        for chunk in batched(beans, batch_size):
+    def embed_beans(self, beans: list[dict]):
+        for chunk in batched(beans, self.batch_size):
             try:
-                vectors = self.embedder.embed_documents([bean[CONTENT] for bean in chunk])
+                vectors = self.embedder.embed_documents([bean[CONTENT][:MAX_DOCUMENT_LEN<<1] for bean in chunk])
                 updates = clean_updates([
                     {URL: b[URL], EMBEDDING: vec}
                     for b, vec in zip(chunk, vectors)
@@ -64,14 +67,14 @@ class Embedder:
                 )
 
     @log_runtime(logger=log)
-    def run(self, batch_size: int = BATCH_SIZE):
+    def run(self):
         beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=EMBEDDED)
         log.info(event="starting embedder", num_items=len(beans))
         if not beans: return 0
         
         total = 0
         with self.embedder:
-            for updates in self.embed_beans(beans, batch_size):
+            for updates in self.embed_beans(beans):
                 count = self.cache.set(BEANS, EMBEDDED, updates)
                 total += (count or len(updates))
         log.info(event="total embedded", num_items=total)
@@ -85,30 +88,33 @@ class Extractor:
     def __init__(
         self,
         cache: StateCacheBase,
-        extractor_model_path: str,
-        extractor_context_len: int
+        model_path: str,
+        context_len: int,
+        batch_size: int = BATCH_SIZE,
     ):
         self.cache = cache
         self.extractor = EntityExtractor(
-            model_path=extractor_model_path,
-            context_len=extractor_context_len,
+            model_path=model_path,
+            context_len=context_len,
             threshold=0.35,
+            batch_size=batch_size,
         )
+        self.batch_size = batch_size
 
-    def extract_beans(self, beans: list[dict], batch_size: int):
-        for chunk in batched(beans, batch_size):
+    def extract_beans(self, beans: list[dict]):
+        for chunk in batched(beans, self.batch_size):
             try:
-                extractions = self.extractor.run_batch([b[CONTENT] for b in chunk])
+                extractions = self.extractor.run_batch([b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk])
                 updates = clean_updates([
                     {
                         URL: b[URL],
                         ENTITIES: ents.model_dump()
                     } if ents else {URL:b[URL]}
-                    for b, ents in zip(chunk, extractions)
+                    for b, ents in zip(chunk, ic(extractions))
                 ])
                 log.info(event="extracted", source=chunk[0][SOURCE], num_items=len(updates))
                 yield updates
-            except Exception as e:
+            except:
                 log.error(event="failed extracting",
                     source=chunk[0][SOURCE],
                     num_items=len(chunk),
@@ -116,14 +122,14 @@ class Extractor:
                 )
 
     @log_runtime(logger=log)
-    def run(self, batch_size: int = BATCH_SIZE):
+    def run(self):
         beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=EXTRACTED)
         log.info(event="starting extractor", num_items=len(beans))
         if not beans: return 0
         
         total = 0
         with self.extractor:
-            for updates in self.extract_beans(beans, batch_size):
+            for updates in self.extract_beans(beans):
                 count = self.cache.set(BEANS, EXTRACTED, updates)
                 total += (count or len(updates))
         log.info(event="total extracted", num_items=total)
@@ -154,6 +160,7 @@ class Digestor:
         cache: StateCacheBase,
         model_path: str,
         context_len: int,
+        batch_size: int,
         **model_kwargs
     ):
         self.cache = cache
@@ -162,20 +169,22 @@ class Digestor:
             context_len=context_len,
             instruction=DIGEST_SYS,
             input_template=DIGEST_INST,
-            output_model=Digest,
+            output_model=Digest,                       
+            max_new_tokens=2048,
+            enable_thinking=False,
+            batch_size=batch_size,
             temperature=0.6, 
             top_p=1, 
             top_k=50,
-            repetition_penalty=1.15,            
-            max_tokens=4096,
-            enable_thinking=False,
+            repetition_penalty=1.15, 
             **model_kwargs
         )
+        self.batch_size = batch_size
 
-    def digest_beans(self, beans: list[dict], batch_size: int):
-        for chunk in batched(beans, batch_size):
+    def digest_beans(self, beans: list[dict]):
+        for chunk in batched(beans, self.batch_size):
             try:
-                digests = self.digestor.run_batch([bean[CONTENT] for bean in chunk])
+                digests = self.digestor.run_batch([bean[CONTENT][:MAX_DOCUMENT_LEN] for bean in chunk])
                 updates = clean_updates([
                     {
                         URL: b[URL],
@@ -186,7 +195,7 @@ class Digestor:
                 ])
                 log.info(event="digested", source=chunk[0][SOURCE], num_items=len(updates))
                 yield updates
-            except Exception as e:
+            except:
                 log.error(event="failed digesting",
                     source=chunk[0][SOURCE],
                     num_items=len(chunk),
@@ -194,14 +203,14 @@ class Digestor:
                 )
 
     @log_runtime(logger=log)
-    def run(self, batch_size: int = BATCH_SIZE):
+    def run(self):
         beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=DIGESTED)
         log.info(event="starting digestor", num_items=len(beans))
         if not beans: return 0
         
         total = 0
         with self.digestor:            
-            for updates in self.digest_beans(beans, batch_size):                
+            for updates in self.digest_beans(beans):                
                 count = self.cache.set(BEANS, DIGESTED, updates)
                 total += (count or len(updates))
         log.info(event="total digested", num_items=total)
@@ -216,12 +225,13 @@ class Classifier:
     cache: StateCacheBase
     cls_cache: ClassificationCache
 
-    def __init__(self, cache: StateCacheBase, cls_cache: ClassificationCache):
+    def __init__(self, cache: StateCacheBase, cls_cache: ClassificationCache, batch_size: int = BATCH_SIZE):
         self.cache = cache
         self.cls_cache = cls_cache
+        self.batch_size = batch_size
 
-    def classify_beans(self, beans: list[dict], batch_size: int):
-        for chunk in batched(beans, batch_size):
+    def classify_beans(self, beans: list[dict]):
+        for chunk in batched(beans, self.batch_size):
             embeddings = [bean[EMBEDDING] for bean in chunk]
             categories = self.cls_cache.batch_search("categories", embeddings, top_n=CLASSIFICATION_LIMIT)
             sentiments = self.cls_cache.batch_search("sentiments", embeddings, top_n=CLASSIFICATION_LIMIT)
@@ -237,9 +247,9 @@ class Classifier:
             log.info(event="classified", source=chunk[0][URL], num_items=len(updates))
             yield updates
 
-    def cluster_beans(self, beans: list[dict], batch_size: int):
+    def cluster_beans(self, beans: list[dict]):
         self.cls_cache.store(BEANS, beans)
-        for chunk in batched(beans, batch_size):
+        for chunk in batched(beans, self.batch_size):
             embeddings = [bean[EMBEDDING] for bean in chunk]
             related_list = self.cls_cache.batch_search(BEANS, embeddings, distance=CLUSTER_EPS, top_n=CLUSTER_LIMIT)
             updates = clean_updates([
@@ -253,13 +263,13 @@ class Classifier:
             yield updates
 
     @log_runtime(logger=log)
-    def run(self, batch_size: int = BATCH_SIZE):
+    def run(self):
         # run classification before clustering
         beans = self.cache.get(BEANS, states=EMBEDDED, exclude_states=CLASSIFIED)
         log.info(event="starting classifier", num_items=len(beans))
         classified = 0
         embedded = [b for b in beans if EMBEDDING in b]
-        for updates in self.classify_beans(embedded, batch_size):
+        for updates in self.classify_beans(embedded):
             count = self.cache.set(BEANS, CLASSIFIED, updates)
             classified += (count or len(updates))
         log.info(event="total classified", num_items=classified)
@@ -269,7 +279,7 @@ class Classifier:
         log.info(event="starting clusterer", num_items=len(beans))
         clustered = 0
         embedded = [b for b in beans if EMBEDDING in b]
-        for updates in self.cluster_beans(embedded, batch_size):
+        for updates in self.cluster_beans(embedded):
             count = self.cache.set(BEANS, CLUSTERED, updates)
             clustered += (count or len(updates))
         log.info(event="total clustered", num_items=clustered)
@@ -278,7 +288,7 @@ class Classifier:
 
 CONSOLIDATION_EPS = float(os.getenv("CONSOLIDATION_EPS", 0.5))
 CONSOLIDATION_RELATED_WINDOW = int(os.getenv("CONSOLIDATION_RELATED_WINDOW", 30))
-CONSOLIDATION_MAX_SIZE = int(os.getenv("CONSOLIDATION_MAX_SIZE", 40))
+CONSOLIDATION_MAX_SIZE = int(os.getenv("CONSOLIDATION_MAX_SIZE", 64))
 CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 4))
 
 BRIEFING_SYS = """
@@ -320,6 +330,7 @@ class Consolidator:
         cache: StateCacheBase,
         model_path: str,
         context_len: int,
+        batch_size: int = BATCH_SIZE,
         **model_kwargs
     ):
         self.cache = cache
@@ -329,12 +340,13 @@ class Consolidator:
             instruction=BRIEFING_SYS,
             input_template=BRIEFING_INST,
             output_model=Briefing,
+            enable_thinking=True,
+            max_new_tokens=4096,
+            batch_size=batch_size,
             temperature=1, 
             top_p=1, 
             top_k=50,
-            repetition_penalty=1,         
-            max_tokens=4096,
-            enable_thinking=True,
+            repetition_penalty=1.15,
             **model_kwargs
         )
 
@@ -382,8 +394,8 @@ class Consolidator:
         log.info(event="consolidation groups", num_items=len(resized_groups))
         return resized_groups
 
-    def consolidate_bean_groups(self, groups: list[dict], batch_size: int):
-        for chunk in batched(groups, batch_size):
+    def consolidate_bean_groups(self, groups: list[dict]):
+        for chunk in batched(groups, self.batch_size):
             try:
                 briefings = self.consolidator.run_batch(list(map(_group_to_str, chunk)))
 
@@ -412,7 +424,7 @@ class Consolidator:
                 )
 
     @log_runtime(logger=log)
-    def run(self, batch_size: int = BATCH_SIZE):
+    def run(self):
         beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED)
         log.info(event="starting consolidator", num_items=len(beans))
 
@@ -422,7 +434,7 @@ class Consolidator:
         total_composites, total_beans = 0, 0
         with self.consolidator:
             results = []
-            for composite_updates, bean_updates in self.consolidate_bean_groups(groups, batch_size):
+            for composite_updates, bean_updates in self.consolidate_bean_groups(groups):
                 results.extend([c[DIGEST] for c in composite_updates])
                 import json
                 with open(".tmp/consolidated.json", "w") as f:
@@ -430,9 +442,7 @@ class Consolidator:
 
 
                 total_composites += self.cache.set(COMPOSITES, COLLECTED, composite_updates)
-                total_beans += self.cache.set(BEANS, CONSOLIDATED, bean_updates)
-
-                
+                total_beans += self.cache.set(BEANS, CONSOLIDATED, bean_updates)                
 
         log.info(event="total consolidated", composites=total_composites, beans=total_beans)
         return total_composites + total_beans

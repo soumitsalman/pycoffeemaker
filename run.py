@@ -73,11 +73,9 @@ if __name__ == "__main__":
     if mode == "COLLECTOR":
         from workers.collectororch import Collector
 
+        feeds = os.getenv("COLLECTOR_SOURCES", f"{CURR_DIR}/factory/feeds.yaml")
         asyncio.run(
-            Collector(cache=async_cache).run(
-                os.getenv("COLLECTOR_SOURCES", f"{CURR_DIR}/factory/feeds.yaml"),
-                batch_size=batch_size,
-            )
+            Collector(cache=async_cache, batch_size=batch_size).run(feeds)
         )
 
     elif mode == "EMBEDDER":
@@ -85,11 +83,12 @@ if __name__ == "__main__":
 
         Embedder(
             cache=cache,
-            embedder_model_path=os.environ["EMBEDDER_PATH"],
-            embedder_context_len=int(
+            model_path=os.environ["EMBEDDER_PATH"],
+            context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
             ),
-        ).run(batch_size=batch_size)
+            batch_size=batch_size,
+        ).run()
 
     elif mode == "CLASSIFIER":
         from workers.analyzerorch import Classifier
@@ -103,7 +102,7 @@ if __name__ == "__main__":
                 SENTIMENTS: {"id_key": "sentiment", "distance_func": "cosine"}
             }
         )
-        Classifier(cache=cache, cls_cache=cls_cache).run(batch_size=batch_size)
+        Classifier(cache=cache, cls_cache=cls_cache, batch_size=batch_size).run()
         cls_cache.close()
 
     elif mode == "EXTRACTOR":
@@ -111,11 +110,12 @@ if __name__ == "__main__":
 
         Extractor(
             cache=cache,
-            extractor_model_path=os.environ["EXTRACTOR_PATH"],
-            extractor_context_len=int(
+            model_path=os.environ["EXTRACTOR_PATH"],
+            context_len=int(
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
             ),
-        ).run(batch_size=batch_size)
+            batch_size=batch_size,
+        ).run()
 
     elif mode == "DIGESTOR":
         from workers.analyzerorch import Digestor
@@ -126,7 +126,8 @@ if __name__ == "__main__":
             context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
-        ).run(batch_size=batch_size)     
+            batch_size=batch_size,
+        ).run()     
 
     elif mode == "CONSOLIDATOR":
         from workers.analyzerorch import Consolidator
@@ -137,9 +138,10 @@ if __name__ == "__main__":
             context_len=int(
                 os.getenv("CONSOLIDATOR_CONTEXT_LEN", CONSOLIDATOR_CONTEXT_LEN)
             ),
+            batch_size=batch_size,
             base_url=os.getenv("CONSOLIDATOR_BASE_URL"),
             api_key=os.getenv("CONSOLIDATOR_API_KEY"),
-        ).run(batch_size=batch_size)
+        ).run()
 
     elif mode == "PORTER":
         from workers.porterorch import BeansackPorter, CupboardPorter

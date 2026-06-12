@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from itertools import batched, chain
 from typing import Any
-
+from tenacity import retry, stop_after_attempt, wait_fixed
 from psycopg_pool import AsyncConnectionPool
 from pgvector.psycopg import Vector, register_vector_async
 from psycopg import sql
@@ -16,8 +16,12 @@ from .models import *
 
 log = logging.getLogger("cupboard")
 
-BATCH_SIZE = int(os.getenv('BATCH_SIZE', 512))
-VECTOR_LEN = int(os.getenv('VECTOR_LEN', 384))
+PG_TIMEOUT = int(os.getenv('PG_TIMEOUT', 300))
+PG_WORKERS = int(os.getenv('PG_WORKERS', 4))
+BATCH_SIZE = 512
+RETRY_COUNT = 3
+RETRY_DELAY = 15
+
 
 _INIT_STMTS = """
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -85,11 +89,13 @@ RELATED = 'related'
 FROM_ID = 'from_id'
 TO_ID = 'to_id'
 RELATIONSHIP = 'relationship'
-TIMEOUT = 270
 
 SIP_COLUMNS = [ID, CREATED, KIND, SOURCE, EMBEDDING, TAGS, DIGEST, URL, BASE_URL]
 SOURCE_COLUMNS = [ID, DOMAIN_NAME, BASE_URL, SITE_NAME, DESCRIPTION, FAVICON, RSS_FEED]
 RELATION_COLUMNS = [FROM_ID, TO_ID, RELATIONSHIP]
+
+VECTOR_LEN = int(os.getenv('VECTOR_LEN', 384))
+
 
 class Cupboard:
     pool: AsyncConnectionPool
@@ -103,9 +109,10 @@ class Cupboard:
             self.conn_str,
             min_size=0,
             max_size=32,
-            timeout=TIMEOUT,
-            max_idle=TIMEOUT,
-            num_workers=os.cpu_count()*2,
+            timeout=PG_TIMEOUT,
+            max_idle=120,
+            max_lifetime=180,
+            num_workers=PG_WORKERS,
             configure=register_vector_async
         )
         await self.pool.open()
@@ -210,6 +217,7 @@ class Cupboard:
         return await self._batch_insert(store_batches)
 
     async def _batch_insert(self, to_store: list[dict[str, Any]]):
+        @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
         async def _insert_chunk(chunk: dict):
             async with self.pool.connection() as conn:
                 result = await conn.execute(chunk["expr"], params=chunk["params"], binary=True)

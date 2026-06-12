@@ -9,17 +9,17 @@ from typing import Any, Optional
 from pydantic import BaseModel
 from .base import *
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
-from pgvector.psycopg import register_vector, Vector
 from icecream import ic
-from tenacity import retry, stop_after_attempt, wait_fixed, wait_random
+from tenacity import retry, stop_after_attempt, wait_fixed
 
-TIMEOUT = 600
-MAX_WORKERS = 4
+PG_TIMEOUT = int(os.getenv('PG_TIMEOUT', 300))
+PG_WORKERS = int(os.getenv('PG_WORKERS', 4))
 BATCH_SIZE = 1024
 RETRY_COUNT = 3
 RETRY_DELAY = 15
 
 PROCESSING_WINDOW = int(os.getenv('PROCESSING_WINDOW', 60))
+PROCESSING_LIMIT = int(os.getenv('PROCESSING_LIMIT', 200_000))
 
 ##############
 # STATE CACHE
@@ -58,10 +58,10 @@ class StateCache(StateCacheBase):
             self.conn_str,
             min_size=0,
             max_size=16,
-            timeout=TIMEOUT,
+            timeout=PG_TIMEOUT,
             max_idle=120,
             max_lifetime=180,
-            num_workers=MAX_WORKERS,
+            num_workers=PG_WORKERS,
         )
         self.pool.open()
         self._init_db()
@@ -107,7 +107,7 @@ class StateCache(StateCacheBase):
         exclude_states: str | list[str] = NULL_STATE,
         ids: list[str] = None,
         window: int = PROCESSING_WINDOW,
-        limit: int = 0,
+        limit: int = PROCESSING_LIMIT,
         offset: int = 0,
     ):
         expr, params = create_query_expr(object_type, states, exclude_states, ids, window, limit, offset)
@@ -163,10 +163,11 @@ class AsyncStateCache(AsyncStateCacheBase):
         self.pool = AsyncConnectionPool(
             self.conn_str,
             min_size=0,
-            max_size=48,
-            timeout=TIMEOUT,
-            max_idle=240,
-            num_workers=MAX_WORKERS,
+            max_size=32,
+            timeout=PG_TIMEOUT,
+            max_idle=120,
+            max_lifetime=180,
+            num_workers=PG_WORKERS,
         )
         await self.pool.open()
         await self._init_db()
@@ -206,7 +207,7 @@ class AsyncStateCache(AsyncStateCacheBase):
         exclude_states: str | list[str] = NULL_STATE,
         ids: list[str] = None,
         window: int = PROCESSING_WINDOW,
-        limit: int = 0,
+        limit: int = PROCESSING_LIMIT,
         offset: int = 0,
     ):
         expr, params = create_query_expr(object_type, states, exclude_states, ids, window, limit, offset)

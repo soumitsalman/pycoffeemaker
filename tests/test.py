@@ -324,10 +324,10 @@ def test_embedder_orch():
     cache = _analyzer_test_cache()
     orch = Embedder(
         cache=cache,
-        embedder_model_path=os.getenv(
+        model_path=os.getenv(
             "EMBEDDER_PATH", "vllm://avsolatorio/GIST-small-Embedding-v0"
         ),
-        embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
+        context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
     )
     orch.run(batch_size=32)
     cache.close()
@@ -341,8 +341,8 @@ def test_extractor_orch():
     cache = _analyzer_test_cache()
     orch = Extractor(
         cache=cache,
-        extractor_model_path=os.getenv("EXTRACTOR_PATH"),
-        extractor_context_len=int(os.getenv("EXTRACTOR_CONTEXT_LEN", 4096)),
+        model_path=os.getenv("EXTRACTOR_PATH"),
+        context_len=int(os.getenv("EXTRACTOR_CONTEXT_LEN", 4096)),
     )
     orch.run(batch_size=16)
     cache.close()

@@ -10,7 +10,7 @@ from dateutil.parser import parse as date_parser
 
 USER_AGENT = "Cafecito-Coffeemaker/v0.9.3+https://github.com/soumitsalman/pycoffeemaker"
 BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-TIMEOUT =  120 # 2 minutes
+TIMEOUT =  int(os.getenv('COLLECTOR_TIMEOUT', 120)) # 2 minutes
 RATELIMIT_WAIT = 300 # 300 seconds / 5 minutes
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()*os.cpu_count()))
 RETRY_COUNT = 3
