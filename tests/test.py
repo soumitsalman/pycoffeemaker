@@ -376,6 +376,30 @@ def test_classifier_orch():
     cls_cache.close()
     cache.close()
 
+
+@pytest.mark.integration
+@pytest.mark.group_to_str
+def test_group_to_str_text_lengths():
+    from workers.analyzerorch import _group_to_str
+    from workers.utils import BEANS, COLLECTED, DIGESTED, DIGEST
+
+    cache = _analyzer_test_cache()
+    try:
+        beans = cache.get(BEANS, states=[COLLECTED, DIGESTED])
+        beans = [b for b in beans if b.get(DIGEST)]
+        for size in (32, 48, 64, 96):
+            if len(beans) < size:
+                pytest.skip(f"need at least {size} digested beans, got {len(beans)}")
+            group = {"data": random.sample(beans, size)}
+            text = _group_to_str(group)
+            lines = text.splitlines()
+            print(f"--- group size {size} (top 100 lines) ---")
+            print("\n".join(lines[:100]))
+            print(f"group size {size}: text len = {len(text)} ({len(lines)} lines)")
+    finally:
+        cache.close()
+
+
 @pytest.mark.integration
 @pytest.mark.orch_porter
 @pytest.mark.parametrize("beansack_or_cupboard", ["beansack", "cupboard"])

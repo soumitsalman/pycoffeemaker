@@ -10,6 +10,7 @@ from .workercache.clscache import ClassificationCache
 from nlp import (
     Digest, 
     Briefing, 
+    Entities,
     EntityExtractor, 
     EmbedderBase,
     TextAnalystBase, 
@@ -306,20 +307,21 @@ CREATE intelligence_briefing FROM event_stream
 BRIEFING_ELEMENTS=
 {description}
 STEPS=
-0.CLUSTER event_items BY shared actors,entities,domains,tags,datapoints,impacts FROM event_stream
-1.CREATE dominant_theme_or_main_thesis FROM the largest/most_coherent cluster WHERE items CONTAIN SAME(subject OR actor OR domain OR causal link)
+0.CLUSTER event_items BY shared related,actions,events,impacts FROM event_stream
+1.CREATE dominant_theme_or_main_thesis FROM the largest/most_coherent cluster WHERE items CONTAIN SAME(related OR causal link)
 2.FILTER event_items FROM event_stream BY relation TO dominant_theme
 3.DISCARD item WHERE NOT EXIST IN (dominant_theme OR retained_items)
-4.DETERMINE relationships between events,entities,domains,datapoints,impacts FROM retained_items
+4.DETERMINE relationships between related,actions,events,impacts FROM retained_items
 5.DETERMINE causal_chain driving or preceding the retained events FROM retained_items
-6.DETERMINE impacts,implications,target_groups of the retained sequence FROM retained_items
-7.DETERMINE forecast FROM impacts,implications FROM retained_items
-CONSTRAINTS=use only retained_items in events,drivers,impacts,impacted_domains,forecast,briefing,tags,entities
+6.DETERMINE impacts,implications,target_groups,forecast FROM retained_items
+CONSTRAINTS=
+USE retained_items ONLY
 EVENT_STREAM=
 {input_text}
 """
-
 IGNORE_WORD_GAMES = ['word_game', 'daily_puzzle', 'nyt', 'wordle']
+
+
 class Consolidator:
     """Consolidates events and data to create consolidated briefings and signals"""
     cache: StateCacheBase
@@ -453,10 +455,34 @@ def _value_to_str(value) -> str:
     if isinstance(value, datetime): return value.strftime('%Y-%m-%d')
     return str(value)
 
+_OUTLOOK_KEYS = ("forecast", "future_outlook")
+_PRIORITY_DIGEST_KEYS = ("briefing", "actions")
+_ENTITY_KEYS = tuple(Entities.model_fields)
+
+def _entity_tags(digest: dict) -> list:
+    tags = set()
+    for key in _ENTITY_KEYS:
+        if v := digest.get(key):
+            tags.update(v if isinstance(v, list) else [v])
+    return sorted(tags)
+
 def _bean_to_str(bean: dict) -> str:
     lines = []
-    if created := bean.get(CREATED): lines.append(f"reported:{_value_to_str(created)}")
-    if digest := bean.get(DIGEST): lines.extend(f"{k}:{_value_to_str(v)}" for k, v in digest.items() if v)
+    if created := bean.get(CREATED):
+        lines.append(f"reported:{_value_to_str(created)}")
+    if digest := bean.get(DIGEST):
+        if tags := _entity_tags(digest):
+            lines.append(f"related:{_value_to_str(tags)}")
+        for key in _PRIORITY_DIGEST_KEYS:
+            if v := digest.get(key):
+                lines.append(f"{key}:{_value_to_str(v)}")
+        for key, v in digest.items():
+            if not v or key in _PRIORITY_DIGEST_KEYS or key in _OUTLOOK_KEYS or key in _ENTITY_KEYS:
+                continue
+            lines.append(f"{key}:{_value_to_str(v)}")
+        for key in _OUTLOOK_KEYS:
+            if v := digest.get(key):
+                lines.append(f"{key}:{_value_to_str(v)}")
     return "\n".join(lines)
 
 def _group_to_str(group: dict) -> str:
