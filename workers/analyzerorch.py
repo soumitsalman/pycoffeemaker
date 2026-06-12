@@ -145,7 +145,8 @@ avoid:markdown,prose,code_fences,null_placeholders,implied_information
 RESPONSE=JSON object matching schema
 """
 DIGEST_INST = """
-DERIVE target_information FROM content
+TRANSLATE content TO english 
+DERIVE target_information FROM english_content
 TARGET_INFORMATION=
 {description}
 CONTENT=
@@ -171,13 +172,13 @@ class Digestor:
             instruction=DIGEST_SYS,
             input_template=DIGEST_INST,
             output_model=Digest,                       
-            max_new_tokens=2048,
+            max_new_tokens=1536,
             enable_thinking=False,
             batch_size=batch_size,
-            temperature=0.6, 
+            temperature=1, 
             top_p=1, 
-            top_k=50,
-            repetition_penalty=1.15, 
+            top_k=25,
+            repetition_penalty=1, 
             **model_kwargs
         )
         self.batch_size = batch_size
@@ -185,7 +186,10 @@ class Digestor:
     def digest_beans(self, beans: list[dict]):
         for chunk in batched(beans, self.batch_size):
             try:
-                digests = self.digestor.run_batch([bean[CONTENT][:MAX_DOCUMENT_LEN] for bean in chunk])
+                digests = self.digestor.run_batch([
+                    f"reported:{_value_to_str(bean[CREATED])}\n{bean[CONTENT][:MAX_DOCUMENT_LEN<<2]}" 
+                    for bean in chunk
+                ])
                 updates = clean_updates([
                     {
                         URL: b[URL],
@@ -410,7 +414,7 @@ class Consolidator:
                         CREATED: max(b[CREATED] for b in group['data']), 
                         EMBEDDING: group[EMBEDDING],
                         TAGS: merge_tags(br.tags, *[b.get(CATEGORIES, []) for b in group['data']]),
-                        DIGEST: br.model_dump(),
+                        DIGEST: ic(br.model_dump()),
                         RELATED: [b[URL] for b in group['data']]
                     })
                     bean_updates.extend({URL: b[URL]} for b in group['data'])
