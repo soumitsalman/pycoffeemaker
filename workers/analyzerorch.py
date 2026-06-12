@@ -111,7 +111,7 @@ class Extractor:
                         URL: b[URL],
                         ENTITIES: ents.model_dump()
                     } if ents else {URL:b[URL]}
-                    for b, ents in zip(chunk, ic(extractions))
+                    for b, ents in zip(chunk, extractions)
                 ])
                 log.info(event="extracted", source=chunk[0][SOURCE], num_items=len(updates))
                 yield updates
