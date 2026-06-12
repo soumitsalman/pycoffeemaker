@@ -355,6 +355,7 @@ class Consolidator:
             repetition_penalty=1,
             **model_kwargs
         )
+        self.batch_size = batch_size
 
     def _get_beans(self, **kwargs) -> list[dict]:
         beans = self.cache.get(BEANS, **{k:v for k,v in kwargs.items() if v})
