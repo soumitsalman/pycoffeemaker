@@ -347,12 +347,12 @@ class Consolidator:
             input_template=BRIEFING_INST,
             output_model=Briefing,
             enable_thinking=True,
-            max_new_tokens=4096,
+            max_new_tokens=3072,
             batch_size=batch_size,
             temperature=1, 
-            top_p=1, 
-            top_k=50,
-            repetition_penalty=1.15,
+            top_p=0.95, 
+            top_k=25,
+            repetition_penalty=1,
             **model_kwargs
         )
 
