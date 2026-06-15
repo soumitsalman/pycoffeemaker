@@ -8,8 +8,9 @@ PYTHON="$WORKING_DIR/.venv/bin/python"
 RUN="$WORKING_DIR/run.py"
 
 LOCAL_CLSCACHE="$WORKING_DIR/.cache/clscache"
-S5CMD_BIN="$HOME/go/bin/s5cmd"
-S5CMD_ARGS=(--credentials-file "$HOME/.aws/credentials" --endpoint-url https://t3.storage.dev)
+AWS_CREDENTIALS_FILE="${AWS_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
+S3_ENDPOINT="${S3_ENDPOINT:-https://t3.storage.dev}"
+AWS_S3_ARGS=(--endpoint-url "$S3_ENDPOINT")
 BACKUP_BUCKET="s3://cafecito-archives-new/processingcache"
 
 EMBEDDER_BATCH_SIZE="${EMBEDDER_BATCH_SIZE:-192}"
@@ -71,7 +72,8 @@ backup_clscache() {
     echo "=== [STARTING] ZVEC Classification Cache Backup ==="
     local dump_file="$WORKING_DIR/.cache/clscache.tar.gz"
     tar -czf "$dump_file" "$LOCAL_CLSCACHE"
-    "$S5CMD_BIN" "${S5CMD_ARGS[@]}" cp "$dump_file" "$BACKUP_BUCKET/"
+    AWS_SHARED_CREDENTIALS_FILE="$AWS_CREDENTIALS_FILE" AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}" \
+        aws s3 cp "$dump_file" "$BACKUP_BUCKET/" "${AWS_S3_ARGS[@]}"
     rm -f "$dump_file"
     echo "=== [FINISHED] ZVEC Classification Cache Backup ==="
 }

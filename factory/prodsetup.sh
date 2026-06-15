@@ -3,13 +3,15 @@ set -e
 echo "=== Updating package lists and installing dependencies ==="
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y build-essential python3.12-venv python3-dev ninja-build cmake
-echo "=== Installing Go and s5cmd ==="
-sudo snap install go --classic
-go install github.com/peak/s5cmd/v2@latest
+
+echo "=== Installing AWS CLI ==="
+sudo apt install -y unzip
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp
+sudo /tmp/aws/install
+rm -rf /tmp/aws /tmp/awscliv2.zip
 
 echo "=== Download dependencies and make venv ==="
-
-cd pycoffeemaker
 git clone https://www.github.com/soumitsalman/pybeansack.git
 git clone https://www.github.com/soumitsalman/nlp.git
 python3 -m venv .venv
@@ -17,7 +19,6 @@ source .venv/bin/activate
 pip install -r requirements.txt
 pip install -r pybeansack/requirements.txt
 mkdir -p .cache/clscache .logs
-cd ..
 # echo "=== Installing psql tools ==="
 
 # sudo rm -f /etc/apt/sources.list.d/pgdg.list
