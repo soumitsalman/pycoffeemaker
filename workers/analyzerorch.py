@@ -179,7 +179,7 @@ class Digestor:
             top_p=1,
             top_k=40,
             repetition_penalty=1,
-            presence_penalty=1.1,
+            presence_penalty=1.2,
             **model_kwargs
         )
         self.batch_size = batch_size
