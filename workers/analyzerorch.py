@@ -175,10 +175,8 @@ class Digestor:
             max_new_tokens=1536,
             enable_thinking=False,
             batch_size=batch_size,
-            temperature=1, 
-            top_p=1, 
-            top_k=25,
-            repetition_penalty=1, 
+            temperature=0.6, 
+            top_p=0.95, 
             **model_kwargs
         )
         self.batch_size = batch_size
@@ -351,8 +349,6 @@ class Consolidator:
             batch_size=batch_size,
             temperature=1, 
             top_p=0.95, 
-            top_k=25,
-            repetition_penalty=1,
             **model_kwargs
         )
         self.batch_size = batch_size
