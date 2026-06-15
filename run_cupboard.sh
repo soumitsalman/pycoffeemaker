@@ -37,9 +37,8 @@ run_consolidator() {
 
 echo "=== [STARTING CUPBOARD] ==="
 
-run_consolidator
 run_digestor
-
+run_consolidator
 
 echo "=== [FINISHED CUPBOARD] ==="
 
