@@ -172,7 +172,7 @@ class Digestor:
             instruction=DIGEST_SYS,
             input_template=DIGEST_INST,
             output_model=Digest,                       
-            max_new_tokens=1536,
+            max_new_tokens=2048,
             enable_thinking=False,
             batch_size=batch_size,
             temperature=0.6, 
