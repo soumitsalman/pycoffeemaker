@@ -13,11 +13,10 @@ S3_ENDPOINT="${S3_ENDPOINT:-https://t3.storage.dev}"
 AWS_S3_ARGS=(--endpoint-url "$S3_ENDPOINT")
 BACKUP_BUCKET="s3://cafecito-archives-new/processingcache"
 
-EMBEDDER_BATCH_SIZE="${EMBEDDER_BATCH_SIZE:-192}"
-EXTRACTOR_BATCH_SIZE="${EXTRACTOR_BATCH_SIZE:-32}"
+EMBEDDER_BATCH_SIZE="${EMBEDDER_BATCH_SIZE:-512}"
+EXTRACTOR_BATCH_SIZE="${EXTRACTOR_BATCH_SIZE:-24}"
 CLASSIFIER_BATCH_SIZE="${CLASSIFIER_BATCH_SIZE:-128}"
-DIGESTOR_BATCH_SIZE="${DIGESTOR_BATCH_SIZE:-32}"
-CONSOLIDATOR_BATCH_SIZE="${CONSOLIDATOR_BATCH_SIZE:-8}"
+
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -31,14 +30,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --classifier-batch-size|--classifier_batch_size)
             CLASSIFIER_BATCH_SIZE="$2"
-            shift 2
-            ;;
-        --digestor-batch-size|--digestor_batch_size)
-            DIGESTOR_BATCH_SIZE="$2"
-            shift 2
-            ;;
-        --consolidator-batch-size|--consolidator_batch_size)
-            CONSOLIDATOR_BATCH_SIZE="$2"
             shift 2
             ;;
         *)
@@ -56,14 +47,6 @@ run_extractor() {
     $PYTHON $RUN --mode EXTRACTOR --batch_size $EXTRACTOR_BATCH_SIZE
 }
 
-run_digestor() {
-    $PYTHON $RUN --mode DIGESTOR --batch_size $DIGESTOR_BATCH_SIZE
-}
-
-run_consolidator() {
-    $PYTHON $RUN --mode CONSOLIDATOR --batch_size $CONSOLIDATOR_BATCH_SIZE
-}
-
 run_classifier() {
     $PYTHON $RUN --mode CLASSIFIER --batch_size $CLASSIFIER_BATCH_SIZE    
 }
@@ -78,33 +61,13 @@ backup_clscache() {
     echo "=== [FINISHED] ZVEC Classification Cache Backup ==="
 }
 
-
-# run_extractor_and_digestor() {
-#     run_extractor
-#     run_digestor
-# }
-
-# run_classifier_and_backup_clscache() {
-#     run_classifier
-#     backup_clscache
-# }
-
-# run sequence
-# embedder runs first
-# extractor and classifier starts parallelly after embedder finishes
-# since the main work for classifier is finished early and most of the time it spends on optimization and backup
-
-echo "=== [STARTING] ==="
+echo "=== [STARTING INDEXERS] ==="
 
 run_embedder
 
 run_extractor &
-run_classifier &
+( run_classifier; backup_clscache ) &
 wait
-run_digestor &
-backup_clscache &
-wait
-# run_consolidator
-echo "=== [FINISHED] ==="
+echo "=== [FINISHED INDEXERS] ==="
 
 $PYTHON $WORKING_DIR/machine_ops.py --action stop
