@@ -5,7 +5,7 @@ set -euo pipefail
 LOG="/home/ubuntu/pycoffeemaker/.logs/cupboard.log"
 WORKDIR="/home/ubuntu/pycoffeemaker"
 SCRIPT="$WORKDIR/run_cupboard.sh"
-ARGS=(--consolidator-batch-size 64 --digestor-batch-size 128)
+ARGS=(--consolidator-batch-size 64 --digestor-batch-size 64)
 
 mkdir -p "$WORKDIR/.logs"
 
