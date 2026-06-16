@@ -12,7 +12,7 @@ if [[ "$(id -u)" -ne 0 ]]; then
     exit 1
 fi
 
-chmod 755 "$UP_SCRIPT"
+chmod 755 "$UP_SCRIPT" "$ROOT/run_cupboard.sh"
 
 install -d -m 755 "$S6_ROOT/$SERVICE/dependencies.d"
 printf 'oneshot\n' >"$S6_ROOT/$SERVICE/type"
