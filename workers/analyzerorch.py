@@ -174,7 +174,7 @@ class Digestor:
             output_model=Digest,                       
             max_new_tokens=1536,
             enable_thinking=False,
-            temperature=0.7,
+            temperature=0.6,
             top_p=0.8,
             top_k=20,
             repetition_penalty=1.1,
