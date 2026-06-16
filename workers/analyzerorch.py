@@ -175,11 +175,11 @@ class Digestor:
             max_new_tokens=1024,
             enable_thinking=False,
             batch_size=batch_size,
-            temperature=1,
-            top_p=1,
-            top_k=40,
+            temperature=0.7,
+            top_p=0.8,
+            top_k=20,
             repetition_penalty=1,
-            presence_penalty=1.2,
+            presence_penalty=1,
             **model_kwargs
         )
         self.batch_size = batch_size
@@ -194,7 +194,7 @@ class Digestor:
                 updates = clean_updates([
                     {
                         URL: b[URL],
-                        DIGEST: d.model_dump()
+                        DIGEST: ic(d.model_dump())
                     }
                     for b, d in zip(chunk, digests)
                     if d
@@ -352,7 +352,7 @@ class Consolidator:
             batch_size=batch_size,
             temperature=1, 
             top_p=0.95, 
-            top_k=25,
+            top_k=40,
             presence_penalty=1.2,
             repetition_penalty=1,
             **model_kwargs
@@ -444,10 +444,10 @@ class Consolidator:
         with self.consolidator:
             results = []
             for composite_updates, bean_updates in self.consolidate_bean_groups(groups):
-                results.extend([c[DIGEST] for c in composite_updates])
-                import json
-                with open(".tmp/consolidated.json", "w") as f:
-                    json.dump(results, f)
+                # results.extend([c[DIGEST] for c in composite_updates])
+                # import json
+                # with open(".tmp/consolidated.json", "w") as f:
+                #     json.dump(results, f)
 
 
                 total_composites += self.cache.set(COMPOSITES, COLLECTED, composite_updates)
