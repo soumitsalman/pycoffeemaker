@@ -179,7 +179,7 @@ class Digestor:
             top_p=0.8,
             top_k=20,
             repetition_penalty=1,
-            presence_penalty=1,
+            # presence_penalty=1.2,
             **model_kwargs
         )
         self.batch_size = batch_size
@@ -194,7 +194,7 @@ class Digestor:
                 updates = clean_updates([
                     {
                         URL: b[URL],
-                        DIGEST: ic(d.model_dump())
+                        DIGEST: d.model_dump()
                     }
                     for b, d in zip(chunk, digests)
                     if d
@@ -353,7 +353,7 @@ class Consolidator:
             temperature=1, 
             top_p=0.95, 
             top_k=40,
-            presence_penalty=1.2,
+            # presence_penalty=1.2,
             repetition_penalty=1,
             **model_kwargs
         )
