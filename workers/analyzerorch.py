@@ -153,6 +153,12 @@ CONTENT=
 {input_text}
 """
 
+def _article_to_str(article: dict) -> str:
+    text = f"reported:{_value_to_str(article[CREATED])}\n"
+    if (article.get(KIND) == POST) and article.get(AUTHOR):
+        text += f"author:{article[AUTHOR]}\n"
+    return text + article[CONTENT][:MAX_DOCUMENT_LEN<<2]
+    
 class Digestor:
     cache: StateCacheBase
     digestor: TextAnalystBase
@@ -184,10 +190,7 @@ class Digestor:
     def digest_beans(self, beans: list[dict]):
         for chunk in batched(beans, self.batch_size):
             try:
-                digests = self.digestor.run_batch([
-                    f"reported:{_value_to_str(bean[CREATED])}\n{bean[CONTENT][:MAX_DOCUMENT_LEN<<2]}" 
-                    for bean in chunk
-                ])
+                digests = self.digestor.run_batch(list(map(_article_to_str, chunk)))
                 updates = clean_updates([
                     {
                         URL: b[URL],
