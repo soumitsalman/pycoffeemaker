@@ -19,7 +19,7 @@ from nlp import (
     create_text_analyst
 )
 from datacollectors import (
-    CONTENT, CREATED, SUMMARY, TAGS, TITLE, URL, SOURCE
+    CONTENT, CREATED, SUMMARY, TAGS, TITLE, URL, SOURCE, KIND, AUTHOR, POST
 )
 
 from .utils import *
