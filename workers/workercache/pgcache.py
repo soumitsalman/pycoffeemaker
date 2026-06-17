@@ -128,10 +128,9 @@ class StateCache(StateCacheBase):
             item for item, item_id in zip(items, ids) if item_id not in existing_ids
         ]
 
-    def optimize(self, cleanup_older_than: int = PROCESSING_WINDOW):
-        threshold = datetime.now(tz=timezone.utc) - timedelta(days=cleanup_older_than)
+    def optimize(self):
         with self.pool.connection() as conn:
-            [conn.execute(_CLEANUP_OLD_SQL.format(table=table), {"threshold": threshold}) for table in self.id_keys]
+            [conn.execute(_CLEANUP_OLD_SQL.format(table=table)) for table in self.id_keys]
 
     def close(self):
         self.pool.close()
@@ -228,10 +227,9 @@ class AsyncStateCache(AsyncStateCacheBase):
             item for item, item_id in zip(items, ids) if item_id not in existing_ids
         ]
 
-    async def optimize(self, cleanup_older_than: int = PROCESSING_WINDOW):
-        threshold = datetime.now(tz=timezone.utc) - timedelta(days=cleanup_older_than)
-        with self.pool.connection() as conn:
-            [await conn.execute(_CLEANUP_OLD_SQL.format(table=table), {"threshold": threshold}) for table in self.id_keys]
+    async def optimize(self):
+        async with self.pool.connection() as conn:
+            [await conn.execute(_CLEANUP_OLD_SQL.format(table=table)) for table in self.id_keys]
 
     async def close(self):
         await self.pool.close()
@@ -255,11 +253,12 @@ def merge(group: list[dict[str, Any]]):
     return pack
 
 def deserialize_data_rows(rows: list[bytes]):
-    return [
+    rows = [
         decode_data(row) if not isinstance(row, list) 
         else merge([decode_data(data) for data in row]) 
         for row in rows
     ]
+    return [row for row in rows if row is not None]
 
 # STATE TABLES
 _insert_state_multivalues_sql = (
@@ -458,4 +457,4 @@ def _add_ts_and_ids_expr(template: str, table: str, params: dict, window: int, i
     return template.format(table=table, ts_expr=ts_expr, ids_expr=ids_expr), params
 
 _EXISTS_SQL = "SELECT id FROM {table} WHERE state = %(state)s AND id = ANY(%(ids)s)"
-_CLEANUP_OLD_SQL = "UPDATE {table} SET data = NULL WHERE ts < %(threshold)s"
+_CLEANUP_OLD_SQL = "UPDATE {table} SET data = NULL WHERE ts < CURRENT_TIMESTAMP - INTERVAL '3 months'"

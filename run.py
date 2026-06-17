@@ -150,14 +150,14 @@ if __name__ == "__main__":
         async def run_porter():
             beansack_db = create_client("pg", pg_connection_string=os.getenv("BEANSACK_CONNECTION_STRING"))
             cupboard_db = Cupboard(os.getenv("CUPBOARD_CONNECTION_STRING"))
-            try:
-                async with async_cache:
-                    await asyncio.gather(
-                        BeansackPorter(cache=async_cache).run(beansack_db, BEANSACKED),
-                        CupboardPorter(cache=async_cache).run(cupboard_db, CUPBOARDED)
-                    )
-            finally:
+            
+            async with async_cache:
+                await asyncio.gather(
+                    BeansackPorter(cache=async_cache).run(beansack_db, BEANSACKED),
+                    CupboardPorter(cache=async_cache).run(cupboard_db, CUPBOARDED)
+                )
                 beansack_db.close()
+                await async_cache.optimize()
 
         asyncio.run(run_porter())
 

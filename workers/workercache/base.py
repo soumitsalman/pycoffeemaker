@@ -27,6 +27,10 @@ class StateCacheBase(ABC):
     def deduplicate(self, object_type: str, state: str, items: list):
         raise NOT_IMPLEMENTED
     
+    @abstractmethod
+    def optimize(self):
+        raise NOT_IMPLEMENTED
+    
     def close(self):
         pass
 
@@ -42,6 +46,10 @@ class AsyncStateCacheBase(ABC):
     @abstractmethod
     async def deduplicate(self, object_type: str, state: str, items: list):
         raise NOT_IMPLEMENTED
+
+    @abstractmethod
+    async def optimize(self):
+        raise NOT_IMPLEMENTED
     
     async def close(self):
         pass
@@ -51,7 +59,7 @@ def encode_data(data):
     return msgpack.packb(data, datetime=True, default=assign_timezone)
 
 def decode_data(data):
-    return msgpack.unpackb(data, timestamp=3)
+    return msgpack.unpackb(data, timestamp=3) if data else None
 
 get_field_val = (
     lambda item, id_key: getattr(item, id_key)
