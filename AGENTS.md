@@ -81,4 +81,4 @@ Rules:
 - ALWAYS read `graphify-out/GRAPH_REPORT.md` before reading source files, running grep/glob, or answering codebase questions.
 - IF `graphify-out/wiki/index.md` EXISTS, navigate it instead of reading raw files
 - For cross-module "how does X relate to Y", prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep
-- After modifying code, run `graphify update .` (AST-only, no API cost)
+- After modifying code, run `graphify update .` using .venv of the current project (AST-only, no API cost)

@@ -102,7 +102,7 @@ def test_scraper():
 @pytest.mark.scrapepubs
 def test_publisher_scraper():
     from datacollectors import AsyncWebScraper
-    from pybeansack.ducklakesack import DuckSack
+    from pybeansack.ducksack import DuckSack
 
     urls = [
         "https://financebuzz.com/retirees-should-buy-at-bjs-4",
@@ -118,8 +118,8 @@ def test_publisher_scraper():
         "https://aws.amazon.com/blogs/storage/mastering-cross-account-amazon-efs-seamlessly-mount-amazon-efs-on-amazon-eks-cluster/",
     ]
     db = DuckSack(
-        catalogdb=os.getenv("DUCKLAKE_CATALOG", os.getenv("PG_CONNECTION_STRING")),
-        storagedb=os.getenv("DUCKLAKE_STORAGE", os.getenv("STORAGE_DATAPATH")),
+        catalog_db=os.getenv("DUCKLAKE_CATALOG", os.getenv("PG_CONNECTION_STRING")),
+        storage_path=os.getenv("DUCKLAKE_STORAGE", os.getenv("STORAGE_DATAPATH")),
     )
 
     async def run():

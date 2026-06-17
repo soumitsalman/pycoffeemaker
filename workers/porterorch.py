@@ -76,7 +76,7 @@ class BeansackPorter:
     async def hydrate_related(self, db: Beansack, target_state: str):
         target = target_state+":link"
         total = 0
-        while related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target, limit=50000):
+        while related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target):
             log.info(event="porting:bean_links", to="beansack", num_items=len(related_beans))
             count = await asyncio.to_thread(db.store_related, self.prep_related(related_beans))
             log.info(event="ported:bean_links", to="beansack", num_items=count)
@@ -165,7 +165,7 @@ class CupboardPorter:
         # related bean is pulling from the same well so distinguishing related vs regular
         target = target_state+":link"
         total = 0
-        while related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target, limit=50000):
+        while related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target):
             log.info(event="porting:event_links", to="cupboard", num_items=len(related_beans))
             count = await db.link_sips(related_beans, "SAME_AS")
             log.info(event="ported:event_links", to="cupboard", num_items=count)

@@ -208,17 +208,23 @@ class Digestor:
                     exc_info=True,
                 )
 
-    @log_runtime(logger=log)
-    def run(self):
+    def _fetch_beans(self) -> list[dict]:
         beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=DIGESTED)
         log.info(event="starting digestor", num_items=len(beans))
-        if not beans: return 0
-        
+        return beans
+
+    @log_runtime(logger=log)
+    def run(self):
         total = 0
-        with self.digestor:            
-            for updates in self.digest_beans(beans):                
-                count = self.cache.set(BEANS, DIGESTED, updates)
-                total += (count or len(updates))
+        with ThreadPoolExecutor(max_workers=1) as exec:
+            beans_future = exec.submit(self._fetch_beans)
+            with self.digestor:
+                beans = beans_future.result()
+                if not beans:
+                    return 0
+                for updates in self.digest_beans(beans):
+                    count = self.cache.set(BEANS, DIGESTED, updates)
+                    total += (count or len(updates))
         log.info(event="total digested", num_items=total)
         return total
 
@@ -429,19 +435,26 @@ class Consolidator:
                     exc_info=True,
                 )
 
+    def _fetch_and_group_beans(self) -> list[dict]:
+        beans = self._get_beans(
+            states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED],
+            exclude_states=CONSOLIDATED,
+        )
+        log.info(event="starting consolidator", num_items=len(beans))
+        return self._create_consolidation_groups(beans)
+
     @log_runtime(logger=log)
     def run(self):
         total_composites, total_beans = 0, 0
-        with self.consolidator:
-            beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED)
-            log.info(event="starting consolidator", num_items=len(beans))
-
-            beans = self._create_consolidation_groups(beans)
-            if not beans: return 0
-
-            for composite_updates, bean_updates in self.consolidate_bean_groups(beans):
-                total_composites += self.cache.set(COMPOSITES, COLLECTED, composite_updates)
-                total_beans += self.cache.set(BEANS, CONSOLIDATED, bean_updates)                
+        with ThreadPoolExecutor(max_workers=1) as exec:
+            groups_future = exec.submit(self._fetch_and_group_beans)
+            with self.consolidator:
+                groups = groups_future.result()
+                if not groups:
+                    return 0
+                for composite_updates, bean_updates in self.consolidate_bean_groups(groups):
+                    total_composites += self.cache.set(COMPOSITES, COLLECTED, composite_updates)
+                    total_beans += self.cache.set(BEANS, CONSOLIDATED, bean_updates)
 
         log.info(event="total consolidated", composites=total_composites, beans=total_beans)
         return total_composites + total_beans

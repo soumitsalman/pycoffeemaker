@@ -23,6 +23,7 @@
 .deploy.sh
 .s3upload.sh
 .ruff_cache
+.pytest_cache
 .codex
 .opencode
 .cursor
