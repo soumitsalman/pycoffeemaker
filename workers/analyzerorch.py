@@ -172,7 +172,7 @@ class Digestor:
             instruction=DIGEST_SYS,
             input_template=DIGEST_INST,
             output_model=Digest,                       
-            max_new_tokens=1536,
+            max_new_tokens=2048,
             enable_thinking=False,
             batch_size=batch_size,
             temperature=0.7,
@@ -434,22 +434,15 @@ class Consolidator:
 
     @log_runtime(logger=log)
     def run(self):
-        beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED)
-        log.info(event="starting consolidator", num_items=len(beans))
-
-        groups = self._create_consolidation_groups(beans)
-        if not groups: return 0
-
         total_composites, total_beans = 0, 0
         with self.consolidator:
-            results = []
+            beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED)
+            log.info(event="starting consolidator", num_items=len(beans))
+
+            groups = self._create_consolidation_groups(beans)
+            if not groups: return 0
+
             for composite_updates, bean_updates in self.consolidate_bean_groups(groups):
-                # results.extend([c[DIGEST] for c in composite_updates])
-                # import json
-                # with open(".tmp/consolidated.json", "w") as f:
-                #     json.dump(results, f)
-
-
                 total_composites += self.cache.set(COMPOSITES, COLLECTED, composite_updates)
                 total_beans += self.cache.set(BEANS, CONSOLIDATED, bean_updates)                
 
