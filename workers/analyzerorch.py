@@ -1,10 +1,10 @@
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from utils.dates import now
 from utils.logs import get_logger, log_runtime
 import os
 from datetime import datetime
 from itertools import batched, chain
-from textcase import snake
 from .workercache.base import StateCacheBase
 from .workercache.clscache import ClassificationCache
 from nlp import (
@@ -410,7 +410,7 @@ class Consolidator:
                     if not br: continue
 
                     composite_updates.append({
-                        ID: now().strftime("%Y_%m_%d") + '_' + snake(br.briefing),
+                        ID: now().strftime("%Y_%m_%d") + "_" + hashlib.sha1(br.briefing.encode("utf-8")).hexdigest(),
                         CREATED: max(b[CREATED] for b in group['data']), 
                         EMBEDDING: group[EMBEDDING],
                         TAGS: merge_tags(br.tags, *[b.get(CATEGORIES, []) for b in group['data']]),
