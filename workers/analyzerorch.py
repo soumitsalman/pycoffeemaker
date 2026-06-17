@@ -437,10 +437,10 @@ class Consolidator:
             beans = self._get_beans(states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED], exclude_states=CONSOLIDATED)
             log.info(event="starting consolidator", num_items=len(beans))
 
-            groups = self._create_consolidation_groups(beans)
-            if not groups: return 0
+            beans = self._create_consolidation_groups(beans)
+            if not beans: return 0
 
-            for composite_updates, bean_updates in self.consolidate_bean_groups(groups):
+            for composite_updates, bean_updates in self.consolidate_bean_groups(beans):
                 total_composites += self.cache.set(COMPOSITES, COLLECTED, composite_updates)
                 total_beans += self.cache.set(BEANS, CONSOLIDATED, bean_updates)                
 
