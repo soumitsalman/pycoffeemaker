@@ -140,7 +140,7 @@ python run.py --mode PORTER
 
 `MODE` and `BATCH_SIZE` can be set via environment instead of CLI.
 
-### Key environment variables
+### Key Environment Variables
 
 | Variable | Used by |
 |----------|---------|
@@ -157,6 +157,28 @@ python run.py --mode PORTER
 | `CUPBOARD_CONNECTION_STRING` | PORTER |
 | `LOG_DIR` | Optional hourly logfmt log file; otherwise logfmt to stderr |
 | `WORDS_THRESHOLD_FOR_STORING` | Min words before full scrape (collector) |
+
+#### Optional Environment Variables
+For Digestor with LiquidAI/LFM2.5-1.2B-Instruct
+```
+DIGESTOR_TEMPERATURE=0.15
+DIGESTOR_TOP_K=50
+DIGESTOR_REPETITION_PENALTY=1.05
+```
+
+For Digestor with nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+```
+DIGESTOR_TEMPERATURE=0.6,
+DIGESTOR_TOP_p=0.95,
+DIGESTOR_REPETITION_PENALTY=1.1
+```
+
+For Consolidator with nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+```
+CONSOLIDATOR_TEMPERATURE=1.0
+CONSOLIDATOR_TOP_P=0.95
+CONSOLIDATOR_REPETITION_PENALTY=1.1
+```
 
 ### Processing states (beans)
 

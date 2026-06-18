@@ -172,17 +172,19 @@ class Digestor:
         **model_kwargs
     ):
         self.cache = cache
+        if not model_kwargs: model_kwargs = {}
+        if temperature := os.getenv("DIGESTOR_TEMPERATURE"): model_kwargs["temperature"] = float(temperature)
+        if top_p := os.getenv("DIGESTOR_TOP_P"): model_kwargs["top_p"] = float(top_p)
+        if repetition_penalty := os.getenv("DIGESTOR_REPETITION_PENALTY"): model_kwargs["repetition_penalty"] = float(repetition_penalty)
+        if top_k := os.getenv("DIGESTOR_TOP_K"): model_kwargs["top_k"] = int(top_k)
         self.digestor = create_text_analyst(
             model_path=model_path,
             context_len=context_len,
             instruction=DIGEST_SYS,
             input_template=DIGEST_INST,
             output_model=Digest,                       
-            max_new_tokens=2048,
             enable_thinking=False,
-            temperature=0.6,
-            top_p=0.95,
-            repetition_penalty=1.1,
+            max_new_tokens=2048,
             **model_kwargs
         )
         self.batch_size = batch_size
@@ -332,7 +334,6 @@ EVENT_STREAM=
 """
 IGNORE_WORD_GAMES = ['word_game', 'daily_puzzle', 'nyt', 'wordle']
 
-
 class Consolidator:
     """Consolidates events and data to create consolidated briefings and signals"""
     cache: StateCacheBase
@@ -347,19 +348,12 @@ class Consolidator:
         **model_kwargs
     ):
         self.cache = cache
-        self.consolidator = create_text_analyst(
-            model_path=model_path,
-            context_len=context_len,
-            instruction=BRIEFING_SYS,
-            input_template=BRIEFING_INST,
-            output_model=Briefing,
-            enable_thinking=True,
-            max_new_tokens=3072,
-            temperature=1.0, 
-            top_p=0.95, 
-            repetition_penalty=1.1,
-            **model_kwargs
-        )
+        if not model_kwargs: model_kwargs = {}
+        if temperature := os.getenv("CONSOLIDATOR_TEMPERATURE"): model_kwargs["temperature"] = float(temperature)
+        if top_p := os.getenv("CONSOLIDATOR_TOP_P"): model_kwargs["top_p"] = float(top_p)
+        if repetition_penalty := os.getenv("CONSOLIDATOR_REPETITION_PENALTY"): model_kwargs["repetition_penalty"] = float(repetition_penalty)
+        if top_k := os.getenv("CONSOLIDATOR_TOP_K"): model_kwargs["top_k"] = int(top_k)
+        self.consolidator = create_text_analyst(model_path=model_path, context_len=context_len, instruction=BRIEFING_SYS, input_template=BRIEFING_INST, output_model=Briefing, enable_thinking=True, max_new_tokens=3072, **model_kwargs)
         self.batch_size = batch_size
 
     def _get_beans(self, **kwargs) -> list[dict]:
@@ -420,7 +414,7 @@ class Consolidator:
                         CREATED: max(b[CREATED] for b in group['data']), 
                         EMBEDDING: group[EMBEDDING],
                         TAGS: merge_tags(br.tags, *[b.get(CATEGORIES, []) for b in group['data']]),
-                        DIGEST: ic(br.model_dump()),
+                        DIGEST: br.model_dump(),
                         RELATED: [b[URL] for b in group['data']]
                     })
                     bean_updates.extend({URL: b[URL]} for b in group['data'])
