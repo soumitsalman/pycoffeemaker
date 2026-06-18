@@ -1,9 +1,7 @@
 import os
-
 import pytest
 from icecream import ic
 
-DB_LOCAL_TEST = "mongodb://localhost:27017/"
 DB_NAME_TEST = "test3"
 AZSTORAGE_PATH_TEST = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;BlobEndpoint=http://localhost:10000/devstoreaccount1;"
 INDEXER_IN_QUEUE = "indexing-queue"
@@ -138,65 +136,6 @@ def test_publisher_scraper():
 @pytest.mark.skip(reason="fullstack orchestrator removed; use run.py worker modes")
 def test_fullstack_orch():
     raise NotImplementedError("fullstack orchestrator was removed; use run.py worker modes instead")
-    from workers.fullstack import Orchestrator  # noqa: F401
-
-    orch = Orchestrator(
-        DB_LOCAL_TEST,
-        now().strftime("%Y%m%d"),
-        now().strftime("%Y%m%d"),
-        embedder_path=os.getenv("EMBEDDER_PATH"),
-        digestor_path=os.getenv("DIGESTOR_PATH"),
-        clus_eps=0.5,
-    )
-    sources = "/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"
-    asyncio.run(orch.run_async(sources))
-    orch.close()
-
-
-def create_test_data_file(output_path):
-    from pybeansack.mongosack import VALUE_EXISTS, MongoDB
-
-    db = MongoDB(os.getenv("MONGODB_CONN_STR"), "test")
-    beans = db.sample_beans(
-        filter={
-            K_COLLECTED: {"$gte": (datetime.now() - timedelta(days=10))},
-            K_KIND: {"$in": [NEWS, BLOG]},
-            K_CONTENT: VALUE_EXISTS,
-            K_GIST: VALUE_EXISTS,
-            K_EMBEDDING: VALUE_EXISTS,
-        },
-        limit=512,
-        project={K_EMBEDDING: 0},
-    )
-    save_models(beans, output_path)
-
-
-def hydrate_test_db():
-    from factory.rectify import migrate_mongodb
-
-    # migrate_mongodb("test", "master", from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
-    migrate_mongodb(
-        "espresso",
-        "espresso1",
-        from_db_conn=os.getenv("MONGO_CONNECTION_STRING"),
-        to_db_conn=DB_LOCAL_TEST,
-    )
-
-
-@pytest.mark.integration
-@pytest.mark.hydrate
-def test_hydrate_db():
-    hydrate_test_db()
-
-
-@pytest.mark.integration
-def test_trend_analysis():
-    from pybeansack.mongosack import MongoDB
-
-    db = MongoDB(os.getenv("MONGODB_CONN_STR"), "test")
-    items = db.query_aggregated_chatters()
-    ic(random.sample(items, 5))
-
 
 @pytest.mark.integration
 def test_static_db():

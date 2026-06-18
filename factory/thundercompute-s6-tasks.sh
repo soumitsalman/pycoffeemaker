@@ -1,16 +1,16 @@
 #!/bin/bash
-# s6 oneshot entry: start run_cupboard.sh in the background at container boot.
+# s6 oneshot entry: start run_pipeline.sh in the background at container boot.
 set -euo pipefail
 
-LOG="/home/ubuntu/pycoffeemaker/.logs/cupboard.log"
+LOG="/home/ubuntu/pycoffeemaker/.logs/thundercompute-tasks.log"
 WORKDIR="/home/ubuntu/pycoffeemaker"
-SCRIPT="$WORKDIR/run_cupboard.sh"
-ARGS=(--consolidator-batch-size 128 --digestor-batch-size 128)
+SCRIPT="$WORKDIR/run_pipeline.sh"
+ARGS=(--digestor 128 --consolidator 128)
 
 mkdir -p "$WORKDIR/.logs"
 
 if pgrep -f "$SCRIPT" >/dev/null 2>&1; then
-    echo "=== [S6 BOOT $(date -u +%Y-%m-%dT%H:%M:%SZ)] cupboard already running, skipping ===" >>"$LOG"
+    echo "=== [S6 BOOT $(date -u +%Y-%m-%dT%H:%M:%SZ)] thundercompute-tasks already running, skipping ===" >>"$LOG"
     exit 0
 fi
 

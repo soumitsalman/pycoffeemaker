@@ -103,7 +103,7 @@ class BeansackPorter:
                 self.hydrate_related(db, target_state), 
                 self.hydrate_chatters(db, target_state)
             ))
-            if sum(counts): db.optimize()
+            if sum(counts): await asyncio.to_thread(db.optimize)
             return sum(counts)
 
         counts = await asyncio.gather(*[

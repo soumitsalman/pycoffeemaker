@@ -68,15 +68,6 @@ def create_composer_topics_locally():
         json.dump(topics, file, indent=2)
 
 
-def migrate_users(from_db, to_db):
-    from coffeemaker.orchestrators.collectororch import Collector
-
-    old_prod = Collector(os.getenv("MONGODB_CONN_STR"), from_db)
-    new_prod = Collector(os.getenv("MONGODB_CONN_STR"), to_db)
-
-    new_prod.db.userstore.insert_many(old_prod.db.userstore.find({}), ordered=False)
-
-
 def split_parquet_into_chunks(
     src_path: str = "/home/soumitsr/.beansack/main/bean_gists/bean-gists-rectified.parquet",
     chunk_size: int = 1024,
@@ -457,5 +448,4 @@ if __name__ == "__main__":
     # create_categories_locally()
     # create_sentiments_locally()
     # port_beans_locally()
-    # migrate_users("beansackV2", "test")
     # migrate_mongodb("test", "espresso")
