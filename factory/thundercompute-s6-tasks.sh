@@ -25,6 +25,7 @@ fi
 (
     sleep 10
     "${RUNAS[@]}" bash -lc "
+        export HOME=/home/ubuntu
         cd '$WORKDIR'
         echo '=== [S6 BOOT $(date -u +%Y-%m-%dT%H:%M:%SZ)] ==='
         exec bash '$SCRIPT' ${ARGS[*]}

@@ -15,12 +15,6 @@ set -a
 source "$WORKING_DIR/.env"
 set +a
 
-LOCAL_CLSCACHE="$WORKING_DIR/.cache/clscache"
-AWS_CREDENTIALS_FILE="${AWS_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
-S3_ENDPOINT="${S3_ENDPOINT:-https://t3.storage.dev}"
-AWS_S3_ARGS=(--endpoint-url "$S3_ENDPOINT")
-BACKUP_BUCKET="s3://cafecito-archives-new/processingcache"
-
 RUN_COLLECTOR=0
 RUN_EMBEDDER=0
 RUN_EXTRACTOR=0
@@ -129,11 +123,17 @@ run_porter() {
 }
 
 backup_clscache() {
-    echo "=== [STARTING] ZVEC Classification Cache Backup ==="
+    local local_clscache="$WORKING_DIR/.cache/clscache"
+    local aws_credentials_file="${AWS_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
+    local s3_endpoint="${S3_ENDPOINT:-https://t3.storage.dev}"
+    local -a aws_s3_args=(--endpoint-url "$s3_endpoint")
+    local backup_bucket="s3://cafecito-archives-new/processingcache"
     local dump_file="$WORKING_DIR/.cache/clscache.tar.gz"
-    tar -czf "$dump_file" -C "$WORKING_DIR/.cache" clscache
-    AWS_SHARED_CREDENTIALS_FILE="$AWS_CREDENTIALS_FILE" AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}" \
-        aws s3 cp "$dump_file" "$BACKUP_BUCKET/" "${AWS_S3_ARGS[@]}"
+
+    echo "=== [STARTING] ZVEC Classification Cache Backup ==="
+    tar -czf "$dump_file" -C "$(dirname "$local_clscache")" "$(basename "$local_clscache")"
+    AWS_SHARED_CREDENTIALS_FILE="$aws_credentials_file" AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}" \
+        aws s3 cp "$dump_file" "$backup_bucket/" "${aws_s3_args[@]}"
     rm -f "$dump_file"
     echo "=== [FINISHED] ZVEC Classification Cache Backup ==="
 }
