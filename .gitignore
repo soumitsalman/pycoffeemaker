@@ -29,6 +29,7 @@
 .cursor
 .webui_secret_key
 *.env
+!factory/pipeline-defaults.env
 graph.html
 history.txt
 zvec

@@ -1,12 +1,12 @@
 import os
 import sys
 
-from dotenv import load_dotenv
-
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 
-load_dotenv()
+from utils.env import load_coffeemaker_env
+
+load_coffeemaker_env(ROOT)
 
 from utils.logs import configure_logging
 

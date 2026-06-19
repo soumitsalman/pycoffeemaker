@@ -106,7 +106,7 @@ Operational config: feed lists, classification taxonomies, migrations—not runt
 ### Prerequisites
 
 - Python 3.10+ (Docker images use 3.10 or 3.13)
-- `.env` at repo root (loaded by `run.py`)
+- `factory/pipeline-defaults.env` for checked-in pipeline defaults; `.env` at repo root for secrets and local overrides
 - Model paths for analyzer modes (`EMBEDDER_PATH`, `EXTRACTOR_PATH`, `DIGESTOR_PATH`, `CONSOLIDATOR_PATH`)
 - `PROCESSING_CACHE` — state DB connection (default: PostgreSQL via `workers/workercache/pgcache.py`; see `extensions/` for sqlite, firebird, surreal)
 - For `PORTER`: `BEANSACK_CONNECTION_STRING`, `CUPBOARD_CONNECTION_STRING`
@@ -142,6 +142,8 @@ python run.py --mode PORTER
 
 ### Key Environment Variables
 
+Python entrypoints load `factory/pipeline-defaults.env` first, then `.env`; duplicate values in `.env` win. `run_pipeline.sh` sources `.env` for shell-level settings like `SHUTDOWN_URL`, while deployment task scripts can export host-specific GPU settings before calling it.
+
 | Variable | Used by |
 |----------|---------|
 | `MODE` | Worker selection (if not passed as `--mode`) |
@@ -168,16 +170,17 @@ DIGESTOR_REPETITION_PENALTY=1.05
 
 For Digestor with nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
 ```
-DIGESTOR_TEMPERATURE=0.5
+DIGESTOR_TEMPERATURE=0.4
 DIGESTOR_TOP_P=0.95
-DIGESTOR_REPETITION_PENALTY=1.1
+DIGESTOR_REPETITION_PENALTY=1.15
 ```
 
 For Consolidator with nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
 ```
-CONSOLIDATOR_TEMPERATURE=1.0
+CONSOLIDATOR_TEMPERATURE=0.8
 CONSOLIDATOR_TOP_P=0.95
-CONSOLIDATOR_REPETITION_PENALTY=1.1
+CONSOLIDATOR_TOP_K=50
+CONSOLIDATOR_REPETITION_PENALTY=1.15
 ```
 
 ### Processing states (beans)

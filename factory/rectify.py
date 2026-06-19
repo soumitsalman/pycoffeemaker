@@ -5,10 +5,10 @@ import os
 import re
 import sys
 
-from dotenv import load_dotenv
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-load_dotenv()
+from utils.env import load_coffeemaker_env
+
+load_coffeemaker_env()
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta

@@ -12,7 +12,7 @@ RUN="$WORKING_DIR/run.py"
 
 set -a
 # shellcheck disable=SC1091
-source "$WORKING_DIR/.env"
+[[ -f "$WORKING_DIR/.env" ]] && source "$WORKING_DIR/.env"
 set +a
 
 RUN_COLLECTOR=0

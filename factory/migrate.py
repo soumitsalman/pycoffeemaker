@@ -3,11 +3,12 @@ import os
 import logging
 import sys
 import os
-from dotenv import load_dotenv
 from tqdm import tqdm
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-load_dotenv()
+from utils.env import load_coffeemaker_env
+
+load_coffeemaker_env()
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

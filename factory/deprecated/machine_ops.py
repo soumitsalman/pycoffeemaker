@@ -1,10 +1,10 @@
 import os
 import requests
 import argparse
-from dotenv import load_dotenv
+from utils.env import load_coffeemaker_env
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(CURR_DIR + "/.env")
+load_coffeemaker_env(CURR_DIR)
 
 def shutdown_td(instance_id, api_key):
     url = f"https://dashboard.tensordock.com/api/v2/instances/{instance_id}/stop"
