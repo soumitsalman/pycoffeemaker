@@ -176,6 +176,66 @@ def test_static_db():
 
 
 @pytest.mark.integration
+@pytest.mark.orch_classifier
+def test_classifier_static_label_search():
+    import pandas as pd
+    from workers.analyzerorch import (
+        CATEGORIES,
+        CLASSIFICATION_LIMIT,
+        EMBEDDING,
+        SENTIMENTS,
+        URL,
+        Classifier,
+    )
+    from workers.utils import BEANS, EMBEDDED
+
+    class DummyCache:
+        pass
+
+    categories_df = pd.read_parquet("./factory/categories.parquet")
+    sentiments_df = pd.read_parquet("./factory/sentiments.parquet")
+    cache = _analyzer_test_cache()
+    classifier = Classifier(cache=cache, cls_cache=DummyCache(), batch_size=2)
+
+    category_embedding = categories_df[EMBEDDING].iloc[0]
+    sentiment_embedding = sentiments_df[EMBEDDING].iloc[0]
+
+    try:
+        categories = classifier._label_batch_search(
+            classifier.category_index,
+            [category_embedding],
+            CLASSIFICATION_LIMIT,
+        )[0]
+        sentiments = classifier._label_batch_search(
+            classifier.sentiment_index,
+            [sentiment_embedding],
+            CLASSIFICATION_LIMIT,
+        )[0]
+
+        assert categories[0] == categories_df["category"].iloc[0]
+        assert sentiments[0] == sentiments_df["sentiment"].iloc[0]
+
+        beans = [
+            bean
+            for bean in cache.get(BEANS, states=EMBEDDED, limit=10)
+            if bean.get(EMBEDDING)
+        ]
+        if not beans:
+            pytest.skip("No embedded beans available in PROCESSING_CACHE")
+
+        updates = list(classifier.classify_beans(beans))
+        flat_updates = [update for chunk in updates for update in chunk]
+        output_block = "\nCLASSIFIER_OUTPUT\n" + json.dumps(flat_updates, indent=2)
+        print(output_block)
+        assert len(flat_updates) == len(beans)
+        assert {update[URL] for update in flat_updates} == {bean[URL] for bean in beans}
+        assert all(update[CATEGORIES] for update in flat_updates)
+        assert all(update[SENTIMENTS] for update in flat_updates)
+    finally:
+        cache.close()
+
+
+@pytest.mark.integration
 @pytest.mark.orch_collector
 def test_collector_orch():
     from workers.collectororch import Collector

@@ -1,10 +1,14 @@
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from utils.dates import now
 from utils.logs import get_logger, log_runtime
 import os
 from datetime import datetime
 from itertools import batched, chain
+import numpy as np
+import pandas as pd
+from sklearn.neighbors import NearestNeighbors
 from .workercache.base import StateCacheBase
 from .workercache.clscache import ClassificationCache
 from nlp import (
@@ -243,12 +247,38 @@ class Classifier:
         self.cache = cache
         self.cls_cache = cls_cache
         self.batch_size = batch_size
+        factory_dir = Path(__file__).resolve().parents[1] / "factory"
+        self.category_index = self._load_label_index(factory_dir / "categories.parquet", "category")
+        self.sentiment_index = self._load_label_index(factory_dir / "sentiments.parquet", "sentiment")
+
+    def _load_label_index(self, path: Path, id_key: str):
+        df = pd.read_parquet(path)
+        labels = df[id_key].tolist()
+        vectors = np.asarray(df[EMBEDDING].tolist(), dtype=np.float32)
+        index = NearestNeighbors(
+            metric="cosine",
+            algorithm="brute",
+            n_jobs=-1,
+        )
+        index.fit(vectors)
+        return {"labels": labels, "index": index}
+
+    def _label_batch_search(self, index_pack: dict, embeddings: list[list[float]], top_n: int) -> list[list[str]]:
+        if not embeddings:
+            return []
+        labels = index_pack["labels"]
+        _, indices = index_pack["index"].kneighbors(
+            np.asarray(embeddings, dtype=np.float32),
+            n_neighbors=min(top_n, len(labels)),
+            return_distance=True,
+        )
+        return [[labels[i] for i in row] for row in indices]
 
     def classify_beans(self, beans: list[dict]):
         for chunk in batched(beans, self.batch_size):
             embeddings = [bean[EMBEDDING] for bean in chunk]
-            categories = self.cls_cache.batch_search("categories", embeddings, top_n=CLASSIFICATION_LIMIT)
-            sentiments = self.cls_cache.batch_search("sentiments", embeddings, top_n=CLASSIFICATION_LIMIT)
+            categories = self._label_batch_search(self.category_index, embeddings, CLASSIFICATION_LIMIT)
+            sentiments = self._label_batch_search(self.sentiment_index, embeddings, CLASSIFICATION_LIMIT)
             updates = clean_updates([
                 {
                     URL: bean[URL],
