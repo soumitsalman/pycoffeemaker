@@ -1,5 +1,37 @@
 set -e
 
+MODE="gpu"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --mode)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --mode requires one of: io, cpu, gpu" >&2
+                exit 1
+            fi
+            MODE="$2"
+            shift 2
+            ;;
+        --mode=*)
+            MODE="${1#*=}"
+            shift
+            ;;
+        *)
+            echo "Usage: $0 [--mode io|cpu|gpu]" >&2
+            exit 1
+            ;;
+    esac
+done
+
+case "$MODE" in
+    io|cpu|gpu)
+        ;;
+    *)
+        echo "Error: invalid mode '$MODE'. Expected one of: io, cpu, gpu" >&2
+        exit 1
+        ;;
+esac
+
 echo "=== Updating package lists and installing dependencies ==="
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y build-essential python3.12-venv python3-dev ninja-build cmake
@@ -16,7 +48,17 @@ git clone https://www.github.com/soumitsalman/pybeansack.git
 git clone https://www.github.com/soumitsalman/nlp.git
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+case "$MODE" in
+    io)
+        pip install -r requirements-io.txt
+        ;;
+    cpu)
+        pip install -r requirements-cpu.txt
+        ;;
+    gpu)
+        pip install -r requirements.txt
+        ;;
+esac
 pip install -r pybeansack/requirements.txt
 mkdir -p .cache/clscache .logs
 # echo "=== Installing psql tools ==="
