@@ -61,31 +61,28 @@ def _parse_page(url: str, html: str) -> dict:
     """Process worker: parse html into metadata + readable content."""
     from readability import Document
 
-    metadata = _get_metadata(url, lxml.html.fromstring(html))
-    doc = Document(html)
+    tree = lxml.html.fromstring(html)
+    metadata = _get_metadata(url, tree)
+    title = metadata.get("meta_title")
+    if not title:
+        title_tags = tree.xpath("//title")
+        if title_tags:
+            title = " ".join(title_tags[0].text_content().split())
+    doc = Document(tree, url=url)
+    summary_html = doc.summary(html_partial=True)
     body = {
-        TITLE: doc.short_title() or doc.title(),
-        AUTHOR: doc.author(),
-        CONTENT: strip_html_tags(doc.summary(html_partial=True))
+        TITLE: title,
+        AUTHOR: metadata.get(AUTHOR),
+        CONTENT: strip_html_tags(summary_html)
     }
     body.update(metadata)
     return body
 
-def _convert_pdf_to_markdown(pdf_bytes: bytes) -> str:
-    """Process worker: convert a PDF byte stream to markdown."""
-    import tempfile
+def _convert_pdf_to_markdown(path: str) -> str:
+    """Process worker: convert a PDF file to markdown."""
     import pymupdf4llm
 
-    path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as pdf:
-            path = pdf.name
-            pdf.write(pdf_bytes)
-        return pymupdf4llm.to_markdown(path, use_ocr=False)
-    finally:
-        if path:
-            try: os.unlink(path)
-            except OSError: pass
+    return pymupdf4llm.to_markdown(path, use_ocr=False)
 
 def _is_pdf_url(url: str) -> bool:
     try: return urlparse(url).path.lower().endswith(".pdf")
@@ -146,8 +143,8 @@ class AsyncWebScraper:
     async def _parse_in_process(self, parser, url: str, html: str) -> dict:
         return await self._run_in_process("parse_pool", parser, url, html)
 
-    async def _convert_pdf_in_process(self, pdf_bytes: bytes) -> str:
-        return await self._run_in_process("pdf_pool", _convert_pdf_to_markdown, pdf_bytes)
+    async def _convert_pdf_in_process(self, path: str) -> str:
+        return await self._run_in_process("pdf_pool", _convert_pdf_to_markdown, path)
 
     @retry(
         retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
@@ -160,10 +157,7 @@ class AsyncWebScraper:
             # check final url (post-redirect) and content-type before buffering anything
             if excluded_content(url=str(response.url), content_type=response.content_type): return None
             if (response.content_length or 0) > MAX_HTML_SIZE: return None
-            body = bytearray()
-            async for chunk in response.content.iter_chunked(1 << 16):
-                body.extend(chunk)
-                if len(body) >= MAX_HTML_SIZE: break  # truncate oversized/streaming responses instead of buffering them whole
+            body = await response.content.read(MAX_HTML_SIZE)
             return body.decode(response.charset or "utf-8", errors="replace")
 
     @retry(
@@ -172,23 +166,9 @@ class AsyncWebScraper:
         wait=wait_random(*RETRY_JITTER),
         reraise=True,
     )
-    async def _scrape_pdf_bytes(self, url: str) -> bytes | None:
-        async with self.throttle, self.session.get(url) as response:
-            if not (_is_pdf_content(response.content_type) or _is_pdf_url(str(response.url))): return None
-            if (response.content_length or 0) > MAX_PDF_SIZE: return None
-            body = bytearray()
-            async for chunk in response.content.iter_chunked(1 << 16):
-                body.extend(chunk)
-                if len(body) >= MAX_PDF_SIZE: return None
-            return bytes(body)
+    async def _scrape_content_body(self, url: str) -> tuple[str, str, str] | None:
+        import tempfile
 
-    @retry(
-        retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
-        stop=stop_after_attempt(RETRY_COUNT),
-        wait=wait_random(*RETRY_JITTER),
-        reraise=True,
-    )
-    async def _scrape_content_body(self, url: str) -> tuple[str, str, str | bytes] | None:
         async with self.throttle, self.session.get(url) as response:
             final_url = str(response.url)
             is_pdf = _is_pdf_content(response.content_type) or _is_pdf_url(final_url)
@@ -200,14 +180,16 @@ class AsyncWebScraper:
             elif (response.content_length or 0) > max_size:
                 return None
 
-            body = bytearray()
-            async for chunk in response.content.iter_chunked(1 << 16):
-                body.extend(chunk)
-                if len(body) >= max_size:
-                    return None if is_pdf else ("html", final_url, body.decode(response.charset or "utf-8", errors="replace"))
-
             if is_pdf:
-                return "pdf", final_url, bytes(body)
+                body = await response.content.read(max_size + 1)
+                if len(body) > max_size:
+                    return None
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as pdf:
+                    path = pdf.name
+                    pdf.write(body)
+                return "pdf", final_url, path
+
+            body = await response.content.read(max_size)
             return "html", final_url, body.decode(response.charset or "utf-8", errors="replace")
 
     @retry(
@@ -220,44 +202,6 @@ class AsyncWebScraper:
         async with self.throttle, self.session.get("https://www.google.com/s2/favicons?domain="+base_url) as response:
             if response.status == 200: return response.headers.get('Content-Location')
 
-    async def _scrape_page(self, url: str):
-        """Scrape a single page for both bean and publisher data."""
-        if excluded_url(url): return None
-        try:    
-            html = await self._scrape_html(url)
-            if not html: return None
-            return await self._parse_in_process(_parse_page, url, html)
-        except Exception as e: 
-            log.debug(event=f"scraping failed - {e.__class__.__name__} {e}",
-                source=url,
-                num_items=1,
-                error_type=e.__class__.__name__,
-                error_details=str(e),
-            )
-            return None
-
-    async def _scrape_pdf(self, url: str):
-        """Scrape a PDF and convert it to markdown content."""
-        if excluded_url(url): return None
-        try:
-            pdf_bytes = await self._scrape_pdf_bytes(url)
-            if not pdf_bytes: return None
-            markdown = await self._convert_pdf_in_process(pdf_bytes)
-            if not markdown: return None
-            return {
-                KIND: FINANCIAL_REPORT,
-                TITLE: _title_from_url(url),
-                CONTENT: markdown,
-            }
-        except Exception as e:
-            log.debug(event=f"pdf scraping failed - {e.__class__.__name__} {e}",
-                source=url,
-                num_items=1,
-                error_type=e.__class__.__name__,
-                error_details=str(e),
-            )
-            return None
-
     async def _scrape_content(self, url: str):
         if excluded_url(url): return None
         try:
@@ -266,16 +210,21 @@ class AsyncWebScraper:
 
             kind, final_url, body = scraped
             if kind == "pdf":
-                if not isinstance(body, bytes): return None
-                markdown = await self._convert_pdf_in_process(body)
-                if not markdown: return None
-                return {
-                    KIND: FINANCIAL_REPORT,
-                    TITLE: _title_from_url(final_url) or _title_from_url(url),
-                    CONTENT: markdown,
-                }
-            if not isinstance(body, str): return None
-            return await self._parse_in_process(_parse_page, final_url, body)
+                try:
+                    markdown = await self._convert_pdf_in_process(body)
+                    if not markdown: return None
+                    return {
+                        KIND: FINANCIAL_REPORT,
+                        TITLE: _title_from_url(final_url) or _title_from_url(url),
+                        CONTENT: markdown,
+                    }
+                finally:
+                    try: os.unlink(body)
+                    except OSError: pass
+
+            result = await self._parse_in_process(_parse_page, final_url, body)
+            del body
+            return result
         except Exception as e:
             log.debug(event=f"content scraping failed - {e.__class__.__name__} {e}",
                 source=url,

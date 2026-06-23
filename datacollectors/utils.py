@@ -99,10 +99,10 @@ def guess_article_type(bean: dict) -> str | None:
     if not bean:
         return None
 
-    url = bean.get(URL, "").lower()
-    base_url = bean.get(BASE_URL, "").lower()
-    domain_name = bean.get(SOURCE, "").lower()
-    site_name = bean.get(SITE_NAME, "").lower()
+    url = (bean.get(URL) or "").lower()
+    base_url = (bean.get(BASE_URL) or "").lower()
+    domain_name = (bean.get(SOURCE) or "").lower()
+    site_name = (bean.get(SITE_NAME) or "").lower()
     tags = bean.get(TAGS)
 
     # 1. explicit post domains (constant-time lookup)

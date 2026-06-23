@@ -1,16 +1,16 @@
 # Graph Report - pycoffeemaker  (2026-06-23)
 
 ## Corpus Check
-- 68 files · ~76,827 words
+- 68 files · ~76,746 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1990 nodes · 3218 edges · 141 communities (101 shown, 40 thin omitted)
+- 2022 nodes · 3257 edges · 151 communities (105 shown, 46 thin omitted)
 - Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 199 edges (avg confidence: 0.77)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1fbd0539`
+- Built from commit: `d014521c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -128,27 +128,37 @@
 - [[_COMMUNITY_Community 110|Community 110]]
 - [[_COMMUNITY_Community 111|Community 111]]
 - [[_COMMUNITY_Community 112|Community 112]]
+- [[_COMMUNITY_Community 113|Community 113]]
 - [[_COMMUNITY_Community 114|Community 114]]
 - [[_COMMUNITY_Community 115|Community 115]]
 - [[_COMMUNITY_Community 116|Community 116]]
 - [[_COMMUNITY_Community 117|Community 117]]
 - [[_COMMUNITY_Community 118|Community 118]]
 - [[_COMMUNITY_Community 119|Community 119]]
-- [[_COMMUNITY_Community 120|Community 120]]
 - [[_COMMUNITY_Community 121|Community 121]]
 - [[_COMMUNITY_Community 122|Community 122]]
 - [[_COMMUNITY_Community 123|Community 123]]
 - [[_COMMUNITY_Community 124|Community 124]]
+- [[_COMMUNITY_Community 125|Community 125]]
+- [[_COMMUNITY_Community 126|Community 126]]
+- [[_COMMUNITY_Community 127|Community 127]]
+- [[_COMMUNITY_Community 128|Community 128]]
 - [[_COMMUNITY_Community 129|Community 129]]
-- [[_COMMUNITY_Community 132|Community 132]]
-- [[_COMMUNITY_Community 133|Community 133]]
-- [[_COMMUNITY_Community 134|Community 134]]
-- [[_COMMUNITY_Community 135|Community 135]]
+- [[_COMMUNITY_Community 130|Community 130]]
+- [[_COMMUNITY_Community 131|Community 131]]
 - [[_COMMUNITY_Community 136|Community 136]]
 - [[_COMMUNITY_Community 137|Community 137]]
 - [[_COMMUNITY_Community 138|Community 138]]
 - [[_COMMUNITY_Community 139|Community 139]]
-- [[_COMMUNITY_Community 140|Community 140]]
+- [[_COMMUNITY_Community 142|Community 142]]
+- [[_COMMUNITY_Community 143|Community 143]]
+- [[_COMMUNITY_Community 144|Community 144]]
+- [[_COMMUNITY_Community 145|Community 145]]
+- [[_COMMUNITY_Community 146|Community 146]]
+- [[_COMMUNITY_Community 147|Community 147]]
+- [[_COMMUNITY_Community 148|Community 148]]
+- [[_COMMUNITY_Community 149|Community 149]]
+- [[_COMMUNITY_Community 150|Community 150]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `MongoDB` - 54 edges
@@ -188,7 +198,7 @@
 - **Project Cafecito core data units** — bean_data_unit, chatter_data_unit, publisher_data_unit, sip_data_unit, composite_data_unit [EXTRACTED 1.00]
 - **Docker Compose local dev infrastructure** — compose_pgcache, compose_localmongo, compose_azurite, compose_localcrawler [EXTRACTED 1.00]
 
-## Communities (141 total, 40 thin omitted)
+## Communities (151 total, 46 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
@@ -200,11 +210,11 @@ Nodes (62): db_instance(), migrate(), Advanced Usage, AggregatedBean, Architectu
 
 ### Community 2 - "Community 2"
 Cohesion: 0.05
-Nodes (31): create_composer_topics_locally(), create_classification_cache(), create_classification_embeddings(), create_classification_files(), create_processing_cache(), Seed cache with classification embeddings, Seed cache with classification embeddings, StateCacheBase (+23 more)
+Nodes (22): APICollectorAsync, retry(), retry_if_exception_type(), stop_after_attempt(), Cupboard, Store a list of sips in the database., Store a list of sips in the database., Link a list of sips to a list of other sips.          Args:             - `relat (+14 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.06
-Nodes (19): APICollectorAsync, retry(), retry_if_exception_type(), stop_after_attempt(), Cupboard, Store a list of sips in the database., Store a list of sips in the database., Link a list of sips to a list of other sips.          Args:             - `relat (+11 more)
+Cohesion: 0.07
+Nodes (19): DiffuserImageGenerationAgent, image_agent_from_path(), LlamaCppTextGeneratorClient, LMAgentBase, LMClientBase, LocalTokenizer, ONNXText2TextClient, OVText2TextClient (+11 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.07
@@ -240,171 +250,167 @@ Nodes (14): AsyncStateCache, ClassificationCache, _cleanup_sql(), _create_id_exi
 
 ### Community 12 - "Community 12"
 Cohesion: 0.06
-Nodes (35): Capabilities, Cloud GPU ops, code:block1 (pycoffeemaker/), code:bash (python machine_ops.py --provider tensordock --action stop), code:bash (python -m venv .venv && source .venv/bin/activate), code:bash (# Collector), code:block4 (DIGESTOR_TEMPERATURE=0.15), code:block5 (DIGESTOR_TEMPERATURE=0.4) (+27 more)
+Nodes (32): _clean_markdown(), Remove any content before the first line starting with '# '., Remove any content before the first line starting with '# '., Remove any content before the first line starting with '# '., Remove any content before the first line starting with '# '., Collects the body of the url as a markdown, Remove any content before the first line starting with '# '., Remove any content before the first line starting with '# '. (+24 more)
 
 ### Community 13 - "Community 13"
+Cohesion: 0.06
+Nodes (35): Capabilities, Cloud GPU ops, code:block1 (pycoffeemaker/), code:bash (python machine_ops.py --provider tensordock --action stop), code:bash (python -m venv .venv && source .venv/bin/activate), code:bash (# Collector), code:block4 (DIGESTOR_TEMPERATURE=0.15), code:block5 (DIGESTOR_TEMPERATURE=0.4) (+27 more)
+
+### Community 14 - "Community 14"
 Cohesion: 0.1
 Nodes (36): AsyncCDNStore, CDNStore, Beansack, DuckDB, duckdbsack.create_db, DuckSack, ducklakesack.create_db, DuckLake warehouse attach (+28 more)
 
-### Community 15 - "Community 15"
+### Community 16 - "Community 16"
 Cohesion: 0.06
 Nodes (31): API summary, APPENDIX: Content Generation Models Evaluation, Article & Content Generation, Backend selection, Batching, code:block1 (nlp/), code:bash (pip install -r nlp/requirements.txt), code:python (from nlp import create_embedder) (+23 more)
 
-### Community 16 - "Community 16"
-Cohesion: 0.08
-Nodes (12): create_embedder(), LlamaCppEmbeddings, ORTEmbeddings, OVEmbeddings, # NOTE: moving the import inside the function so that there is no need to instal, # NOTE: moving the import inside the function so that there is no need to instal, RemoteEmbeddings, VLLMEmbedder (+4 more)
-
 ### Community 17 - "Community 17"
-Cohesion: 0.08
-Nodes (25): Scrape a single page for both bean and publisher data., Scrape a single page for both bean and publisher data., Prepare result for page scraping (bean and publisher)., Prepare result for page scraping (bean and publisher)., Scrape a single URL for both bean and publisher data., Prepare result for page scraping (bean and publisher)., Scrape a single URL for both bean and publisher data., Prepare result for page scraping (bean and publisher). (+17 more)
-
-### Community 18 - "Community 18"
 Cohesion: 0.07
 Nodes (28): `APICollector` / `APICollectorAsync`, `AsyncWebScraper`, Chatter fields (when present), Choosing a scraper, code:python ({), code:python ({), code:python ({), code:python ({) (+20 more)
 
+### Community 18 - "Community 18"
+Cohesion: 0.08
+Nodes (25): Scrape a single page for both bean and publisher data., Scrape a single page for both bean and publisher data., Scrape a single URL for both bean and publisher data., Scrape a single URL for both bean and publisher data., Scrape a single page for both bean and publisher data., Augment existing beans with scraped data., Scrape a single URL for both bean and publisher data., Scrape a single bean for page data. (+17 more)
+
 ### Community 19 - "Community 19"
-Cohesion: 0.09
-Nodes (19): Collects the body of the url as a markdown, Collects the bodies of the urls as markdowns, Collects the bodies of the beans as markdowns, Collects the body of the url as a markdown, Collects the bodies of the urls as markdowns, Collects the bodies of the beans as markdowns, Collects the body of the url as a markdown, Collects the bodies of the urls as markdowns (+11 more)
+Cohesion: 0.13
+Nodes (8): AsyncStateCache, _create_multi_state_query_expr(), create_rows(), _create_single_state_query_expr(), _create_state_query_expr(), _create_state_tables_sql(), _rectify_path(), StateCache
 
 ### Community 20 - "Community 20"
+Cohesion: 0.18
+Nodes (24): _deduplicate(), generate_fake_beans(), generate_fake_chatters(), generate_fake_embeddings(), generate_fake_extractions(), generate_fake_mugs(), generate_fake_publishers(), generate_fake_related() (+16 more)
+
+### Community 21 - "Community 21"
 Cohesion: 0.16
 Nodes (26): Bean Processing Pipeline, Beansack Porter, Classifier and Clusterer Worker, Collector Orchestrator, Consolidator Worker, Cupboard Porter, Digestor Worker, Embedder Worker (+18 more)
 
-### Community 21 - "Community 21"
-Cohesion: 0.14
-Nodes (8): AsyncStateCacheBase, AsyncStateCache, _create_multi_state_query_expr(), _create_single_state_query_expr(), _create_state_query_expr(), _create_state_tables_sql(), _rectify_path(), StateCache
-
 ### Community 23 - "Community 23"
-Cohesion: 0.1
-Nodes (23): _convert_pdf_to_markdown(), _get_metadata(), _is_pdf_content(), _is_pdf_url(), _parse_metadata(), _parse_page(), Async context manager exit, # TODO: add a check to remove "advertisement" (+15 more)
-
-### Community 24 - "Community 24"
-Cohesion: 0.11
-Nodes (8): ClassificationCacheBase, AsyncStateCache, ClassificationCache, _create_emb_tables_sql(), _create_state_tables_sql(), Initialize the ProcessingCache with a PostgreSQL connection string and table set, Initialize the ProcessingCache with a PostgreSQL connection string and table set, StateCache
-
-### Community 25 - "Community 25"
 Cohesion: 0.15
 Nodes (11): AsyncStateMachine, create_data_to_store(), create_exists_query_expr(), _create_multi_state_query_expr(), create_optimize_expr(), create_query_expr(), _create_single_state_query_expr(), create_table_expr() (+3 more)
 
-### Community 26 - "Community 26"
-Cohesion: 0.21
-Nodes (21): _deduplicate(), generate_fake_beans(), generate_fake_chatters(), generate_fake_digests(), generate_fake_extractions(), generate_fake_mugs(), generate_fake_publishers(), generate_fake_related() (+13 more)
-
-### Community 27 - "Community 27"
-Cohesion: 0.16
-Nodes (20): APICollectorAsync, AsyncWebScraper, _analyzer_cls_cache(), _analyzer_test_cache(), create_test_data_file(), hydrate_test_db(), main(), save_models() (+12 more)
-
-### Community 28 - "Community 28"
+### Community 24 - "Community 24"
 Cohesion: 0.15
 Nodes (16): APICollector, _batch_run(), _build_rss_item(), _extract_author_email(), _extract_body(), _extract_feed_metadata(), _extract_language(), _extract_link() (+8 more)
 
+### Community 25 - "Community 25"
+Cohesion: 0.09
+Nodes (21): Scrape a single site for publisher data., Scrape a single site for publisher data., Scrape a single site for publisher data., Scrape a single site for publisher data., Scrape a site for publisher data., Scrape a site for publisher data., Scrape a single publisher for publisher data., Scrape a single site for publisher data. (+13 more)
+
+### Community 27 - "Community 27"
+Cohesion: 0.16
+Nodes (18): APICollectorAsync, AsyncWebScraper, _analyzer_cls_cache(), _analyzer_test_cache(), create_test_data_file(), hydrate_test_db(), main(), save_models() (+10 more)
+
+### Community 28 - "Community 28"
+Cohesion: 0.13
+Nodes (19): _build_hackernews_item(), _build_reddit_item(), Prepare result for page scraping (bean and publisher)., Prepare result for page scraping (bean and publisher)., Prepare result for page scraping (bean and publisher)., Prepare result for page scraping (bean and publisher)., Prepare result for page scraping (bean and publisher)., Prepare result for page scraping (bean and publisher). (+11 more)
+
 ### Community 29 - "Community 29"
-Cohesion: 0.14
-Nodes (15): batch_search(), _copy_insert_state_rows(), _copy_insert_state_rows_async(), _create_multi_state_query_expr(), create_query_expr(), _create_rows(), _create_single_state_query_expr(), create_vector_search_expr() (+7 more)
+Cohesion: 0.18
+Nodes (14): batch_search(), _copy_insert_state_rows(), _copy_insert_state_rows_async(), _create_multi_state_query_expr(), create_query_expr(), _create_single_state_query_expr(), create_vector_search_expr(), _normalize_states() (+6 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.11
-Nodes (15): _apply_model_json_constraints(), cleanup_fields(), cleanup_names(), model_json_schema(), Remove leading/trailing non-alphanumeric characters, filter out empty and undete, Remove leading/trailing non-alphanumeric characters, filter out empty and undete, Converts the tags into snake_case, Converts the tags into snake_case (+7 more)
-
-### Community 32 - "Community 32"
-Cohesion: 0.14
-Nodes (11): AsyncWebScraper, Async context manager enter, Scrape a PDF and convert it to markdown content., Scrape a PDF and convert it to markdown content., Async context manager enter, Async context manager enter, Sync: single lxml parse for metadata only., Sync: parse html into metadata + readable content. Runs in a worker thread. (+3 more)
-
-### Community 33 - "Community 33"
-Cohesion: 0.1
-Nodes (18): Scrape a single site for publisher data., Scrape a single site for publisher data., Scrape a single site for publisher data., Scrape a single site for publisher data., Scrape a site for publisher data., Augment existing publishers with scraped data., Scrape a site for publisher data., Augment existing publishers with scraped data. (+10 more)
-
-### Community 34 - "Community 34"
-Cohesion: 0.12
-Nodes (15): AggregatedBean, Bean, Config, Publisher, Metadata of the website, publication or social medium from which an article or c, Metadata of the website, publication or social medium from which an article or c, Metadata of an article such as a news or blog post., Metadata of an article such as a news or blog post. (+7 more)
-
-### Community 35 - "Community 35"
 Cohesion: 0.16
 Nodes (10): AsyncCDNStore, CDNStore, _guess_type(), _public_url(), Uploads a single binary file.          Parameters:             path: should be i, Uploads multiple text items concurrently.          Parameters:             data:, Creates a public access URL based on template. Ex: https://{bucket}.t3.tigrisfil, Uploads a single text file.          Parameters:             path: should be in (+2 more)
 
-### Community 36 - "Community 36"
+### Community 31 - "Community 31"
 Cohesion: 0.16
 Nodes (5): Cupboard, Insert a batch while skipping records that already exist., Link inserted events to matching sources via `source['base_url']->PUBLISHED-> ev, Link matching events to inserted sources via `source->PUBLISHED->event['base_url, transaction()
 
-### Community 37 - "Community 37"
+### Community 32 - "Community 32"
 Cohesion: 0.14
-Nodes (17): _build_hackernews_item(), _build_reddit_item(), Scrape a single publisher for publisher data., Scrape a single publisher for publisher data., Scrape a single publisher for publisher data., Scrape a single publisher for publisher data., Scrape a single publisher for publisher data., cleanup_item() (+9 more)
+Nodes (18): _get_metadata(), _is_pdf_content(), _is_pdf_url(), _parse_metadata(), _parse_page(), # TODO: add a check to remove "advertisement", # TODO: add a check to remove "advertisement", # TODO: add a check to remove "advertisement" (+10 more)
 
-### Community 38 - "Community 38"
-Cohesion: 0.15
-Nodes (5): StateCacheBase, AsyncStateCache, _create_state_tables_sql(), Initialize the ProcessingCache with a PostgreSQL connection string and table set, StateCache
+### Community 33 - "Community 33"
+Cohesion: 0.12
+Nodes (15): AggregatedBean, Bean, Config, Publisher, Metadata of the website, publication or social medium from which an article or c, Metadata of the website, publication or social medium from which an article or c, Metadata of an article such as a news or blog post., Metadata of an article such as a news or blog post. (+7 more)
 
-### Community 39 - "Community 39"
-Cohesion: 0.15
-Nodes (7): EmbedderBase, Takes a list of strings/large documents as input and chunks them into smaller pi, Takes a list of strings/large documents as input and chunks them into smaller pi, Embeds a single string as a query. It prepends `query: ` to the input., Embeds a single string as a query. It prepends `query: ` to the input., This takes a string or an list of strings as an input.         This calls the em, This takes a string or an list of strings as an input.         This calls the em
+### Community 34 - "Community 34"
+Cohesion: 0.14
+Nodes (6): AsyncStateCacheBase, StateCacheBase, AsyncStateCache, _create_state_tables_sql(), Initialize the ProcessingCache with a PostgreSQL connection string and table set, StateCache
 
-### Community 40 - "Community 40"
-Cohesion: 0.21
-Nodes (4): LocalTokenizer, ONNXText2TextClient, OVText2TextClient, TransformerText2TextClient
-
-### Community 41 - "Community 41"
-Cohesion: 0.15
-Nodes (5): DiffuserImageGenerationAgent, image_agent_from_path(), LMAgentBase, RemoteImageGenerationAgent, Text2TextAgent
-
-### Community 42 - "Community 42"
-Cohesion: 0.2
-Nodes (9): LlamaCppTextGeneratorClient, LMClientBase, RemoteTextGeneratorClient, text2text_agent_from_path(), text2text_client_from_path(), text_generator_agent(), text_generator_client(), TextGeneratorAgent (+1 more)
-
-### Community 43 - "Community 43"
+### Community 35 - "Community 35"
 Cohesion: 0.16
 Nodes (6): parse_compressed(), parse_markdown(), _run_single(), _strip_fences(), TextAnalystBase, VLLMTextAnalyst
 
-### Community 44 - "Community 44"
+### Community 36 - "Community 36"
 Cohesion: 0.16
 Nodes (6): MicroAgentBase, parse_compressed(), parse_markdown(), _run_single(), _strip_fences(), VLLMMicroAgent
 
-### Community 45 - "Community 45"
+### Community 37 - "Community 37"
+Cohesion: 0.15
+Nodes (7): EmbedderBase, Takes a list of strings/large documents as input and chunks them into smaller pi, Takes a list of strings/large documents as input and chunks them into smaller pi, Embeds a single string as a query. It prepends `query: ` to the input., Embeds a single string as a query. It prepends `query: ` to the input., This takes a string or an list of strings as an input.         This calls the em, This takes a string or an list of strings as an input.         This calls the em
+
+### Community 38 - "Community 38"
+Cohesion: 0.18
+Nodes (8): AsyncWebScraper, _convert_pdf_to_markdown(), Scrape a PDF and convert it to markdown content., Scrape a PDF and convert it to markdown content., Process worker: convert a PDF file to markdown., Sync: single lxml parse for metadata only., Process worker: convert a PDF file to markdown., _title_from_url()
+
+### Community 39 - "Community 39"
+Cohesion: 0.12
+Nodes (15): Scrape multiple URLs in parallel for bean and publisher data., Scrape multiple URLs in parallel for bean and publisher data., Scrape multiple sites for publisher data, deduplicating by base_url., Scrape multiple URLs in parallel for bean and publisher data., Scrape multiple URLs in parallel for bean and publisher data., Scrape multiple sites for publisher data, deduplicating by base_url., Scrape multiple sites for publisher data, deduplicating by base_url., Scrape multiple URLs in parallel for bean and publisher data. (+7 more)
+
+### Community 40 - "Community 40"
 Cohesion: 0.15
 Nodes (16): Cupboard, Mug, pycupboard/requirements.txt, Sip, extract_sips_from_content(), extract_tldr_highlight(), import_espresso_rss(), parse_rss_to_mugs_and_sips() (+8 more)
 
-### Community 46 - "Community 46"
-Cohesion: 0.12
-Nodes (16): Test storing BeanGist data in warehouse, Test storing Chatter data in warehouse, Test storing Chatter data in warehouse, Test storing Source data in warehouse, Test storing Source data in warehouse, Test storing BeanCore data in warehouse, Test storing BeanCore data in warehouse, Test storing BeanEmbedding data in warehouse (+8 more)
+### Community 41 - "Community 41"
+Cohesion: 0.23
+Nodes (15): _add_ts_and_ids_expr(), _copy_insert_state_rows_async(), _create_multi_state_query_expr(), create_query_expr(), _create_single_state_query_expr(), deduplicate(), deserialize_data_rows(), get() (+7 more)
 
-### Community 47 - "Community 47"
+### Community 42 - "Community 42"
 Cohesion: 0.23
 Nodes (15): _deduplicate(), generate_fake_beans(), generate_fake_chatters(), generate_fake_extractions(), generate_fake_publishers(), generate_fake_related(), random_embedding(), Integration tests for pybeansack backends (run via pytest). (+7 more)
 
-### Community 48 - "Community 48"
+### Community 43 - "Community 43"
+Cohesion: 0.12
+Nodes (16): Test storing BeanGist data in warehouse, Test storing Chatter data in warehouse, Test storing Chatter data in warehouse, Test storing Source data in warehouse, Test storing Source data in warehouse, Test storing BeanCore data in warehouse, Test storing BeanCore data in warehouse, Test storing BeanEmbedding data in warehouse (+8 more)
+
+### Community 44 - "Community 44"
+Cohesion: 0.16
+Nodes (3): AsyncStateCache, _create_state_tables_sql(), StateCache
+
+### Community 46 - "Community 46"
+Cohesion: 0.15
+Nodes (7): create_embedder(), LlamaCppEmbeddings, # NOTE: moving the import inside the function so that there is no need to instal, # NOTE: moving the import inside the function so that there is no need to instal, RemoteEmbeddings, test_cache(), test_vector_search()
+
+### Community 47 - "Community 47"
 Cohesion: 0.2
 Nodes (10): BaseModel, Digest, Metadata, parse_compressed(), parse_json(), parse_markdown(), valid_names(), valid_regions() (+2 more)
+
+### Community 48 - "Community 48"
+Cohesion: 0.18
+Nodes (9): AINewsDigest, _apply_model_json_constraints(), cleanup_digest_fields(), CyberNewsDigest, Digest, LogisticsDigest, model_json_schema(), Main digest/key points of an article/news/blog/report (+1 more)
 
 ### Community 49 - "Community 49"
 Cohesion: 0.14
 Nodes (12): _scrape_html(), excluded_content(), excluded_url(), extract_domain(), parse_int(), True if the url pattern or the response content-type indicates non-scrapable con, True if the url pattern or the response content-type indicates non-scrapable con, Return the url with a 'www.' host prefix, or None if it already has one / can't (+4 more)
 
+### Community 50 - "Community 50"
+Cohesion: 0.16
+Nodes (5): migrate_classification_cache(), _prepare_to_store(), Opens connection to existing or new simple database on `db_path`.         Create, SimpleVectorDB, test_static_db()
+
 ### Community 51 - "Community 51"
-Cohesion: 0.18
-Nodes (4): migrate_classification_cache(), _prepare_to_store(), Opens connection to existing or new simple database on `db_path`.         Create, SimpleVectorDB
-
-### Community 52 - "Community 52"
-Cohesion: 0.31
-Nodes (12): decode_data(), _add_ts_and_ids_expr(), _create_multi_state_query_expr(), create_query_expr(), _create_single_state_query_expr(), deduplicate(), deserialize_data_rows(), get() (+4 more)
-
-### Community 53 - "Community 53"
 Cohesion: 0.18
 Nodes (9): _fix_publisher_ids(), _Publisher, # TODO: split out function for adding embeddings and gists. code commented out b, # TODO: add function for recompute (for clusters, categories, sentiments and tre, # TODO: add a recompute and cleanup function, # TODO: add delete for bookmarked bean, # NOTE: remove anything collected 7 days ago that did not get processed by analy, # TODO: this is a temporary fix. (+1 more)
 
-### Community 54 - "Community 54"
+### Community 52 - "Community 52"
 Cohesion: 0.15
-Nodes (12): cleanup_bean_tags(), hydrate_processing_cache(), migrate_classification_cache_pg_to_fire(), migrate_users(), Migrate ClassificationCache from PostgreSQL to Firebird/zvec.      Args:, Migrate ClassificationCache from PostgreSQL to Firebird/zvec.      Args:, Hydrates local processing cache with beans and publishers from production/backup, Hydrates local processing cache with beans and publishers from production/backup (+4 more)
+Nodes (12): cleanup_names(), Remove leading/trailing non-alphanumeric characters, filter out empty and undete, Remove leading/trailing non-alphanumeric characters, filter out empty and undete, Converts the tags into snake_case, Converts the tags into snake_case, Remove leading/trailing non-alphanumeric characters, filter out empty and undete, Remove leading/trailing non-alphanumeric characters, filter out empty and undete, Converts the tags into snake_case (+4 more)
+
+### Community 53 - "Community 53"
+Cohesion: 0.23
+Nodes (7): Consolidator, Consolidates events and data to create consolidated briefings and signals, Consolidates events and data to create consolidated briefings and signals, Consolidates events and data to create consolidated briefings and signals, Consolidates events and data to create consolidated briefings and signals, Consolidates events and data to create consolidated briefings and signals, Consolidates events and data to create consolidated briefings and signals
+
+### Community 54 - "Community 54"
+Cohesion: 0.18
+Nodes (9): _fix_publisher_ids(), _Publisher, # TODO: split out function for adding embeddings and gists. code commented out b, # TODO: add function for recompute (for clusters, categories, sentiments and tre, # TODO: add a recompute and cleanup function, # TODO: add delete for bookmarked bean, # NOTE: remove anything collected 7 days ago that did not get processed by analy, # TODO: this is a temporary fix. (+1 more)
 
 ### Community 55 - "Community 55"
 Cohesion: 0.21
 Nodes (11): create_client(), db(), duck_db(), lance_db(), pg_db(), Indirect parametrization: request.param is pg_db | duck_db | lance_db., db(), duck_db() (+3 more)
 
 ### Community 56 - "Community 56"
-Cohesion: 0.18
-Nodes (9): _fix_publisher_ids(), _Publisher, # TODO: split out function for adding embeddings and gists. code commented out b, # TODO: add function for recompute (for clusters, categories, sentiments and tre, # TODO: add a recompute and cleanup function, # TODO: add delete for bookmarked bean, # NOTE: remove anything collected 7 days ago that did not get processed by analy, # TODO: this is a temporary fix. (+1 more)
-
-### Community 57 - "Community 57"
 Cohesion: 0.15
-Nodes (11): Scrape multiple URLs in parallel for bean and publisher data., Scrape multiple URLs in parallel for bean and publisher data., Scrape multiple sites for publisher data, deduplicating by base_url., Scrape multiple URLs in parallel for bean and publisher data., Scrape multiple URLs in parallel for bean and publisher data., Scrape multiple sites for publisher data, deduplicating by base_url., Scrape multiple sites for publisher data, deduplicating by base_url., Scrape multiple URLs in parallel for bean and publisher data. (+3 more)
+Nodes (12): cleanup_bean_tags(), hydrate_processing_cache(), migrate_classification_cache_pg_to_fire(), migrate_users(), Migrate ClassificationCache from PostgreSQL to Firebird/zvec.      Args:, Migrate ClassificationCache from PostgreSQL to Firebird/zvec.      Args:, Hydrates local processing cache with beans and publishers from production/backup, Hydrates local processing cache with beans and publishers from production/backup (+4 more)
 
 ### Community 59 - "Community 59"
 Cohesion: 0.17
@@ -412,19 +418,19 @@ Nodes (6): Briefing, Intelligence briefing from a stream of events., Intelligenc
 
 ### Community 60 - "Community 60"
 Cohesion: 0.17
-Nodes (11): Bean state flow, code:block1 (collected), Concepts, `deduplicate(object_type, state, items)`, `get(object_type, states, exclude_states=..., ids=None, window=..., limit=0, offset=0)`, How to use the API, `optimize(cleanup_older_than=...)`, Related docs (+3 more)
+Nodes (10): Async context manager enter, Async context manager enter, Async context manager exit, Async context manager exit, Async context manager exit, Async context manager enter, Async context manager enter, Async context manager exit (+2 more)
 
 ### Community 61 - "Community 61"
-Cohesion: 0.18
-Nodes (4): create_rows(), encode_data(), _create_rows(), set()
+Cohesion: 0.17
+Nodes (11): Bean state flow, code:block1 (collected), Concepts, `deduplicate(object_type, state, items)`, `get(object_type, states, exclude_states=..., ids=None, window=..., limit=0, offset=0)`, How to use the API, `optimize(cleanup_older_than=...)`, Related docs (+3 more)
 
 ### Community 62 - "Community 62"
-Cohesion: 0.2
-Nodes (4): _beans_query_pipeline(), _beans_text_search_pipeline(), _deserialize_beans(), _related_beans_pipeline()
+Cohesion: 0.18
+Nodes (5): _create_rows(), set(), encode_data(), _create_rows(), set()
 
 ### Community 63 - "Community 63"
 Cohesion: 0.2
-Nodes (4): _beans_query_pipeline(), _beans_text_search_pipeline(), _deserialize_beans(), _related_beans_pipeline()
+Nodes (3): create_micro_agent(), create_text_analyst(), RemoteTextAnalyst
 
 ### Community 64 - "Community 64"
 Cohesion: 0.2
@@ -436,133 +442,153 @@ Nodes (11): Bean, Chatter, Composite, PUBLISHED graph edge, SAME_AS graph edge, 
 
 ### Community 66 - "Community 66"
 Cohesion: 0.22
-Nodes (11): Beansack, RSS feedparser field reference, DockerfileIO, entry.content, entry.title, Asynchronous unaware orchestrators, test_porter_orch(), COLLECTOR worker mode (+3 more)
+Nodes (11): Topic classification taxonomy, CLASSIFICATION_CACHE, factory/classifications.yaml, create_embedder, EntityExtractor, Sentiment labels, test_embedder_orch(), CLASSIFIER worker mode (+3 more)
 
 ### Community 67 - "Community 67"
 Cohesion: 0.22
-Nodes (11): Topic classification taxonomy, CLASSIFICATION_CACHE, factory/classifications.yaml, create_embedder, EntityExtractor, Sentiment labels, test_embedder_orch(), CLASSIFIER worker mode (+3 more)
+Nodes (5): ClassificationCacheBase, ClassificationCache, _create_emb_tables_sql(), Initialize the ProcessingCache with a PostgreSQL connection string and table set, Initialize the ProcessingCache with a PostgreSQL connection string and table set
 
 ### Community 68 - "Community 68"
 Cohesion: 0.24
 Nodes (5): Project-wide utilities (logging, dates)., log_runtime(), log_runtime_async(), structlog logfmt logging: file when LOG_DIR set, else stderr., _runtime_decorator()
 
-### Community 69 - "Community 69"
+### Community 70 - "Community 70"
+Cohesion: 0.24
+Nodes (6): create_classification_cache(), create_classification_embeddings(), create_classification_files(), create_processing_cache(), Seed cache with classification embeddings, Seed cache with classification embeddings
+
+### Community 71 - "Community 71"
+Cohesion: 0.2
+Nodes (6): create_composer_topics_locally(), test_digestor_orch(), test_embedder_orch(), StateCacheBase, Digestor, Embedder
+
+### Community 72 - "Community 72"
 Cohesion: 0.38
 Nodes (9): load_json(), save_image(), save_json(), save_markdown(), test_digestor(), test_embedder(), test_extractor(), to_filename() (+1 more)
 
-### Community 70 - "Community 70"
+### Community 73 - "Community 73"
 Cohesion: 0.2
 Nodes (9): Cafecito naming, code:block1 (pycoffeemaker/), Coffeemaker, Data units, graphify, Other components, Repository layout, State machine (`workers/workercache/`) (+1 more)
 
-### Community 72 - "Community 72"
+### Community 74 - "Community 74"
+Cohesion: 0.22
+Nodes (8): RSS feedparser field reference, entry.content, entry.title, create_micro_agent, Legacy digest prompts, Digest schema, COLLECTOR worker mode, DIGESTOR worker mode
+
+### Community 75 - "Community 75"
 Cohesion: 0.27
 Nodes (9): Coffeemaker, DockerfileGPU, Espresso, Project Cafecito, run(), shutdown_az(), shutdown_td(), start_td() (+1 more)
 
-### Community 73 - "Community 73"
+### Community 76 - "Community 76"
 Cohesion: 0.22
 Nodes (5): _deserialize_chatters(), Retrieves the latest social media status from different mediums., Chatter, Social media engagement stats of an article/bean (specified by `url`)., _deserialize_chatters()
 
-### Community 74 - "Community 74"
+### Community 77 - "Community 77"
 Cohesion: 0.22
 Nodes (9): FinancialMarketsNewsSummary, HardwareNewsDigest, Summary focused on chips, accelerators, compute infrastructure, Summary focused on chips, accelerators, compute infrastructure, Summary focused on stocks, earnings, filings, market movements, Summary focused on chips, accelerators, compute infrastructure, Summary focused on chips, accelerators, compute infrastructure, Summary focused on stocks, earnings, filings, market movements (+1 more)
 
-### Community 76 - "Community 76"
-Cohesion: 0.25
-Nodes (7): AINewsDigest, cleanup_digest_fields(), CyberNewsDigest, Digest, LogisticsDigest, Main digest/key points of an article/news/blog/report, Main digest/key points of an article/news/blog/report
+### Community 78 - "Community 78"
+Cohesion: 0.33
+Nodes (3): EntityExtractor, cleanup_fields(), Entities
 
 ### Community 79 - "Community 79"
-Cohesion: 0.52
-Nodes (6): call_to_action_density(), compression_ratio(), narrative_density(), repeated_phrases(), should_reject_input(), surface_signature_trigger()
+Cohesion: 0.22
+Nodes (8): Augment existing publishers with scraped data., Augment existing publishers with scraped data., Augment existing publishers with scraped data., Prepare result for page scraping (bean and publisher)., Scrape a single URL for both bean and publisher data., Augment existing publishers with scraped data., Augment existing publishers with scraped data., Augment existing publishers with scraped data.
 
 ### Community 80 - "Community 80"
 Cohesion: 0.29
-Nodes (7): _clean_markdown(), Remove any content before the first line starting with '# '., Remove any content before the first line starting with '# '., Remove any content before the first line starting with '# '., Remove any content before the first line starting with '# '., Remove any content before the first line starting with '# '., Remove any content before the first line starting with '# '.
-
-### Community 82 - "Community 82"
-Cohesion: 0.33
-Nodes (6): PROCESSING_CACHE, Bean processing states, Insert/delete over update, Fault-tolerant state machine, test_collector_orch(), Worker state cache (state machine)
+Nodes (3): _beans_query_pipeline(), _deserialize_beans(), _related_beans_pipeline()
 
 ### Community 83 - "Community 83"
 Cohesion: 0.29
-Nodes (6): azurite service, localindexer (legacy INDEXER), localcrawler (crawl4ai), localmongo service, pgcache service, pybeansack/docker-compose.yml
+Nodes (3): _beans_query_pipeline(), _deserialize_beans(), _related_beans_pipeline()
+
+### Community 84 - "Community 84"
+Cohesion: 0.29
+Nodes (7): PROCESSING_CACHE, Bean processing states, Insert/delete over update, Fault-tolerant state machine, test_collector_orch(), Worker state cache (state machine), Collector orchestrator
 
 ### Community 85 - "Community 85"
-Cohesion: 0.4
-Nodes (6): get_duck_client(), random_embedding(), Refresh trend aggregates and query trending/aggregated views., test_ducksack(), test_trend_queries(), _trend_queries()
+Cohesion: 0.52
+Nodes (6): call_to_action_density(), compression_ratio(), narrative_density(), repeated_phrases(), should_reject_input(), surface_signature_trigger()
 
-### Community 87 - "Community 87"
+### Community 86 - "Community 86"
+Cohesion: 0.29
+Nodes (7): _group_items(), Groups items based on L2 distance between embeddings.          Args:         ite, Groups items based on L2 distance between embeddings.          Args:         ite, Groups items based on L2 distance between embeddings.          Args:         ite, Groups items based on L2 distance between embeddings.          Args:         ite, Groups items based on L2 distance between embeddings.          Args:         ite, Groups items based on L2 distance between embeddings.          Args:         ite
+
+### Community 89 - "Community 89"
+Cohesion: 0.29
+Nodes (6): azurite service, localindexer (legacy INDEXER), localcrawler (crawl4ai), localmongo service, pgcache service, pybeansack/docker-compose.yml
+
+### Community 91 - "Community 91"
 Cohesion: 0.47
 Nodes (4): cleanup_markdown(), remove_after(), remove_before(), run_batch()
 
-### Community 89 - "Community 89"
+### Community 92 - "Community 92"
+Cohesion: 0.6
+Nodes (5): _article_to_str(), _bean_to_str(), _entity_tags(), _group_to_str(), _value_to_str()
+
+### Community 93 - "Community 93"
 Cohesion: 0.33
 Nodes (5): Article/Entry-Level Fields, code:python (feed = feedparser.parse(rss_url)), Example: Accessing Fields, Feed-Level Fields, RSS Feed Field Reference (feedparser)
 
-### Community 90 - "Community 90"
+### Community 95 - "Community 95"
+Cohesion: 0.4
+Nodes (6): get_duck_client(), random_embedding(), Refresh trend aggregates and query trending/aggregated views., test_ducksack(), test_trend_queries(), _trend_queries()
+
+### Community 96 - "Community 96"
 Cohesion: 0.47
 Nodes (6): factory/feeds.yaml, Reddit subreddit sources, RSS feed sources, YCombinator Hacker News API sources, tests/sources-1.yaml, tests/sources-2.yaml
 
-### Community 91 - "Community 91"
+### Community 97 - "Community 97"
 Cohesion: 0.4
-Nodes (4): create_micro_agent, Legacy digest prompts, Digest schema, DIGESTOR worker mode
+Nodes (6): Beansack, DockerfileIO, Asynchronous unaware orchestrators, test_porter_orch(), PORTER worker mode, Porter orchestrator
 
-### Community 92 - "Community 92"
+### Community 98 - "Community 98"
 Cohesion: 0.7
 Nodes (4): run(), shutdown_az(), shutdown_td(), start_td()
 
-### Community 93 - "Community 93"
-Cohesion: 0.4
-Nodes (5): Summary focused on robotics systems, autonomous vehicles, drones, Summary focused on robotics systems, autonomous vehicles, drones, Summary focused on robotics systems, autonomous vehicles, drones, Summary focused on robotics systems, autonomous vehicles, drones, RoboticsAVDronesNewsSummary
-
-### Community 94 - "Community 94"
+### Community 99 - "Community 99"
 Cohesion: 0.4
 Nodes (5): Summary for SEC filings (10-K, 10-Q, 8-K, etc.), Summary for SEC filings (10-K, 10-Q, 8-K, etc.), Summary for SEC filings (10-K, 10-Q, 8-K, etc.), Summary for SEC filings (10-K, 10-Q, 8-K, etc.), SECFilingSummary
 
-### Community 95 - "Community 95"
+### Community 100 - "Community 100"
 Cohesion: 0.4
-Nodes (5): Summary focused on startups, corporate moves, funding, M&A, Summary focused on startups, corporate moves, funding, M&A, Summary focused on startups, corporate moves, funding, M&A, Summary focused on startups, corporate moves, funding, M&A, StartupCorpNewsSummary
+Nodes (5): Summary focused on robotics systems, autonomous vehicles, drones, Summary focused on robotics systems, autonomous vehicles, drones, Summary focused on robotics systems, autonomous vehicles, drones, Summary focused on robotics systems, autonomous vehicles, drones, RoboticsAVDronesNewsSummary
 
-### Community 96 - "Community 96"
-Cohesion: 0.4
-Nodes (5): Render a readable type name from a Pydantic FieldInfo annotation., Render a readable type name from a Pydantic FieldInfo annotation., Render a readable type name from a Pydantic FieldInfo annotation., Render a readable type name from a Pydantic FieldInfo annotation., typeinfo()
-
-### Community 97 - "Community 97"
-Cohesion: 0.4
-Nodes (5): FinancialCoreMetrics, Reusable core quantitative financial metrics common to earnings releases and SEC, Reusable core quantitative financial metrics common to earnings releases and SEC, Reusable core quantitative financial metrics common to earnings releases and SEC, Reusable core quantitative financial metrics common to earnings releases and SEC
-
-### Community 98 - "Community 98"
-Cohesion: 0.4
-Nodes (5): MacroEconomyDigest, Summary focused on global economy, macro indicators, forecasts, Summary focused on global economy, macro indicators, forecasts, Summary focused on global economy, macro indicators, forecasts, Summary focused on global economy, macro indicators, forecasts
-
-### Community 99 - "Community 99"
+### Community 101 - "Community 101"
 Cohesion: 0.4
 Nodes (5): EarningsReportSummary, Summary for earnings press releases, call transcripts, and related materials, Summary for earnings press releases, call transcripts, and related materials, Summary for earnings press releases, call transcripts, and related materials, Summary for earnings press releases, call transcripts, and related materials
 
-### Community 100 - "Community 100"
+### Community 102 - "Community 102"
+Cohesion: 0.4
+Nodes (5): Render a readable type name from a Pydantic FieldInfo annotation., Render a readable type name from a Pydantic FieldInfo annotation., Render a readable type name from a Pydantic FieldInfo annotation., Render a readable type name from a Pydantic FieldInfo annotation., typeinfo()
+
+### Community 103 - "Community 103"
 Cohesion: 0.4
 Nodes (5): FinancialDocumentSummary, Unified model covering earnings releases, call transcripts, 10-K, 10-Q, 8-K and, Unified model covering earnings releases, call transcripts, 10-K, 10-Q, 8-K and, Unified model covering earnings releases, call transcripts, 10-K, 10-Q, 8-K and, Unified model covering earnings releases, call transcripts, 10-K, 10-Q, 8-K and
 
-### Community 101 - "Community 101"
-Cohesion: 0.5
-Nodes (4): _copy_insert_state_rows_async(), Async version: Insert rows using COPY + staging table for optimal performance., Async version: Insert rows using COPY + staging table for optimal performance., Async version: Insert rows using COPY + staging table for optimal performance.
+### Community 104 - "Community 104"
+Cohesion: 0.4
+Nodes (5): FinancialCoreMetrics, Reusable core quantitative financial metrics common to earnings releases and SEC, Reusable core quantitative financial metrics common to earnings releases and SEC, Reusable core quantitative financial metrics common to earnings releases and SEC, Reusable core quantitative financial metrics common to earnings releases and SEC
 
-### Community 102 - "Community 102"
+### Community 105 - "Community 105"
+Cohesion: 0.4
+Nodes (5): Summary focused on startups, corporate moves, funding, M&A, Summary focused on startups, corporate moves, funding, M&A, Summary focused on startups, corporate moves, funding, M&A, Summary focused on startups, corporate moves, funding, M&A, StartupCorpNewsSummary
+
+### Community 106 - "Community 106"
+Cohesion: 0.4
+Nodes (5): MacroEconomyDigest, Summary focused on global economy, macro indicators, forecasts, Summary focused on global economy, macro indicators, forecasts, Summary focused on global economy, macro indicators, forecasts, Summary focused on global economy, macro indicators, forecasts
+
+### Community 107 - "Community 107"
 Cohesion: 0.5
 Nodes (4): _copy_insert_state_rows(), Insert rows using COPY + staging table for optimal performance on large batches., Insert rows using COPY + staging table for optimal performance on large batches., Insert rows using COPY + staging table for optimal performance on large batches.
 
-### Community 107 - "Community 107"
-Cohesion: 0.67
-Nodes (3): Test querying unprocessed beans, Test querying unprocessed beans, test_unprocessed_beans()
-
-### Community 108 - "Community 108"
-Cohesion: 0.67
-Nodes (3): Test warehouse maintenance tasks, Test warehouse maintenance tasks, test_setup()
-
-### Community 109 - "Community 109"
+### Community 117 - "Community 117"
 Cohesion: 0.67
 Nodes (3): Test warehouse maintenance tasks, Test warehouse maintenance tasks, test_maintenance()
 
-### Community 110 - "Community 110"
+### Community 118 - "Community 118"
+Cohesion: 0.67
+Nodes (3): Test warehouse maintenance tasks, Test warehouse maintenance tasks, test_setup()
+
+### Community 119 - "Community 119"
 Cohesion: 0.67
 Nodes (3): Test querying processed beans, Test querying processed beans, test_processed_beans()
 
@@ -581,9 +607,9 @@ Nodes (3): Test querying processed beans, Test querying processed beans, test_pr
   history.txt · relation: semantically_similar_to
 
 ## Knowledge Gaps
-- **468 isolated node(s):** `Seed cache with classification embeddings`, `Read a Parquet file, split it into chunks of `chunk_size` rows and     write eac`, `Migrate ClassificationCache from PostgreSQL to Firebird/zvec.      Args:`, `Hydrates local processing cache with beans and publishers from production/backup`, `Consolidates events and data to create consolidated briefings and signals` (+463 more)
+- **490 isolated node(s):** `Seed cache with classification embeddings`, `Read a Parquet file, split it into chunks of `chunk_size` rows and     write eac`, `Migrate ClassificationCache from PostgreSQL to Firebird/zvec.      Args:`, `Hydrates local processing cache with beans and publishers from production/backup`, `Consolidates events and data to create consolidated briefings and signals` (+485 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **40 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **46 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -600,5 +626,5 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: semantically_similar_to) - confidence is low._
 - **What is the exact relationship between `Publisher` and `PUBLISHED graph edge`?**
   _Edge tagged AMBIGUOUS (relation: semantically_similar_to) - confidence is low._
-- **Why does `AsyncWebScraper` connect `Community 32` to `Community 33`, `Community 3`, `Community 37`, `Community 17`, `Community 23`, `Community 57`?**
-  _High betweenness centrality (0.083) - this node is a cross-community bridge._
+- **Why does `AsyncWebScraper` connect `Community 38` to `Community 32`, `Community 2`, `Community 39`, `Community 28`, `Community 79`, `Community 18`, `Community 25`, `Community 60`?**
+  _High betweenness centrality (0.115) - this node is a cross-community bridge._
