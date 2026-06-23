@@ -246,7 +246,10 @@ def test_collector_orch():
         PUBLISHERS: {"id_key": K_BASE_URL},
         CHATTERS: {"id_key": "id"}
     }
-    orch = Collector(AsyncStateCache(os.getenv("PROCESSING_CACHE"), cache_settings))
+    orch = Collector(
+        AsyncStateCache(os.getenv("PROCESSING_CACHE"), cache_settings),
+        batch_size=16,
+    )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
     # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
     # sources = """
@@ -275,18 +278,31 @@ def test_collector_orch():
     # """
     sources = """
     sources:
-        rss:
-            - https://newatlas.com/index.rss
-            - https://www.channele2e.com/feed/topic/latest
-            - https://www.ghacks.net/feed/
-            - https://thenewstack.io/feed
-            - https://scitechdaily.com/feed/
-            - https://www.techradar.com/feeds/articletype/news
-            - https://www.geekwire.com/feed/
-            - https://investorplace.com/content-feed/
+        reddit:
+            - news
+            - worldnews
+            - InternationalNews
+            - GlobalNews
+            - GlobalMarketNews
+            - FinanceNews
+            - StockNews
+            - CryptoNews
+            - energyStocks       
     """
+    # sources = """
+    # sources:
+    #     rss:
+    #         - https://newatlas.com/index.rss
+    #         - https://www.channele2e.com/feed/topic/latest
+    #         - https://www.ghacks.net/feed/
+    #         - https://thenewstack.io/feed
+    #         - https://scitechdaily.com/feed/
+    #         - https://www.techradar.com/feeds/articletype/news
+    #         - https://www.geekwire.com/feed/
+    #         - https://investorplace.com/content-feed/
+    # """
 
-    asyncio.run(orch.run(sources, batch_size=16))
+    asyncio.run(orch.run(sources))
     
 
 def _analyzer_test_cache():

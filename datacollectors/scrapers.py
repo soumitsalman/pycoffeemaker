@@ -3,10 +3,12 @@ import json
 import asyncio
 import aiohttp
 import lxml.html
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from lxml.cssselect import CSSSelector
 from utils.logs import get_logger
 from itertools import chain
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin, urlparse
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random
 from .utils import *
 from icecream import ic
@@ -14,7 +16,9 @@ from icecream import ic
 log = get_logger(__name__)
 
 MAX_HTML_SIZE = int(os.getenv("MAX_HTML_SIZE", 4 << 20))  # hard cap per response; article content lives in the first few MB
+MAX_PDF_SIZE = int(os.getenv("MAX_PDF_SIZE", 16 << 20))  # PDFs are larger than HTML, but still bounded for collector stability
 PARSE_CONCURRENCY = int(os.getenv("PARSE_CONCURRENCY", min(4, os.cpu_count())))  # max DOM trees in memory at once
+PDF_CONCURRENCY = int(os.getenv("PDF_CONCURRENCY", 2))  # PDF conversion is CPU/native-heavy; keep it isolated from HTML parsing
 
 _METADATA_SELECTORS = {
     'site_name': "meta[property='og:site_name'], meta[property='sitename'], meta[itemprop='name']",
@@ -36,6 +40,69 @@ _HTML_REQUEST_HEADERS = {
     'Accept': "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5,application/signed-exchange;v=b3;q=0.9"
 }
 
+def _get_metadata(url: str, tree: lxml.html.HtmlElement):
+    metadata = {}
+    for key, selectors in _METADATA_CSS.items():
+        for select in selectors:
+            if tags := select(tree):
+                metadata[key] = tags[0].get('content') or tags[0].get('href') or tags[0].get('lang')
+                break
+
+    if 'published_time' in metadata: metadata[CREATED] = parse_date(metadata['published_time'])
+    if 'favicon' in metadata: metadata[FAVICON] = full_url(url, metadata['favicon'])
+    if 'rss_feed' in metadata: metadata[RSS_FEED] = full_url(url, metadata['rss_feed'])
+    return metadata
+
+def _parse_metadata(url: str, html: str) -> dict:
+    """Process worker: single lxml parse for metadata only."""
+    return _get_metadata(url, lxml.html.fromstring(html))
+
+def _parse_page(url: str, html: str) -> dict:
+    """Process worker: parse html into metadata + readable content."""
+    from readability import Document
+
+    metadata = _get_metadata(url, lxml.html.fromstring(html))
+    doc = Document(html)
+    body = {
+        TITLE: doc.short_title() or doc.title(),
+        AUTHOR: doc.author(),
+        CONTENT: strip_html_tags(doc.summary(html_partial=True))
+    }
+    body.update(metadata)
+    return body
+
+def _convert_pdf_to_markdown(pdf_bytes: bytes) -> str:
+    """Process worker: convert a PDF byte stream to markdown."""
+    import tempfile
+    import pymupdf4llm
+
+    path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as pdf:
+            path = pdf.name
+            pdf.write(pdf_bytes)
+        return pymupdf4llm.to_markdown(path, use_ocr=False)
+    finally:
+        if path:
+            try: os.unlink(path)
+            except OSError: pass
+
+def _is_pdf_url(url: str) -> bool:
+    try: return urlparse(url).path.lower().endswith(".pdf")
+    except Exception: return False
+
+def _is_pdf_content(content_type: str = None) -> bool:
+    return bool(content_type and content_type.split(";")[0].strip().lower() == "application/pdf")
+
+def _title_from_url(url: str) -> str | None:
+    try:
+        filename = os.path.basename(unquote(urlparse(url).path))
+        if filename.lower().endswith(".pdf"):
+            filename = filename[:-4]
+        return filename.replace("-", " ").replace("_", " ").strip() or None
+    except Exception:
+        return None
+
 class AsyncWebScraper:
     session: aiohttp.ClientSession = None
     throttle: asyncio.Semaphore = None
@@ -44,6 +111,8 @@ class AsyncWebScraper:
         self.batch_size = batch_size
         self.throttle = asyncio.Semaphore(batch_size)
         self.parse_throttle = asyncio.Semaphore(PARSE_CONCURRENCY)
+        self.parse_pool = ProcessPoolExecutor(max_workers=PARSE_CONCURRENCY)
+        self.pdf_pool = ProcessPoolExecutor(max_workers=PDF_CONCURRENCY)
         
     async def __aenter__(self):
         """Async context manager enter"""
@@ -60,37 +129,25 @@ class AsyncWebScraper:
         if self.session:
             await self.session.close()
             self.session = None
+        self.parse_pool.shutdown(cancel_futures=True)
+        self.pdf_pool.shutdown(cancel_futures=True)
 
-    def _get_metadata(self, url: str, tree: lxml.html.HtmlElement):
-        metadata = {}
-        for key, selectors in _METADATA_CSS.items():
-            for select in selectors:
-                if tags := select(tree):
-                    metadata[key] = tags[0].get('content') or tags[0].get('href') or tags[0].get('lang')
-                    break
+    async def _run_in_process(self, pool_name: str, func, *args):
+        loop = asyncio.get_running_loop()
+        pool = getattr(self, pool_name)
+        try:
+            return await loop.run_in_executor(pool, func, *args)
+        except BrokenProcessPool:
+            pool.shutdown(cancel_futures=True)
+            max_workers = PDF_CONCURRENCY if pool_name == "pdf_pool" else PARSE_CONCURRENCY
+            setattr(self, pool_name, ProcessPoolExecutor(max_workers=max_workers))
+            raise
 
-        if 'published_time' in metadata: metadata[CREATED] = parse_date(metadata['published_time'])
-        if 'favicon' in metadata: metadata[FAVICON] = full_url(url, metadata['favicon'])
-        if 'rss_feed' in metadata: metadata[RSS_FEED] = full_url(url, metadata['rss_feed'])
-        return metadata
+    async def _parse_in_process(self, parser, url: str, html: str) -> dict:
+        return await self._run_in_process("parse_pool", parser, url, html)
 
-    def _parse_metadata(self, url: str, html: str) -> dict:
-        """Sync: single lxml parse for metadata only."""
-        return self._get_metadata(url, lxml.html.fromstring(html))
-
-    def _parse_page(self, url: str, html: str) -> dict:
-        """Sync: parse html into metadata + readable content. Runs in a worker thread."""
-        from readability import Document
-
-        metadata = self._get_metadata(url, lxml.html.fromstring(html))
-        doc = Document(html)
-        body = {
-            TITLE: doc.short_title() or doc.title(),
-            AUTHOR: doc.author(),
-            CONTENT: strip_html_tags(doc.summary(html_partial=True))
-        }
-        body.update(metadata)
-        return body
+    async def _convert_pdf_in_process(self, pdf_bytes: bytes) -> str:
+        return await self._run_in_process("pdf_pool", _convert_pdf_to_markdown, pdf_bytes)
 
     @retry(
         retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
@@ -115,6 +172,50 @@ class AsyncWebScraper:
         wait=wait_random(*RETRY_JITTER),
         reraise=True,
     )
+    async def _scrape_pdf_bytes(self, url: str) -> bytes | None:
+        async with self.throttle, self.session.get(url) as response:
+            if not (_is_pdf_content(response.content_type) or _is_pdf_url(str(response.url))): return None
+            if (response.content_length or 0) > MAX_PDF_SIZE: return None
+            body = bytearray()
+            async for chunk in response.content.iter_chunked(1 << 16):
+                body.extend(chunk)
+                if len(body) >= MAX_PDF_SIZE: return None
+            return bytes(body)
+
+    @retry(
+        retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
+        stop=stop_after_attempt(RETRY_COUNT),
+        wait=wait_random(*RETRY_JITTER),
+        reraise=True,
+    )
+    async def _scrape_content_body(self, url: str) -> tuple[str, str, str | bytes] | None:
+        async with self.throttle, self.session.get(url) as response:
+            final_url = str(response.url)
+            is_pdf = _is_pdf_content(response.content_type) or _is_pdf_url(final_url)
+            max_size = MAX_PDF_SIZE if is_pdf else MAX_HTML_SIZE
+            if is_pdf:
+                if (response.content_length or 0) > max_size: return None
+            elif excluded_content(url=final_url, content_type=response.content_type):
+                return None
+            elif (response.content_length or 0) > max_size:
+                return None
+
+            body = bytearray()
+            async for chunk in response.content.iter_chunked(1 << 16):
+                body.extend(chunk)
+                if len(body) >= max_size:
+                    return None if is_pdf else ("html", final_url, body.decode(response.charset or "utf-8", errors="replace"))
+
+            if is_pdf:
+                return "pdf", final_url, bytes(body)
+            return "html", final_url, body.decode(response.charset or "utf-8", errors="replace")
+
+    @retry(
+        retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
+        stop=stop_after_attempt(RETRY_COUNT),
+        wait=wait_random(*RETRY_JITTER),
+        reraise=True,
+    )
     async def _scrape_favicon(self, base_url: str):
         async with self.throttle, self.session.get("https://www.google.com/s2/favicons?domain="+base_url) as response:
             if response.status == 200: return response.headers.get('Content-Location')
@@ -125,11 +226,58 @@ class AsyncWebScraper:
         try:    
             html = await self._scrape_html(url)
             if not html: return None
-            # parsing builds large DOM trees and is CPU-bound; throttle it and keep it off the event loop
-            # async with self.parse_throttle:
-            return await asyncio.to_thread(self._parse_page, url, html)
+            return await self._parse_in_process(_parse_page, url, html)
         except Exception as e: 
             log.debug(event=f"scraping failed - {e.__class__.__name__} {e}",
+                source=url,
+                num_items=1,
+                error_type=e.__class__.__name__,
+                error_details=str(e),
+            )
+            return None
+
+    async def _scrape_pdf(self, url: str):
+        """Scrape a PDF and convert it to markdown content."""
+        if excluded_url(url): return None
+        try:
+            pdf_bytes = await self._scrape_pdf_bytes(url)
+            if not pdf_bytes: return None
+            markdown = await self._convert_pdf_in_process(pdf_bytes)
+            if not markdown: return None
+            return {
+                KIND: FINANCIAL_REPORT,
+                TITLE: _title_from_url(url),
+                CONTENT: markdown,
+            }
+        except Exception as e:
+            log.debug(event=f"pdf scraping failed - {e.__class__.__name__} {e}",
+                source=url,
+                num_items=1,
+                error_type=e.__class__.__name__,
+                error_details=str(e),
+            )
+            return None
+
+    async def _scrape_content(self, url: str):
+        if excluded_url(url): return None
+        try:
+            scraped = await self._scrape_content_body(url)
+            if not scraped: return None
+
+            kind, final_url, body = scraped
+            if kind == "pdf":
+                if not isinstance(body, bytes): return None
+                markdown = await self._convert_pdf_in_process(body)
+                if not markdown: return None
+                return {
+                    KIND: FINANCIAL_REPORT,
+                    TITLE: _title_from_url(final_url) or _title_from_url(url),
+                    CONTENT: markdown,
+                }
+            if not isinstance(body, str): return None
+            return await self._parse_in_process(_parse_page, final_url, body)
+        except Exception as e:
+            log.debug(event=f"content scraping failed - {e.__class__.__name__} {e}",
                 source=url,
                 num_items=1,
                 error_type=e.__class__.__name__,
@@ -152,8 +300,7 @@ class AsyncWebScraper:
         try:                  
             html = await self._scrape_html(url)
             if not html: return None
-            # async with self.parse_throttle:
-            meta.update(await asyncio.to_thread(self._parse_metadata, url, html))
+            meta.update(await self._parse_in_process(_parse_metadata, url, html))
             meta[SITE_NAME] = meta.get(SITE_NAME) or meta.get('meta_title')
             meta[DESCRIPTION] = meta.get(DESCRIPTION)
             meta[SITE_LANGUAGE] = meta.get(LANGUAGE)
@@ -207,7 +354,7 @@ class AsyncWebScraper:
 
     async def scrape_page(self, url: str):
         """Scrape a single URL for both bean and publisher data."""
-        result = await self._scrape_page(url)
+        result = await self._scrape_content(url)
         if not result:
             return None
 
@@ -219,7 +366,7 @@ class AsyncWebScraper:
 
     async def scrape_pages(self, urls: list[str]):
         """Scrape multiple URLs in parallel for bean and publisher data."""
-        results = await asyncio.gather(*[self._scrape_page(url) for url in urls])
+        results = await asyncio.gather(*[self._scrape_content(url) for url in urls])
         return [
             self._prep_page_result({
                 URL: url,
@@ -234,7 +381,7 @@ class AsyncWebScraper:
         
     async def scrape_bean(self, bean: dict):
         """Scrape a single bean for page data."""
-        result = await self._scrape_page(bean.get(URL))
+        result = await self._scrape_content(bean.get(URL))
         return self._prep_page_result(bean, result)
 
     async def scrape_site(self, url: str):
@@ -520,46 +667,3 @@ class WebCrawler:
             ret.update(metadata)
         return ret
     
-# import asyncio
-# from typing import List
-
-# import aiohttp
-# from docling.datamodel.base_models import InputFormat
-# from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions, AcceleratorOptions
-# from docling.document_converter import DocumentConverter
-# from docling.datamodel.settings import settings
-
-# class PDFScraper:
-#     _converter = None
-
-#     def __init__(self):
-#         if self._converter is None:
-#             opts = ThreadedPdfPipelineOptions(
-#                 do_ocr=False,
-#                 do_table_structure=True,
-#                 do_image_extraction=False,
-#                 generate_page_images=False,
-#                 generate_picture_images=False,
-#                 layout_batch_size=1,
-#                 table_batch_size=1,
-#             )
-#             opts.accelerator_options = AcceleratorOptions(num_threads=1, device="cpu")
-#             self.__class__._converter = DocumentConverter(format_options={InputFormat.PDF: opts})
-#         self.converter = self._converter
-#         self._sem = asyncio.Semaphore(2)   # 1-2 vCPU limit, no lock needed
-
-#     async def scrape_urls(self, urls: List[str]) -> List[str]:
-#         async with aiohttp.ClientSession(
-#             connector=aiohttp.TCPConnector(limit=2),
-#             timeout=aiohttp.ClientTimeout(total=90)
-#         ) as session:
-#             tasks = [self._convert_one(session, url) for url in urls]
-#             return await asyncio.gather(*tasks, return_exceptions=True)
-
-#     async def _convert_one(self, session: aiohttp.ClientSession, url: str) -> str:
-#         async with self._sem:
-#             async with session.get(url) as resp:
-#                 resp.raise_for_status()
-#                 pdf_bytes = await resp.read()
-#             result = await asyncio.to_thread(self.converter.convert, pdf_bytes, filetype="pdf")
-#             return result.document.export_to_markdown()

@@ -1,7 +1,5 @@
 import re
 import os
-import gc
-import ctypes
 import tldextract
 import lxml.html
 from datetime import datetime, timezone
@@ -67,7 +65,7 @@ PODCAST_TAGS = {"podcast", "episode", "show"}
 
 # heuristic url patterns to exclude from collection
 EXCLUDED_URL_PATTERNS = [
-    r'\.(png|jpeg|jpg|gif|webp|mp4|avi|mkv|mp3|wav|pdf)$',
+    r'\.(png|jpeg|jpg|gif|webp|mp4|avi|mkv|mp3|wav)$',
     r'(v\.redd\.it|i\.redd\.it|www\.reddit\.com\/gallery|youtube\.com|youtu\.be)',
     r'\/video(s)?\/',
     r'\/image(s)?\/',
@@ -176,16 +174,6 @@ def strip_html_tags(html):
 
 def full_url(base_url: str, target_url: str) -> str:
     return urljoin(base_url, target_url)
-
-try: _LIBC = ctypes.CDLL("libc.so.6")
-except OSError: _LIBC = None
-
-def trim_memory():
-    """Collect cyclic garbage (lxml trees) and return freed heap pages to the OS (glibc only)."""
-    gc.collect()
-    if _LIBC:
-        try: _LIBC.malloc_trim(0)
-        except Exception: pass
 
 def remove_query_params(url: str) -> str:
     try: return urlunparse(urlparse(url)._replace(query="", fragment=""))
