@@ -18,7 +18,7 @@ BATCH_SIZE = 1024
 RETRY_COUNT = 3
 RETRY_DELAY = 15
 
-PROCESSING_WINDOW = int(os.getenv('PROCESSING_WINDOW', 60))
+PROCESSING_WINDOW = int(os.getenv('PROCESSING_WINDOW', 0))
 PROCESSING_LIMIT = int(os.getenv('PROCESSING_LIMIT', 200_000))
 
 ##############
@@ -106,11 +106,11 @@ class StateCache(StateCacheBase):
         states: str | list[str],
         exclude_states: str | list[str] = NULL_STATE,
         ids: list[str] = None,
-        window: int = PROCESSING_WINDOW,
+        window: int | None = None,
         limit: int = PROCESSING_LIMIT,
         offset: int = 0,
     ):
-        expr, params = create_query_expr(object_type, states, exclude_states, ids, window, limit, offset)
+        expr, params = create_query_expr(object_type, states, exclude_states, ids, window if window is not None else PROCESSING_WINDOW, limit, offset)
         with self.pool.connection() as conn:
             rows = _read(conn, expr, params)
         return deserialize_data_rows(rows) 
@@ -205,11 +205,11 @@ class AsyncStateCache(AsyncStateCacheBase):
         states: str | list[str],
         exclude_states: str | list[str] = NULL_STATE,
         ids: list[str] = None,
-        window: int = PROCESSING_WINDOW,
+        window: int | None = None,
         limit: int = PROCESSING_LIMIT,
         offset: int = 0,
     ):
-        expr, params = create_query_expr(object_type, states, exclude_states, ids, window, limit, offset)
+        expr, params = create_query_expr(object_type, states, exclude_states, ids, window if window is not None else PROCESSING_WINDOW, limit, offset)
         async with self.pool.connection() as conn:
             rows = await _read_async(conn, expr, params)
         return deserialize_data_rows(rows)         
@@ -367,7 +367,7 @@ def create_query_expr(
     states: str | list[str],
     exclude_states: str | list[str],
     ids: list[str] = None,
-    window: int = DEFAULT_WINDOW,
+    window: int = 0,
     limit: int = 0,
     offset: int = 0,
 ):
