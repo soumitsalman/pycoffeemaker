@@ -275,21 +275,35 @@ class Classifier:
         return [[labels[i] for i in row] for row in indices]
 
     def classify_beans(self, beans: list[dict]):
-        for chunk in batched(beans, self.batch_size):
-            embeddings = [bean[EMBEDDING] for bean in chunk]
-            categories = self._label_batch_search(self.category_index, embeddings, CLASSIFICATION_LIMIT)
-            sentiments = self._label_batch_search(self.sentiment_index, embeddings, CLASSIFICATION_LIMIT)
-            updates = clean_updates([
-                {
-                    URL: bean[URL],
-                    CATEGORIES: valid_tags(cats),
-                    SENTIMENTS: valid_tags(sents),
-                }
-                for bean, cats, sents in zip(chunk, categories, sentiments)
-                if cats and sents
-            ])
-            log.info(event="classified", source=chunk[0][URL], num_items=len(updates))
-            yield updates
+        embeddings = [bean[EMBEDDING] for bean in beans]
+        categories = self._label_batch_search(self.category_index, embeddings, CLASSIFICATION_LIMIT)
+        sentiments = self._label_batch_search(self.sentiment_index, embeddings, CLASSIFICATION_LIMIT)
+        updates = clean_updates([
+            {
+                URL: bean[URL],
+                CATEGORIES: valid_tags(cats),
+                SENTIMENTS: valid_tags(sents),
+            }
+            for bean, cats, sents in zip(beans, categories, sentiments)
+            if cats and sents
+        ])
+        log.info(event="classified", num_items=len(updates))
+        yield updates
+        # for chunk in batched(beans, self.batch_size):
+        #     embeddings = [bean[EMBEDDING] for bean in chunk]
+        #     categories = self._label_batch_search(self.category_index, embeddings, CLASSIFICATION_LIMIT)
+        #     sentiments = self._label_batch_search(self.sentiment_index, embeddings, CLASSIFICATION_LIMIT)
+        #     updates = clean_updates([
+        #         {
+        #             URL: bean[URL],
+        #             CATEGORIES: valid_tags(cats),
+        #             SENTIMENTS: valid_tags(sents),
+        #         }
+        #         for bean, cats, sents in zip(chunk, categories, sentiments)
+        #         if cats and sents
+        #     ])
+        #     log.info(event="classified", source=chunk[0][URL], num_items=len(updates))
+        #     yield updates
 
     def cluster_beans(self, beans: list[dict]):
         self.cls_cache.store(BEANS, beans)
