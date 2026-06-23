@@ -402,7 +402,8 @@ def _normalize_states(states: str | list[str] | None) -> list[str]:
 
 _QUERY_SINGLE_STATE_SQL = """
 SELECT data FROM {table}
-WHERE state = %(include_state)s
+WHERE data IS NOT NULL 
+AND state = %(include_state)s
 AND NOT EXISTS (SELECT 1 FROM {table} t2 WHERE t2.id = {table}.id AND t2.state = %(exclude_state)s)
 {ts_expr}
 {ids_expr}
@@ -423,7 +424,8 @@ def _create_single_state_query_expr(
 
 _QUERY_MULTI_STATE_SQL = """
 SELECT ARRAY_AGG(data) AS data FROM {table} incl
-WHERE state = ANY(%(include_states)s)
+WHERE data IS NOT NULL 
+    AND state = ANY(%(include_states)s)
     AND NOT EXISTS (
         SELECT 1 FROM {table} excl 
         WHERE excl.id = incl.id AND excl.state = ANY(%(exclude_states)s)
