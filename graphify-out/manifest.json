@@ -24,16 +24,16 @@
     "hash": "d38f71491da80aa90857c9b834617b20"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/analyzerorch.py": {
-    "mtime": 1781890407.7196338,
-    "hash": "a13c88177bfdce5de52d009187e7b094"
+    "mtime": 1782241045.8167164,
+    "hash": "31fb7c6b8f001b2504632156431f5c15"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/porterorch.py": {
     "mtime": 1781800805.0595515,
     "hash": "ea8d710e1b40b6e794d490b391cd0221"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/collectororch.py": {
-    "mtime": 1782221663.9640212,
-    "hash": "465df63b38b37ea83ade62ae4889aedb"
+    "mtime": 1782237849.742548,
+    "hash": "f1084b4462d4246295416a6a048d048d"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/workercache/pgcache.py": {
     "mtime": 1781729918.4754715,
@@ -116,8 +116,8 @@
     "hash": "bfde4d83668a239ad2d173ebfedb1b1a"
   },
   "/home/soumitsr/codes/pycoffeemaker/pybeansack/pgsack.py": {
-    "mtime": 1781799057.815293,
-    "hash": "e5b865d770f20f900ea14f4a3e0c6557"
+    "mtime": 1782227314.0559864,
+    "hash": "a35c0f65f70287f207968a99e0985a87"
   },
   "/home/soumitsr/codes/pycoffeemaker/pybeansack/ducksack.py": {
     "mtime": 1781793392.892922,
@@ -216,20 +216,20 @@
     "hash": "4326eb290bd17bc56503691000b37d35"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/utils.py": {
-    "mtime": 1782222298.209589,
-    "hash": "749e7caae8d2c8e5405e46d7489f2e89"
+    "mtime": 1782241698.3352613,
+    "hash": "1cb7e688614fb44b8abef6ce80d03d2d"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/apicollectors.py": {
     "mtime": 1781034521.5374367,
     "hash": "2878594c64821642bcb6ae22ce8040b7"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/scrapers.py": {
-    "mtime": 1782224912.2406723,
-    "hash": "2c24704c894d6d52689fe32e54d9708e"
+    "mtime": 1782241675.120496,
+    "hash": "ee9dd4e17614b1ba0b34327163a9e5ac"
   },
   "/home/soumitsr/codes/pycoffeemaker/tests/test.py": {
-    "mtime": 1782224707.7615476,
-    "hash": "f012414445e1c06b4baacd1759d00da5"
+    "mtime": 1782224978.4779677,
+    "hash": "b977c3f78818342d64a40862528a712e"
   },
   "/home/soumitsr/codes/pycoffeemaker/tests/conftest.py": {
     "mtime": 1781880415.24122,

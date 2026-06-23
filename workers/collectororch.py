@@ -46,6 +46,20 @@ BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count()))
 WORDS_THRESHOLD_FOR_STORING = int(os.getenv("WORDS_THRESHOLD_FOR_STORING", 160))  # min words needed to not download the body
 
 IGNORE_WORD_GAMES = ['hurdle hints', 'nyt strands hints', 'wordle today', 'crossword today', 'crossword hints', 'nyt connections hints', 'spelling bee hints', 'wordle answers']
+BEAN_EXCLUDED_FIELDS = {
+    ARTICLE_LANGUAGE,
+    CHATTER_URL,
+    COMMENTS,
+    DESCRIPTION,
+    FAVICON,
+    FORUM,
+    LIKES,
+    PLATFORM,
+    RSS_FEED,
+    SITE_LANGUAGE,
+    SITE_NAME,
+    "subscribers",
+}
 is_bean_storable = lambda bean: (
     bean
     and bean.get("content_length", 0) >= WORDS_THRESHOLD_FOR_STORING
@@ -54,7 +68,7 @@ is_bean_storable = lambda bean: (
 storable_beans = lambda beans: list(filter(is_bean_storable, beans)) if beans else beans
 is_bean_scrapable = lambda bean: (
     bean
-    and bean[KIND] != POST
+    and bean.get(KIND) != POST
     and bean.get("content_length", 0) < WORDS_THRESHOLD_FOR_STORING
     and not any(tag in bean.get(TITLE, '').lower() for tag in IGNORE_WORD_GAMES)
 )
@@ -120,28 +134,6 @@ class Collector:
         if not item:
             return None, None, None
 
-        bean = {
-            URL: item.get(URL),
-            KIND: item.get(KIND),
-            SOURCE: item.get(SOURCE),
-            TITLE: item.get(TITLE),
-            SUMMARY: item.get(SUMMARY),
-            CONTENT: item.get(CONTENT),
-            AUTHOR: item.get(AUTHOR),
-            CREATED: item.get(CREATED),
-            COLLECTED: item.get(COLLECTED),
-            BASE_URL: item.get(BASE_URL),
-            IMAGEURL: item.get(IMAGEURL),
-            RESTRICTED_CONTENT: item.get(RESTRICTED_CONTENT),
-            TAGS: item.get(TAGS),
-            AUTHOR_EMAIL: item.get(AUTHOR_EMAIL),
-            LANGUAGE: item.get(ARTICLE_LANGUAGE) or item.get(LANGUAGE),
-            "title_length": item.get("title_length"),
-            "summary_length": item.get("summary_length"),
-            "content_length": item.get("content_length"),
-        }
-        bean = {key: value for key, value in bean.items() if value}
-
         chatter = {
             CHATTER_URL: item.get(CHATTER_URL),
             URL: item.get(URL),
@@ -152,7 +144,7 @@ class Collector:
             COMMENTS: item.get(COMMENTS),
             "subscribers": item.get("subscribers"),
         }
-        chatter = {key: value for key, value in chatter.items() if value}
+        [chatter.pop(key, None) for key in list(chatter) if not chatter[key]]
 
         publisher = {
             SOURCE: item.get(SOURCE),
@@ -164,7 +156,14 @@ class Collector:
             COLLECTED: item.get(COLLECTED),
             LANGUAGE: item.get(SITE_LANGUAGE) or item.get(LANGUAGE),
         }
-        publisher = {key: value for key, value in publisher.items() if value}
+        [publisher.pop(key, None) for key in list(publisher) if not publisher[key]]
+        
+        bean = item        
+        if language := (item.get(ARTICLE_LANGUAGE) or item.get(LANGUAGE)):
+            bean[LANGUAGE] = language
+        if is_bean_scrapable(bean):
+            bean.pop(CONTENT, None)      
+        [bean.pop(key, None) for key in list(bean) if (key in BEAN_EXCLUDED_FIELDS) or (not bean[key])]
 
         return (
             bean if validate_bean_item(bean) else None,
@@ -191,16 +190,25 @@ class Collector:
         if not items: return
 
         beans, chatters, publishers = self._split_items(items)
+        del items
+        storable_bean_items = storable_beans(beans)
+        scrapable_bean_items = scrapable_beans(beans)
+        del beans
+        storable_publisher_items = storable_publishers(publishers)
+        scrapable_publisher_items = scrapable_publishers(publishers)
+        del publishers
 
         async with asyncio.TaskGroup() as tg:
             if chatters:
                 tg.create_task(self._cache_chatters(chatters))
-            if beans:                
-                tg.create_task(self._cache_beans(storable_beans(beans)))
-                tg.create_task(self._scrape_beans(scrapable_beans(beans)))
-            if publishers:
-                tg.create_task(self._cache_publishers(storable_publishers(publishers)))
-                tg.create_task(self._scrape_publishers(scrapable_publishers(publishers)))
+            if storable_bean_items:
+                tg.create_task(self._cache_beans(storable_bean_items))
+            if scrapable_bean_items:
+                tg.create_task(self._scrape_beans(scrapable_bean_items))
+            if storable_publisher_items:
+                tg.create_task(self._cache_publishers(storable_publisher_items))
+            if scrapable_publisher_items:
+                tg.create_task(self._scrape_publishers(scrapable_publisher_items))
 
     async def _cache_beans(self, beans: list[dict]):
         if not beans: return
