@@ -35,8 +35,7 @@ from datacollectors import (
     TAGS,
     TITLE,
     URL,
-    POST,
-    trim_memory
+    POST
 )
 from .workercache.base import AsyncStateCacheBase
 from .utils import *
@@ -310,11 +309,9 @@ class Collector:
     #         if len(beans_buffer) >= BUFFER_SIZE:
     #             await self._scrape_beans(beans_buffer)
     #             beans_buffer = []
-    #             trim_memory()
     #         if len(publishers_buffer) >= BUFFER_SIZE:
     #             await self._scrape_publishers(publishers_buffer)
     #             publishers_buffer = []
-    #             trim_memory()
 
     #     await asyncio.gather(
     #         self._scrape_beans(beans_buffer), 

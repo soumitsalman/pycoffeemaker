@@ -32,8 +32,8 @@
     "hash": "ea8d710e1b40b6e794d490b391cd0221"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/collectororch.py": {
-    "mtime": 1781279299.9360926,
-    "hash": "c914776b4cf8d44563122910800522c0"
+    "mtime": 1782221663.9640212,
+    "hash": "465df63b38b37ea83ade62ae4889aedb"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/workercache/pgcache.py": {
     "mtime": 1781729918.4754715,
@@ -212,24 +212,24 @@
     "hash": "4261258889c2779df370c9a602370822"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/__init__.py": {
-    "mtime": 1781031539.3845284,
-    "hash": "96326fc901ef7a93e9c88c06f4926d62"
+    "mtime": 1782221660.9203587,
+    "hash": "4326eb290bd17bc56503691000b37d35"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/utils.py": {
-    "mtime": 1781273638.345616,
-    "hash": "c6891cc770a8dedaf3b5fcb0d887f381"
+    "mtime": 1782222298.209589,
+    "hash": "749e7caae8d2c8e5405e46d7489f2e89"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/apicollectors.py": {
     "mtime": 1781034521.5374367,
     "hash": "2878594c64821642bcb6ae22ce8040b7"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/scrapers.py": {
-    "mtime": 1781100269.7545526,
-    "hash": "c7e00bd3390d9d3465eb6a0be1e7119c"
+    "mtime": 1782224912.2406723,
+    "hash": "2c24704c894d6d52689fe32e54d9708e"
   },
   "/home/soumitsr/codes/pycoffeemaker/tests/test.py": {
-    "mtime": 1781890854.9255233,
-    "hash": "d879588a0fc7f7082ed7057bdbf3091c"
+    "mtime": 1782224707.7615476,
+    "hash": "f012414445e1c06b4baacd1759d00da5"
   },
   "/home/soumitsr/codes/pycoffeemaker/tests/conftest.py": {
     "mtime": 1781880415.24122,
@@ -256,8 +256,8 @@
     "hash": "836e61b49fb40404a215dca3053c3a2d"
   },
   "/home/soumitsr/codes/pycoffeemaker/requirements.txt": {
-    "mtime": 1781559628.4564042,
-    "hash": "8023c2dcc01489af4275d86ebcfa01f5"
+    "mtime": 1782222301.3727484,
+    "hash": "f8efd08f4ac5ab1c0d972b35431a64f0"
   },
   "/home/soumitsr/codes/pycoffeemaker/requirements-dev.txt": {
     "mtime": 1781273488.6055787,
