@@ -20,6 +20,7 @@ RETRY_DELAY = 15
 
 PROCESSING_WINDOW = int(os.getenv('PROCESSING_WINDOW', 0))
 PROCESSING_LIMIT = int(os.getenv('PROCESSING_LIMIT', 200_000))
+CACHE_CLEANUP_WINDOW = os.getenv('CACHE_CLEANUP_WINDOW', '3 months')
 
 ##############
 # STATE CACHE
@@ -130,7 +131,7 @@ class StateCache(StateCacheBase):
 
     def optimize(self):
         with self.pool.connection() as conn:
-            [conn.execute(_CLEANUP_OLD_SQL.format(table=table)) for table in self.id_keys]
+            [conn.execute(_CLEANUP_OLD_SQL.format(table=table, window=CACHE_CLEANUP_WINDOW)) for table in self.id_keys]
 
     def close(self):
         self.pool.close()
@@ -229,7 +230,7 @@ class AsyncStateCache(AsyncStateCacheBase):
 
     async def optimize(self):
         async with self.pool.connection() as conn:
-            [await conn.execute(_CLEANUP_OLD_SQL.format(table=table)) for table in self.id_keys]
+            [await conn.execute(_CLEANUP_OLD_SQL.format(table=table, window=CACHE_CLEANUP_WINDOW)) for table in self.id_keys]
 
     async def close(self):
         await self.pool.close()
@@ -459,4 +460,4 @@ def _add_ts_and_ids_expr(template: str, table: str, params: dict, window: int, i
     return template.format(table=table, ts_expr=ts_expr, ids_expr=ids_expr), params
 
 _EXISTS_SQL = "SELECT id FROM {table} WHERE state = %(state)s AND id = ANY(%(ids)s)"
-_CLEANUP_OLD_SQL = "UPDATE {table} SET data = NULL WHERE ts < CURRENT_TIMESTAMP - INTERVAL '3 months'"
+_CLEANUP_OLD_SQL = "UPDATE {table} SET data = NULL WHERE ts < CURRENT_TIMESTAMP - INTERVAL '{window}'"

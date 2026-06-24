@@ -175,18 +175,23 @@ if [[ $RUN_EMBEDDER -eq 1 ]]; then
     run_embedder
 fi
 
-if [[ $RUN_EXTRACTOR -eq 1 || $RUN_CLUSTERING -eq 1 ]]; then
-    if [[ $RUN_EXTRACTOR -eq 1 ]]; then
-        run_extractor &
-    fi
-    if [[ $RUN_CLUSTERING -eq 1 ]]; then
-        run_clustering &
-    fi
-    wait
+CLUSTERING_PID=""
+
+if [[ $RUN_CLUSTERING -eq 1 ]]; then
+    run_clustering &
+    CLUSTERING_PID=$!
+fi
+
+if [[ $RUN_EXTRACTOR -eq 1 ]]; then
+    run_extractor
 fi
 
 if [[ $RUN_DIGESTOR -eq 1 ]]; then
     run_digestor
+fi
+
+if [[ -n "$CLUSTERING_PID" ]]; then
+    wait "$CLUSTERING_PID"
 fi
 
 if [[ $RUN_CONSOLIDATOR -eq 1 ]]; then

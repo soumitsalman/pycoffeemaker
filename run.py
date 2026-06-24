@@ -42,12 +42,11 @@ parser.add_argument(
         "EMBEDDER",
         "DIGESTOR",
         "EXTRACTOR",
-        "CLASSIFIER",
         "CLUSTERING",
         "CONSOLIDATOR",
         "PORTER",
     ],
-    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLASSIFIER, CLUSTERING, CONSOLIDATOR, PORTER)",
+    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLUSTERING, CONSOLIDATOR, PORTER)",
 )
 
 from workers.workercache.pgcache import AsyncStateCache, StateCache
@@ -89,21 +88,21 @@ if __name__ == "__main__":
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
             ),
             batch_size=batch_size,
+            categories=f"{CURR_DIR}/factory/categories.parquet",
+            sentiments=f"{CURR_DIR}/factory/sentiments.parquet",
         ).run()
 
-    elif mode in ("CLASSIFIER", "CLUSTERING"):
-        from workers.analyzerorch import Classifier
+    elif mode == "CLUSTERING":
+        from workers.analyzerorch import Clusterer
         from workers.workercache.clscache import ClassificationCache
         
         cls_cache = ClassificationCache(
             os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/.cache/clsstore'), 
             table_settings={
-                BEANS: {"id_key": URL, "distance_func": "l2"},
-                CATEGORIES: {"id_key": "category", "distance_func": "cosine"},
-                SENTIMENTS: {"id_key": "sentiment", "distance_func": "cosine"}
+                BEANS: {"id_key": URL, "distance_func": "l2"}
             }
         )
-        Classifier(cache=cache, cls_cache=cls_cache, batch_size=batch_size).run()
+        Clusterer(cache=cache, cls_cache=cls_cache, batch_size=batch_size).run()
         cls_cache.close()
 
     elif mode == "EXTRACTOR":

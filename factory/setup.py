@@ -25,16 +25,16 @@ def create_classification_embeddings():
     with create_embedder(os.getenv('EMBEDDER_PATH'), 512) as embedder:
         categories = pd.DataFrame(
             {
-                "category": classifications[K_CATEGORIES],
-                K_EMBEDDING: embedder([f"topic/category: {cat}" for cat in classifications[K_CATEGORIES]])
+                "id": classifications[K_CATEGORIES],
+                K_EMBEDDING: embedder([f"topic/domain={cat}" for cat in classifications[K_CATEGORIES]])
             }
         )
         ic(categories.sample(n=3))
 
         sentiments = pd.DataFrame(
             {
-                "sentiment": classifications[K_SENTIMENTS],
-                K_EMBEDDING: embedder([f"sentiment: {s}" for s in classifications[K_SENTIMENTS]])
+                "id": classifications[K_SENTIMENTS],
+                K_EMBEDDING: embedder([f"sentiment={s}" for s in classifications[K_SENTIMENTS]])
             }
         )
         ic(sentiments.sample(n=3))

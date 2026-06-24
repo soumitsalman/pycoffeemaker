@@ -31,58 +31,109 @@ from icecream import ic
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
 MAX_DOCUMENT_LEN = int(os.getenv("MAX_DOCUMENT_LEN", 4096)) # 16KB
-
-log = get_logger("analyzerworker")
-clean_updates = lambda packlist: [{k:v for k,v in pack.items() if v} for pack in packlist if pack]
-
 VECTOR_LEN = int(os.getenv("VECTOR_LEN", 384))
 
+log = get_logger("analyzerworker")
+
+def clean_updates(updates: list[dict]) -> list[dict]:
+    for update in updates:
+        for k in [k for k, v in update.items() if not v]:
+            update.pop(k)
+    return updates
+
+def decache_beans(cache: StateCacheBase, states: list[str], exclude_states: list[str], batch_size: int = BATCH_SIZE) -> list[dict]:
+    beans = cache.get(BEANS, states=states, exclude_states=exclude_states)
+    log.info(event="decached", target_state=str(exclude_states), num_items=len(beans))
+    for chunk in batched(beans, batch_size):
+        yield chunk
+
+CLASSIFICATION_LIMIT = int(os.getenv("CLASSIFICATION_LIMIT", 2))
 class Embedder:
     cache: StateCacheBase
     embedder: EmbedderBase
+    classifications: dict
 
     def __init__(
         self,
         cache: StateCacheBase,
         model_path: str,
-        context_len: int,
+        context_len: int,        
         batch_size: int = BATCH_SIZE,
+        **classification_kwargs
     ):
         self.cache = cache
         self.embedder = create_embedder(model_path=model_path, context_len=context_len)
         self.batch_size = batch_size
+        self.classifications = {key: self._load_label_index(value) for key, value in classification_kwargs.items()}
+        
+    @classmethod
+    def _load_label_index(cls, path: Path):
+        df = pd.read_parquet(path)
+        labels = df["id"].tolist()
+        vectors = np.asarray(df[EMBEDDING].tolist(), dtype=np.float32)
+        index = NearestNeighbors(
+            metric="cosine",
+            algorithm="brute",
+            n_jobs=-1,
+        )
+        index.fit(vectors)
+        return {"labels": labels, "index": index}
+
+    @classmethod
+    def _label_batch_search(cls, index_pack: dict, embeddings: list[list[float]], top_n: int) -> list[list[str]]:
+        if not embeddings:
+            return []
+        labels = index_pack["labels"]
+        _, indices = index_pack["index"].kneighbors(
+            np.asarray(embeddings, dtype=np.float32),
+            n_neighbors=min(top_n, len(labels)),
+            return_distance=True,
+        )
+        return [[labels[i] for i in row] for row in indices]
+
+    def classify_beans(self, beans: list[dict]):
+        embeddings = [bean[EMBEDDING] for bean in beans]
+        for key, index in self.classifications.items():
+            labels = self._label_batch_search(index, embeddings, CLASSIFICATION_LIMIT)
+            # NOTE: updating in place for future extension when I put the classifications in the queue for digestion
+            [
+                b.update({key: valid_tags(lbl)}) 
+                for b, lbl in zip(beans, labels) 
+                if lbl
+            ]   
+        return beans
 
     def embed_beans(self, beans: list[dict]):
-        for chunk in batched(beans, self.batch_size):
-            try:
-                vectors = self.embedder.embed_documents([bean[CONTENT][:MAX_DOCUMENT_LEN<<1] for bean in chunk])
-                updates = clean_updates([
-                    {URL: b[URL], EMBEDDING: vec}
-                    for b, vec in zip(chunk, vectors)
-                    if vec and len(vec) == VECTOR_LEN
-                ])
-                log.info(event="embedded", source=chunk[0][SOURCE], num_items=len(updates))
-                yield updates
-            except Exception as e:
-                log.error(event="failed embedding",
-                    source=chunk[0][SOURCE],
-                    num_items=len(chunk),                    
-                    exc_info=True,
-                    
-                )
+        vectors = self.embedder.embed_documents([bean[CONTENT][:MAX_DOCUMENT_LEN<<1] for bean in beans])
+        # NOTE: updating in place for future extension when I put the embeddings in the queue for clustering
+        [
+            b.update({EMBEDDING: vec})
+            for b, vec in zip(beans, vectors)
+            if vec and len(vec) == VECTOR_LEN
+        ]        
+        return beans        
 
     @log_runtime(logger=log)
-    def run(self):
-        beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=EMBEDDED)
-        log.info(event="starting embedder", num_items=len(beans))
-        if not beans: return 0
-        
+    def run(self): 
         total = 0
         with self.embedder:
-            for updates in self.embed_beans(beans):
-                count = self.cache.set(BEANS, EMBEDDED, updates)
-                total += (count or len(updates))
-        log.info(event="total embedded", num_items=total)
+            for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=EMBEDDED, batch_size=self.batch_size):
+                try:
+                    updates = self.embed_beans(chunk)
+                    log.info(event="embedded", source=chunk[0][SOURCE], num_items=len(updates))
+                    updates = self.classify_beans(updates)
+                    log.info(event="classified", source=chunk[0][SOURCE], num_items=len(updates))
+                    # running clean_updates once to avoid multiple passes over the data
+                    updates = clean_updates(updates) 
+                    count = self.cache.set(BEANS, EMBEDDED, updates)
+                    total += (count or len(updates))
+                except Exception as e:
+                    log.error(event="failed embedding and classifying",
+                        source=chunk[0][SOURCE],
+                        num_items=len(chunk),
+                        exc_info=True,
+                    )
+        log.info(event="embedder completed", total_embedded=total)
         return total
 
 
@@ -194,154 +245,95 @@ class Digestor:
         self.batch_size = batch_size
 
     def digest_beans(self, beans: list[dict]):
-        for chunk in batched(beans, self.batch_size):
-            try:
-                digests = self.digestor.run_batch(list(map(_article_to_str, chunk)))
-                updates = clean_updates([
-                    {
-                        URL: b[URL],
-                        DIGEST: d.model_dump()
-                    }
-                    for b, d in zip(chunk, digests)
-                    if d
-                ])
-                log.info(event="digested", source=chunk[0][SOURCE], num_items=len(updates))
-                yield updates
-            except:
-                log.error(event="failed digesting",
-                    source=chunk[0][SOURCE],
-                    num_items=len(chunk),
-                    exc_info=True,
-                )
+        digests = self.digestor.run_batch(list(map(_article_to_str, beans)))
+        updates = [
+            {
+                URL: b[URL],
+                DIGEST: d.model_dump()
+            }
+            for b, d in zip(beans, digests)
+            if d
+        ]
+        return updates
 
-    def _fetch_beans(self) -> list[dict]:
-        beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=DIGESTED)
-        log.info(event="starting digestor", num_items=len(beans))
-        return beans
+
+    # def _fetch_beans(self) -> list[dict]:
+    #     beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=DIGESTED)
+    #     log.info(event="starting digestor", num_items=len(beans))
+    #     return beans
 
     @log_runtime(logger=log)
     def run(self):
         total = 0
-        with ThreadPoolExecutor(max_workers=1) as exec:
-            beans_future = exec.submit(self._fetch_beans)
-            with self.digestor:
-                beans = beans_future.result()
-                if not beans:
-                    return 0
-                for updates in self.digest_beans(beans):
+        # with ThreadPoolExecutor(max_workers=1) as exec:
+        #     beans_future = exec.submit(self._fetch_beans)
+        with self.digestor:
+            # beans = beans_future.result()
+            # if not beans:
+            #     return 0
+            for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=DIGESTED, batch_size=self.batch_size):
+                try:
+                    updates =self.digest_beans(chunk)
+                    log.info(event="digested", source=chunk[0][SOURCE], num_items=len(updates))
+                    updates = clean_updates(updates)
                     count = self.cache.set(BEANS, DIGESTED, updates)
                     total += (count or len(updates))
-        log.info(event="total digested", num_items=total)
+                except:
+                    log.error(event="failed digesting",
+                        source=chunk[0][SOURCE],
+                        num_items=len(chunk),
+                        exc_info=True,
+                    )
+        log.info(event="digestor completed", total_digested=total)
         return total
 
 
-CLASSIFICATION_LIMIT = int(os.getenv("CLASSIFICATION_LIMIT", 2))
 CLUSTER_LIMIT = int(os.getenv('CLUSTER_LIMIT', 500))
 CLUSTER_EPS = float(os.getenv("CLUSTER_EPS", 0.4))
 
-class Classifier:
+class Clusterer:
     cache: StateCacheBase
     cls_cache: ClassificationCache
 
     def __init__(self, cache: StateCacheBase, cls_cache: ClassificationCache, batch_size: int = BATCH_SIZE):
         self.cache = cache
         self.cls_cache = cls_cache
-        self.batch_size = batch_size
-        factory_dir = Path(__file__).resolve().parents[1] / "factory"
-        self.category_index = self._load_label_index(factory_dir / "categories.parquet", "category")
-        self.sentiment_index = self._load_label_index(factory_dir / "sentiments.parquet", "sentiment")
-
-    def _load_label_index(self, path: Path, id_key: str):
-        df = pd.read_parquet(path)
-        labels = df[id_key].tolist()
-        vectors = np.asarray(df[EMBEDDING].tolist(), dtype=np.float32)
-        index = NearestNeighbors(
-            metric="cosine",
-            algorithm="brute",
-            n_jobs=-1,
-        )
-        index.fit(vectors)
-        return {"labels": labels, "index": index}
-
-    def _label_batch_search(self, index_pack: dict, embeddings: list[list[float]], top_n: int) -> list[list[str]]:
-        if not embeddings:
-            return []
-        labels = index_pack["labels"]
-        _, indices = index_pack["index"].kneighbors(
-            np.asarray(embeddings, dtype=np.float32),
-            n_neighbors=min(top_n, len(labels)),
-            return_distance=True,
-        )
-        return [[labels[i] for i in row] for row in indices]
-
-    def classify_beans(self, beans: list[dict]):
-        embeddings = [bean[EMBEDDING] for bean in beans]
-        categories = self._label_batch_search(self.category_index, embeddings, CLASSIFICATION_LIMIT)
-        sentiments = self._label_batch_search(self.sentiment_index, embeddings, CLASSIFICATION_LIMIT)
-        updates = clean_updates([
-            {
-                URL: bean[URL],
-                CATEGORIES: valid_tags(cats),
-                SENTIMENTS: valid_tags(sents),
-            }
-            for bean, cats, sents in zip(beans, categories, sentiments)
-            if cats and sents
-        ])
-        log.info(event="classified", num_items=len(updates))
-        yield updates
-        # for chunk in batched(beans, self.batch_size):
-        #     embeddings = [bean[EMBEDDING] for bean in chunk]
-        #     categories = self._label_batch_search(self.category_index, embeddings, CLASSIFICATION_LIMIT)
-        #     sentiments = self._label_batch_search(self.sentiment_index, embeddings, CLASSIFICATION_LIMIT)
-        #     updates = clean_updates([
-        #         {
-        #             URL: bean[URL],
-        #             CATEGORIES: valid_tags(cats),
-        #             SENTIMENTS: valid_tags(sents),
-        #         }
-        #         for bean, cats, sents in zip(chunk, categories, sentiments)
-        #         if cats and sents
-        #     ])
-        #     log.info(event="classified", source=chunk[0][URL], num_items=len(updates))
-        #     yield updates
+        self.batch_size = batch_size  
 
     def cluster_beans(self, beans: list[dict]):
-        self.cls_cache.store(BEANS, beans)
-        for chunk in batched(beans, self.batch_size):
-            embeddings = [bean[EMBEDDING] for bean in chunk]
-            related_list = self.cls_cache.batch_search(BEANS, embeddings, distance=CLUSTER_EPS, top_n=CLUSTER_LIMIT)
-            updates = clean_updates([
-                {
-                    URL: bean[URL],
-                    RELATED: list(filter(lambda x: x != bean[URL], related)),
-                }
-                for bean, related in zip(chunk, related_list)
-            ])
-            log.info(event="clustered", source=chunk[0][URL], num_items=len(updates))
-            yield updates
+        self.cls_cache.store(BEANS, beans)  
+        related_list = self.cls_cache.batch_search(BEANS, [bean[EMBEDDING] for bean in beans], distance=CLUSTER_EPS, top_n=CLUSTER_LIMIT)
+        return clean_updates([            
+            {
+                URL: b[URL],
+                RELATED: related
+            }
+            for b, related in zip(beans, related_list)
+        ])
 
     @log_runtime(logger=log)
     def run(self):
-        # run classification before clustering
-        beans = self.cache.get(BEANS, states=EMBEDDED, exclude_states=CLASSIFIED)
-        log.info(event="starting classifier", num_items=len(beans))
-        classified = 0
-        embedded = [b for b in beans if EMBEDDING in b]
-        for updates in self.classify_beans(embedded):
-            count = self.cache.set(BEANS, CLASSIFIED, updates)
-            classified += (count or len(updates))
-        log.info(event="total classified", num_items=classified)
-
-        # run clustering after classification
-        beans = self.cache.get(BEANS, states=EMBEDDED, exclude_states=CLUSTERED)
-        log.info(event="starting clusterer", num_items=len(beans))
-        clustered = 0
-        embedded = [b for b in beans if EMBEDDING in b]
-        for updates in self.cluster_beans(embedded):
+        total = 0
+        for chunk in decache_beans(self.cache, states=EMBEDDED, exclude_states=CLUSTERED, batch_size=self.batch_size):
+            # no need for try-except since this does not have a OOM issue
+            updates = self.cluster_beans(chunk)
+            log.info(event="clustered", source=chunk[0].get(SOURCE, chunk[0][URL]), num_items=len(updates))
             count = self.cache.set(BEANS, CLUSTERED, updates)
-            clustered += (count or len(updates))
-        log.info(event="total clustered", num_items=clustered)
-        return classified, clustered
+            total += (count or len(updates))
+            
+        log.info(event="clusterer completed", total_clustered=total)
+        return total
+
+        # # run clustering after classification
+        # beans = self.cache.get(BEANS, states=EMBEDDED, exclude_states=CLUSTERED)
+        # log.info(event="starting clusterer", num_items=len(beans))
+        # clustered = 0
+        # embedded = [b for b in beans if EMBEDDING in b]
+        # for updates in self.cluster_beans(embedded):
+        #     count = self.cache.set(BEANS, CLUSTERED, updates)
+        #     clustered += (count or len(updates))
+        # log.info(event="total clustered", num_items=clustered)
+        # return classified, clustered
 
 
 CONSOLIDATION_EPS = float(os.getenv("CONSOLIDATION_EPS", 0.5))
@@ -413,7 +405,8 @@ class Consolidator:
     def _expand_group(self, group: dict) -> dict:
         # fetch and expand only if we don't have enough beans and 
         # we can make enough beans by fetching
-        ids_to_fetch = list(chain.from_iterable(b.get(RELATED, []) for b in group["data"]))
+        existing = {b[URL] for b in group["data"]}
+        ids_to_fetch = list(set(chain.from_iterable(b.get(RELATED, []) for b in group["data"])) - existing)
         if len(group["data"]) < CONSOLIDATION_MAX_SIZE and len(ids_to_fetch) > 0 and len(ids_to_fetch) + len(group["data"]) >= CONSOLIDATION_MIN_SIZE:
             related = self._get_beans(
                 states=[COLLECTED, EMBEDDED, DIGESTED], 
@@ -475,7 +468,7 @@ class Consolidator:
 
     def _fetch_and_group_beans(self) -> list[dict]:
         beans = self._get_beans(
-            states=[COLLECTED, EMBEDDED, CLASSIFIED, CLUSTERED, DIGESTED],
+            states=[COLLECTED, EMBEDDED, CLUSTERED, DIGESTED],
             exclude_states=CONSOLIDATED,
         )
         log.info(event="starting consolidator", num_items=len(beans))

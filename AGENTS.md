@@ -7,8 +7,9 @@ Backend processing engine for **Project Cafecito**: collect web content, enrich 
 ```
 pycoffeemaker/
 ├── run.py                 # Entry: --mode, --batch_size; loads .env
+├── run_pipeline.sh        # Multi-stage scheduler (GPU/CPU/IO ordering)
 ├── machine_ops.py         # GPU cloud start/stop (TensorDock, Azure)
-├── factory/               # feeds.yaml, classifications.yaml, migrate/rectify
+├── factory/               # feeds.yaml, pipeline-defaults.env, classifications.yaml, migrate/rectify
 ├── workers/               # Orchestrators + state cache
 ├── datacollectors/        # RSS/API/scrapers (APICollectorAsync, AsyncWebScraper)
 ├── nlp/                   # Embeddings, digests, NER (submodule; see nlp/README.md)
@@ -26,14 +27,52 @@ One **mode** per process. Orchestrators are unaware of each other; coordination 
 | Mode | Module | Role | Load |
 |------|--------|------|------|
 | `COLLECTOR` | `collectororch.py` | Ingest RSS, APIs, Reddit, scraped pages; normalize fields; scrape publishers | IO |
-| `EMBEDDER` | `analyzerorch.py` | Vector embeddings on bean content | Compute |
-| `EXTRACTOR` | `analyzerorch.py` | NER (people, orgs, regions, tickers) via GLiNER | Compute |
-| `DIGESTOR` | `analyzerorch.py` | Structured digests (gist, highlights) via LLM | Compute / GPU |
-| `CLASSIFIER` | `analyzerorch.py` | Topics, sentiments, related-article clustering (`CLASSIFICATION_CACHE`) | Compute |
-| `CONSOLIDATOR` | `analyzerorch.py` | Composite briefings from related beans | Compute / GPU or remote API |
+| `EMBEDDER` | `analyzerorch.py` | Vector embeddings; lightweight topic/sentiment labels (CPU) | GPU + light CPU |
+| `CLUSTERING` | `analyzerorch.py` | Related-article clustering (`CLASSIFICATION_CACHE`) | CPU-heavy |
+| `EXTRACTOR` | `analyzerorch.py` | NER (people, orgs, regions, tickers) via GLiNER | GPU |
+| `DIGESTOR` | `analyzerorch.py` | Structured digests (gist, highlights) via LLM | GPU |
+| `CONSOLIDATOR` | `analyzerorch.py` | Composite briefings from related beans | GPU or remote API |
 | `PORTER` | `porterorch.py` | `BeansackPorter` + `CupboardPorter` → PG Beansack + Cupboard | IO |
 
-Suggested cadence (see `run.py` comments): collector ~2×/day; embedder/extractor/classifier/digestor ~3×/day; porter on demand.
+### Scheduling (`run_pipeline.sh`)
+
+Single-process entry: `run.py --mode MODE`. Multi-stage runs use `run_pipeline.sh`:
+
+```bash
+./run_pipeline.sh --collector 128 --embedder 512 --clustering 128 \
+  --extractor 24 --digestor 32 --consolidator 32 --porter 32
+```
+
+Each flag enables a stage and sets its `--batch_size`. Omit flags for stages you do not want.
+
+**Resource model**
+
+| Stage | Bound | Parallelism |
+|-------|-------|-------------|
+| `COLLECTOR`, `PORTER` | IO | Background; overlap with other stages |
+| `EMBEDDER`, `EXTRACTOR`, `DIGESTOR`, `CONSOLIDATOR` | GPU | Serial with each other (one GPU job at a time) |
+| `CLUSTERING` | CPU | Background after embedder; overlaps extractor and/or digestor |
+
+**Order and dependencies** (enforced by `run_pipeline.sh`):
+
+```
+collector (bg) ─────────────────────────────────────────┐
+embedder (sync)                                         │
+  ├─ clustering (bg, CPU) ───────── wait before ────────┤
+  ├─ extractor (sync, GPU)     ── serial GPU stages ────┤
+  └─ digestor (sync, GPU)                               │
+consolidator (sync, GPU)  ← needs digest; needs clustering if enabled
+porter (bg) ────────────────────────────────────────────┘
+```
+
+- **Embedder** must finish before clustering, extractor, or digestor (clustering reads embeddings).
+- **Clustering** starts immediately after embedder and may still be running while extractor/digestor run.
+- **Consolidator** runs after extractor and digestor (if enabled) and waits for clustering when `--clustering` is set (needs `embedded`, `digested`, `clustered`, related links).
+- **Porter** can start while collector is still running; hydrates Beansack/Cupboard from finished cache states.
+
+Suggested cadence: collector ~2×/day; embedder/clustering/extractor/digestor ~3×/day; consolidator with digestor; porter on demand.
+
+**Configuration** — `factory/pipeline-defaults.env` holds checked-in defaults for deployment convenience (model paths, context lengths, analyzer tuning). Python entrypoints load it first via `utils/env.load_coffeemaker_env`, then `.env` at repo root with override. Without a local `.env`, workers use those defaults as-is. Put secrets and host-specific overrides (`PROCESSING_CACHE`, `BEANSACK_CONNECTION_STRING`, API keys, alternate `EMBEDDER_PATH`, etc.) in `.env` only. `run_pipeline.sh` sources `.env` for shell-level vars (e.g. `SHUTDOWN_URL`).
 
 ### State machine (`workers/workercache/`)
 

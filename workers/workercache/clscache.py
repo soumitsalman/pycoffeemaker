@@ -75,7 +75,7 @@ class ClassificationCache:
         return [r.fields[self.id_keys[object_type]] for r in filter(filter_distance, results)]
 
     def batch_search(self, object_type: str, embeddings: list[list[float]], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN) -> list[list[str]]:
-        return list(ThreadPoolExecutor().map(lambda emb: self.search(object_type, emb, distance, top_n), embeddings))        
+        return [self.search(object_type, emb, distance, top_n) for emb in embeddings]        
 
     def close(self):
         try: [coll.optimize() for coll in self.collections.values()]

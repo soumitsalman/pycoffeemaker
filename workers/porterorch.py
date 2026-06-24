@@ -39,7 +39,7 @@ class BeansackPorter:
     async def hydrate_beans(self, db: Beansack, target_state: str):
         if beans := await self.cache.get(
             BEANS,
-            states=[COLLECTED, EMBEDDED, CLASSIFIED, DIGESTED],
+            states=[COLLECTED, EMBEDDED, DIGESTED],
             exclude_states=target_state,
         ):  
             log.info(event="porting:beans", to="beansack", num_items=len(beans))  
@@ -130,7 +130,7 @@ class CupboardPorter:
     async def hydrate_events(self, db: Cupboard, target_state: str):
         if beans := await self.cache.get(
             BEANS,
-            states=[COLLECTED, EMBEDDED, CLASSIFIED, DIGESTED],
+            states=[COLLECTED, EMBEDDED, DIGESTED],
             exclude_states=target_state,
         ):  
             log.info(event="porting:events", to="cupboard", num_items=len(beans))             

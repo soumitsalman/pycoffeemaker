@@ -9,6 +9,7 @@ Can be deployed as standalone worker nodes or imported by other services (e.g. E
 ```
 pycoffeemaker/
 ├── run.py                 # Entry point: --mode selects worker
+├── run_pipeline.sh        # Multi-stage scheduler (GPU/CPU/IO ordering)
 ├── machine_ops.py         # Start/stop GPU cloud instances (TensorDock, Azure)
 ├── requirements.txt       # Full deps (GPU/LLM workloads)
 ├── requirements-io.txt    # IO-only deps (collector, porter)
@@ -18,11 +19,12 @@ pycoffeemaker/
 ├── docker-compose.yaml    # Local stack: pgcache, mongo, postgres, workers, azurite, crawl4ai
 ├── factory/
 │   ├── feeds.yaml         # RSS/API/social source lists for COLLECTOR
-│   ├── classifications.yaml  # Topic/sentiment labels for CLASSIFIER
+│   ├── pipeline-defaults.env  # Checked-in model paths and analyzer defaults
+│   ├── classifications.yaml  # Topic/sentiment labels
 │   ├── setup.py / migrate.py / rectify.py  # DB setup & maintenance
 ├── workers/               # Orchestrators (operators)
 │   ├── collectororch.py   # COLLECTOR
-│   ├── analyzerorch.py    # EMBEDDER, EXTRACTOR, DIGESTOR, CLASSIFIER, CONSOLIDATOR
+│   ├── analyzerorch.py    # EMBEDDER, CLUSTERING, EXTRACTOR, DIGESTOR, CONSOLIDATOR
 │   ├── porterorch.py      # PORTER → Beansack + Cupboard
 │   ├── utils.py           # State names, field constants
 │   └── workercache/       # Fault-tolerant state store (pg, sqlite, firebird, surreal)
@@ -43,16 +45,68 @@ pycoffeemaker/
 | Stage | Mode | What it does |
 |-------|------|----------------|
 | Collect | `COLLECTOR` | Ingest RSS, APIs, Reddit, scraped pages; normalize title, content, metadata, chatter stats |
-| Embed | `EMBEDDER` | Vector embeddings on article content |
+| Embed | `EMBEDDER` | Vector embeddings; lightweight topic/sentiment labels (CPU) |
+| Cluster | `CLUSTERING` | Related-article clustering (`CLASSIFICATION_CACHE`) |
 | Extract | `EXTRACTOR` | Named entities (people, companies, regions, tickers) via GLiNER |
 | Digest | `DIGESTOR` | Structured digests (gist, highlights) via LLM |
-| Classify | `CLASSIFIER` | Topic categories + sentiments; related-article clustering |
 | Consolidate | `CONSOLIDATOR` | Group related digests into composite briefings/signals |
 | Port | `PORTER` | Push finished beans/chatters/publishers to Beansack (PG) and Cupboard |
 
 Processing is **idempotent**: each item moves through named states in `workers/workercache`; already-done work is skipped.
 
-Suggested schedule (from `run.py` comments): collector ~2×/day; embedder/extractor/classifier/digestor ~3×/day; porter on demand.
+## Pipeline scheduling
+
+Single-process entry: `python run.py --mode MODE`. Multi-stage runs use `run_pipeline.sh`:
+
+```bash
+./run_pipeline.sh --collector 128 --embedder 512 --clustering 128 \
+  --extractor 24 --digestor 32 --consolidator 32 --porter 32
+```
+
+Each flag enables a stage and sets its `--batch_size`. Omit flags for stages you do not want.
+
+### Stages → cache → downstream
+
+| Mode | Cache state | Downstream (via `PORTER`) |
+|------|-------------|---------------------------|
+| `COLLECTOR` | `collected` | title, content, source, dates, tags |
+| `EMBEDDER` | `embedded` | `embedding`, categories, sentiments |
+| `CLUSTERING` | `clustered` | `related` links (porter link tables) |
+| `EXTRACTOR` | `extracted` | `entities` (Beansack main beans) |
+| `DIGESTOR` | `digested` | digest-derived regions/entities (Cupboard events) |
+| `CONSOLIDATOR` | `consolidated` | composite briefings → Cupboard signals |
+| `PORTER` | `beansacked` / `cupboarded` | rows in Beansack / Cupboard |
+
+State merge rules: `workers/workercache/STATEMACHINE.md`.
+
+### Resource model and order
+
+| Stage | Bound | Parallelism |
+|-------|-------|-------------|
+| `COLLECTOR`, `PORTER` | IO | Background; overlap with other stages |
+| `EMBEDDER`, `EXTRACTOR`, `DIGESTOR`, `CONSOLIDATOR` | GPU | Serial with each other (one GPU job at a time) |
+| `CLUSTERING` | CPU | Background after embedder; overlaps extractor and/or digestor |
+
+```
+collector (bg) ─────────────────────────────────────────┐
+embedder (sync)                                         │
+  ├─ clustering (bg, CPU) ───────── wait before ────────┤
+  ├─ extractor (sync, GPU)     ── serial GPU stages ────┤
+  └─ digestor (sync, GPU)                               │
+consolidator (sync, GPU)  ← needs digest; needs clustering if enabled
+porter (bg) ────────────────────────────────────────────┘
+```
+
+- **Embedder** must finish before clustering, extractor, or digestor (clustering reads embeddings).
+- **Clustering** starts immediately after embedder and may still be running while extractor/digestor run.
+- **Consolidator** runs after extractor and digestor (if enabled) and waits for clustering when `--clustering` is set.
+- **Porter** can start while collector is still running; hydrates Beansack/Cupboard from finished cache states.
+
+Suggested cadence: collector ~2×/day; embedder/clustering/extractor/digestor ~3×/day; consolidator with digestor; porter on demand or at end of each pipeline run.
+
+### Configuration
+
+`factory/pipeline-defaults.env` holds checked-in defaults for deployment convenience (model paths, context lengths, analyzer tuning). Python entrypoints load it first via `utils/env.load_coffeemaker_env`, then `.env` at repo root with override. Without a local `.env`, workers use those defaults as-is. Put secrets and host-specific overrides (`PROCESSING_CACHE`, `BEANSACK_CONNECTION_STRING`, API keys, alternate `EMBEDDER_PATH`, etc.) in `.env` only. `run_pipeline.sh` sources `.env` for shell-level vars (e.g. `SHUTDOWN_URL`).
 
 ## Project Cafecito naming
 
@@ -72,7 +126,7 @@ Suggested schedule (from `run.py` comments): collector ~2×/day; embedder/extrac
 ### `workers/` — orchestrators
 
 - **Collector** (`collectororch.py`): reads `COLLECTOR_SOURCES` (default `factory/feeds.yaml`), uses `datacollectors` for RSS/API/scrape; writes `collected` state.
-- **Embedder / Extractor / Digestor / Classifier / Consolidator** (`analyzerorch.py`): read from cache by state, call `nlp`, write next state (`embedded`, `extracted`, `digested`, `classified`, `consolidated`).
+- **Embedder / Clustering / Extractor / Digestor / Consolidator** (`analyzerorch.py`): read from cache by state, call `nlp`, write next state (`embedded`, `clustered`, `extracted`, `digested`, `consolidated`).
 - **Porter** (`porterorch.py`): `BeansackPorter` + `CupboardPorter` hydrate downstream DBs from cache.
 
 ### `datacollectors/`
@@ -81,7 +135,7 @@ Suggested schedule (from `run.py` comments): collector ~2×/day; embedder/extrac
 
 ### `workers/workercache/`
 
-Fault-tolerant state machine used by all orchestrators. Default backend: `pgcache.StateCache` / `pgcache.AsyncStateCache` via `PROCESSING_CACHE`. `clscache.ClassificationCache` backs CLASSIFIER (`CLASSIFICATION_CACHE`). Alternate backends live under `extensions/` (sqlite, firebird, surreal). State flow: `workers/workercache/STATEMACHINE.md`.
+Fault-tolerant state machine used by all orchestrators. Default backend: `pgcache.StateCache` / `pgcache.AsyncStateCache` via `PROCESSING_CACHE`. `clscache.ClassificationCache` backs `CLUSTERING` (`CLASSIFICATION_CACHE`). Alternate backends live under `extensions/` (sqlite, firebird, surreal). State flow: `workers/workercache/STATEMACHINE.md`.
 
 Tracks per-object processing states (`beans`, `publishers`, `chatters`, `composites`).
 
@@ -99,7 +153,7 @@ Pydantic models (`Bean`, `Chatter`, `Publisher`) and storage: `create_client("pg
 
 ### `factory/`
 
-Operational config: feed lists, classification taxonomies, migrations—not runtime library code.
+Operational config: feed lists, `pipeline-defaults.env`, classification taxonomies, migrations—not runtime library code.
 
 ## How to use
 
@@ -125,24 +179,26 @@ pip install -r requirements.txt   # or requirements-io.txt for collector-only
 # Collector
 python run.py --mode COLLECTOR --batch_size 32
 
-# Embedder (needs EMBEDDER_PATH)
+# Single analyzer stage
 python run.py --mode EMBEDDER --batch_size 64
-
-# Extractor, digestor, classifier, consolidator — same pattern
+python run.py --mode CLUSTERING --batch_size 128
 python run.py --mode EXTRACTOR
 python run.py --mode DIGESTOR
-python run.py --mode CLASSIFIER
 python run.py --mode CONSOLIDATOR
 
-# Porter
-python run.py --mode PORTER
+# Porter (partial backfill; needs upstream cache states)
+python run.py --mode PORTER --batch_size 32
+
+# Full pipeline (see Pipeline scheduling above)
+./run_pipeline.sh --collector 128 --embedder 512 --clustering 128 \
+  --extractor 24 --digestor 32 --consolidator 32 --porter 32
 ```
 
 `MODE` and `BATCH_SIZE` can be set via environment instead of CLI.
 
 ### Key Environment Variables
 
-Python entrypoints load `factory/pipeline-defaults.env` first, then `.env`; duplicate values in `.env` win. `run_pipeline.sh` sources `.env` for shell-level settings like `SHUTDOWN_URL`, while deployment task scripts can export host-specific GPU settings before calling it.
+Python entrypoints load `factory/pipeline-defaults.env` first, then `.env`; duplicate values in `.env` win. See **Configuration** under Pipeline scheduling. `run_pipeline.sh` sources `.env` for shell-level settings like `SHUTDOWN_URL`; deployment task scripts can export host-specific GPU settings before calling it.
 
 | Variable | Used by |
 |----------|---------|
@@ -154,7 +210,7 @@ Python entrypoints load `factory/pipeline-defaults.env` first, then `.env`; dupl
 | `EXTRACTOR_PATH`, `EXTRACTOR_CONTEXT_LEN` | EXTRACTOR |
 | `DIGESTOR_PATH`, `DIGESTOR_CONTEXT_LEN` | DIGESTOR |
 | `CONSOLIDATOR_PATH`, `CONSOLIDATOR_BASE_URL`, `CONSOLIDATOR_API_KEY` | CONSOLIDATOR (remote LLM optional) |
-| `CLASSIFICATION_CACHE` | Vector store for CLASSIFIER (`workers/workercache/clscache.py`, zvec) |
+| `CLASSIFICATION_CACHE` | Vector store for `CLUSTERING` (`workers/workercache/clscache.py`, zvec) |
 | `BEANSACK_CONNECTION_STRING` | PORTER |
 | `CUPBOARD_CONNECTION_STRING` | PORTER |
 | `LOG_DIR` | Optional hourly logfmt log file; otherwise logfmt to stderr |
