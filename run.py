@@ -43,10 +43,11 @@ parser.add_argument(
         "DIGESTOR",
         "EXTRACTOR",
         "CLASSIFIER",
+        "CLUSTERING",
         "CONSOLIDATOR",
         "PORTER",
     ],
-    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLASSIFIER, CONSOLIDATOR, PORTER)",
+    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLASSIFIER, CLUSTERING, CONSOLIDATOR, PORTER)",
 )
 
 from workers.workercache.pgcache import AsyncStateCache, StateCache
@@ -90,7 +91,7 @@ if __name__ == "__main__":
             batch_size=batch_size,
         ).run()
 
-    elif mode == "CLASSIFIER":
+    elif mode in ("CLASSIFIER", "CLUSTERING"):
         from workers.analyzerorch import Classifier
         from workers.workercache.clscache import ClassificationCache
         
@@ -163,7 +164,7 @@ if __name__ == "__main__":
 
     else:
         raise ValueError(
-            "Invalid mode. Choose COLLECTOR, EMBEDDER, EXTRACTOR, DIGESTOR, CLASSIFIER, CONSOLIDATOR, or PORTER."
+            "Invalid mode. Choose COLLECTOR, EMBEDDER, EXTRACTOR, DIGESTOR, CLASSIFIER, CLUSTERING, CONSOLIDATOR, or PORTER."
         )
     
     cache.close()
