@@ -26,7 +26,7 @@ fi
     sleep 10
     "${RUNAS[@]}" bash -lc "
         export HOME=/home/ubuntu
-        export LOG_DIR="/home/ubuntu/pycoffeemaker/.logs/$(date +%y-%m-%d-%H-%M-%S).log"
+        export LOG_DIR="/home/ubuntu/pycoffeemaker/.logs"
         export VLLM_MAX_NUM_BATCHED_TOKENS=98304
         export VLLM_MAX_NUM_SEQS=256
         export VLLM_GPU_MEMORY_UTILIZATION=0.99
