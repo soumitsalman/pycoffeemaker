@@ -5,7 +5,7 @@ set -euo pipefail
 LOG="/home/ubuntu/pycoffeemaker/.logs/pipeline.log"
 WORKDIR="/home/ubuntu/pycoffeemaker"
 SCRIPT="$WORKDIR/run_pipeline.sh"
-ARGS=(--embedder 512 --clustering 512 --digestor 64 --consolidator 64)
+ARGS=(--embedder 480 --clustering 480 --digestor 64 --consolidator 64)
 
 mkdir -p "$WORKDIR/.logs"
 
