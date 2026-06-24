@@ -20,7 +20,9 @@ from nlp import (
     TextAnalystBase, 
     valid_tags, 
     create_embedder, 
-    create_text_analyst
+    create_text_analyst,
+    clear_gpu_cache,
+    is_cuda_oom,
 )
 from datacollectors import (
     CONTENT, CREATED, SUMMARY, TAGS, TITLE, URL, SOURCE, KIND, AUTHOR, POST
@@ -128,6 +130,8 @@ class Embedder:
                     count = self.cache.set(BEANS, EMBEDDED, updates)
                     total += (count or len(updates))
                 except Exception as e:
+                    if is_cuda_oom(e):
+                        clear_gpu_cache()
                     log.error(event="failed embedding and classifying",
                         source=chunk[0][SOURCE],
                         num_items=len(chunk),
@@ -157,37 +161,34 @@ class Extractor:
         )
         self.batch_size = batch_size
 
-    def extract_beans(self, beans: list[dict]):
-        for chunk in batched(beans, self.batch_size):
-            try:
-                extractions = self.extractor.run_batch([b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk])
-                updates = clean_updates([
-                    {
-                        URL: b[URL],
-                        ENTITIES: ents.model_dump()
-                    } if ents else {URL:b[URL]}
-                    for b, ents in zip(chunk, extractions)
-                ])
-                log.info(event="extracted", source=chunk[0][SOURCE], num_items=len(updates))
-                yield updates
-            except:
-                log.error(event="failed extracting",
-                    source=chunk[0][SOURCE],
-                    num_items=len(chunk),
-                    exc_info=True,
-                )
+    def extract_beans(self, chunk: list[dict]):
+        extractions = self.extractor.run_batch([b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk])
+        return clean_updates([
+            {
+                URL: b[URL],
+                ENTITIES: ents.model_dump()
+            } if ents else {URL:b[URL]}
+            for b, ents in zip(chunk, extractions)
+        ])
 
     @log_runtime(logger=log)
     def run(self):
-        beans = self.cache.get(BEANS, states=COLLECTED, exclude_states=EXTRACTED)
-        log.info(event="starting extractor", num_items=len(beans))
-        if not beans: return 0
-        
         total = 0
         with self.extractor:
-            for updates in self.extract_beans(beans):
-                count = self.cache.set(BEANS, EXTRACTED, updates)
-                total += (count or len(updates))
+            for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=EXTRACTED, batch_size=self.batch_size):
+                try:
+                    updates = self.extract_beans(chunk)
+                    log.info(event="extracted", source=chunk[0][SOURCE], num_items=len(updates))
+                    count = self.cache.set(BEANS, EXTRACTED, updates)
+                    total += (count or len(updates))
+                except Exception as e:
+                    if is_cuda_oom(e):
+                        clear_gpu_cache()
+                    log.error(event="failed extracting",
+                        source=chunk[0][SOURCE],
+                        num_items=len(chunk),
+                        exc_info=True,
+                    )
         log.info(event="total extracted", num_items=total)
         return total
 
@@ -278,7 +279,9 @@ class Digestor:
                     updates = clean_updates(updates)
                     count = self.cache.set(BEANS, DIGESTED, updates)
                     total += (count or len(updates))
-                except:
+                except Exception as e:
+                    if is_cuda_oom(e):
+                        clear_gpu_cache()
                     log.error(event="failed digesting",
                         source=chunk[0][SOURCE],
                         num_items=len(chunk),
