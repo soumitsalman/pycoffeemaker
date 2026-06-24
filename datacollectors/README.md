@@ -36,7 +36,8 @@ Import from `datacollectors` or `datacollectors.utils`.
 |----------|---------|
 | `cleanup_item(item)` | Strip text, normalize tags/dates, set lengths; in-place |
 | `guess_article_type(bean)` | Infer `kind` from URL, source, tags, site name |
-| `excluded_url(url)` | Skip media/gallery/video URLs |
+| `excluded_url(url)` | Skip media/gallery/video URLs and Russian-owned domains (pre-fetch) |
+| `exclude_content(response)` | Gate response by URL, content-type, and size; returns `ContentGate` |
 | `extract_base_url`, `extract_source`, `parse_date`, `strip_html_tags` | Shared parsing helpers |
 
 ## Output format

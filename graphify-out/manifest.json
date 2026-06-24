@@ -212,20 +212,20 @@
     "hash": "4261258889c2779df370c9a602370822"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/__init__.py": {
-    "mtime": 1782221660.9203587,
-    "hash": "4326eb290bd17bc56503691000b37d35"
+    "mtime": 1782309726.2692726,
+    "hash": "8051e7558596c9a33dc470db51ee1118"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/utils.py": {
-    "mtime": 1782241698.3352613,
-    "hash": "1cb7e688614fb44b8abef6ce80d03d2d"
+    "mtime": 1782311240.8379219,
+    "hash": "0bc7bc9a6c705bb046d060b052284b1b"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/apicollectors.py": {
-    "mtime": 1781034521.5374367,
-    "hash": "2878594c64821642bcb6ae22ce8040b7"
+    "mtime": 1782310945.322517,
+    "hash": "50f64d20b15c497fb987bc97facfd0de"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/scrapers.py": {
-    "mtime": 1782241675.120496,
-    "hash": "ee9dd4e17614b1ba0b34327163a9e5ac"
+    "mtime": 1782309723.129029,
+    "hash": "560b6b8c2ede5dc4a1294a9499dad5e5"
   },
   "/home/soumitsr/codes/pycoffeemaker/tests/test.py": {
     "mtime": 1782224978.4779677,
@@ -272,8 +272,8 @@
     "hash": "c648d3e72848e1d470106cfaea199a3a"
   },
   "/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml": {
-    "mtime": 1781037857.824236,
-    "hash": "84bed63148922062b31f2b53725be230"
+    "mtime": 1782310950.4673128,
+    "hash": "250c67fd4c752fefe5b55f41007a0d1c"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/workercache/STATEMACHINE.md": {
     "mtime": 1780322958.2690172,
@@ -324,8 +324,8 @@
     "hash": "4fc5e99d4d63e54089744feb09257b36"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/README.md": {
-    "mtime": 1780332187.085444,
-    "hash": "a9902e4493f2d900c85b558b363c76ac"
+    "mtime": 1782310948.0233126,
+    "hash": "83dd1d24892a20f7b42ea9ca5689a68c"
   },
   "/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml": {
     "mtime": 1778084071.8687549,

@@ -4776,7 +4776,6 @@ sources:
   - http://songexploder.net/feed
   - http://stratechery.com/feed/
   - http://syndication.thedailywtf.com/TheDailyWtf
-  - http://tass.com/rss/v2.xml
   - http://thegrowthshow.hubspot.libsynpro.com/
   - http://www.betterlivingthroughdesign.com/feed/
   - http://www.bicolstandard.com/feeds/posts/default?alt=rss
@@ -4968,7 +4967,6 @@ sources:
   - https://rss.art19.com/tim-ferriss-show
   - https://rss.dw.com/rdf/rss-en-all
   - https://rss.elconfidencial.com/espana/
-  - https://rss.newsru.com/top/big/
   - https://rss.nytimes.com/services/xml/rss/nyt/DiningandWine.xml
   - https://rss.nytimes.com/services/xml/rss/nyt/FashionandStyle.xml
   - https://rss.nytimes.com/services/xml/rss/nyt/Science.xml
@@ -4976,7 +4974,6 @@ sources:
   - https://rss.nytimes.com/services/xml/rss/nyt/World.xml
   - https://rss.politico.com/playbook.xml
   - https://rss.whooshkaa.com/rss/podcast/id/1308
-  - https://russia-insider.com/en/all-content/rss
   - https://saket.me/feed/
   - https://sciencebasedmedicine.org/feed/
   - https://seekingalpha.com/market_currents.xml
@@ -5163,7 +5160,6 @@ sources:
   - https://www.philstar.com/rss/headlines
   - https://www.popsugar.com/beauty/feed
   - https://www.popsugar.com/fashion/feed
-  - https://www.pravdareport.com/export.xml
   - https://www.premiumtimesng.com/feed
   - https://www.producthunt.com/feed
   - https://www.prothomalo.com/feed/
@@ -5181,7 +5177,6 @@ sources:
   - https://www.therobotreport.com/feed/
   - https://www.roboticstomorrow.com/rss/news
   - https://www.rp.pl/rss/1019
-  - https://www.rt.com/rss/
   - https://www.savingadvice.com/feed/
   - https://www.scmp.com/rss/91/feed
   - https://www.sidehustlenation.com/feed

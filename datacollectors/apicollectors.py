@@ -184,6 +184,15 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
 
     return cleanup_item(item)
 
+def _collect_rss_entries(feed, feed_url: str, site_url: str, default_kind: str) -> list[dict]:
+    items = []
+    for entry in feed.entries:
+        entry_link = _extract_link(entry, feed, feed_url, site_url)
+        if excluded_url(entry_link):
+            continue
+        items.append(_build_rss_item(feed=feed, feed_url=feed_url, site_url=site_url, entry=entry, default_kind=default_kind))
+    return items
+
 def _build_reddit_item(post, subreddit_name, default_kind: str):
     subreddit = f"r/{subreddit_name}"
     current_time = now()
@@ -293,6 +302,8 @@ class APICollector:
         return merge_lists(_batch_run(self.collect_rssfeed, feed_urls))
 
     def collect_rssfeed(self, url: str) -> list[dict]:
+        if excluded_url(url):
+            return None
         resp = requests.get(url, headers=_RSS_REQUEST_HEADERS, timeout=TIMEOUT)
         resp.raise_for_status()
         feed = feedparser.parse(BytesIO(resp.content))
@@ -301,7 +312,7 @@ class APICollector:
             source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].link)
             return _return_collected(
                 extract_source(source_url),
-                [_build_rss_item(feed=feed, feed_url=url, site_url=source_url, entry=entry, default_kind=NEWS) for entry in feed.entries]
+                _collect_rss_entries(feed, url, source_url, NEWS)
             )
 
     def collect_subreddit(self, subreddit_name, default_kind: str = NEWS):
@@ -386,6 +397,8 @@ class APICollectorAsync:
             return await resp.text()
 
     async def collect_rssfeed(self, url: str, default_kind: str = NEWS) -> list[dict]:
+        if excluded_url(url):
+            return None
         try:
             text = await self._fetch_rss(url)
         except aiohttp.ClientConnectorCertificateError:
@@ -399,7 +412,7 @@ class APICollectorAsync:
         source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].get('link'))
         return _return_collected(
             extract_source(source_url),
-            [_build_rss_item(feed=feed, feed_url=url, site_url=source_url, entry=entry, default_kind=default_kind) for entry in feed.entries]
+            _collect_rss_entries(feed, url, source_url, default_kind)
         )
 
     async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[dict]:

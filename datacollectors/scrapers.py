@@ -15,8 +15,6 @@ from icecream import ic
 
 log = get_logger(__name__)
 
-MAX_HTML_SIZE = int(os.getenv("MAX_HTML_SIZE", 4 << 20))  # hard cap per response; article content lives in the first few MB
-MAX_PDF_SIZE = int(os.getenv("MAX_PDF_SIZE", 16 << 20))  # PDFs are larger than HTML, but still bounded for collector stability
 PARSE_CONCURRENCY = int(os.getenv("PARSE_CONCURRENCY", min(4, os.cpu_count())))  # max DOM trees in memory at once
 PDF_CONCURRENCY = int(os.getenv("PDF_CONCURRENCY", 2))  # PDF conversion is CPU/native-heavy; keep it isolated from HTML parsing
 
@@ -84,13 +82,6 @@ def _convert_pdf_to_markdown(path: str) -> str:
 
     return pymupdf4llm.to_markdown(path, use_ocr=False)
 
-def _is_pdf_url(url: str) -> bool:
-    try: return urlparse(url).path.lower().endswith(".pdf")
-    except Exception: return False
-
-def _is_pdf_content(content_type: str = None) -> bool:
-    return bool(content_type and content_type.split(";")[0].strip().lower() == "application/pdf")
-
 def _title_from_url(url: str) -> str | None:
     try:
         filename = os.path.basename(unquote(urlparse(url).path))
@@ -154,11 +145,11 @@ class AsyncWebScraper:
     )
     async def _scrape_html(self, url: str) -> str | None:
         async with self.throttle, self.session.get(url) as response:
-            # check final url (post-redirect) and content-type before buffering anything
-            if excluded_content(url=str(response.url), content_type=response.content_type): return None
-            if (response.content_length or 0) > MAX_HTML_SIZE: return None
-            body = await response.content.read(MAX_HTML_SIZE)
-            return body.decode(response.charset or "utf-8", errors="replace")
+            gate = exclude_content(response, html_only=True)
+            if gate.excluded:
+                return None
+            body = await response.content.read(gate.max_size)
+            return body.decode(gate.charset, errors="replace")
 
     @retry(
         retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
@@ -170,27 +161,21 @@ class AsyncWebScraper:
         import tempfile
 
         async with self.throttle, self.session.get(url) as response:
-            final_url = str(response.url)
-            is_pdf = _is_pdf_content(response.content_type) or _is_pdf_url(final_url)
-            max_size = MAX_PDF_SIZE if is_pdf else MAX_HTML_SIZE
-            if is_pdf:
-                if (response.content_length or 0) > max_size: return None
-            elif excluded_content(url=final_url, content_type=response.content_type):
-                return None
-            elif (response.content_length or 0) > max_size:
+            gate = exclude_content(response)
+            if gate.excluded:
                 return None
 
-            if is_pdf:
-                body = await response.content.read(max_size + 1)
-                if len(body) > max_size:
+            if gate.is_pdf:
+                body = await response.content.read(gate.max_size + 1)
+                if len(body) > gate.max_size:
                     return None
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as pdf:
                     path = pdf.name
                     pdf.write(body)
-                return "pdf", final_url, path
+                return "pdf", gate.url, path
 
-            body = await response.content.read(max_size)
-            return "html", final_url, body.decode(response.charset or "utf-8", errors="replace")
+            body = await response.content.read(gate.max_size)
+            return "html", gate.url, body.decode(gate.charset, errors="replace")
 
     @retry(
         retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),

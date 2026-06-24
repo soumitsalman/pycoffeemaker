@@ -2,9 +2,12 @@ import re
 import os
 import tldextract
 import lxml.html
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from urllib.parse import urljoin, urlparse, urlunparse
 from dateutil.parser import parse as date_parser
+from aiohttp import ClientResponse
 
 USER_AGENT = "Cafecito-Coffeemaker/v0.9.3+https://github.com/soumitsalman/pycoffeemaker"
 BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -13,6 +16,8 @@ RATELIMIT_WAIT = 300 # 300 seconds / 5 minutes
 BATCH_SIZE = int(os.getenv('BATCH_SIZE', os.cpu_count()*os.cpu_count()))
 RETRY_COUNT = 3
 RETRY_JITTER = (1, 30)
+MAX_HTML_SIZE = int(os.getenv("MAX_HTML_SIZE", 4 << 20))
+MAX_PDF_SIZE = int(os.getenv("MAX_PDF_SIZE", 16 << 20))
 
 # content types
 POST = "post"
@@ -69,10 +74,12 @@ EXCLUDED_URL_PATTERNS = [
     r'(v\.redd\.it|i\.redd\.it|www\.reddit\.com\/gallery|youtube\.com|youtu\.be)',
     r'\/video(s)?\/',
     r'\/image(s)?\/',
+    r'://[^/?#]+\.ru(?:[:/?#]|$)',
+    r'://[^/?#]+\.su(?:[:/?#]|$)',
+    r'(?:^|//|\.)(?:tass\.com|rt\.com|newsru\.com|russia-insider\.com|pravdareport\.com|sputniknews\.com|sputnikglobe\.com)(?:[:/]|$)',
 ]
 
-# content types worth parsing for text; everything else (media, binaries, archives) is excluded
-SCRAPABLE_CONTENT_TYPES = (
+HTML_CONTENT_TYPES = (
     "text/html",
     "application/xhtml+xml",
     "text/xml",
@@ -81,6 +88,7 @@ SCRAPABLE_CONTENT_TYPES = (
     "application/atom+xml",
     "text/plain",
 )
+SCRAPABLE_CONTENT_TYPES = HTML_CONTENT_TYPES + ("application/pdf",)
 
 # heuristic invalid author names to exclude
 EXCLUDED_AUTHORS = ["[no-author]", "noreply", "hidden", "admin", "isbpostadmin", "unknown", "anonymous"]
@@ -137,18 +145,54 @@ def guess_article_type(bean: dict) -> str | None:
     return None
 
 # general utilities
-def excluded_content(url: str = None, content_type: str = None) -> bool:
-    """True if the url pattern or the response content-type indicates non-scrapable content."""
-    if url and any(re.search(pattern, url) for pattern in EXCLUDED_URL_PATTERNS):
-        return True
-    if content_type:
-        mime = content_type.split(";")[0].strip().lower()
-        if mime and mime not in SCRAPABLE_CONTENT_TYPES:
-            return True
-    return False
+@dataclass(frozen=True)
+class ContentGate:
+    excluded: bool
+    is_pdf: bool
+    max_size: int
+    url: str
+    charset: str
 
-def excluded_url(url: str):
-    return (not url) or excluded_content(url=url)
+def is_pdf_content(content_type: str | None) -> bool:
+    return bool(content_type and content_type.split(";")[0].strip().lower() == "application/pdf")
+
+def is_pdf_url(url: str) -> bool:
+    try:
+        return urlparse(url).path.lower().endswith(".pdf")
+    except Exception:
+        return False
+
+def is_pdf(url: str | None = None, content_type: str | None = None) -> bool:
+    return is_pdf_content(content_type) or bool(url and is_pdf_url(url))
+
+def exclude_content(response: ClientResponse, *, html_only: bool = False) -> ContentGate:
+    """Gate a response before buffering body bytes."""
+    url = str(response.url)
+    content_type = response.content_type
+    content_length = response.content_length
+    charset = response.charset or "utf-8"
+    is_pdf_doc = is_pdf(url, content_type)
+    max_size = MAX_PDF_SIZE if is_pdf_doc else MAX_HTML_SIZE
+    allowed = HTML_CONTENT_TYPES if html_only else SCRAPABLE_CONTENT_TYPES
+
+    excluded = excluded_url(url)
+    if not excluded and content_type:
+        mime = content_type.split(";")[0].strip().lower()
+        if mime and mime not in allowed:
+            excluded = True
+    if not excluded and (content_length or 0) > max_size:
+        excluded = True
+
+    return ContentGate(
+        excluded=excluded,
+        is_pdf=is_pdf_doc,
+        max_size=max_size,
+        url=url,
+        charset=charset,
+    )
+
+def excluded_url(url: str) -> bool:
+    return (not url) or any(re.search(pattern, url) for pattern in EXCLUDED_URL_PATTERNS)
 
 def extract_base_url(url: str) -> str:
     try: return urlparse(url).netloc
