@@ -5,7 +5,7 @@ set -euo pipefail
 LOG="/home/ubuntu/pycoffeemaker/.logs/pipeline.log"
 WORKDIR="/home/ubuntu/pycoffeemaker"
 SCRIPT="$WORKDIR/run_pipeline.sh"
-ARGS=(--embedder 480 --clustering 480 --digestor 64 --consolidator 64)
+ARGS=(--embedder 448 --clustering 448 --digestor 96 --consolidator 96)
 
 mkdir -p "$WORKDIR/.logs"
 
@@ -27,6 +27,7 @@ fi
     "${RUNAS[@]}" bash -lc "
         export HOME=/home/ubuntu
         export LOG_DIR="/home/ubuntu/pycoffeemaker/.logs"
+        export PROCESSING_WINDOW=7
         export VLLM_MAX_NUM_BATCHED_TOKENS=98304
         export VLLM_MAX_NUM_SEQS=256
         export VLLM_GPU_MEMORY_UTILIZATION=0.99
