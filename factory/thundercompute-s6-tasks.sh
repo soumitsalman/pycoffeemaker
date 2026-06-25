@@ -2,11 +2,12 @@
 # s6 oneshot entry: start run_pipeline.sh in the background at container boot.
 set -euo pipefail
 
+# Runtime fallback defaults (manual runs without install).
 EMBEDDER_BATCH=448
 CLUSTERING_BATCH=448
 DIGESTOR_BATCH=128
 CONSOLIDATOR_BATCH=128
-MODE_FILE="/etc/thundercompute/pipeline.mode"
+ARGS_FILE="/etc/thundercompute/pipeline.args"
 
 LOG="/home/ubuntu/pycoffeemaker/.logs/pipeline.log"
 WORKDIR="/home/ubuntu/pycoffeemaker"
@@ -49,9 +50,13 @@ if [[ $# -gt 0 && "$1" == --* ]]; then
     ARGS=("$@")
 elif [[ $# -gt 0 ]]; then
     resolve_preset "$1"
-else
-    MODE="$(cat "$MODE_FILE" 2>/dev/null || echo all)"
+elif [[ -f "$ARGS_FILE" ]]; then
+    mapfile -t ARGS < "$ARGS_FILE"
+elif [[ -f /etc/thundercompute/pipeline.mode ]]; then
+    MODE="$(cat /etc/thundercompute/pipeline.mode)"
     resolve_preset "$MODE"
+else
+    resolve_preset all
 fi
 
 ARGS_QUOTED="$(printf '%q ' "${ARGS[@]}")"

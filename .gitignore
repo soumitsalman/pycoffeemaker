@@ -30,7 +30,11 @@
 .webui_secret_key
 *.env
 !factory/pipeline-defaults.env
-graph.html
+graphify-out/graph.html
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/.rebuild.lock
+graphify-out/cost.json
 history.txt
 zvec
 __azurite*

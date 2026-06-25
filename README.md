@@ -22,6 +22,8 @@ pycoffeemaker/
 │   ├── pipeline-defaults.env  # Checked-in model paths and analyzer defaults
 │   ├── classifications.yaml  # Topic/sentiment labels
 │   ├── setup.py / migrate.py / rectify.py  # DB setup & maintenance
+│   ├── install-thundercompute-s6-tasks.sh  # s6 boot task installer (ThunderCompute)
+│   ├── thundercompute-s6-tasks.sh          # Boot entry: run_pipeline.sh at VM start
 ├── workers/               # Orchestrators (operators)
 │   ├── collectororch.py   # COLLECTOR
 │   ├── analyzerorch.py    # EMBEDDER, CLUSTERING, EXTRACTOR, DIGESTOR, CONSOLIDATOR
@@ -286,6 +288,72 @@ Services include: `pgcache` (pgvector), `localmongo`, `localpostgres`, `localcol
 python machine_ops.py --provider tensordock --action stop
 # Requires TD_INSTANCE_ID, TD_API_KEY or AZ_AUTH_URL, GPU_PROVIDER
 ```
+
+### Cloud GPU ops
+
+`machine_ops.py` starts/stops TensorDock or Azure instances:
+
+```bash
+python machine_ops.py --provider tensordock --action stop
+# Requires TD_INSTANCE_ID, TD_API_KEY or AZ_AUTH_URL, GPU_PROVIDER
+```
+
+### ThunderCompute boot pipeline
+
+On [ThunderCompute](https://www.thundercompute.com/) GPU VMs, register a one-shot s6 service so `run_pipeline.sh` starts automatically after each boot (e.g. after stop/start or reprovision).
+
+**One-time setup** (from the repo checkout, typically `/home/ubuntu/pycoffeemaker`):
+
+```bash
+cd /home/ubuntu/pycoffeemaker
+sudo ./factory/install-thundercompute-s6-tasks.sh
+```
+
+Default preset is **`all`**: embedder, clustering, digestor, and consolidator with batch sizes defined at the top of `factory/install-thundercompute-s6-tasks.sh` (edit there before reinstall to tune deploy defaults).
+
+**Preset modes:**
+
+| Mode | Stages run at boot |
+|------|--------------------|
+| `embedder` | embedder |
+| `digestor` | clustering + digestor |
+| `embedder_digestor` | embedder + clustering + digestor |
+| `consolidator` | consolidator |
+| `all` (default) | embedder + clustering + digestor + consolidator |
+
+```bash
+sudo ./factory/install-thundercompute-s6-tasks.sh digestor
+sudo ./factory/install-thundercompute-s6-tasks.sh embedder_digestor
+```
+
+**Custom stage flags** (replace preset entirely; validated like `run_pipeline.sh`):
+
+```bash
+sudo ./factory/install-thundercompute-s6-tasks.sh --embedder 256 --clustering 256 --digestor 128
+```
+
+Allowed flags: `--collector`, `--embedder`, `--extractor`, `--clustering`, `--digestor`, `--consolidator`, `--porter` each followed by a positive integer.
+
+**What gets installed:**
+
+- `/etc/thundercompute/pipeline.args` — resolved flags written at install time (inspected with `cat /etc/thundercompute/pipeline.args`)
+- s6 oneshot `thundercompute-tasks` (depends on `sshd`, runs `factory/thundercompute-s6-tasks.sh` at boot)
+- Pipeline log: `/home/ubuntu/pycoffeemaker/.logs/pipeline.log`
+
+**Reinstall** after changing preset, batch defaults in the install script, or custom flags — no need to edit `thundercompute-s6-tasks.sh` for deploy tuning:
+
+```bash
+sudo ./factory/install-thundercompute-s6-tasks.sh all
+```
+
+**Manual run** (without reboot):
+
+```bash
+./factory/thundercompute-s6-tasks.sh digestor
+./factory/thundercompute-s6-tasks.sh --consolidator 128
+```
+
+Ensure `.env` is configured (`PROCESSING_CACHE`, model paths, etc.) before boot; the boot script exports ThunderCompute GPU settings (`VLLM_*`, `PROCESSING_WINDOW`) before calling `run_pipeline.sh`.
 
 ### Production notes
 
