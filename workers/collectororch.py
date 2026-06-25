@@ -281,7 +281,7 @@ class Collector:
         to_triage = None
         try:
             if source_type == "ychackernews": to_triage = await self.apicollector.collect_ychackernews(source)
-            elif source_type == "reddit": to_triage = await self.apicollector.collect_subreddit(source)
+            elif source_type == "reddit": to_triage = await self.apicollector.collect_subreddit_json(source)
             elif source_type == "rss": to_triage = await self.apicollector.collect_rssfeed(source)
         except Exception as e:
             log.warning(

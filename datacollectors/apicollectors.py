@@ -31,9 +31,18 @@ _RSS_REQUEST_HEADERS = {
     'Accept': "application/atom+xml,application/rdf+xml,application/rss+xml,application/x-netcdf,application/xml;q=0.9,text/xml;q=0.2,*/*;q=0.1"
 }
 _JSON_REQUEST_HEADERS = {
-    "User-Agent": USER_AGENT,
+    "User-Agent": BROWSER_USER_AGENT,
     'Accept-encoding': 'gzip, deflate',
-    'Accept': "application/json,text/json"
+    'Accept-Language': 'en-US,en;q=0.9',    
+    'Accept': "application/atom+xml,application/rdf+xml,application/rss+xml,application/x-netcdf,application/xml;q=0.9,text/xml;q=0.2,*/*;q=0.1"
+}
+
+_REDDIT_REQUEST_HEADERS = {
+    "User-Agent": BROWSER_USER_AGENT,
+    'Accept-encoding': 'gzip, deflate',
+    'Accept-Language': 'en-US,en;q=0.9',    
+    'Accept': "application/atom+xml,application/rdf+xml,application/rss+xml,application/x-netcdf,application/xml;q=0.9,text/xml;q=0.2,*/*;q=0.1",
+    'Cookie': os.getenv("REDDIT_SESSION_COOKIE"),
 }
 
 REDDIT = "Reddit"
@@ -47,6 +56,7 @@ HACKERNEWS_STORIES_URLS = [HACKERNEWS_TOP_STORIES, HACKERNEWS_NEW_STORIES, HACKE
 
 from_timestamp = lambda timestamp: min(now(), datetime.fromtimestamp(timestamp, timezone.utc)) if timestamp else now()
 reddit_submission_permalink = lambda permalink: f"https://www.reddit.com{permalink}"
+REDDIT_JSON_URL = "https://old.reddit.com/r/{subreddit}.json"
 hackernews_story_metadata = lambda id: f"https://hacker-news.firebaseio.com/v0/item/{id}.json"
 hackernews_story_permalink = lambda id: f"https://news.ycombinator.com/item?id={id}"
 
@@ -104,9 +114,9 @@ def _get_site_url(*urls):
     for url in urls:
         if url and isinstance(url, str) and url.startswith('http'): return url
 
-def _fetch_json(url: str):
+def _fetch_json(url: str, headers: dict = _JSON_REQUEST_HEADERS):
     try: 
-        resp = requests.get(url, headers=_JSON_REQUEST_HEADERS, timeout=TIMEOUT)
+        resp = requests.get(url, headers=headers, timeout=TIMEOUT)
         resp.raise_for_status()
         return resp.json()
     except Exception as e: 
@@ -192,6 +202,25 @@ def _collect_rss_entries(feed, feed_url: str, site_url: str, default_kind: str) 
             continue
         items.append(_build_rss_item(feed=feed, feed_url=feed_url, site_url=site_url, entry=entry, default_kind=default_kind))
     return items
+
+class _RedditPost:
+    """Thin adapter so _build_reddit_item can accept raw JSON dicts."""
+    __slots__ = ('created_utc','permalink','is_self','url','title',
+                 'selftext','author','score','num_comments')
+    def __init__(self, d: dict):
+        self.created_utc = d.get('created_utc')
+        self.permalink   = d.get('permalink')
+        self.is_self     = d.get('is_self', False)
+        self.url         = d.get('url','')
+        self.title       = d.get('title','')
+        self.selftext    = d.get('selftext','') or ''
+        self.score       = d.get('score', 0)
+        self.num_comments= d.get('num_comments', 0)
+        author = d.get('author') or d.get('author_fullname')
+        self.author = type('A', (), {'name': author})()
+
+def _build_reddit_json_item(post_data: dict, subreddit_name: str, default_kind: str):
+    return _build_reddit_item(_RedditPost(post_data), subreddit_name, default_kind)
 
 def _build_reddit_item(post, subreddit_name, default_kind: str):
     subreddit = f"r/{subreddit_name}"
@@ -328,6 +357,17 @@ class APICollector:
 
         return _return_collected(subreddit_name, _collect())
 
+    def collect_subreddit_json(self, subreddit_name, default_kind: str = NEWS, limit: int = 25):
+        url = REDDIT_JSON_URL.format(subreddit=subreddit_name)
+        data = _fetch_json(f"{url}?limit={limit}", headers=_REDDIT_REQUEST_HEADERS)
+        if not data:
+            return _return_collected(subreddit_name, None)
+        children = data.get('data', {}).get('children', [])
+        items = [_build_reddit_json_item(c['data'], subreddit_name, default_kind)
+                 for c in children
+                 if c.get('kind') == 't3' and not excluded_url(c.get('data', {}).get('url'))]
+        return _return_collected(subreddit_name, items)
+
     def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[dict]:
         if isinstance(stories_urls, str):
             stories_urls = [stories_urls]
@@ -373,9 +413,9 @@ class APICollectorAsync:
             await self.session.close()
             self.session = None
 
-    async def _fetch_json(self, url: str):
+    async def _fetch_json(self, url: str, headers: dict = _JSON_REQUEST_HEADERS):
         try:
-            async with self.throttle, self.session.get(url, headers=_JSON_REQUEST_HEADERS) as resp:
+            async with self.throttle, self.session.get(url, headers=headers) as resp:
                 return await resp.json()
         except Exception as e:
             log.warning(
@@ -427,6 +467,17 @@ class APICollectorAsync:
                 return [_build_reddit_item(post, subreddit_name, default_kind) async for post in sr.hot(limit=25) if not excluded_url(post.url)]
 
         return _return_collected(subreddit_name, await _collect())    
+
+    async def collect_subreddit_json(self, subreddit_name: str, default_kind: str = NEWS, limit: int = 25) -> list[dict]:
+        url = REDDIT_JSON_URL.format(subreddit=subreddit_name)
+        data = await self._fetch_json(f"{url}?limit={limit}", headers=_REDDIT_REQUEST_HEADERS)
+        if not data:
+            return _return_collected(subreddit_name, None)
+        children = data.get('data', {}).get('children', [])
+        items = [_build_reddit_json_item(c['data'], subreddit_name, default_kind)
+                 for c in children
+                 if c.get('kind') == 't3' and not excluded_url(c.get('data', {}).get('url'))]
+        return _return_collected(subreddit_name, items)
 
     async def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[dict]:
         if isinstance(stories_urls, str):

@@ -9,7 +9,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 from dateutil.parser import parse as date_parser
 from aiohttp import ClientResponse
 
-USER_AGENT = "Cafecito-Coffeemaker/v0.9.3+https://github.com/soumitsalman/pycoffeemaker"
+USER_AGENT = "Cafecito-Coffeemaker/v0.9.8+https://github.com/soumitsalman/pycoffeemaker"
 BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 TIMEOUT =  int(os.getenv('COLLECTOR_TIMEOUT', 120)) # 2 minutes
 RATELIMIT_WAIT = 300 # 300 seconds / 5 minutes
