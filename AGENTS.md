@@ -107,9 +107,6 @@ Storage: `pybeansack.create_client("pg"\|"lance"\|"duck"\|"dl", ...)`. Cupboard:
 - **`nlp/`** — `create_embedder`, `create_micro_agent`, `Digest`, `EntityExtractor`; local HF, vLLM, ONNX, remote APIs
 - **`factory/`** — `feeds.yaml` (`COLLECTOR_SOURCES`), `classifications.yaml`, DB setup/migrations (not runtime libs)
 
----
-HARD REQUIREMENT: EXTREMELY CONCISE TOKEN EFFICIENT RESPONSES ONLY
-
 ## graphify
 
 Knowledge graph at `graphify-out/` (god nodes, communities, cross-file edges).
@@ -121,3 +118,9 @@ Rules:
 - IF `graphify-out/wiki/index.md` EXISTS, navigate it instead of reading raw files
 - For cross-module "how does X relate to Y", prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep
 - After modifying code, run `graphify update .` using .venv of the current project (AST-only, no API cost)
+
+## MUST FOLLOW
+- Extremely concise short response for every ask and plan
+- Answer every ask/plan with yes/no/may-be if the answer is binary
+- Include code samples in every plan
+- Include pros and cons as bullet points for every suggestion
