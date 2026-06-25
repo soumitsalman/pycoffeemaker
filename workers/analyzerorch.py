@@ -494,7 +494,7 @@ class Consolidator:
         return total_composites + total_beans
 
 def _value_to_str(value) -> str:
-    if isinstance(value, list): return ",".join(_value_to_str(v) for v in value)
+    if isinstance(value, list): return "|".join(_value_to_str(v) for v in value)
     if isinstance(value, dict): return "|".join(f"{k}:{_value_to_str(v)}" for k,v in value.items() if v)
     if isinstance(value, datetime): return value.strftime('%Y-%m-%d')
     return str(value)
