@@ -57,6 +57,7 @@ HACKERNEWS_STORIES_URLS = [HACKERNEWS_TOP_STORIES, HACKERNEWS_NEW_STORIES, HACKE
 from_timestamp = lambda timestamp: min(now(), datetime.fromtimestamp(timestamp, timezone.utc)) if timestamp else now()
 reddit_submission_permalink = lambda permalink: f"https://www.reddit.com{permalink}"
 REDDIT_JSON_URL = "https://old.reddit.com/r/{subreddit}.json"
+REDDIT_RSS_URL = "https://old.reddit.com/r/{subreddit}/.rss"
 hackernews_story_metadata = lambda id: f"https://hacker-news.firebaseio.com/v0/item/{id}.json"
 hackernews_story_permalink = lambda id: f"https://news.ycombinator.com/item?id={id}"
 
@@ -109,7 +110,25 @@ def _extract_main_image(entry: feedparser.FeedParserDict) -> str:
         return entry.media_thumbnail[0].get('url')
     if 'image' in entry:
         return entry.image.get('href')
-    
+
+def _parse_reddit_rss_entry(entry) -> tuple[str | None, str | None, str | None]:
+    """Parse Reddit RSS entry content HTML. Returns (external_url, comments_url, selftext)."""
+    raw = entry.content[0]['value'] if isinstance(entry.content, list) else entry.get('content', '')
+    selftext = None
+    external_url, comments_url = None, None
+    try:
+        doc = lxml.html.fromstring(raw)
+        md = doc.xpath('//div[@class="md"]')
+        if md: selftext = strip_html_tags(lxml.html.tostring(md[0], encoding='unicode'))
+        for a in doc.xpath('//a'):
+            href, text = a.get('href', ''), (a.text_content() or '').strip()
+            if text == '[link]' and not external_url and 'reddit.com' not in href:
+                external_url = href
+            elif text == '[comments]' and not comments_url:
+                comments_url = href
+    except Exception: pass
+    return external_url, comments_url, selftext
+
 def _get_site_url(*urls):
     for url in urls:
         if url and isinstance(url, str) and url.startswith('http'): return url
@@ -201,6 +220,39 @@ def _collect_rss_entries(feed, feed_url: str, site_url: str, default_kind: str) 
         if excluded_url(entry_link):
             continue
         items.append(_build_rss_item(feed=feed, feed_url=feed_url, site_url=site_url, entry=entry, default_kind=default_kind))
+    return items
+
+def _build_reddit_rss_item(entry, subreddit_name, default_kind: str):
+    subreddit = f"r/{subreddit_name}"
+    current_time = now()
+    published = entry.get("published_parsed") or entry.get("updated_parsed")
+    created = from_timestamp(time.mktime(published)) if published else current_time
+
+    external_url, comments_url, selftext = _parse_reddit_rss_entry(entry)
+    entry_link = getattr(entry, 'link', '') or entry.get('id', '')
+    author = (entry.get('author', '') or '').lstrip('/u/')
+
+    if external_url:
+        url = remove_query_params(external_url)
+        source = extract_source(url)
+        kind = guess_article_type({URL: url, SOURCE: source, TITLE: entry.get('title')}) or default_kind
+    else:
+        url = entry_link
+        source = subreddit
+        kind = POST
+
+    return cleanup_item({
+        URL: url, KIND: kind, TITLE: entry.get('title'), CONTENT: selftext,
+        AUTHOR: author, SOURCE: source, BASE_URL: extract_base_url(url),
+        CREATED: created, COLLECTED: current_time,
+    })
+
+def _collect_reddit_rss_entries(feed, feed_url, subreddit_name, default_kind) -> list[dict]:
+    items = []
+    for entry in feed.entries:
+        entry_link = getattr(entry, 'link', '')
+        if excluded_url(entry_link): continue
+        items.append(_build_reddit_rss_item(entry, subreddit_name, default_kind))
     return items
 
 class _RedditPost:
@@ -368,6 +420,16 @@ class APICollector:
                  if c.get('kind') == 't3' and not excluded_url(c.get('data', {}).get('url'))]
         return _return_collected(subreddit_name, items)
 
+    def collect_subreddit_rss(self, subreddit_name, default_kind: str = NEWS):
+        url = REDDIT_RSS_URL.format(subreddit=subreddit_name)
+        resp = requests.get(url, headers=_RSS_REQUEST_HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+        feed = feedparser.parse(BytesIO(resp.content))
+        if not feed.entries:
+            return _return_collected(subreddit_name, None)
+        return _return_collected(subreddit_name,
+            _collect_reddit_rss_entries(feed, url, subreddit_name, default_kind))
+
     def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[dict]:
         if isinstance(stories_urls, str):
             stories_urls = [stories_urls]
@@ -478,6 +540,19 @@ class APICollectorAsync:
                  for c in children
                  if c.get('kind') == 't3' and not excluded_url(c.get('data', {}).get('url'))]
         return _return_collected(subreddit_name, items)
+
+    async def collect_subreddit_rss(self, subreddit_name: str, default_kind: str = NEWS) -> list[dict]:
+        url = REDDIT_RSS_URL.format(subreddit=subreddit_name)
+        try:
+            text = await self._fetch_rss(url)
+        except aiohttp.ClientConnectorCertificateError:
+            if not (www_url := with_www(url)): raise
+            text = await self._fetch_rss(www_url)
+        feed = feedparser.parse(text)
+        if not feed.entries:
+            return _return_collected(subreddit_name, None)
+        return _return_collected(subreddit_name,
+            _collect_reddit_rss_entries(feed, url, subreddit_name, default_kind))
 
     async def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[dict]:
         if isinstance(stories_urls, str):
