@@ -133,19 +133,6 @@ def _get_site_url(*urls):
     for url in urls:
         if url and isinstance(url, str) and url.startswith('http'): return url
 
-def _fetch_json(url: str, headers: dict = _JSON_REQUEST_HEADERS):
-    try: 
-        resp = requests.get(url, headers=headers, timeout=TIMEOUT)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e: 
-        log.warning(event=f"collection failed - {e.__class__.__name__}: {e}",
-            source=url,
-            num_items=1,
-            error_type=e.__class__.__name__,
-            error_details=str(e),
-        )
-
 def _return_collected(source, collected: list|None):
     if collected: log.debug(event="collected", source=source, num_items=len(collected))
     else: log.debug(event="collection failed", source=source, num_items=1)
@@ -366,18 +353,39 @@ def _build_hackernews_item(story: dict, default_kind: str):
 
 
 class APICollector:
-    reddit_client = None
+    _reddit_client = None
 
     def __init__(self, collect_callback: Callable = None, batch_size: int = BATCH_SIZE):
         self.collect_callback = collect_callback
-        self.reddit_client = praw.Reddit(
-            check_for_updates=True,
-            client_id=os.getenv("REDDIT_CLIENT_ID"),
-            client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
-            user_agent=USER_AGENT + " (by u/IntelligentLeave680)",
-            timeout=TIMEOUT,
-            rate_limit_seconds=RATELIMIT_WAIT,
-        )
+        self._reddit_client = None
+        self.batch_size = batch_size
+
+    @property
+    def reddit_client(self):
+        if not self._reddit_client:
+            self._reddit_client = praw.Reddit(
+                check_for_updates=True,
+                client_id=os.getenv("REDDIT_CLIENT_ID"),
+                client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+                user_agent=USER_AGENT + " (by u/IntelligentLeave680)",
+                timeout=TIMEOUT,
+                rate_limit_seconds=RATELIMIT_WAIT,
+            )
+        return self._reddit_client
+
+    @classmethod
+    def _fetch_json(cls, url: str, headers: dict = _JSON_REQUEST_HEADERS):
+        try: 
+            resp = requests.get(url, headers=headers, timeout=TIMEOUT)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e: 
+            log.warning(event=f"collection failed - {e.__class__.__name__}: {e}",
+                source=url,
+                num_items=1,
+                error_type=e.__class__.__name__,
+                error_details=str(e),
+            )
 
     def collect_rssfeeds(self, feed_urls: list[str]) -> list[dict]:
         return merge_lists(_batch_run(self.collect_rssfeed, feed_urls))
@@ -411,7 +419,7 @@ class APICollector:
 
     def collect_subreddit_json(self, subreddit_name, default_kind: str = NEWS, limit: int = 25):
         url = REDDIT_JSON_URL.format(subreddit=subreddit_name)
-        data = _fetch_json(f"{url}?limit={limit}", headers=_REDDIT_REQUEST_HEADERS)
+        data = self._fetch_json(f"{url}?limit={limit}", headers=_REDDIT_REQUEST_HEADERS)
         if not data:
             return _return_collected(subreddit_name, None)
         children = data.get('data', {}).get('children', [])
@@ -433,21 +441,22 @@ class APICollector:
     def collect_ychackernews(self, stories_urls = HACKERNEWS_STORIES_URLS) -> list[dict]:
         if isinstance(stories_urls, str):
             stories_urls = [stories_urls]
-        ids = _batch_run(_fetch_json, stories_urls)
+        ids = _batch_run(self._fetch_json, stories_urls)
         ids = set(chain(*ids))
-        stories = _batch_run(_fetch_json, [hackernews_story_metadata(id) for id in ids])
+        stories = _batch_run(self._fetch_json, [hackernews_story_metadata(id) for id in ids])
         stories = [_build_hackernews_item(story, BLOG) for story in stories if story and not excluded_url(story.get('url'))]
         return _return_collected(HACKERNEWS, stories)
 
 
 class APICollectorAsync:
-    reddit_client = None
+    _reddit_client = None
     session = None
 
     def __init__(self, batch_size: int = BATCH_SIZE, collect_callback: Callable = None):
         self.collect_callback = collect_callback
         self.batch_size = batch_size
         self.throttle = asyncio.Semaphore(batch_size)
+        self._reddit_client = None        
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(
@@ -456,21 +465,12 @@ class APICollectorAsync:
             timeout=aiohttp.ClientTimeout(total=TIMEOUT),
             raise_for_status=True,
         )
-        self.reddit_client = asyncpraw.Reddit(
-            check_for_updates=True,
-            client_id=os.getenv("REDDIT_CLIENT_ID"),
-            client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
-            user_agent=USER_AGENT + " (by u/IntelligentLeave680)",
-            timeout=TIMEOUT,
-            rate_limit_seconds=RATELIMIT_WAIT,
-            requestor_kwargs={"session": self.session},
-        )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.reddit_client:
-            await self.reddit_client.close()
-            self.reddit_client = None
+        if self._reddit_client:
+            await self._reddit_client.close()
+            self._reddit_client = None
         if self.session:
             await self.session.close()
             self.session = None
@@ -516,6 +516,19 @@ class APICollectorAsync:
             extract_source(source_url),
             _collect_rss_entries(feed, url, source_url, default_kind)
         )
+
+    def reddit_client(self):
+        if not self._reddit_client:
+            self._reddit_client = asyncpraw.Reddit(
+                check_for_updates=True,
+                client_id=os.getenv("REDDIT_CLIENT_ID"),
+                client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+                user_agent=USER_AGENT + " (by u/IntelligentLeave680)",
+                timeout=TIMEOUT,
+                rate_limit_seconds=RATELIMIT_WAIT,
+                requestor_kwargs={"session": self.session},
+            )
+        return self._reddit_client
 
     async def collect_subreddit(self, subreddit_name: str, default_kind: str = NEWS) -> list[dict]:
         @retry(
