@@ -16,6 +16,19 @@ from .models import *
 
 log = logging.getLogger("cupboard")
 
+
+def _clean_null_bytes(obj):
+    """Recursively remove null bytes (\\u0000) from all strings in the object."""
+    if isinstance(obj, dict):
+        return {k: _clean_null_bytes(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_clean_null_bytes(v) for v in obj]
+    elif isinstance(obj, str):
+        return obj.replace("\u0000", "NULL_BYTE")
+    return obj
+
+
+
 PG_TIMEOUT = int(os.getenv('PG_TIMEOUT', 300))
 PG_WORKERS = int(os.getenv('PG_WORKERS', 4))
 BATCH_SIZE = 512
@@ -134,10 +147,11 @@ class Cupboard:
     async def store_sips(self, sips: list[Sip]) -> int:
         """Store a list of sips in the database."""
         if not sips: return 0
-        
+
+        sips = [sip for sip in sips if sip.digest and sip.embedding]
         for sip in sips:
             sip.embedding = Vector(sip.embedding)
-            sip.digest = Jsonb(sip.digest)
+            sip.digest = Jsonb(_clean_null_bytes(sip.digest))
 
         row_placeholder = sql.SQL("(" + ",".join(["%s"] * len(SIP_COLUMNS)) + ")")
         store_batches = [

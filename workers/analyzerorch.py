@@ -251,10 +251,10 @@ class Digestor:
         updates = [
             {
                 URL: b[URL],
-                DIGEST: d.model_dump()
+                DIGEST: dig
             }
             for b, d in zip(beans, digests)
-            if d
+            if d and (dig := d.model_dump())
         ]
         return updates
 
@@ -327,18 +327,6 @@ class Clusterer:
             
         log.info(event="clusterer completed", total_clustered=total)
         return total
-
-        # # run clustering after classification
-        # beans = self.cache.get(BEANS, states=EMBEDDED, exclude_states=CLUSTERED)
-        # log.info(event="starting clusterer", num_items=len(beans))
-        # clustered = 0
-        # embedded = [b for b in beans if EMBEDDING in b]
-        # for updates in self.cluster_beans(embedded):
-        #     count = self.cache.set(BEANS, CLUSTERED, updates)
-        #     clustered += (count or len(updates))
-        # log.info(event="total clustered", num_items=clustered)
-        # return classified, clustered
-
 
 CONSOLIDATION_EPS = float(os.getenv("CONSOLIDATION_EPS", 0.5))
 CONSOLIDATION_RELATED_WINDOW = int(os.getenv("CONSOLIDATION_RELATED_WINDOW", 30))
