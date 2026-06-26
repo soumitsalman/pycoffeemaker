@@ -120,6 +120,9 @@ if __name__ == "__main__":
     elif mode == "DIGESTOR":
         from workers.analyzerorch import Digestor
 
+        if v2_mode := os.getenv("DIGESTOR_VLLM_USE_V2_MODEL_RUNNER"): 
+            os.environ["VLLM_USE_V2_MODEL_RUNNER"] = v2_mode
+
         Digestor(
             cache=cache,
             model_path=os.environ["DIGESTOR_PATH"],
@@ -132,6 +135,9 @@ if __name__ == "__main__":
     elif mode == "CONSOLIDATOR":
         from workers.analyzerorch import Consolidator
         
+        if v2_mode := os.getenv("CONSOLIDATOR_VLLM_USE_V2_MODEL_RUNNER"): 
+            os.environ["VLLM_USE_V2_MODEL_RUNNER"] = v2_mode
+
         Consolidator(
             cache=cache,
             model_path=os.environ["CONSOLIDATOR_PATH"],
