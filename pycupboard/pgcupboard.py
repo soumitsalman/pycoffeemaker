@@ -205,11 +205,16 @@ class Cupboard:
                 relation_rows.extend((from_id, to_id, relationship) for to_ref in related_urls if (to_id := _sip_id(to_ref)))
 
         # step 3: create insertion statements and insert relation rows
-        expr_format = """INSERT INTO relations (from_id, to_id, relationship) VALUES {values}
-            ON CONFLICT (from_id, to_id, relationship) DO NOTHING"""
+        row_placeholder = sql.SQL("(" + ",".join(["%s"] * len(RELATION_COLUMNS)) + ")")
         store_batches = [
             {
-                "expr": expr_format.format(values=", ".join("(%s, %s, %s)" for _ in chunk)),
+                "expr": sql.SQL(
+                    "INSERT INTO relations ({cols}) VALUES {values} "
+                    "ON CONFLICT (from_id, to_id, relationship) DO NOTHING"
+                ).format(
+                    cols=sql.SQL(", ").join(map(sql.Identifier, RELATION_COLUMNS)),
+                    values=sql.SQL(", ").join(row_placeholder for _ in chunk),
+                ),
                 "params": list(chain.from_iterable(chunk)),
             }
             for chunk in batched(relation_rows, BATCH_SIZE)
