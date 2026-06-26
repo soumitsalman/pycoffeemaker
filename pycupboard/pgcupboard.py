@@ -137,7 +137,7 @@ class Cupboard:
         
         for sip in sips:
             sip.embedding = Vector(sip.embedding)
-            if sip.digest: sip.digest = Jsonb(sip.digest)
+            sip.digest = Jsonb(sip.digest)
 
         row_placeholder = sql.SQL("(" + ",".join(["%s"] * len(SIP_COLUMNS)) + ")")
         store_batches = [

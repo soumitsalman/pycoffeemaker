@@ -231,8 +231,9 @@ class Digestor:
         if not model_kwargs: model_kwargs = {}
         if temperature := os.getenv("DIGESTOR_TEMPERATURE"): model_kwargs["temperature"] = float(temperature)
         if top_p := os.getenv("DIGESTOR_TOP_P"): model_kwargs["top_p"] = float(top_p)
-        if repetition_penalty := os.getenv("DIGESTOR_REPETITION_PENALTY"): model_kwargs["repetition_penalty"] = float(repetition_penalty)
         if top_k := os.getenv("DIGESTOR_TOP_K"): model_kwargs["top_k"] = int(top_k)
+        if repetition_penalty := os.getenv("DIGESTOR_REPETITION_PENALTY"): model_kwargs["repetition_penalty"] = float(repetition_penalty)
+        if presence_penalty := os.getenv("DIGESTOR_PRESENCE_PENALTY"): model_kwargs["presence_penalty"] = float(presence_penalty)
         self.digestor = create_text_analyst(
             model_path=model_path,
             context_len=context_len,
