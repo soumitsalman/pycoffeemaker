@@ -85,7 +85,7 @@ fi
         export VLLM_MAX_NUM_BATCHED_TOKENS=98304
         export VLLM_MAX_NUM_SEQS=256
         export VLLM_GPU_MEMORY_UTILIZATION=0.99
-        export VLLM_USE_V2_MODEL_RUNNER=0
+        export DIGESTOR_VLLM_USE_V2_MODEL_RUNNER=0
         cd '$WORKDIR'
         echo '=== [S6 BOOT $(date -u +%Y-%m-%dT%H:%M:%SZ)] ==='
         exec bash '$SCRIPT' $ARGS_QUOTED
