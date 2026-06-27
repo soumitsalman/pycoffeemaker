@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 from datetime import datetime as dt
 
-from utils.env import load_coffeemaker_env
+from dotenv import load_dotenv
 
 MAX_WORKERS = os.cpu_count() * os.cpu_count()
 EMBEDDER_CONTEXT_LEN = 512
@@ -13,7 +13,7 @@ DIGESTOR_CONTEXT_LEN = 32768
 CONSOLIDATOR_CONTEXT_LEN = 65536
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
-load_coffeemaker_env(CURR_DIR)
+load_dotenv(os.path.join(CURR_DIR, ".env"), override=True)
 
 log_dir, log_file = os.getenv("LOG_DIR"), None
 if log_dir:

@@ -1,7 +1,7 @@
 {
   "/home/soumitsr/codes/pycoffeemaker/run.py": {
-    "mtime": 1782322497.6716306,
-    "hash": "be61485600263a2c56a23674587b8b12"
+    "mtime": 1782586811.4287927,
+    "hash": "e6e6ac79b403c0e6718cdab6a702dde0"
   },
   "/home/soumitsr/codes/pycoffeemaker/factory/migrate.py": {
     "mtime": 1781880383.628672,
@@ -24,16 +24,16 @@
     "hash": "d38f71491da80aa90857c9b834617b20"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/analyzerorch.py": {
-    "mtime": 1782331179.2626648,
-    "hash": "c6d4e86377df6552c0fddfd337175662"
+    "mtime": 1782487848.4358087,
+    "hash": "6eff62b8583824922d2d97a4bcde575e"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/porterorch.py": {
-    "mtime": 1782327107.630777,
-    "hash": "9b5545b9f789a17a8e0477d7320315cc"
+    "mtime": 1782482435.1285381,
+    "hash": "adcca25cc5e6ebc822d5a2b6f28c9904"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/collectororch.py": {
-    "mtime": 1782237849.742548,
-    "hash": "f1084b4462d4246295416a6a048d048d"
+    "mtime": 1782586189.06016,
+    "hash": "dee3ac932ece3b46fe6aac032decd95e"
   },
   "/home/soumitsr/codes/pycoffeemaker/workers/workercache/pgcache.py": {
     "mtime": 1782323330.6536076,
@@ -76,8 +76,8 @@
     "hash": "5bd4017b2df3e09b37c01659e114521f"
   },
   "/home/soumitsr/codes/pycoffeemaker/utils/env.py": {
-    "mtime": 1781881176.1457276,
-    "hash": "4c0f1585f5cb313c7769e7be8ee6a20f"
+    "mtime": 1782586811.5260894,
+    "hash": "68dc94745bdbb081d1bff23d7a13596b"
   },
   "/home/soumitsr/codes/pycoffeemaker/pybeansack/__init__.py": {
     "mtime": 1782326064.8203783,
@@ -116,8 +116,8 @@
     "hash": "bfde4d83668a239ad2d173ebfedb1b1a"
   },
   "/home/soumitsr/codes/pycoffeemaker/pybeansack/pgsack.py": {
-    "mtime": 1782319084.551929,
-    "hash": "1644921f8695b0309312c9463512a947"
+    "mtime": 1782482261.62151,
+    "hash": "05472ba0bcd866bfa9bdd45e9954e537"
   },
   "/home/soumitsr/codes/pycoffeemaker/pybeansack/ducksack.py": {
     "mtime": 1781793392.892922,
@@ -148,8 +148,8 @@
     "hash": "ae95d23fa1e933d57b801c4856c6b176"
   },
   "/home/soumitsr/codes/pycoffeemaker/pycupboard/pgcupboard.py": {
-    "mtime": 1781279380.8219306,
-    "hash": "07a43b6b7526bf0e30933db4263f565d"
+    "mtime": 1782489503.8198702,
+    "hash": "996b4e5c4a3c51debe2d8da13733b6db"
   },
   "/home/soumitsr/codes/pycoffeemaker/pycupboard/surrealcupboard.py": {
     "mtime": 1779122952.7625716,
@@ -180,8 +180,8 @@
     "hash": "f1f30c662add464e5a6c9e6076bec60d"
   },
   "/home/soumitsr/codes/pycoffeemaker/nlp/models.py": {
-    "mtime": 1782325788.4434512,
-    "hash": "d64f5f8c9287fb68a493d43804285fb1"
+    "mtime": 1782489910.2075841,
+    "hash": "d95e711466eff5c7f6c6dd490867d4b6"
   },
   "/home/soumitsr/codes/pycoffeemaker/nlp/tests/__init__.py": {
     "mtime": 1778084231.591458,
@@ -216,16 +216,16 @@
     "hash": "8051e7558596c9a33dc470db51ee1118"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/utils.py": {
-    "mtime": 1782311325.3258815,
-    "hash": "216b42ae9d6d68e26f11d2eba0e16afe"
+    "mtime": 1782586549.514721,
+    "hash": "ad76b3b7267e34b95f98361c5c792051"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/apicollectors.py": {
-    "mtime": 1782310945.322517,
-    "hash": "50f64d20b15c497fb987bc97facfd0de"
+    "mtime": 1782586078.0016067,
+    "hash": "6f824c9e262041035633f68628a870ab"
   },
   "/home/soumitsr/codes/pycoffeemaker/datacollectors/scrapers.py": {
-    "mtime": 1782309723.129029,
-    "hash": "560b6b8c2ede5dc4a1294a9499dad5e5"
+    "mtime": 1782586551.2745128,
+    "hash": "91e9c7d77a0ad95a128aeb8d5303cfd2"
   },
   "/home/soumitsr/codes/pycoffeemaker/tests/test.py": {
     "mtime": 1782224978.4779677,
@@ -284,7 +284,7 @@
     "hash": "b78a056d9059f35752370f5656e564b8"
   },
   "/home/soumitsr/codes/pycoffeemaker/pybeansack/README.md": {
-    "mtime": 1782397404.900174,
+    "mtime": 1782585482.3641148,
     "hash": "d99ce589ec7268f7f02aab6d9ea30417"
   },
   "/home/soumitsr/codes/pycoffeemaker/pybeansack/requirements.txt": {

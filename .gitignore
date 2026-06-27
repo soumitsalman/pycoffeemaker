@@ -29,7 +29,6 @@
 .cursor
 .webui_secret_key
 *.env
-!factory/pipeline-defaults.env
 graphify-out/graph.html
 graphify-out/.graphify_python
 graphify-out/.graphify_root

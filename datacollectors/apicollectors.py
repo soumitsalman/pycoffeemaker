@@ -24,7 +24,7 @@ log = get_logger(__name__)
 
 # browser-like headers: many WAFs 403 the custom bot User-Agent
 _RSS_REQUEST_HEADERS = {
-    "User-Agent": BROWSER_USER_AGENT,
+    # "User-Agent": BROWSER_USER_AGENT,
     'Accept-encoding': 'gzip, deflate',
     'Accept-Language': 'en-US,en;q=0.9',
     'A-IM': 'feed',

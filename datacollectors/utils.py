@@ -210,6 +210,15 @@ def parse_int(val: str) -> int:
     try: return int(val)
     except: return 0
 
+# XML 1.0 allows tab, LF, CR only among C0 controls; lxml rejects the rest.
+_INVALID_XML_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+def sanitize_html_for_xml(html: str) -> str:
+    """Strip NULL bytes and C0 control chars that break lxml/readability."""
+    if not html:
+        return html
+    return _INVALID_XML_CHAR_RE.sub("", html)
+
 def strip_html_tags(html):
     if not html: return None
     try: text = lxml.html.fromstring(html).text_content()

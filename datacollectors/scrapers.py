@@ -59,6 +59,7 @@ def _parse_page(url: str, html: str) -> dict:
     """Process worker: parse html into metadata + readable content."""
     from readability import Document
 
+    html = sanitize_html_for_xml(html)
     tree = lxml.html.fromstring(html)
     metadata = _get_metadata(url, tree)
     title = metadata.get("meta_title")
@@ -67,11 +68,15 @@ def _parse_page(url: str, html: str) -> dict:
         if title_tags:
             title = " ".join(title_tags[0].text_content().split())
     doc = Document(tree, url=url)
-    summary_html = doc.summary(html_partial=True)
+    try:
+        summary_html = doc.summary(html_partial=True)
+        content = strip_html_tags(summary_html)
+    except Exception:
+        content = strip_html_tags(html) or " ".join(tree.text_content().split())
     body = {
         TITLE: title,
         AUTHOR: metadata.get(AUTHOR),
-        CONTENT: strip_html_tags(summary_html)
+        CONTENT: content,
     }
     body.update(metadata)
     return body
