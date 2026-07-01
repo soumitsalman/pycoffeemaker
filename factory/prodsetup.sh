@@ -44,8 +44,6 @@ sudo /tmp/aws/install
 rm -rf /tmp/aws /tmp/awscliv2.zip
 
 echo "=== Download dependencies and make venv ==="
-git clone https://www.github.com/soumitsalman/pybeansack.git
-git clone https://www.github.com/soumitsalman/nlp.git
 python3 -m venv .venv
 source .venv/bin/activate
 case "$MODE" in

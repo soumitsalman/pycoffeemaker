@@ -1,28 +1,30 @@
-from uuid import UUID, uuid5, NAMESPACE_URL
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
-# sip fields
-ID = 'id'
-CREATED = 'created'
-KIND = 'kind'
-SOURCE = 'source'
-EMBEDDING = 'embedding'
-TAGS = 'tags'
-DIGEST = 'digest'
-URL = 'url'
+from utils.fields import (
+    BASE_URL,
+    CREATED,
+    DESCRIPTION,
+    DIGEST,
+    DOMAIN_NAME,
+    EMBEDDING,
+    FAVICON,
+    ID,
+    KIND,
+    RSS_FEED,
+    SITE_NAME,
+    SOURCE,
+    TAGS,
+    URL,
+)
+from utils.ids import generate_uuid
 
-# source fields
-BASE_URL = 'base_url'
-DOMAIN_NAME = 'domain_name'
-SITE_NAME = 'site_name'
-DESCRIPTION = 'description'
-FAVICON = 'favicon'
-RSS_FEED = 'rss_feed'
+generate_id = generate_uuid
+DEFAULT_SOURCE = generate_uuid("https://cafecito.tech")
 
-generate_id = lambda url: uuid5(NAMESPACE_URL, url)
-DEFAULT_SOURCE = generate_id("https://cafecito.tech")
 
 class Sip(BaseModel):
     id: Optional[UUID] = Field(default=None)
@@ -37,11 +39,16 @@ class Sip(BaseModel):
 
     def model_post_init(self, __context):
         if not self.id:
-            if self.url: self.id = generate_id(self.url)
-            else: raise ValueError("Sip must have a `url` or `id`")
+            if self.url:
+                self.id = generate_id(self.url)
+            else:
+                raise ValueError("Sip must have a `url` or `id`")
         if not self.source:
-            if self.base_url: self.source = generate_id(self.base_url)
-            else: self.source = DEFAULT_SOURCE
+            if self.base_url:
+                self.source = generate_id(self.base_url)
+            else:
+                self.source = DEFAULT_SOURCE
+
 
 class Source(BaseModel):
     id: Optional[UUID] = Field(default=None)
@@ -54,5 +61,7 @@ class Source(BaseModel):
 
     def model_post_init(self, __context):
         if not self.id:
-            if self.base_url: self.id = generate_id(self.base_url)
-            else: self.id = DEFAULT_SOURCE
+            if self.base_url:
+                self.id = generate_id(self.base_url)
+            else:
+                self.id = DEFAULT_SOURCE

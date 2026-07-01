@@ -18,3 +18,16 @@ openai
 aiofiles
 persist-queue
 structlog
+pydantic
+pyarrow
+pandas
+duckdb
+lancedb
+pgvector
+psycopg
+psycopg[binary,pool]
+s3fs
+rfc3339
+tenacity
+aioboto3
+surrealdb

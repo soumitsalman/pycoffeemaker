@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: pybeansack-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: eatabagodicks
+      POSTGRES_DB: beansack
+    ports:
+      - "5433:5432"

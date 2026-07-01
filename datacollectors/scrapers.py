@@ -10,7 +10,9 @@ from utils.logs import get_logger
 from itertools import chain
 from urllib.parse import unquote, urljoin, urlparse
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random
-from .utils import *
+from utils.fields import *
+from .settings import *
+from .normalize import *
 from icecream import ic
 
 log = get_logger(__name__)

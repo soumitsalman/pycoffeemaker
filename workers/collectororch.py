@@ -6,9 +6,8 @@ import os
 import random
 import uuid
 import yaml
-from datacollectors import (
-    APICollectorAsync,
-    AsyncWebScraper,
+from datacollectors import APICollectorAsync, AsyncWebScraper, POST
+from utils.fields import (
     ARTICLE_LANGUAGE,
     AUTHOR,
     AUTHOR_EMAIL,
@@ -35,10 +34,9 @@ from datacollectors import (
     TAGS,
     TITLE,
     URL,
-    POST
 )
 from .workercache.base import AsyncStateCacheBase
-from .utils import *
+from .states import *
 from persistqueue import AsyncQueue, Empty
 from icecream import ic
 

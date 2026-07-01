@@ -50,8 +50,8 @@ parser.add_argument(
 )
 
 from workers.workercache.pgcache import AsyncStateCache, StateCache
-from workers.utils import BEANSACKED, CATEGORIES, CUPBOARDED, SENTIMENTS, COMPOSITES, BEANS, PUBLISHERS, CHATTERS, ID
-from datacollectors import URL, BASE_URL
+from workers.states import BEANSACKED, CATEGORIES, CUPBOARDED, SENTIMENTS, COMPOSITES, BEANS, PUBLISHERS, CHATTERS, ID
+from utils.fields import URL, BASE_URL
 from pybeansack import create_client
 
 if __name__ == "__main__":

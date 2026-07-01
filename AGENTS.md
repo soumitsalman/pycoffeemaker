@@ -12,8 +12,8 @@ pycoffeemaker/
 ├── factory/               # feeds.yaml, pipeline-defaults.env, classifications.yaml, migrate/rectify
 ├── workers/               # Orchestrators + state cache
 ├── datacollectors/        # RSS/API/scrapers (APICollectorAsync, AsyncWebScraper)
-├── nlp/                   # Embeddings, digests, NER (submodule; see nlp/README.md)
-├── pybeansack/            # Bean/Chatter/Publisher models + DB backends (submodule)
+├── nlp/                   # Embeddings, digests, NER (vendored package; see nlp/README.md)
+├── pybeansack/            # Bean/Chatter/Publisher models + DB backends (vendored package)
 ├── pycupboard/            # Sip/Source + Cupboard (Cortado)
 └── tests/                 # Integration tests
 ```

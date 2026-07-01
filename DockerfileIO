@@ -20,7 +20,6 @@ WORKDIR /worker
 
 # COPY --from=iobuilder /pythonlibs /usr/local
 COPY . .
-RUN pip install --no-cache -r pybeansack/requirements.txt
 RUN pip install --no-cache -r requirements-io.txt
 
 RUN mkdir -p .cache/collector

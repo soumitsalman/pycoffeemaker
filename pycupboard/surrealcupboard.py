@@ -11,15 +11,10 @@ NS = "__coffeemaker__"
 DB = "__cupboard__"
 BATCH_SIZE = 2048
 
-K_ID = 'id'
-K_BASE_URL = 'base_url'
-K_URL = 'url'
-K_RELATED_URL = 'related_url'
-K_EMBEDDING = 'embedding'
+from utils.config import VECTOR_LEN
+from utils.fields import BASE_URL, EMBEDDING, ID, RELATED_URL, URL
 
 DATA_TYPES = Literal["events", "signals", "sources"]
-
-VECTOR_LEN = int(os.getenv('VECTOR_LEN', 384))
 
 _INIT_STMTS = [
     # event tables, fields and indexes
@@ -110,15 +105,15 @@ class Cupboard:
         """Link inserted events to matching sources via `source['base_url']->PUBLISHED-> events`."""
         existing_sources = await txn.query(
             "SELECT id, base_url FROM sources WHERE base_url IN $bu",
-            {"bu": list({e[K_BASE_URL] for e in events})},
+            {"bu": list({e[BASE_URL] for e in events})},
         )
         if not existing_sources: return
 
-        source_ids = {s[K_BASE_URL]: s[K_ID] for s in existing_sources}
+        source_ids = {s[BASE_URL]: s[ID] for s in existing_sources}
         relations = [
-            f"RELATE {source_ids[e[K_BASE_URL]]} -> PUBLISHED -> {e[K_ID]};"
+            f"RELATE {source_ids[e[BASE_URL]]} -> PUBLISHED -> {e[ID]};"
             for e in events 
-            if source_ids.get(e[K_BASE_URL])
+            if source_ids.get(e[BASE_URL])
         ]
         return await self._insert_relations(txn, relations)
 
@@ -126,13 +121,13 @@ class Cupboard:
         """Link matching events to inserted sources via `source->PUBLISHED->event['base_url']`."""
         existing_events = await txn.query(
             "SELECT id, base_url FROM events WHERE base_url IN $bu",
-            {"bu": list({src[K_BASE_URL] for src in sources})},
+            {"bu": list({src[BASE_URL] for src in sources})},
         )
         if not existing_events: return
 
         relations = []
         for src in sources:
-            relations.extend(f"RELATE {src[K_ID]} -> PUBLISHED -> {e[K_ID]};" for e in existing_events if e[K_BASE_URL] == src[K_BASE_URL])
+            relations.extend(f"RELATE {src[ID]} -> PUBLISHED -> {e[ID]};" for e in existing_events if e[BASE_URL] == src[BASE_URL])
         return await self._insert_relations(txn, relations)
   
     async def link_events(self, links: list[dict[str, str]]):

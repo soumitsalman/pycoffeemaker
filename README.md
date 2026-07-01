@@ -34,9 +34,9 @@ pycoffeemaker/
 │       ├── pgcache.py     # Default PostgreSQL state cache (PROCESSING_CACHE)
 │       ├── clscache.py    # Classification vector store (CLASSIFICATION_CACHE)
 │       └── extensions/    # Alternate backends (sqlite, firebird, surreal, pg+cls)
-├── datacollectors/        # RSS, APIs, async web scrapers
+├── datacollectors/        # RSS, APIs, async web scrapers (see datacollectors/README.md)
 ├── nlp/                   # Embeddings, digests, NER (see nlp/README.md)
-├── pybeansack/            # Bean/Chatter/Publisher models + DB backends (pg, lance, duck, mongo)
+├── pybeansack/            # Bean/Chatter/Publisher models + DB backends (see pybeansack/README.md)
 ├── pycupboard/            # Sip/Source models for Cortado (Cupboard)
 ├── tests/                 # Integration tests & sample source YAMLs
 └── .env                   # Local secrets and connection strings (not committed)
@@ -131,9 +131,9 @@ Suggested cadence: collector ~2×/day; embedder/clustering/extractor/digestor ~3
 - **Embedder / Clustering / Extractor / Digestor / Consolidator** (`analyzerorch.py`): read from cache by state, call `nlp`, write next state (`embedded`, `clustered`, `extracted`, `digested`, `consolidated`).
 - **Porter** (`porterorch.py`): `BeansackPorter` + `CupboardPorter` hydrate downstream DBs from cache.
 
-### `datacollectors/`
+### [`datacollectors/`](datacollectors/README.md)
 
-`APICollectorAsync`, `AsyncWebScraper`—shared field constants (`URL`, `CONTENT`, `SOURCE`, etc.).
+`APICollectorAsync`, `AsyncWebScraper`—shared field constants (`URL`, `CONTENT`, `SOURCE`, etc.). See [datacollectors/README.md](datacollectors/README.md) for feeds, scrape settings, and normalization.
 
 ### `workers/workercache/`
 
@@ -141,13 +141,13 @@ Fault-tolerant state machine used by all orchestrators. Default backend: `pgcach
 
 Tracks per-object processing states (`beans`, `publishers`, `chatters`, `composites`).
 
-### `nlp/`
+### [`nlp/`](nlp/README.md)
 
-Embeddings (`create_embedder`), structured extraction (`create_micro_agent` / `Digest`, `Briefing`), NER (`EntityExtractor`). Supports local HF, vLLM, ONNX, OpenVINO, remote OpenAI-compatible APIs. Details: `nlp/README.md`.
+Embeddings (`create_embedder`), structured extraction (`create_text_analyst` / `Digest`, `Briefing`), NER (`EntityExtractor`). Supports local HF, vLLM, ONNX, OpenVINO, remote OpenAI-compatible APIs. Details: [nlp/README.md](nlp/README.md).
 
-### `pybeansack/`
+### [`pybeansack/`](pybeansack/README.md)
 
-Pydantic models (`Bean`, `Chatter`, `Publisher`) and storage: `create_client("pg"|"lance"|"duck"|"dl", ...)`.
+Pydantic models (`Bean`, `Chatter`, `Publisher`) and storage: `create_client("pg"|"lance"|"duck"|"dl", ...)`. See [pybeansack/README.md](pybeansack/README.md) for backends, queries, and tests.
 
 ### `pycupboard/`
 
@@ -362,9 +362,15 @@ Ensure `.env` is configured (`PROCESSING_CACHE`, model paths, etc.) before boot;
 - IO nodes: `DockerfileIO` + `COLLECTOR` / `PORTER`.
 - Keep `PROCESSING_CACHE` (state DB) and downstream DBs reachable from every worker tier.
 
+## Package documentation
+
+| Package | README | Topics |
+|---------|--------|--------|
+| **datacollectors** | [datacollectors/README.md](datacollectors/README.md) | RSS/API/scrape collectors, field normalization, `APICollectorAsync`, `AsyncWebScraper`, crawl4ai |
+| **nlp** | [nlp/README.md](nlp/README.md) | Embeddings, digestors, NER, model backends (`create_embedder`, `create_text_analyst`, `EntityExtractor`) |
+| **pybeansack** | [pybeansack/README.md](pybeansack/README.md) | Bean/Chatter/Publisher models, PG/Lance/Duck/DuckLake backends, queries, porting |
+
 ## Further reading
 
-- `AGENTS.md` — design overview for agents/tools
-- `workers/workercache/STATEMACHINE.md` — state machine schema and worker read/write flow
-- `nlp/README.md` — model backends and API
-- `pybeansack/` — data model and DB adapters
+- [`AGENTS.md`](AGENTS.md) — design overview for agents/tools
+- [`workers/workercache/STATEMACHINE.md`](workers/workercache/STATEMACHINE.md) — state machine schema and worker read/write flow

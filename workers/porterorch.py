@@ -8,11 +8,16 @@ from typing import Any
 
 from .workercache.base import AsyncStateCacheBase
 from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
-from pybeansack.models import K_BASE_URL, K_CATEGORIES, K_CONTENT, K_CONTENT_LENGTH, K_CREATED, K_EMBEDDING, K_ENTITIES, K_KIND, K_REGIONS, K_RELATED, K_RESTRICTED_CONTENT, K_SENTIMENTS, K_SOURCE, K_SUMMARY, K_SUMMARY_LENGTH, K_TAGS, K_TITLE, K_TITLE_LENGTH, K_URL
+from pybeansack.models import (
+    BASE_URL, CATEGORIES, CONTENT, CONTENT_LENGTH, CREATED, EMBEDDING, ENTITIES,
+    KIND, REGIONS, RELATED, RESTRICTED_CONTENT, SENTIMENTS, SOURCE, SUMMARY,
+    SUMMARY_LENGTH, TAGS, TITLE, TITLE_LENGTH, URL,
+)
 from pycupboard.pgcupboard import Cupboard
-from pycupboard.models import SOURCE, TAGS, URL, Sip, Source, DEFAULT_SOURCE, KIND, generate_id
+from pycupboard.models import Sip, Source, DEFAULT_SOURCE, generate_id
 
-from .utils import *
+from .states import *
+from .tags import merge_tags
 from icecream import ic
 
 log = get_logger("porterworker")
@@ -32,9 +37,9 @@ class BeansackPorter:
             if digest := bean.get(DIGEST):
                 if not isinstance(digest, dict): continue
                 if entities := merge_tags(digest.get('people'), digest.get('companies'), digest.get('products'), digest.get('stock_tickers')):
-                    bean[K_ENTITIES] = entities
+                    bean[ENTITIES] = entities
                 if regions := digest.get('regions'):
-                    bean[K_REGIONS] = regions
+                    bean[REGIONS] = regions
         return [Bean(**bean) for bean in beans]
 
     async def hydrate_beans(self, db: Beansack, target_state: str):
@@ -46,7 +51,7 @@ class BeansackPorter:
             log.info(event="porting:beans", to="beansack", num_items=len(beans))  
             count = await asyncio.to_thread(db.store_beans, self.prep_beans(beans))
             log.info(event="ported:beans", to="beansack", num_items=count)                
-            await self.cache.set(BEANS, target_state, [{K_URL: b[K_URL]} for b in beans])
+            await self.cache.set(BEANS, target_state, [{URL: b[URL]} for b in beans])
             return count
         return 0
 
@@ -55,7 +60,7 @@ class BeansackPorter:
             log.info(event="porting:publishers", to="beansack", num_items=len(publishers))
             count = await asyncio.to_thread(db.store_publishers, [Publisher(**pub) for pub in publishers])
             log.info(event="ported:publishers", to="beansack", num_items=count)
-            await self.cache.set(PUBLISHERS, target_state, [{K_BASE_URL: p[K_BASE_URL]} for p in publishers])
+            await self.cache.set(PUBLISHERS, target_state, [{BASE_URL: p[BASE_URL]} for p in publishers])
             return count
         return 0
 
@@ -63,10 +68,10 @@ class BeansackPorter:
     def prep_related(cls, beans: list[dict]):
         items = {}
         for bean in beans:
-            url = bean[K_URL]
-            if related := bean.get(K_RELATED):
-                items.update({f"{url}#{r}": {K_URL: url, "related_url": r} for r in related})
-                items.update({f"{r}#{url}": {K_URL: r, "related_url": url} for r in related})
+            url = bean[URL]
+            if related := bean.get(RELATED):
+                items.update({f"{url}#{r}": {URL: url, "related_url": r} for r in related})
+                items.update({f"{r}#{url}": {URL: r, "related_url": url} for r in related})
         return list(items.values())
 
     async def hydrate_related(self, db: Beansack, target_state: str):
@@ -75,7 +80,7 @@ class BeansackPorter:
             log.info(event="porting:bean_links", to="beansack", num_items=len(related_beans))
             count = await asyncio.to_thread(db.store_related, self.prep_related(related_beans))
             log.info(event="ported:bean_links", to="beansack", num_items=count)
-            await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
+            await self.cache.set(BEANS, target, [{URL: b[URL]} for b in related_beans])
             return count
         return 0
 
@@ -129,9 +134,9 @@ class CupboardPorter:
     def prep_events(cls, beans: list[dict[str, Any]]):
         beans = [bean for bean in beans if bean.get(DIGEST)]
         for bean in beans:            
-            bean.pop(K_SOURCE)
-            bean[K_KIND] = "event:"+bean[K_KIND]
-            bean[K_TAGS] = merge_tags(bean.get(K_CATEGORIES), bean.get(K_SENTIMENTS), bean.get(DIGEST, {}).get(TAGS))
+            bean.pop(SOURCE)
+            bean[KIND] = "event:"+bean[KIND]
+            bean[TAGS] = merge_tags(bean.get(CATEGORIES), bean.get(SENTIMENTS), bean.get(DIGEST, {}).get(TAGS))
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):
@@ -143,13 +148,13 @@ class CupboardPorter:
             log.info(event="porting:events", to="cupboard", num_items=len(beans))             
             count = await db.store_sips(self.prep_events(beans))
             log.info(event="ported:events", to="cupboard", num_items=count)                
-            await self.cache.set(BEANS, target_state, [{K_URL: b[K_URL]} for b in beans])       
+            await self.cache.set(BEANS, target_state, [{URL: b[URL]} for b in beans])       
             return count
         return 0
 
     @classmethod
     def prep_sources(cls, sources: list[dict]):
-        return [Source(**src, domain_name=src.get(K_SOURCE)) for src in sources]
+        return [Source(**src, domain_name=src.get(SOURCE)) for src in sources]
 
     async def hydrate_sources(self, db: Cupboard, target_state: str):
         count = 0
@@ -158,7 +163,7 @@ class CupboardPorter:
             log.info(event="porting:sources", to="cupboard", num_items=len(sources))
             count = await db.store_sources(sources)
             log.info(event="ported:sources", to="cupboard", num_items=count)
-            await self.cache.set(PUBLISHERS, target_state, [{K_BASE_URL: p.base_url} for p in sources])
+            await self.cache.set(PUBLISHERS, target_state, [{BASE_URL: p.base_url} for p in sources])
         return count
 
     async def hydrate_related(self, db: Cupboard, target_state: str):
@@ -168,7 +173,7 @@ class CupboardPorter:
             log.info(event="porting:event_links", to="cupboard", num_items=len(related_beans))
             count = await db.link_sips(related_beans, "SAME_AS")
             log.info(event="ported:event_links", to="cupboard", num_items=count)
-            await self.cache.set(BEANS, target, [{K_URL: b[K_URL]} for b in related_beans])
+            await self.cache.set(BEANS, target, [{URL: b[URL]} for b in related_beans])
             return count
         return 0
 

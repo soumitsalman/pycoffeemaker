@@ -10,7 +10,7 @@ load_coffeemaker_env()
 
 from icecream import ic
 from pybeansack.models import *
-from pybeansack import BEANS, CHATTERS, PUBLISHERS, K_URL, K_BASE_URL
+from pybeansack import BEANS, CHATTERS, PUBLISHERS, URL, BASE_URL
 
 def create_classification_embeddings():
     import yaml
@@ -25,16 +25,16 @@ def create_classification_embeddings():
     with create_embedder(os.getenv('EMBEDDER_PATH'), 512) as embedder:
         categories = pd.DataFrame(
             {
-                "id": classifications[K_CATEGORIES],
-                K_EMBEDDING: embedder([f"topic/domain={cat}" for cat in classifications[K_CATEGORIES]])
+                "id": classifications[CATEGORIES],
+                EMBEDDING: embedder([f"topic/domain={cat}" for cat in classifications[CATEGORIES]])
             }
         )
         ic(categories.sample(n=3))
 
         sentiments = pd.DataFrame(
             {
-                "id": classifications[K_SENTIMENTS],
-                K_EMBEDDING: embedder([f"sentiment={s}" for s in classifications[K_SENTIMENTS]])
+                "id": classifications[SENTIMENTS],
+                EMBEDDING: embedder([f"sentiment={s}" for s in classifications[SENTIMENTS]])
             }
         )
         ic(sentiments.sample(n=3))
@@ -54,8 +54,8 @@ def create_processing_cache(db_path: str):
     StateCache(
         db_path, 
         {
-            BEANS: {"id_key": K_URL},
-            PUBLISHERS: {"id_key": K_BASE_URL},
+            BEANS: {"id_key": URL},
+            PUBLISHERS: {"id_key": BASE_URL},
             CHATTERS: {"id_key": "id"}
         }
     ).close()
@@ -65,7 +65,7 @@ def create_classification_cache():
     cls_cache = ClassificationCache(
         os.getenv('CLASSIFICATION_CACHE'), 
         {
-            BEANS: {"id_key": K_URL, "vector_length": 384, "distance_func": "l2"},
+            BEANS: {"id_key": URL, "vector_length": 384, "distance_func": "l2"},
             "categories": {"id_key": "category", "vector_length": 384, "distance_func": "cosine"},
             "sentiments": {"id_key": "sentiment", "vector_length": 384, "distance_func": "cosine"}
         }
@@ -80,8 +80,8 @@ def hydrate_classification_cache(window: int = 90):
     from workers.workercache.pgcache import StateCache
     from workers.workercache.clscache import ClassificationCache
 
-    proc_cache = StateCache(os.getenv('PROCESSING_CACHE'), {BEANS: {"id_key": K_URL}})
-    cls_cache = ClassificationCache(os.getenv('CLASSIFICATION_CACHE'), {BEANS: {"id_key": K_URL}})
+    proc_cache = StateCache(os.getenv('PROCESSING_CACHE'), {BEANS: {"id_key": URL}})
+    cls_cache = ClassificationCache(os.getenv('CLASSIFICATION_CACHE'), {BEANS: {"id_key": URL}})
     
     if beans := proc_cache.get(BEANS, states="embedded", window=window):
         beans = [bean for bean in beans if bean.get("embedding")]

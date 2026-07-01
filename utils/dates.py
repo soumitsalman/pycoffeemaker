@@ -1,6 +1,19 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-now = datetime.now
-ndays_ago = lambda days: (now() - timedelta(days=days)).replace(
-    hour=0, minute=0, second=0, microsecond=0
-)
+
+def now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def ndays_ago(days: int) -> datetime:
+    return now() - timedelta(days=days)
+
+
+def ndays_ago_str(days: int) -> str:
+    return ndays_ago(days).strftime("%Y-%m-%d")
+
+
+def ensure_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)

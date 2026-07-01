@@ -26,7 +26,7 @@ from coffeemaker.processingcache.firecache import (
     ClassificationCache as FireClassificationCache,
 )
 
-K_RELATED = "related"
+RELATED = "related"
 LIMIT = 40000
 
 
@@ -41,7 +41,7 @@ if log_dir:
 #     format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s",
 # )
 
-ndays_ago = lambda n: datetime.now() - timedelta(days=n)
+from utils.dates import ndays_ago, now
 make_id = lambda text: re.sub(r"[^a-zA-Z0-9]", "-", text.lower())
 
 
@@ -58,9 +58,9 @@ def create_composer_topics_locally():
         topics = yaml.safe_load(file)
 
     embedder = embedders.from_path(os.getenv("EMBEDDER_PATH"), 512)
-    vecs = embedder(["topic: " + topics[key][K_DESCRIPTION] for key in topics.keys()])
+    vecs = embedder(["topic: " + topics[key][DESCRIPTION] for key in topics.keys()])
     for key, vec in zip(topics.keys(), vecs):
-        topics[key][K_EMBEDDING] = vec
+        topics[key][EMBEDDING] = vec
 
     with open(
         "/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.json", "w"
@@ -115,11 +115,11 @@ def migrate_classification_cache(from_lance, to_pg):
     from pybeansack import SimpleVectorDB
     from coffeemaker.processingcache.firecache import ClassificationCache
 
-    from_cache = SimpleVectorDB(from_lance, {BEANS: K_URL})
+    from_cache = SimpleVectorDB(from_lance, {BEANS: URL})
     to_cache = ClassificationCache(
         to_pg,
         table_settings={
-            BEANS: {"id_key": K_URL},
+            BEANS: {"id_key": URL},
             "categories": {"id_key": "category"},
             "sentiments": {"id_key": "sentiment"},
         },
@@ -168,7 +168,7 @@ def migrate_classification_cache_pg_to_fire(
 
     table_settings={
         BEANS: {
-            "id_key": K_URL,
+            "id_key": URL,
             "vector_length": vector_length,
             "distance_func": distance_func,
         },
@@ -262,18 +262,18 @@ def cleanup_bean_tags():
                         limit=batch_size,
                         offset=offset,
                         columns=[
-                            K_URL,
-                            K_CATEGORIES,
-                            K_SENTIMENTS,
-                            K_ENTITIES,
-                            K_REGIONS,
+                            URL,
+                            CATEGORIES,
+                            SENTIMENTS,
+                            ENTITIES,
+                            REGIONS,
                         ],
                     )
                 )
                 future = executor.submit(
                     db.update_beans,
                     beans,
-                    columns=[K_CATEGORIES, K_SENTIMENTS, K_ENTITIES, K_REGIONS],
+                    columns=[CATEGORIES, SENTIMENTS, ENTITIES, REGIONS],
                 )
                 future.add_done_callback(lambda f: pbar.update(f.result()))
             # executor waits for all submitted updates to finish before exiting
@@ -292,9 +292,9 @@ def hydrate_processing_cache(cache_dir, batch_size):
     from coffeemaker.processingcache.sqlitecache import StateCache
     from coffeemaker.processingcache.base import ClassificationStore
     from pybeansack import (
-        K_URL,
-        K_EMBEDDING,
-        K_BASE_URL,
+        URL,
+        EMBEDDING,
+        BASE_URL,
         BEANS,
         PUBLISHERS,
         RELATED_BEANS,
@@ -305,7 +305,7 @@ def hydrate_processing_cache(cache_dir, batch_size):
         db_type="pg", pg_connection_string=os.getenv("PG_CONNECTION_STRING")
     )
     state_store = StateCache(
-        cache_dir, {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}}
+        cache_dir, {BEANS: {"id_key": URL}, PUBLISHERS: {"id_key": BASE_URL}}
     )
 
     if False:
@@ -316,7 +316,7 @@ def hydrate_processing_cache(cache_dir, batch_size):
             ],
             limit=batch_size,
             offset=offset,
-            columns=[K_BASE_URL, K_SOURCE],
+            columns=[BASE_URL, SOURCE],
         ):
             publisher_states = [
                 pub.model_dump(exclude_none=True, exclude_unset=True) for pub in pubs
@@ -339,9 +339,9 @@ def hydrate_processing_cache(cache_dir, batch_size):
                 conditions=["gist IS NOT NULL", "embedding IS NOT NULL"],
                 limit=batch_size,
                 offset=offset,
-                columns=[K_URL],
+                columns=[URL],
             ):
-                basic_vals = [{K_URL: bean.url} for bean in beans]
+                basic_vals = [{URL: bean.url} for bean in beans]
                 exec.map(
                     lambda state: state_store.set(BEANS, state, basic_vals),
                     [
@@ -361,12 +361,12 @@ def hydrate_processing_cache(cache_dir, batch_size):
 
     if True:
         offset = 0
-        cls_cache = ClassificationStore(cache_dir, {BEANS: K_URL})
+        cls_cache = ClassificationStore(cache_dir, {BEANS: URL})
         while beans := db.query_latest_beans(
             conditions=["embedding IS NOT NULL"],
             limit=batch_size,
             offset=offset,
-            columns=[K_URL, K_EMBEDDING],
+            columns=[URL, EMBEDDING],
         ):
             offset += len(beans)
             count = cls_cache.store(
@@ -393,7 +393,7 @@ def recitify_embeddings_and_classifications():
     cls_cache =  FireClassificationCache(
         os.getenv('CLASSIFICATION_CACHE', f'.cache/clsstore'), 
         table_settings={
-            BEANS: {"id_key": K_URL, "distance_func": "l2"},
+            BEANS: {"id_key": URL, "distance_func": "l2"},
             "categories": {"id_key": "category", "distance_func": "cosine"},
             "sentiments": {"id_key": "sentiment", "distance_func": "cosine"}
         }
@@ -403,7 +403,7 @@ def recitify_embeddings_and_classifications():
             conditions=["embedding IS NOT NULL"],
             limit=16,
             offset=0,
-            columns=[K_URL, K_CONTENT],
+            columns=[URL, CONTENT],
         ):
             embeddings = embedder.embed_documents([bean.content for bean in beans])
             categories = cls_cache.batch_search("categories", embeddings, top_n=2)
@@ -414,7 +414,7 @@ def recitify_embeddings_and_classifications():
                     Bean(url=bean.url, embedding=emb, categories=cats, sentiments=sents)
                     for bean, emb, cats, sents in zip(beans, embeddings, categories, sentiments)
                 ], 
-                columns=[K_EMBEDDING, K_CATEGORIES, K_SENTIMENTS]
+                columns=[EMBEDDING, CATEGORIES, SENTIMENTS]
             )
             print("rectified %d" % offset)
             offset += len(beans)

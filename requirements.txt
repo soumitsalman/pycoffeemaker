@@ -24,3 +24,15 @@ zvec
 scikit-learn
 aiofiles
 persist-queue
+pydantic
+pyarrow
+pandas
+duckdb
+lancedb
+pgvector
+psycopg
+psycopg[binary,pool]
+s3fs
+rfc3339
+tenacity
+aioboto3

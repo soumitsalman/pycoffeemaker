@@ -84,7 +84,7 @@ class LanceDBCupboard:
         limit: int = 0, offset: int = 0, 
         columns: list[str] = None
     ):
-        query = self.tables[table].search() if not embedding else self.tables[table].search(query=embedding, query_type="vector", vector_column_name=K_EMBEDDING)      
+        query = self.tables[table].search() if not embedding else self.tables[table].search(query=embedding, query_type="vector", vector_column_name=EMBEDDING)      
         where_expr = _where(created=created, updated=updated, conditions=conditions)
         if where_expr: query = query.where(where_expr)
         if embedding: query = query.distance_type("cosine")
@@ -104,7 +104,7 @@ class LanceDBCupboard:
         limit: int = 0, offset: int = 0, 
         columns: list[str] = None
     ) -> list[Sip]:
-        query = self.tables[table].search() if not vectors else self.tables[table].search(query=vectors, query_type="vector", vector_column_name=K_EMBEDDING)      
+        query = self.tables[table].search() if not vectors else self.tables[table].search(query=vectors, query_type="vector", vector_column_name=EMBEDDING)      
         where_expr = _where(created=created, updated=updated, conditions=conditions)
         if where_expr: query = query.where(where_expr)
         if vectors: query = query.distance_type("cosine")
@@ -160,7 +160,7 @@ class LanceDBCupboard:
     
     def optimize(self):
         # NOTE: something wrong with the vector index creation
-        # try: [self.tables[table].create_index(vector_column_name=K_EMBEDDING, index_type="IVF_PQ", metric="cosine") for table in [MUGS, SIPS]]
+        # try: [self.tables[table].create_index(vector_column_name=EMBEDDING, index_type="IVF_PQ", metric="cosine") for table in [MUGS, SIPS]]
         # except: pass
         [table.optimize() for table in self.tables.values()]
 

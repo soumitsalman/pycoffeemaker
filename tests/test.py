@@ -179,15 +179,15 @@ def test_static_db():
 @pytest.mark.orch_classifier
 def test_classifier_static_label_search():
     import pandas as pd
+    from utils.fields import URL
     from workers.analyzerorch import (
         CATEGORIES,
         CLASSIFICATION_LIMIT,
         EMBEDDING,
         SENTIMENTS,
-        URL,
         Classifier,
     )
-    from workers.utils import BEANS, EMBEDDED
+    from workers.states import BEANS, EMBEDDED
 
     class DummyCache:
         pass
@@ -242,8 +242,8 @@ def test_collector_orch():
     from workers.workercache.pgcache import AsyncStateCache
 
     cache_settings = {
-        BEANS: {"id_key": K_URL},
-        PUBLISHERS: {"id_key": K_BASE_URL},
+        BEANS: {"id_key": URL},
+        PUBLISHERS: {"id_key": BASE_URL},
         CHATTERS: {"id_key": "id"}
     }
     orch = Collector(
@@ -311,8 +311,8 @@ def _analyzer_test_cache():
     return StateCache(
         os.getenv("PROCESSING_CACHE"),
         {
-            BEANS: {"id_key": K_URL},
-            PUBLISHERS: {"id_key": K_BASE_URL},
+            BEANS: {"id_key": URL},
+            PUBLISHERS: {"id_key": BASE_URL},
             CHATTERS: {"id_key": "id"}
         }
     )
@@ -324,7 +324,7 @@ def _analyzer_cls_cache():
     return ClassificationCache(
         ".test/clsstore-test",
         table_settings={
-            BEANS: {"id_key": K_URL, "distance_func": "l2"},
+            BEANS: {"id_key": URL, "distance_func": "l2"},
             "categories": {"id_key": "category", "distance_func": "cosine"},
             "sentiments": {"id_key": "sentiment", "distance_func": "cosine"},
         },
@@ -396,7 +396,7 @@ def test_classifier_orch():
 @pytest.mark.group_to_str
 def test_group_to_str_text_lengths():
     from workers.analyzerorch import _group_to_str
-    from workers.utils import BEANS, COLLECTED, DIGESTED, DIGEST
+    from workers.states import BEANS, COLLECTED, DIGESTED, DIGEST
 
     cache = _analyzer_test_cache()
     try:
@@ -420,12 +420,12 @@ def test_group_to_str_text_lengths():
 @pytest.mark.parametrize("beansack_or_cupboard", ["beansack", "cupboard"])
 def test_porter_orch(beansack_or_cupboard):
     from workers.porterorch import BeansackPorter, CupboardPorter
-    from workers.utils import COMPOSITES
+    from workers.states import COMPOSITES
     from workers.workercache.pgcache import AsyncStateCache
 
     cache_settings = {
-        BEANS: {"id_key": K_URL},
-        PUBLISHERS: {"id_key": K_BASE_URL},
+        BEANS: {"id_key": URL},
+        PUBLISHERS: {"id_key": BASE_URL},
         CHATTERS: {"id_key": "id"},
         COMPOSITES: {"id_key": "id"}
     }
@@ -503,23 +503,23 @@ def test_cache():
 
     st_cache = StateCache(
         conn_str,
-        {BEANS: {"id_key": K_URL}, PUBLISHERS: {"id_key": K_BASE_URL}},
+        {BEANS: {"id_key": URL}, PUBLISHERS: {"id_key": BASE_URL}},
     )
     try:
         beans = [
             {
-                K_URL: fake.unique.url(),
-                K_CONTENT: fake.paragraph(3),
-                K_SOURCE: fake.domain_name(),
+                URL: fake.unique.url(),
+                CONTENT: fake.paragraph(3),
+                SOURCE: fake.domain_name(),
             }
             for _ in range(10)
         ]
-        urls = [b[K_URL] for b in beans]
+        urls = [b[URL] for b in beans]
         st_cache.set(BEANS, test_state, beans)
 
         subset = urls[2:7]
         by_ids = st_cache.get(BEANS, test_state, exclude_state, ids=subset)
-        returned_urls = {item[K_URL] for item in by_ids}
+        returned_urls = {item[URL] for item in by_ids}
         assert returned_urls == set(subset), f"get by ids: {returned_urls} != {set(subset)}"
         ic("get by ids ok", len(by_ids))
 
@@ -533,7 +533,7 @@ def test_cache():
         within_window = st_cache.get(
             BEANS, test_state, exclude_state, ids=urls, window=7
         )
-        in_window = {item[K_URL] for item in within_window}
+        in_window = {item[URL] for item in within_window}
         assert set(recent_urls) <= in_window
         assert not set(old_urls) & in_window, f"window=7 should exclude: {old_urls & in_window}"
         ic("window=7 ok", sorted(in_window))
@@ -541,7 +541,7 @@ def test_cache():
         wide = st_cache.get(
             BEANS, test_state, exclude_state, ids=old_urls, window=14
         )
-        assert {item[K_URL] for item in wide} == set(old_urls)
+        assert {item[URL] for item in wide} == set(old_urls)
         ic("window=14 ok", len(wide))
 
         st_cache.set(BEANS, exclude_state, beans)
@@ -558,7 +558,7 @@ def test_cache():
         cls_cache = ClassificationCache(
             ".test/cache",
             {
-                BEANS: {"id_key": K_URL, "distance_func": "l2", "vector_length": VECTOR_LEN},
+                BEANS: {"id_key": URL, "distance_func": "l2", "vector_length": VECTOR_LEN},
                 "categories": {"id_key": "category", "distance_func": "cosine", "vector_length": VECTOR_LEN},
                 "sentiments": {"id_key": "sentiment", "distance_func": "cosine", "vector_length": VECTOR_LEN},
             }
@@ -577,7 +577,7 @@ def test_cache():
 @pytest.mark.integration
 def test_orch_on_lancesack():
     from datacollectors import APICollector
-    from nlp import Digest, create_digestor, create_embedder
+    from nlp import Digest, create_text_analyst, create_embedder
     from pybeansack import create_db
     from pybeansack.lancesack import _Bean
     from workers.collectororch import parse_sources
@@ -608,7 +608,7 @@ def test_orch_on_lancesack():
                 collected=ndays_ago(2),
                 conditions=["embedding IS NULL", "content_length >= 200"],
                 limit=32,
-                columns=[K_URL, K_CONTENT, K_SOURCE],
+                columns=[URL, CONTENT, SOURCE],
             ):
                 vectors = embedder.embed_documents([bean.content for bean in beans])
                 updates = [
@@ -619,7 +619,7 @@ def test_orch_on_lancesack():
                 ic(db.update_embeddings(updates))
 
     if False:
-        with create_digestor(
+        with create_text_analyst(
             os.getenv("DIGESTOR_PATH"),
             context_len=4096,
             output_model=Digest,
@@ -628,7 +628,7 @@ def test_orch_on_lancesack():
                 collected=ndays_ago(2),
                 conditions=["gist IS NULL", "content_length >= 200"],
                 limit=2,
-                columns=[K_URL, K_CONTENT, K_SOURCE],
+                columns=[URL, CONTENT, SOURCE],
             ):
                 digests = digestor.run_batch([bean.content for bean in beans])
                 updates = [
@@ -641,14 +641,14 @@ def test_orch_on_lancesack():
                     for bean, d in zip(beans, digests)
                     if d
                 ]
-                ic(db.update_beans(updates, columns=[K_GIST, K_REGIONS, K_ENTITIES]))
+                ic(db.update_beans(updates, columns=[GIST, REGIONS, ENTITIES]))
 
     if True:
         print("===========")
         beans = db.query_latest_beans(
             conditions=["embedding IS NOT NULL"],
             limit=5,
-            columns=[K_URL, K_TITLE, K_CREATED, K_CATEGORIES, K_SENTIMENTS],
+            columns=[URL, TITLE, CREATED, CATEGORIES, SENTIMENTS],
         )
         [print(bean.created, bean.title, bean.categories) for bean in beans]
 
@@ -671,7 +671,7 @@ def test_orch_on_lancesack():
                 embedding=vec,
                 distance=0.3,
                 limit=10,
-                columns=[K_URL, K_TITLE, K_CREATED, K_CATEGORIES, K_SENTIMENTS],
+                columns=[URL, TITLE, CREATED, CATEGORIES, SENTIMENTS],
             )
             [print(bean.created, bean.title, bean.categories) for bean in beans]
             print("===========")

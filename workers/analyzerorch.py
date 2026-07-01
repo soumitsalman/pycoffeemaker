@@ -24,16 +24,18 @@ from nlp import (
     clear_gpu_cache,
     is_cuda_oom,
 )
-from datacollectors import (
-    CONTENT, CREATED, SUMMARY, TAGS, TITLE, URL, SOURCE, KIND, AUTHOR, POST
+from utils.fields import (
+    CONTENT, CREATED, SUMMARY, TAGS, TITLE, URL, SOURCE, KIND, AUTHOR,
 )
+from datacollectors import POST
 
-from .utils import *
+from .states import *
+from .tags import merge_tags
 from icecream import ic
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
 MAX_DOCUMENT_LEN = int(os.getenv("MAX_DOCUMENT_LEN", 4096)) # 16KB
-VECTOR_LEN = int(os.getenv("VECTOR_LEN", 384))
+from utils.config import VECTOR_LEN
 
 log = get_logger("analyzerworker")
 

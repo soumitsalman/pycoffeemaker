@@ -17,7 +17,10 @@ from tenacity import retry, retry_if_exception, retry_if_exception_type, stop_af
 from io import BytesIO
 from itertools import chain
 from concurrent.futures import ThreadPoolExecutor
-from .utils import *
+from utils.collections import merge_lists
+from utils.fields import *
+from .settings import *
+from .normalize import *
 from icecream import ic
 
 log = get_logger(__name__)
@@ -137,8 +140,6 @@ def _return_collected(source, collected: list|None):
     if collected: log.debug(event="collected", source=source, num_items=len(collected))
     else: log.debug(event="collection failed", source=source, num_items=1)
     return collected
-
-merge_lists = lambda results: list(chain(*(r for r in results if r))) 
 
 def _transient_fetch_error(e: BaseException) -> bool:
     """Server-side 5xx, truncated payloads and timeouts are worth retrying."""
