@@ -1,5 +1,5 @@
 pyyaml
-retry
+tenacity
 requests
 beautifulsoup4
 lxml_html_clean
@@ -12,6 +12,9 @@ icecream
 python-dotenv
 msgpack
 textcase
-pyturso
 zvec
-firebird-driver
+scikit-learn
+openai
+aiofiles
+persist-queue
+structlog

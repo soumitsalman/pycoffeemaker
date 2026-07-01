@@ -3,11 +3,12 @@ import os
 import logging
 import sys
 import os
-from dotenv import load_dotenv
 from tqdm import tqdm
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-load_dotenv()
+from utils.env import load_coffeemaker_env
+
+load_coffeemaker_env()
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -22,9 +23,9 @@ def db_instance(db_type: str) -> Beansack:
     elif db_type in ["pg", "postgres", "postgresql"]:
         return Postgres(os.getenv("PG_CONNECTION_STRING"))
     elif db_type in ["duckdb", "duck"]:
-        return DuckDB(os.getenv("DUCKDB_STORAGE"))
+        return DuckSack(db_path=os.getenv("DUCKDB_STORAGE"))
     elif db_type in ["ducklake", "dl"]:
-        return Ducklake(os.getenv("DUCKLAKE_CATALOG"), os.getenv("DUCKLAKE_STORAGE"))
+        return DuckSack(catalog_db=os.getenv("DUCKLAKE_CATALOG"), storage_path=os.getenv("DUCKLAKE_STORAGE"))
     else:
         raise ValueError(f"Unsupported db type: {db_type}")
 

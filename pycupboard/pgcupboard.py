@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from itertools import batched, chain
 from typing import Any
-
+from tenacity import retry, stop_after_attempt, wait_fixed
 from psycopg_pool import AsyncConnectionPool
 from pgvector.psycopg import Vector, register_vector_async
 from psycopg import sql
@@ -16,8 +16,25 @@ from .models import *
 
 log = logging.getLogger("cupboard")
 
-BATCH_SIZE = int(os.getenv('BATCH_SIZE', 512))
-VECTOR_LEN = int(os.getenv('VECTOR_LEN', 384))
+
+def _clean_null_bytes(obj):
+    """Recursively remove null bytes (\\u0000) from all strings in the object."""
+    if isinstance(obj, dict):
+        return {k: _clean_null_bytes(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_clean_null_bytes(v) for v in obj]
+    elif isinstance(obj, str):
+        return obj.replace("\u0000", "NULL_BYTE")
+    return obj
+
+
+
+PG_TIMEOUT = int(os.getenv('PG_TIMEOUT', 300))
+PG_WORKERS = int(os.getenv('PG_WORKERS', 4))
+BATCH_SIZE = 512
+RETRY_COUNT = 3
+RETRY_DELAY = 15
+
 
 _INIT_STMTS = """
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -85,11 +102,13 @@ RELATED = 'related'
 FROM_ID = 'from_id'
 TO_ID = 'to_id'
 RELATIONSHIP = 'relationship'
-TIMEOUT = 270
 
 SIP_COLUMNS = [ID, CREATED, KIND, SOURCE, EMBEDDING, TAGS, DIGEST, URL, BASE_URL]
 SOURCE_COLUMNS = [ID, DOMAIN_NAME, BASE_URL, SITE_NAME, DESCRIPTION, FAVICON, RSS_FEED]
 RELATION_COLUMNS = [FROM_ID, TO_ID, RELATIONSHIP]
+
+VECTOR_LEN = int(os.getenv('VECTOR_LEN', 384))
+
 
 class Cupboard:
     pool: AsyncConnectionPool
@@ -103,9 +122,10 @@ class Cupboard:
             self.conn_str,
             min_size=0,
             max_size=32,
-            timeout=TIMEOUT,
-            max_idle=TIMEOUT,
-            num_workers=os.cpu_count()*2,
+            timeout=PG_TIMEOUT,
+            max_idle=120,
+            max_lifetime=180,
+            num_workers=PG_WORKERS,
             configure=register_vector_async
         )
         await self.pool.open()
@@ -127,10 +147,11 @@ class Cupboard:
     async def store_sips(self, sips: list[Sip]) -> int:
         """Store a list of sips in the database."""
         if not sips: return 0
-        
+
+        sips = [sip for sip in sips if sip.digest and sip.embedding]
         for sip in sips:
             sip.embedding = Vector(sip.embedding)
-            if sip.digest: sip.digest = Jsonb(sip.digest)
+            sip.digest = Jsonb(_clean_null_bytes(sip.digest))
 
         row_placeholder = sql.SQL("(" + ",".join(["%s"] * len(SIP_COLUMNS)) + ")")
         store_batches = [
@@ -198,11 +219,16 @@ class Cupboard:
                 relation_rows.extend((from_id, to_id, relationship) for to_ref in related_urls if (to_id := _sip_id(to_ref)))
 
         # step 3: create insertion statements and insert relation rows
-        expr_format = """INSERT INTO relations (from_id, to_id, relationship) VALUES {values}
-            ON CONFLICT (from_id, to_id, relationship) DO NOTHING"""
+        row_placeholder = sql.SQL("(" + ",".join(["%s"] * len(RELATION_COLUMNS)) + ")")
         store_batches = [
             {
-                "expr": expr_format.format(values=", ".join("(%s, %s, %s)" for _ in chunk)),
+                "expr": sql.SQL(
+                    "INSERT INTO relations ({cols}) VALUES {values} "
+                    "ON CONFLICT (from_id, to_id, relationship) DO NOTHING"
+                ).format(
+                    cols=sql.SQL(", ").join(map(sql.Identifier, RELATION_COLUMNS)),
+                    values=sql.SQL(", ").join(row_placeholder for _ in chunk),
+                ),
                 "params": list(chain.from_iterable(chunk)),
             }
             for chunk in batched(relation_rows, BATCH_SIZE)
@@ -210,6 +236,7 @@ class Cupboard:
         return await self._batch_insert(store_batches)
 
     async def _batch_insert(self, to_store: list[dict[str, Any]]):
+        @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
         async def _insert_chunk(chunk: dict):
             async with self.pool.connection() as conn:
                 result = await conn.execute(chunk["expr"], params=chunk["params"], binary=True)

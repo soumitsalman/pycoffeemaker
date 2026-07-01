@@ -1,34 +1,7 @@
-import logging
 import os
-import sys
-from dotenv import load_dotenv
+import pytest
 from icecream import ic
 
-load_dotenv()
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s|%(name)s|%(levelname)s|%(message)s|%(source)s|%(num_items)s",
-)
-logger = logging.getLogger("test")
-logger.setLevel(logging.INFO)
-logging.getLogger("collectorworker").setLevel(logging.INFO)
-logging.getLogger("analyzerworker").setLevel(logging.INFO)
-logging.getLogger("porterworker").setLevel(logging.INFO)
-logging.getLogger("processingcache").setLevel(logging.INFO)
-logging.getLogger("jieba").propagate = False
-logging.getLogger("nlp.digestors").propagate = False
-logging.getLogger("nlp.embedders").propagate = False
-logging.getLogger("asyncprawcore").propagate = False
-logging.getLogger("asyncpraw").propagate = False
-logging.getLogger("dammit").propagate = False
-logging.getLogger("UnicodeDammit").propagate = False
-logging.getLogger("urllib3").propagate = False
-logging.getLogger("connectionpool").propagate = False
-logging.getLogger("asyncio").propagate = False
-
-DB_LOCAL_TEST = "mongodb://localhost:27017/"
 DB_NAME_TEST = "test3"
 AZSTORAGE_PATH_TEST = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;BlobEndpoint=http://localhost:10000/devstoreaccount1;"
 INDEXER_IN_QUEUE = "indexing-queue"
@@ -40,16 +13,12 @@ import asyncio
 import json
 import random
 import re
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 from pybeansack.models import *
 from pybeansack import *
 from pycupboard.pgcupboard import Cupboard
 from pycupboard.models import ID, Sip
-
-os.makedirs(".test", exist_ok=True)
-
 
 def url_to_filename(url: str) -> str:
     return "./.test/" + re.sub(r"[^a-zA-Z0-9]", "-", url)
@@ -90,6 +59,8 @@ def save_models(items: list[Bean | Chatter], file_name: str = None):
         return ic(items)
 
 
+@pytest.mark.integration
+@pytest.mark.collect
 def test_collector():
     from datacollectors import APICollectorAsync
 
@@ -102,6 +73,8 @@ def test_collector():
     asyncio.run(run())
 
 
+@pytest.mark.integration
+@pytest.mark.scrape
 def test_scraper():
     from datacollectors import AsyncWebScraper
 
@@ -118,14 +91,16 @@ def test_scraper():
     async def run():
         async with AsyncWebScraper() as scraper:
             for url in urls:
-                ic(await scraper.scrape_page(url, False))
+                ic(await scraper.scrape_page(url))
 
     asyncio.run(run())
 
 
+@pytest.mark.integration
+@pytest.mark.scrapepubs
 def test_publisher_scraper():
     from datacollectors import AsyncWebScraper
-    from pybeansack.ducklakesack import DuckSack
+    from pybeansack.ducksack import DuckSack
 
     urls = [
         "https://financebuzz.com/retirees-should-buy-at-bjs-4",
@@ -141,8 +116,8 @@ def test_publisher_scraper():
         "https://aws.amazon.com/blogs/storage/mastering-cross-account-amazon-efs-seamlessly-mount-amazon-efs-on-amazon-eks-cluster/",
     ]
     db = DuckSack(
-        catalogdb=os.getenv("DUCKLAKE_CATALOG", os.getenv("PG_CONNECTION_STRING")),
-        storagedb=os.getenv("DUCKLAKE_STORAGE", os.getenv("STORAGE_DATAPATH")),
+        catalog_db=os.getenv("DUCKLAKE_CATALOG", os.getenv("PG_CONNECTION_STRING")),
+        storage_path=os.getenv("DUCKLAKE_STORAGE", os.getenv("STORAGE_DATAPATH")),
     )
 
     async def run():
@@ -157,61 +132,12 @@ def test_publisher_scraper():
     asyncio.run(run())
 
 
+@pytest.mark.integration
+@pytest.mark.skip(reason="fullstack orchestrator removed; use run.py worker modes")
 def test_fullstack_orch():
     raise NotImplementedError("fullstack orchestrator was removed; use run.py worker modes instead")
-    from workers.fullstack import Orchestrator  # noqa: F401
 
-    orch = Orchestrator(
-        DB_LOCAL_TEST,
-        now().strftime("%Y%m%d"),
-        now().strftime("%Y%m%d"),
-        embedder_path=os.getenv("EMBEDDER_PATH"),
-        digestor_path=os.getenv("DIGESTOR_PATH"),
-        clus_eps=0.5,
-    )
-    sources = "/home/soumitsr/codes/pycoffeemaker/tests/sources-2.yaml"
-    asyncio.run(orch.run_async(sources))
-    orch.close()
-
-
-def create_test_data_file(output_path):
-    from pybeansack.mongosack import VALUE_EXISTS, MongoDB
-
-    db = MongoDB(os.getenv("MONGODB_CONN_STR"), "test")
-    beans = db.sample_beans(
-        filter={
-            K_COLLECTED: {"$gte": (datetime.now() - timedelta(days=10))},
-            K_KIND: {"$in": [NEWS, BLOG]},
-            K_CONTENT: VALUE_EXISTS,
-            K_GIST: VALUE_EXISTS,
-            K_EMBEDDING: VALUE_EXISTS,
-        },
-        limit=512,
-        project={K_EMBEDDING: 0},
-    )
-    save_models(beans, output_path)
-
-
-def hydrate_test_db():
-    from factory.rectify import migrate_mongodb
-
-    # migrate_mongodb("test", "master", from_db_conn=os.getenv('MONGODB_CONN_STR'), to_db_conn=DB_LOCAL_TEST)
-    migrate_mongodb(
-        "espresso",
-        "espresso1",
-        from_db_conn=os.getenv("MONGO_CONNECTION_STRING"),
-        to_db_conn=DB_LOCAL_TEST,
-    )
-
-
-def test_trend_analysis():
-    from pybeansack.mongosack import MongoDB
-
-    db = MongoDB(os.getenv("MONGODB_CONN_STR"), "test")
-    items = db.query_aggregated_chatters()
-    ic(random.sample(items, 5))
-
-
+@pytest.mark.integration
 def test_static_db():
     import pandas as pd
     from nlp import create_embedder
@@ -249,18 +175,107 @@ def test_static_db():
     db.close()
 
 
+@pytest.mark.integration
+@pytest.mark.orch_classifier
+def test_classifier_static_label_search():
+    import pandas as pd
+    from workers.analyzerorch import (
+        CATEGORIES,
+        CLASSIFICATION_LIMIT,
+        EMBEDDING,
+        SENTIMENTS,
+        URL,
+        Classifier,
+    )
+    from workers.utils import BEANS, EMBEDDED
+
+    class DummyCache:
+        pass
+
+    categories_df = pd.read_parquet("./factory/categories.parquet")
+    sentiments_df = pd.read_parquet("./factory/sentiments.parquet")
+    cache = _analyzer_test_cache()
+    classifier = Classifier(cache=cache, cls_cache=DummyCache(), batch_size=2)
+
+    category_embedding = categories_df[EMBEDDING].iloc[0]
+    sentiment_embedding = sentiments_df[EMBEDDING].iloc[0]
+
+    try:
+        categories = classifier._label_batch_search(
+            classifier.category_index,
+            [category_embedding],
+            CLASSIFICATION_LIMIT,
+        )[0]
+        sentiments = classifier._label_batch_search(
+            classifier.sentiment_index,
+            [sentiment_embedding],
+            CLASSIFICATION_LIMIT,
+        )[0]
+
+        assert categories[0] == categories_df["category"].iloc[0]
+        assert sentiments[0] == sentiments_df["sentiment"].iloc[0]
+
+        beans = [
+            bean
+            for bean in cache.get(BEANS, states=EMBEDDED, limit=10)
+            if bean.get(EMBEDDING)
+        ]
+        if not beans:
+            pytest.skip("No embedded beans available in PROCESSING_CACHE")
+
+        updates = list(classifier.classify_beans(beans))
+        flat_updates = [update for chunk in updates for update in chunk]
+        output_block = "\nCLASSIFIER_OUTPUT\n" + json.dumps(flat_updates, indent=2)
+        print(output_block)
+        assert len(flat_updates) == len(beans)
+        assert {update[URL] for update in flat_updates} == {bean[URL] for bean in beans}
+        assert all(update[CATEGORIES] for update in flat_updates)
+        assert all(update[SENTIMENTS] for update in flat_updates)
+    finally:
+        cache.close()
+
+
+@pytest.mark.integration
+@pytest.mark.orch_collector
 def test_collector_orch():
     from workers.collectororch import Collector
-    from processingcache.pgcache import AsyncStateCache
+    from workers.workercache.pgcache import AsyncStateCache
 
     cache_settings = {
         BEANS: {"id_key": K_URL},
         PUBLISHERS: {"id_key": K_BASE_URL},
         CHATTERS: {"id_key": "id"}
     }
-    orch = Collector(AsyncStateCache(os.getenv("PROCESSING_CACHE")+"/statestore", cache_settings))
+    orch = Collector(
+        AsyncStateCache(os.getenv("PROCESSING_CACHE"), cache_settings),
+        batch_size=16,
+    )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
     # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
+    # sources = """
+    # sources:
+    #     reddit:
+    #         - news
+    #         - worldnews
+    #         - InternationalNews
+    #         - GlobalNews
+    #         - GlobalMarketNews
+    #         - FinanceNews
+    #         - StockNews
+    #         - CryptoNews
+    #         - energyStocks
+    #     rss:
+    #         - https://newatlas.com/index.rss
+    #         - https://www.channele2e.com/feed/topic/latest
+    #         - https://www.ghacks.net/feed/
+    #         - https://thenewstack.io/feed
+    #         - https://scitechdaily.com/feed/
+    #         - https://www.techradar.com/feeds/articletype/news
+    #         - https://www.geekwire.com/feed/
+    #         - https://investorplace.com/content-feed/
+    #     ychackernews:
+    #         - https://hacker-news.firebaseio.com/v0/newstories.json
+    # """
     sources = """
     sources:
         reddit:
@@ -272,26 +287,26 @@ def test_collector_orch():
             - FinanceNews
             - StockNews
             - CryptoNews
-            - energyStocks
-        rss:
-            - https://newatlas.com/index.rss
-            - https://www.channele2e.com/feed/topic/latest
-            - https://www.ghacks.net/feed/
-            - https://thenewstack.io/feed
-            - https://scitechdaily.com/feed/
-            - https://www.techradar.com/feeds/articletype/news
-            - https://www.geekwire.com/feed/
-            - https://investorplace.com/content-feed/
-        ychackernews:
-            - https://hacker-news.firebaseio.com/v0/newstories.json
-
+            - energyStocks       
     """
+    # sources = """
+    # sources:
+    #     rss:
+    #         - https://newatlas.com/index.rss
+    #         - https://www.channele2e.com/feed/topic/latest
+    #         - https://www.ghacks.net/feed/
+    #         - https://thenewstack.io/feed
+    #         - https://scitechdaily.com/feed/
+    #         - https://www.techradar.com/feeds/articletype/news
+    #         - https://www.geekwire.com/feed/
+    #         - https://investorplace.com/content-feed/
+    # """
 
-    asyncio.run(orch.run(sources, batch_size=16))
+    asyncio.run(orch.run(sources))
     
 
 def _analyzer_test_cache():
-    from processingcache.pgcache import StateCache
+    from workers.workercache.pgcache import StateCache
 
     return StateCache(
         os.getenv("PROCESSING_CACHE"),
@@ -304,7 +319,7 @@ def _analyzer_test_cache():
 
 
 def _analyzer_cls_cache():
-    from processingcache.clscache import ClassificationCache
+    from workers.workercache.clscache import ClassificationCache
 
     return ClassificationCache(
         ".test/clsstore-test",
@@ -316,49 +331,57 @@ def _analyzer_cls_cache():
     )
 
 
+@pytest.mark.integration
+@pytest.mark.orch_embedder
 def test_embedder_orch():
     from workers.analyzerorch import Embedder
 
     cache = _analyzer_test_cache()
     orch = Embedder(
         cache=cache,
-        embedder_model_path=os.getenv(
+        model_path=os.getenv(
             "EMBEDDER_PATH", "vllm://avsolatorio/GIST-small-Embedding-v0"
         ),
-        embedder_context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
+        context_len=int(os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)),
     )
     orch.run(batch_size=32)
     cache.close()
 
 
+@pytest.mark.integration
+@pytest.mark.orch_extractor
 def test_extractor_orch():
     from workers.analyzerorch import Extractor
 
     cache = _analyzer_test_cache()
     orch = Extractor(
         cache=cache,
-        extractor_model_path=os.getenv("EXTRACTOR_PATH"),
-        extractor_context_len=int(os.getenv("EXTRACTOR_CONTEXT_LEN", 4096)),
+        model_path=os.getenv("EXTRACTOR_PATH"),
+        context_len=int(os.getenv("EXTRACTOR_CONTEXT_LEN", 4096)),
     )
     orch.run(batch_size=16)
     cache.close()
 
 
+@pytest.mark.integration
+@pytest.mark.orch_digestor
 def test_digestor_orch():
     from workers.analyzerorch import Digestor
 
     cache = _analyzer_test_cache()
     orch = Digestor(
         cache=cache,
-        digestor_model_path=os.getenv(
+        model_path=os.getenv(
             "DIGESTOR_PATH", "vllm://LiquidAI/LFM2.5-1.2B-Instruct"
         ),
-        digestor_context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", 32768)),
+        context_len=int(os.getenv("DIGESTOR_CONTEXT_LEN", 32768)),
     )
     orch.run(batch_size=16)
     cache.close()
 
 
+@pytest.mark.integration
+@pytest.mark.orch_classifier
 def test_classifier_orch():
     from workers.analyzerorch import Classifier
 
@@ -368,10 +391,37 @@ def test_classifier_orch():
     cls_cache.close()
     cache.close()
 
+
+@pytest.mark.integration
+@pytest.mark.group_to_str
+def test_group_to_str_text_lengths():
+    from workers.analyzerorch import _group_to_str
+    from workers.utils import BEANS, COLLECTED, DIGESTED, DIGEST
+
+    cache = _analyzer_test_cache()
+    try:
+        beans = cache.get(BEANS, states=[COLLECTED, DIGESTED])
+        beans = [b for b in beans if b.get(DIGEST)]
+        for size in (32, 48, 64, 96):
+            if len(beans) < size:
+                pytest.skip(f"need at least {size} digested beans, got {len(beans)}")
+            group = {"data": random.sample(beans, size)}
+            text = _group_to_str(group)
+            lines = text.splitlines()
+            print(f"--- group size {size} (top 100 lines) ---")
+            print("\n".join(lines[:100]))
+            print(f"group size {size}: text len = {len(text)} ({len(lines)} lines)")
+    finally:
+        cache.close()
+
+
+@pytest.mark.integration
+@pytest.mark.orch_porter
+@pytest.mark.parametrize("beansack_or_cupboard", ["beansack", "cupboard"])
 def test_porter_orch(beansack_or_cupboard):
     from workers.porterorch import BeansackPorter, CupboardPorter
     from workers.utils import COMPOSITES
-    from processingcache.pgcache import AsyncStateCache
+    from workers.workercache.pgcache import AsyncStateCache
 
     cache_settings = {
         BEANS: {"id_key": K_URL},
@@ -399,6 +449,8 @@ def test_porter_orch(beansack_or_cupboard):
 
         asyncio.run(run())
 
+@pytest.mark.integration
+@pytest.mark.vector
 def test_vector_search():
     from pycupboard.pgcupboard import Cupboard
     from pycupboard.models import URL
@@ -431,12 +483,14 @@ def test_vector_search():
     asyncio.run(run())
 
 
+@pytest.mark.integration
+@pytest.mark.cache
 def test_cache():
-    from processingcache.base import DEFAULT_WINDOW
-    from processingcache.clscache import ClassificationCache
+    from workers.workercache.base import DEFAULT_WINDOW
+    from workers.workercache.clscache import ClassificationCache
     import pandas as pd
     from nlp import create_embedder
-    from processingcache.pgcache import StateCache
+    from workers.workercache.pgcache import StateCache
     from faker import Faker
 
     fake = Faker()
@@ -520,6 +574,7 @@ def test_cache():
         cls_cache.close()
 
 
+@pytest.mark.integration
 def test_orch_on_lancesack():
     from datacollectors import APICollector
     from nlp import Digest, create_digestor, create_embedder
@@ -626,76 +681,3 @@ def test_orch_on_lancesack():
                 for bean in beans
             ]
 
-
-import argparse
-import subprocess
-
-parser = argparse.ArgumentParser(description="Run pycoffeemaker tests")
-parser.add_argument(
-    "--hydrate", action="store_true", help="Hydrate local gobeansack database"
-)
-# parser.add_argument("--hydrate-test-db", action="store_true", help="Hydrate test database")
-# parser.add_argument("--test-static-db", action="store_true", help="Test static database")
-# parser.add_argument("--test-trend-analysis", action="store_true", help="Test trend analysis")
-parser.add_argument("--collect", action="store_true", help="Test collector and scraper")
-parser.add_argument("--scrapepubs", action="store_true", help="Test publisher scraper")
-parser.add_argument("--scrape", action="store_true", help="Test web scraper")
-parser.add_argument(
-    "--runcollector", action="store_true", help="Test collector orchestrator"
-)
-parser.add_argument(
-    "--runembedder", action="store_true", help="Test embedder orchestrator"
-)
-parser.add_argument(
-    "--runextractor", action="store_true", help="Test extractor orchestrator"
-)
-parser.add_argument(
-    "--rundigestor", action="store_true", help="Test digestor orchestrator"
-)
-parser.add_argument(
-    "--runclassifier", action="store_true", help="Test classifier orchestrator"
-)
-parser.add_argument("--runporter", type=str, help="Test porter")
-parser.add_argument(
-    "--runrefresher", action="store_true", help="Test refresher orchestrator"
-)
-parser.add_argument("--cache", action="store_true", help="Test cache implementation")
-parser.add_argument("--vector", action="store_true", help="Test vector search implementation")
-parser.add_argument("--readonly", action="store_true", help="Test readonly warehouse")
-parser.add_argument("--warehouse", action="store_true", help="Test warehouse v2")
-parser.add_argument(
-    "--cupboard", action="store_true", help="Test cupboard orchestrator"
-)
-parser.add_argument(
-    "--orchonlance", action="store_true", help="Test lancesack orchestrator"
-)
-
-def main():
-
-    args = parser.parse_args()
-
-    if args.hydrate:
-        hydrate_test_db()
-    if args.collect:
-        test_collector()
-    if args.scrape:
-        test_scraper()
-    if args.scrapepubs:
-        test_publisher_scraper()
-    
-    if args.runcollector: test_collector_orch()
-    if args.runembedder: test_embedder_orch()
-    if args.runextractor: test_extractor_orch()
-    if args.rundigestor: test_digestor_orch()
-    if args.runclassifier: test_classifier_orch()
-    if args.runporter: test_porter_orch(args.runporter)
-    if args.cache: test_cache()
-    if args.vector: test_vector_search()
-    # if args.test_fullstack_orch:
-    #     test_fullstack_orch()
-    # if args.create_test_data_file:
-    #     create_test_data_file(args.create_test_data_file)
-
-
-if __name__ == "__main__":
-    main()

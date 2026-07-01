@@ -1,0 +1,1 @@
+{"nodes": [{"id": "ducklakesack_sql_attach", "label": "DuckLake warehouse attach", "file_type": "code", "source_file": "pybeansack/ducklakesack.sql", "source_location": "10:20", "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

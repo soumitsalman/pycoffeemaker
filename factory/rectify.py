@@ -5,10 +5,10 @@ import os
 import re
 import sys
 
-from dotenv import load_dotenv
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-load_dotenv()
+from utils.env import load_coffeemaker_env
+
+load_coffeemaker_env()
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -66,15 +66,6 @@ def create_composer_topics_locally():
         "/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.json", "w"
     ) as file:
         json.dump(topics, file, indent=2)
-
-
-def migrate_users(from_db, to_db):
-    from coffeemaker.orchestrators.collectororch import Collector
-
-    old_prod = Collector(os.getenv("MONGODB_CONN_STR"), from_db)
-    new_prod = Collector(os.getenv("MONGODB_CONN_STR"), to_db)
-
-    new_prod.db.userstore.insert_many(old_prod.db.userstore.find({}), ordered=False)
 
 
 def split_parquet_into_chunks(
@@ -457,5 +448,4 @@ if __name__ == "__main__":
     # create_categories_locally()
     # create_sentiments_locally()
     # port_beans_locally()
-    # migrate_users("beansackV2", "test")
     # migrate_mongodb("test", "espresso")

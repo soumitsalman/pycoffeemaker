@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-import logging
 import os
 from datetime import datetime as dt
 
@@ -14,35 +13,17 @@ DIGESTOR_CONTEXT_LEN = 32768
 CONSOLIDATOR_CONTEXT_LEN = 65536
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(CURR_DIR + "/.env")
+load_dotenv(os.path.join(CURR_DIR, ".env"), override=True)
 
 log_dir, log_file = os.getenv("LOG_DIR"), None
 if log_dir:
     os.makedirs(log_dir, exist_ok=True)
     log_file = f"{log_dir}/coffeemaker-{dt.now().strftime('%Y-%m-%d-%H')}.log"
 
-logging.basicConfig(
-    level=logging.WARNING,
-    filename=log_file,
-    format="%(asctime)s||%(name)s||%(levelname)s||%(message)s||%(source)s||%(num_items)s",
-)
+from utils.logs import configure_logging, get_logger
 
-log = logging.getLogger("app")
-log.setLevel(logging.INFO)
-logging.getLogger("collectorworker").setLevel(logging.INFO)
-logging.getLogger("analyzerworker").setLevel(logging.INFO)
-logging.getLogger("porterworker").setLevel(logging.INFO)
-logging.getLogger("processingcache").setLevel(logging.INFO)
-logging.getLogger("jieba").propagate = False
-logging.getLogger("nlp.digestors").propagate = False
-logging.getLogger("nlp.embedders").propagate = False
-logging.getLogger("asyncprawcore").propagate = False
-logging.getLogger("asyncpraw").propagate = False
-logging.getLogger("dammit").propagate = False
-logging.getLogger("UnicodeDammit").propagate = False
-logging.getLogger("urllib3").propagate = False
-logging.getLogger("connectionpool").propagate = False
-# logging.getLogger("asyncio").propagate = False
+configure_logging(log_file=log_file)
+log = get_logger("app")
 
 ### WORKER SCHEDULING ###
 # Collector can run 2 times a day for 1-1.5 hours -- 6 AM / 6 PM
@@ -53,10 +34,6 @@ logging.getLogger("connectionpool").propagate = False
 # Set up argument parser
 parser = argparse.ArgumentParser(description="Run the coffee maker application")
 parser.add_argument("--batch_size", type=int, help="Batch size for processing")
-# parser.add_argument("--embedder_batch_size", type=int, help="Batch size for processing")
-# parser.add_argument("--extractor_batch_size", type=int, help="Batch size for processing")
-# parser.add_argument("--digestor_batch_size", type=int, help="Batch size for processing")
-# parser.add_argument("--classifier_batch_size", type=int, help="Batch size for processing")
 parser.add_argument(
     "--mode",
     type=str,
@@ -65,14 +42,14 @@ parser.add_argument(
         "EMBEDDER",
         "DIGESTOR",
         "EXTRACTOR",
-        "CLASSIFIER",
+        "CLUSTERING",
         "CONSOLIDATOR",
         "PORTER",
     ],
-    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLASSIFIER, CONSOLIDATOR, PORTER)",
+    help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLUSTERING, CONSOLIDATOR, PORTER)",
 )
 
-from processingcache.pgcache import AsyncStateCache, StateCache
+from workers.workercache.pgcache import AsyncStateCache, StateCache
 from workers.utils import BEANSACKED, CATEGORIES, CUPBOARDED, SENTIMENTS, COMPOSITES, BEANS, PUBLISHERS, CHATTERS, ID
 from datacollectors import URL, BASE_URL
 from pybeansack import create_client
@@ -96,11 +73,9 @@ if __name__ == "__main__":
     if mode == "COLLECTOR":
         from workers.collectororch import Collector
 
+        feeds = os.getenv("COLLECTOR_SOURCES", f"{CURR_DIR}/factory/feeds.yaml")
         asyncio.run(
-            Collector(cache=async_cache).run(
-                os.getenv("COLLECTOR_SOURCES", f"{CURR_DIR}/factory/feeds.yaml"),
-                batch_size=batch_size,
-            )
+            Collector(cache=async_cache, batch_size=batch_size).run(feeds)
         )
 
     elif mode == "EMBEDDER":
@@ -108,25 +83,26 @@ if __name__ == "__main__":
 
         Embedder(
             cache=cache,
-            embedder_model_path=os.environ["EMBEDDER_PATH"],
-            embedder_context_len=int(
+            model_path=os.environ["EMBEDDER_PATH"],
+            context_len=int(
                 os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
             ),
-        ).run(batch_size=batch_size)
+            batch_size=batch_size,
+            categories=f"{CURR_DIR}/factory/categories.parquet",
+            sentiments=f"{CURR_DIR}/factory/sentiments.parquet",
+        ).run()
 
-    elif mode == "CLASSIFIER":
-        from workers.analyzerorch import Classifier
-        from processingcache.clscache import ClassificationCache
+    elif mode == "CLUSTERING":
+        from workers.analyzerorch import Clusterer
+        from workers.workercache.clscache import ClassificationCache
         
         cls_cache = ClassificationCache(
             os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/.cache/clsstore'), 
             table_settings={
-                BEANS: {"id_key": URL, "distance_func": "l2"},
-                CATEGORIES: {"id_key": "category", "distance_func": "cosine"},
-                SENTIMENTS: {"id_key": "sentiment", "distance_func": "cosine"}
+                BEANS: {"id_key": URL, "distance_func": "l2"}
             }
         )
-        Classifier(cache=cache, cls_cache=cls_cache).run(batch_size=batch_size)
+        Clusterer(cache=cache, cls_cache=cls_cache, batch_size=batch_size).run()
         cls_cache.close()
 
     elif mode == "EXTRACTOR":
@@ -134,35 +110,44 @@ if __name__ == "__main__":
 
         Extractor(
             cache=cache,
-            extractor_model_path=os.environ["EXTRACTOR_PATH"],
-            extractor_context_len=int(
+            model_path=os.environ["EXTRACTOR_PATH"],
+            context_len=int(
                 os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
             ),
-        ).run(batch_size=batch_size)
+            batch_size=batch_size,
+        ).run()
 
     elif mode == "DIGESTOR":
         from workers.analyzerorch import Digestor
 
+        if v2_mode := os.getenv("DIGESTOR_VLLM_USE_V2_MODEL_RUNNER"): 
+            os.environ["VLLM_USE_V2_MODEL_RUNNER"] = v2_mode
+
         Digestor(
             cache=cache,
-            digestor_model_path=os.environ["DIGESTOR_PATH"],
-            digestor_context_len=int(
+            model_path=os.environ["DIGESTOR_PATH"],
+            context_len=int(
                 os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
             ),
-        ).run(batch_size=batch_size)     
+            batch_size=batch_size,
+        ).run()     
 
     elif mode == "CONSOLIDATOR":
         from workers.analyzerorch import Consolidator
         
+        if v2_mode := os.getenv("CONSOLIDATOR_VLLM_USE_V2_MODEL_RUNNER"): 
+            os.environ["VLLM_USE_V2_MODEL_RUNNER"] = v2_mode
+
         Consolidator(
             cache=cache,
-            consolidator_model_path=os.environ["CONSOLIDATOR_PATH"],
-            consolidator_context_len=int(
+            model_path=os.environ["CONSOLIDATOR_PATH"],
+            context_len=int(
                 os.getenv("CONSOLIDATOR_CONTEXT_LEN", CONSOLIDATOR_CONTEXT_LEN)
             ),
+            batch_size=batch_size,
             base_url=os.getenv("CONSOLIDATOR_BASE_URL"),
             api_key=os.getenv("CONSOLIDATOR_API_KEY"),
-        ).run(batch_size=batch_size)
+        ).run()
 
     elif mode == "PORTER":
         from workers.porterorch import BeansackPorter, CupboardPorter
@@ -171,20 +156,20 @@ if __name__ == "__main__":
         async def run_porter():
             beansack_db = create_client("pg", pg_connection_string=os.getenv("BEANSACK_CONNECTION_STRING"))
             cupboard_db = Cupboard(os.getenv("CUPBOARD_CONNECTION_STRING"))
-            try:
-                async with async_cache:
-                    await asyncio.gather(
-                        BeansackPorter(cache=async_cache).hydrate_beansack(beansack_db, BEANSACKED),
-                        CupboardPorter(cache=async_cache).hydrate_cupboard(cupboard_db, CUPBOARDED)
-                    )
-            finally:
+            
+            async with async_cache:
+                await asyncio.gather(
+                    BeansackPorter(cache=async_cache).run(beansack_db, BEANSACKED),
+                    CupboardPorter(cache=async_cache).run(cupboard_db, CUPBOARDED)
+                )
                 beansack_db.close()
+                await async_cache.optimize()
 
         asyncio.run(run_porter())
 
     else:
         raise ValueError(
-            "Invalid mode. Choose COLLECTOR, EMBEDDER, EXTRACTOR, DIGESTOR, CLASSIFIER, CONSOLIDATOR, or PORTER."
+            "Invalid mode. Choose COLLECTOR, EMBEDDER, EXTRACTOR, DIGESTOR, CLASSIFIER, CLUSTERING, CONSOLIDATOR, or PORTER."
         )
     
     cache.close()
