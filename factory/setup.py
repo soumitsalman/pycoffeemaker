@@ -22,7 +22,7 @@ def create_classification_embeddings():
     with open(f"{dir_name}/classifications.yaml", "r") as file:
         classifications = yaml.safe_load(file)
 
-    with create_embedder(os.getenv('EMBEDDER_PATH'), 512) as embedder:
+    with create_embedder(os.getenv('EMBEDDER_PATH'), os.getenv('EMBEDDER_CONTEXT_LEN')) as embedder:
         categories = pd.DataFrame(
             {
                 ID: classifications[CATEGORIES],
