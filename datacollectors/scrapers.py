@@ -60,11 +60,15 @@ def _parse_metadata(url: str, html: str) -> dict:
 
 def _parse_html_body(url: str, html: str) -> dict:
     doc = Document(html, url=url)
-    return {
-        CONTENT: strip_html_tags(doc.summary(html_partial=True)),
-        TITLE: doc.short_title() or doc.title(),
-        AUTHOR: doc.author()
-    }
+    try:
+        return {
+            CONTENT: strip_html_tags(doc.summary(html_partial=True)),
+            TITLE: doc.short_title() or doc.title(),
+            AUTHOR: doc.author()
+        }
+    except:
+        log.error(f"Error parsing HTML body", exc_info=True)
+        return {}
 
 def _parse_jsonld_body(url: str, html: str) -> dict | None:    
     if jsonld := _extract_jsonld_content(html):
@@ -136,6 +140,13 @@ def _title_from_url(url: str) -> str | None:
         return filename.replace("-", " ").replace("_", " ").strip() or None
     except Exception:
         return None
+
+_HTML_MARKERS = ("<!doctype", "<html", "<body", "<article", "<main")
+
+def _is_parseable_html(html: str | None) -> bool:
+    if not html or not html.strip():
+        return False
+    return any(marker in html for marker in _HTML_MARKERS)
 
 class AsyncWebScraper:
     session: aiohttp.ClientSession = None
@@ -255,6 +266,9 @@ class AsyncWebScraper:
                 finally:
                     try: os.unlink(body)
                     except OSError: pass
+
+            if not _is_parseable_html(body):
+                return None
 
             result = await self._parse_in_process(_parse_page, final_url, body)
             del body
