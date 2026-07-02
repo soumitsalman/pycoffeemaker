@@ -59,77 +59,7 @@ def save_models(items: list[Bean | Chatter], file_name: str = None):
         return ic(items)
 
 
-@pytest.mark.integration
-@pytest.mark.collect
-def test_collector():
-    from datacollectors import APICollectorAsync
 
-    async def run():
-        async with APICollectorAsync(batch_size=128) as col:
-            items = await col.collect_subreddit("InfoSecNews")
-            ic(items)
-            items = await col.collect_ychackernews("https://hacker-news.firebaseio.com/v0/showstories.json")
-            ic(len(items))
-    asyncio.run(run())
-
-
-@pytest.mark.integration
-@pytest.mark.scrape
-def test_scraper():
-    from datacollectors import AsyncWebScraper
-
-    urls = [
-        "https://financebuzz.com/retirees-should-buy-at-bjs-4",
-        "https://financebuzz.com/southern-lake-towns-afford-social-security",
-        "https://financebuzz.com/professional-skills-more-valuable-after-60",
-        "https://financebuzz.com/avoid-buying-rv-in-retirement",
-        "https://financebuzz.com/trader-joes-pantry-items-june-2025",
-        "https://financebuzz.com/cities-getting-caseys-june-2025",
-        "https://financebuzz.com/costco-home-decor-guests-want-june-2025",
-    ]
-
-    async def run():
-        async with AsyncWebScraper() as scraper:
-            for url in urls:
-                ic(await scraper.scrape_page(url))
-
-    asyncio.run(run())
-
-
-@pytest.mark.integration
-@pytest.mark.scrapepubs
-def test_publisher_scraper():
-    from datacollectors import AsyncWebScraper
-    from pybeansack.ducksack import DuckSack
-
-    urls = [
-        "https://financebuzz.com/retirees-should-buy-at-bjs-4",
-        "https://financebuzz.com/southern-lake-towns-afford-social-security",
-        "https://financebuzz.com/professional-skills-more-valuable-after-60",
-        "https://www.cyberark.com/blog/distinguishing-authn-and-authz/",
-        "http://jalammar.github.io/ai-image-generation-tools/",
-        "https://aws.amazon.com/blogs/aws/introducing-aws-capabilities-by-region-for-easier-regional-planning-and-faster-global-deployments/",
-        "https://www.camilleroux.com/la-veille-technologique-ma-methode-complete-pour-rester-a-jour/",
-        "https://www.neelc.org/posts/freebsd-signal-proxy/",
-        "https://aws.amazon.com/blogs/storage/cross-account-amazon-s3-bulk-transfers-with-enhanced-aws-kms-support/",
-        "https://aws.amazon.com/blogs/storage/cross-account-disaster-recovery-setup-using-aws-elastic-disaster-recovery-in-secured-networks-part-1-architecture-and-network-setup/",
-        "https://aws.amazon.com/blogs/storage/mastering-cross-account-amazon-efs-seamlessly-mount-amazon-efs-on-amazon-eks-cluster/",
-    ]
-    db = DuckSack(
-        catalog_db=os.getenv("DUCKLAKE_CATALOG", os.getenv("PG_CONNECTION_STRING")),
-        storage_path=os.getenv("DUCKLAKE_STORAGE", os.getenv("STORAGE_DATAPATH")),
-    )
-
-    async def run():
-        async with AsyncWebScraper() as scraper:
-            ic(await scraper.scrape_sites(urls))
-            pubs = db.query_publishers(
-                conditions=["rss_feed IS NULL", "favicon IS NULL", "site_name IS NULL"],
-                limit=5,
-            )
-            ic(await scraper.scrape_publishers(pubs))
-
-    asyncio.run(run())
 
 
 @pytest.mark.integration

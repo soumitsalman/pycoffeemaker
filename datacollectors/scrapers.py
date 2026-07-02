@@ -289,7 +289,7 @@ class AsyncWebScraper:
         item[CREATED] = min(created, bean.get(COLLECTED)) if created and bean.get(COLLECTED) else created
 
         if not item.get(KIND):
-            item[KIND] = guess_article_type(item)
+            item[KIND] = guess_content_type(item)
 
         return cleanup_item(item)
 

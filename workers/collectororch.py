@@ -6,7 +6,6 @@ import os
 import random
 import uuid
 import yaml
-import aiohttp
 from datacollectors import RSSFeedCollector, RedditCollector, HackerNewsCollector, SECFilingCollector, AsyncWebScraper, POST
 from utils.fields import (
     ARTICLE_LANGUAGE,
@@ -128,13 +127,11 @@ class Collector:
     def __init__(self, cache: AsyncStateCacheBase, batch_size: int = BATCH_SIZE):
         self.cache = cache
         self.batch_size = batch_size
-        self.session = None
-        self.rss_collector = None
-        self.reddit_collector = None
-        self.hn_collector = None
-        self.sec_filing_collector = None
+        self.rss_collector = RSSFeedCollector(batch_size)
+        self.reddit_collector = RedditCollector(batch_size)
+        self.hn_collector = HackerNewsCollector(batch_size)
+        self.sec_filing_collector = SECFilingCollector(batch_size)
         self.webscraper = AsyncWebScraper(batch_size<<6)
-        # self.scraper_queue = AsyncQueue(f"{_COLLECTOR_CACHE}/scraper", chunksize=self.batch_size<<1, tempdir=_COLLECTOR_CACHE)
 
     def _split_item(self, item: dict):
         if not item:
@@ -294,8 +291,6 @@ class Collector:
                 to_triage = await self.rss_collector.collect(source)
             elif source_type == "sec_edgar":
                 to_triage = await self.sec_filing_collector.collect(source)
-            elif source_type in ("sec_press", "sec_statements", "sec_enforcement"):
-                to_triage = await self.rss_collector.collect(source, source_type=source_type)
         except Exception as e:
             log.warning(
                 event="collection failed",
@@ -314,9 +309,7 @@ class Collector:
                 await self._collect(*func)
 
         await asyncio.gather(*(work(offset) for offset in range(self.batch_size)), return_exceptions=True)        
-        log.info(event="collectors completed")
 
-        await self.scraper_queue.put_nowait(None)
 
     # async def _run_scraper(self):
     #     """Run the scrapers - flushing the buffers when full or worker is done."""      
@@ -349,35 +342,21 @@ class Collector:
         log.info(event="starting collectors")
 
         self._init_run()
-        
-        # Create aiohttp session and initialize collectors with session
-        self.session = aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit=self.batch_size<<6, limit_per_host=(self.batch_size<<5) or 1),
-            timeout=aiohttp.ClientTimeout(total=300),
-        )
-        self.rss_collector = RSSFeedCollector(self.session)
-        self.reddit_collector = RedditCollector(self.session)
-        self.hn_collector = HackerNewsCollector(self.session)
-        self.sec_filing_collector = SECFilingCollector(self.session)
-        
-        try:
-            async with self.cache, self.webscraper:
-                await asyncio.gather(
-                    self._run_collectors(sources),
-                    # self._run_scraper(),
-                    return_exceptions=True
-                )
-        finally:
-            if self.session:
-                await self.session.close()
-                
-        # await self.scraper_queue.close()
-        # shutil.rmtree(_COLLECTOR_CACHE, ignore_errors=True)
-        log.info(event="total collected", beans=self.beans_collected, publishers=self.publishers_collected)
 
-async def _get_many(queue: AsyncQueue, batch_size: int):
-    items = []
-    while len(items) < batch_size and not (await queue.empty()):
-        try: items.append(await queue.get_nowait())
-        except Empty: break
-    return items
+        async with (
+            self.rss_collector,
+            self.reddit_collector,
+            self.hn_collector,
+            self.sec_filing_collector,
+            self.webscraper,
+            self.cache
+        ):
+            await self._run_collectors(sources)
+        log.info(event="collection completed", beans=self.beans_collected, publishers=self.publishers_collected)
+
+# async def _get_many(queue: AsyncQueue, batch_size: int):
+#     items = []
+#     while len(items) < batch_size and not (await queue.empty()):
+#         try: items.append(await queue.get_nowait())
+#         except Empty: break
+#     return items

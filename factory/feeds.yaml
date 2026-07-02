@@ -5320,18 +5320,15 @@ sources:
   - https://aws.amazon.com/blogs/hpc/feed/
   - https://www.pugetsystems.com/feed/
   - https://www.nasdaq.com/feed/rssoutbound
+  - https://www.sec.gov/news/pressreleases.rss
+  - https://www.sec.gov/news/statements.rss
+  - https://www.sec.gov/news/speeches-statements.rss
+  - https://www.sec.gov/enforcement-litigation/administrative-proceedings/rss
+  - https://www.sec.gov/enforcement-litigation/litigation-releases/rss
   sec_edgar:
   - https://www.sec.gov/Archives/edgar/xbrlrss.all.xml
   - https://www.sec.gov/Archives/edgar/usgaap.rss.xml
-  - https://www.sec.gov/Archives/edgar/xbrl-rr.rss.xml
-  sec_press:
-  - https://www.sec.gov/news/pressreleases.rss
-  sec_statements:
-  - https://www.sec.gov/news/statements.rss
-  - https://www.sec.gov/news/speeches-statements.rss
-  sec_enforcement:
-  - https://www.sec.gov/enforcement-litigation/administrative-proceedings/rss
-  - https://www.sec.gov/enforcement-litigation/litigation-releases/rss
+  - https://www.sec.gov/Archives/edgar/xbrl-rr.rss.xml  
   reddit:
   - technology
   - tech

@@ -2,6 +2,7 @@ import asyncio
 import json
 import zipfile
 import re
+import time
 from utils.logs import get_logger
 import os
 from urllib.parse import urljoin
@@ -20,6 +21,26 @@ from .settings import *
 from .normalize import *
 
 log = get_logger(__name__)
+
+
+class APICollectorBase:
+    session: aiohttp.ClientSession = None
+
+    def __init__(self, batch_size: int):
+        self.batch_size = batch_size
+
+    async def __aenter__(self):
+        self.session = aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(limit=self.batch_size, limit_per_host=self.batch_size or 1),
+            timeout=aiohttp.ClientTimeout(total=TIMEOUT),
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            await self.session.close()
+            self.session = None
+
 
 _RSS_REQUEST_HEADERS = {
     'Accept-encoding': 'gzip, deflate',
@@ -80,6 +101,19 @@ async def _fetch_json(session: aiohttp.ClientSession, url: str, headers: dict = 
         )
 
 
+async def _fetch_feed(session: aiohttp.ClientSession, url: str) -> feedparser.FeedParserDict | None:
+    try:
+        async with session.get(url, headers=_RSS_REQUEST_HEADERS) as resp:
+            text = await resp.text()
+    except aiohttp.ClientConnectorCertificateError:
+        if not (www_url := with_www(url)):
+            raise
+        async with session.get(www_url, headers=_RSS_REQUEST_HEADERS) as resp:
+            text = await resp.text()
+    feed = feedparser.parse(text)
+    return feed if feed.entries else None
+
+
 def _get_site_url(*urls):
     for url in urls:
         if url and isinstance(url, str) and url.startswith('http'):
@@ -92,6 +126,20 @@ def _extract_link(entry, feed, feed_url, site_url):
     if 'links' in entry and entry.links:
         return full_url(site_url, entry.links[0]['href'])
     raise ValueError(f"Invalid rss feed entry without link {entry}")
+
+
+def _extract_rss_entries(feed, feed_url: str, site_url: str) -> list[tuple[feedparser.FeedParserDict, str]]:
+    """Extract and filter RSS entries; return list of (entry, resolved_link)."""
+    results = []
+    for entry in feed.entries:
+        try:
+            entry_link = _extract_link(entry, feed, feed_url, site_url)
+        except ValueError:
+            continue
+        if excluded_url(entry_link):
+            continue
+        results.append((entry, entry_link))
+    return results
 
 
 def _extract_body(entry: feedparser.FeedParserDict) -> tuple[str, str]:
@@ -137,7 +185,7 @@ def _extract_main_image(entry: feedparser.FeedParserDict) -> str:
         return entry.image.get('href')
 
 
-def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedParserDict, default_kind: str):
+def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedParserDict, default_kind: str, entry_link: str | None = None):
     current_time = now()
     published_time = entry.get("published_parsed") or entry.get("updated_parsed")
     created_time = from_timestamp(time.mktime(published_time)) if published_time else current_time
@@ -145,7 +193,8 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
     tags = _extract_tags(entry)
     author_email = _extract_author_email(entry)
     language = _extract_language(entry, feed)
-    entry_link = _extract_link(entry, feed, feed_url, site_url)
+    if entry_link is None:
+        entry_link = _extract_link(entry, feed, feed_url, site_url)
     source = extract_source(entry_link)
     base_url = extract_base_url(entry_link)
 
@@ -170,7 +219,7 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
     if image_url:
         item[IMAGEURL] = full_url(site_url, image_url)
 
-    item[KIND] = guess_article_type(item) or default_kind
+    item[KIND] = guess_content_type(item, feed_url) or default_kind
 
     comments_url = entry.get('wfw_commentrss')
     comments_count = parse_int(entry.get('slash_comments') or entry.get('comments') or 0)
@@ -193,14 +242,11 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
     return cleanup_item(item)
 
 
-def _collect_rss_entries(feed, feed_url: str, site_url: str, default_kind: str) -> list[dict]:
-    items = []
-    for entry in feed.entries:
-        entry_link = _extract_link(entry, feed, feed_url, site_url)
-        if excluded_url(entry_link):
-            continue
-        items.append(_build_rss_item(feed=feed, feed_url=feed_url, site_url=site_url, entry=entry, default_kind=default_kind))
-    return items
+# def _collect_rss_entries(feed, feed_url: str, site_url: str, default_kind: str) -> list[dict]:
+#     items = []
+#     for entry, entry_link in _extract_rss_entries(feed, feed_url, site_url):
+#         items.append(_build_rss_item(feed, feed_url, site_url, entry, default_kind, entry_link=entry_link))
+#     return items
 
 
 def _parse_reddit_rss_entry(entry) -> tuple[str | None, str | None, str | None]:
@@ -223,20 +269,21 @@ def _parse_reddit_rss_entry(entry) -> tuple[str | None, str | None, str | None]:
     return external_url, comments_url, selftext
 
 
-def _build_reddit_rss_item(entry, subreddit_name, default_kind: str):
+def _build_reddit_rss_item(entry, subreddit_name, default_kind: str, entry_link: str | None = None):
     subreddit = f"r/{subreddit_name}"
     current_time = now()
     published = entry.get("published_parsed") or entry.get("updated_parsed")
     created = from_timestamp(time.mktime(published)) if published else current_time
 
     external_url, comments_url, selftext = _parse_reddit_rss_entry(entry)
-    entry_link = getattr(entry, 'link', '') or entry.get('id', '')
+    if entry_link is None:
+        entry_link = getattr(entry, 'link', '') or entry.get('id', '')
     author = (entry.get('author', '') or '').lstrip('/u/')
 
     if external_url:
         url = remove_query_params(external_url)
         source = extract_source(url)
-        kind = guess_article_type({URL: url, SOURCE: source, TITLE: entry.get('title')}) or default_kind
+        kind = guess_content_type({URL: url, SOURCE: source, TITLE: entry.get('title')}) or default_kind
     else:
         url = entry_link
         source = subreddit
@@ -247,16 +294,6 @@ def _build_reddit_rss_item(entry, subreddit_name, default_kind: str):
         AUTHOR: author, SOURCE: source, BASE_URL: extract_base_url(url),
         CREATED: created, COLLECTED: current_time,
     })
-
-
-def _collect_reddit_rss_entries(feed, feed_url, subreddit_name, default_kind) -> list[dict]:
-    items = []
-    for entry in feed.entries:
-        entry_link = getattr(entry, 'link', '')
-        if excluded_url(entry_link):
-            continue
-        items.append(_build_reddit_rss_item(entry, subreddit_name, default_kind))
-    return items
 
 
 class _RedditPost:
@@ -294,7 +331,7 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
         source = extract_source(post.url)
         if source:
             url = remove_query_params(post.url)
-            kind = guess_article_type({
+            kind = guess_content_type({
                 URL: url,
                 BASE_URL: extract_base_url(url),
                 SOURCE: source,
@@ -342,7 +379,7 @@ def _build_hackernews_item(story: dict, default_kind: str):
         url = remove_query_params(story['url'])
         source = extract_source(url)
         tags = []
-        kind = guess_article_type({'URL': url, 'SOURCE': source}) or (SITE if "show hn" in story.get('title', '').lower() else default_kind)
+        kind = guess_content_type({'URL': url, 'SOURCE': source}) or (SITE if "show hn" in story.get('title', '').lower() else default_kind)
     else:
         url = hackernews_story_permalink(story_id)
         source = HACKERNEWS
@@ -372,130 +409,47 @@ def _build_hackernews_item(story: dict, default_kind: str):
     return cleanup_item(item)
 
 
-class RSSFeedCollector:
-    SEC_KIND_MAP = {
-        SEC_PRESS: NEWS,
-        SEC_STATEMENTS: BLOG,
-        SEC_ENFORCEMENT: NEWS,
+class RSSFeedCollector(APICollectorBase):
+    _STATEMENT_URLS = {
+        "https://www.sec.gov/news/statements.rss",
+        "https://www.sec.gov/news/speeches-statements.rss",
     }
 
-    def __init__(self, session: aiohttp.ClientSession):
-        self.session = session
+    def __init__(self, batch_size: int):
+        super().__init__(batch_size)
 
-    @staticmethod
-    def _extract_author_from_description(description: str) -> str | None:
-        if not description:
-            return None
-        match = re.match(r'^([A-Z][a-z]+(?:\s[A-Z][a-z]+)+),\s*', description)
-        if match:
-            return match.group(1)
-        match = re.match(r'^By\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)+)', description)
-        if match:
-            return match.group(1)
-        first_line = description.split('\n')[0].strip()
-        if re.match(r'^[A-Z][a-z]+(?:\s[A-Z][a-z]+)+', first_line):
-            return first_line
-        return None
-
-    @staticmethod
-    def _remove_author_from_description(description: str, author: str | None) -> str:
-        if not author or not description:
-            return description
-        lines = description.split('\n')
-        content_lines = [line for line in lines if author not in line]
-        return '\n'.join(content_lines).strip()
-
-    async def _fetch_rss(self, url: str) -> str:
-        async with self.session.get(url, headers=_RSS_REQUEST_HEADERS) as resp:
-            return await resp.text()
-
-    async def collect(self, url: str, source_type: str = "rss") -> list[dict]:
+    async def collect(self, url: str) -> list[dict]:
         if excluded_url(url):
             return None
-
-        if source_type in self.SEC_KIND_MAP:
-            return await self._collect_sec_feed(url, source_type)
-
-        return await self._collect_rss_feed(url)
-
-    async def _collect_rss_feed(self, url: str, default_kind: str = NEWS) -> list[dict]:
-        try:
-            text = await self._fetch_rss(url)
-        except aiohttp.ClientConnectorCertificateError:
-            if not (www_url := with_www(url)):
-                raise
-            text = await self._fetch_rss(www_url)
-        feed = feedparser.parse(text)
-
-        if not feed.entries:
+        feed = await _fetch_feed(self.session, url)
+        if not feed:
             return None
-
         source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].get('link'))
-        return _return_collected(
-            extract_source(source_url),
-            _collect_rss_entries(feed, url, source_url, default_kind)
-        )
+        if url in self._STATEMENT_URLS: items = self._extract_sec_statements_rss_entries(feed, url, source_url)
+        else: items = self._extract_default_rss_entries(feed, url, source_url, NEWS)
+            
+        return _return_collected(extract_source(source_url), items)
 
-    async def _collect_sec_feed(self, url: str, source_type: str) -> list[dict]:
-        default_kind = self.SEC_KIND_MAP.get(source_type, NEWS)
+    @staticmethod
+    def _extract_sec_statements_rss_entries(feed, feed_url: str, site_url: str) -> list[dict]:
+        items = []
+        for entry, entry_link in _extract_rss_entries(feed, feed_url, site_url):
+            item = _build_rss_item(feed, feed_url, site_url, entry, BLOG, entry_link=entry_link)
+            item[AUTHOR] = entry.get('description', '')
+            items.append(cleanup_item(item))
+        return items
 
-        try:
-            text = await self._fetch_rss(url)
-        except aiohttp.ClientConnectorCertificateError:
-            if not (www_url := with_www(url)):
-                raise
-            text = await self._fetch_rss(www_url)
-
-        feed = feedparser.parse(text)
-        if not feed.entries:
-            return None
-
-        if source_type == SEC_STATEMENTS:
-            items = []
-            for entry in feed.entries:
-                entry_link = getattr(entry, 'link', None) or entry.get('link')
-                if not entry_link or excluded_url(entry_link):
-                    continue
-
-                description = entry.get('description', '')
-                author = self._extract_author_from_description(description)
-                content = self._remove_author_from_description(description, author)
-
-                current_time = now()
-                published_time = entry.get("published_parsed") or entry.get("updated_parsed")
-                created_time = from_timestamp(time.mktime(published_time)) if published_time else current_time
-
-                item = cleanup_item({
-                    URL: entry_link,
-                    BASE_URL: extract_base_url(entry_link),
-                    SOURCE: extract_source(entry_link),
-                    TITLE: entry.get('title', ''),
-                    SUMMARY: strip_html_tags(description or ''),
-                    CONTENT: strip_html_tags(content),
-                    AUTHOR: author or entry.get('author', ''),
-                    ARTICLE_LANGUAGE: 'en',
-                    SITE_LANGUAGE: 'en',
-                    TAGS: ['sec'],
-                    AUTHOR_EMAIL: None,
-                    IMAGEURL: None,
-                    CREATED: created_time,
-                    COLLECTED: current_time,
-                    KIND: BLOG,
-                    RSS_FEED: url,
-                })
-                items.append(item)
-            return _return_collected('sec', items)
-
-        source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].get('link'))
-        return _return_collected(
-            extract_source(source_url),
-            _collect_rss_entries(feed, url, source_url, default_kind)
-        )
+    @staticmethod
+    def _extract_default_rss_entries(feed, feed_url: str, site_url: str, default_kind: str) -> list[dict]:
+        items = []
+        for entry, entry_link in _extract_rss_entries(feed, feed_url, site_url):
+            items.append(_build_rss_item(feed, feed_url, site_url, entry, default_kind, entry_link=entry_link))
+        return items
 
 
-class RedditCollector:
-    def __init__(self, session: aiohttp.ClientSession):
-        self.session = session
+class RedditCollector(APICollectorBase):
+    def __init__(self, batch_size: int):
+        super().__init__(batch_size)
         self._reddit_client = None
 
     def _reddit_client_instance(self):
@@ -544,26 +498,25 @@ class RedditCollector:
 
     async def _collect_rss(self, subreddit_name: str, default_kind: str = NEWS) -> list[dict]:
         url = f"https://old.reddit.com/r/{subreddit_name}/.rss"
-        try:
-            async with self.session.get(url, headers=_RSS_REQUEST_HEADERS) as resp:
-                text = await resp.text()
-        except aiohttp.ClientConnectorCertificateError:
-            www_url = with_www(url)
-            if not www_url:
-                raise
-            async with self.session.get(www_url, headers=_RSS_REQUEST_HEADERS) as resp:
-                text = await resp.text()
-
-        feed = feedparser.parse(text)
-        if not feed.entries:
+        feed = await _fetch_feed(self.session, url)
+        if not feed:
             return _return_collected(subreddit_name, None)
+        site_url = _get_site_url(feed.feed.get('link'), url)
         return _return_collected(subreddit_name,
-            _collect_reddit_rss_entries(feed, url, subreddit_name, default_kind))
+            self._extract_reddit_rss_entries(feed, url, subreddit_name, default_kind, site_url))
+
+    @staticmethod
+    def _extract_reddit_rss_entries(feed, feed_url: str, subreddit_name: str, default_kind: str, site_url: str) -> list[dict]:
+        items = []
+        for entry, entry_link in _extract_rss_entries(feed, feed_url, site_url):
+            items.append(_build_reddit_rss_item(entry, subreddit_name, default_kind, entry_link=entry_link))
+        return items
 
 
-class HackerNewsCollector:
-    def __init__(self, session: aiohttp.ClientSession):
-        self.session = session
+
+class HackerNewsCollector(APICollectorBase):
+    def __init__(self, batch_size: int):
+        super().__init__(batch_size)
 
     async def collect(self, stories_urls: list[str] = HACKERNEWS_STORIES_URLS) -> list[dict]:
         if isinstance(stories_urls, str):
@@ -575,17 +528,13 @@ class HackerNewsCollector:
         return _return_collected(HACKERNEWS, stories)
 
 
-class SECFilingCollector:
-    def __init__(self, session: aiohttp.ClientSession):
-        self.session = session
+class SECFilingCollector(APICollectorBase):
+    def __init__(self, batch_size: int):
+        super().__init__(batch_size)
         self.html_converter = html2text.HTML2Text()
         self.html_converter.ignore_links = False
         self.html_converter.ignore_images = False
         self.html_converter.body_width = 0
-
-    async def _fetch_rss(self, url: str) -> str:
-        async with self.session.get(url, headers=_RSS_REQUEST_HEADERS) as resp:
-            return await resp.text()
 
     async def _download_zip(self, url: str) -> bytes:
         async with self.session.get(url) as resp:
@@ -616,39 +565,21 @@ class SECFilingCollector:
         match = re.search(r'(\d{10}-\d{2}-\d{6})', url)
         return match.group(1) if match else None
 
-    def _build_filing_item(self, entry, feed_url: str, content: str, extra_fields: dict = None) -> dict:
-        current_time = now()
-        published_time = entry.get("published_parsed") or entry.get("updated_parsed")
-        created_time = from_timestamp(time.mktime(published_time)) if published_time else current_time
-
+    def _build_filing_item(self, entry, feed, feed_url: str, site_url: str, content: str, filing_type: str, accession_number: str) -> dict:
         entry_link = getattr(entry, 'link', None) or entry.get('link')
         if not entry_link:
             return None
 
-        source = extract_source(entry_link)
-        base_url = extract_base_url(entry_link)
+        item = _build_rss_item(feed, feed_url, site_url, entry, SEC_FILING)
+        item[CONTENT] = content
+        item[KIND] = SEC_FILING
 
-        item = {
-            URL: entry_link,
-            BASE_URL: base_url,
-            SOURCE: source,
-            TITLE: entry.get('title', ''),
-            SUMMARY: strip_html_tags(entry.get('summary', '') or ''),
-            CONTENT: content,
-            AUTHOR: entry.get('author', ''),
-            ARTICLE_LANGUAGE: 'en',
-            SITE_LANGUAGE: 'en',
-            TAGS: ['sec', 'edgar'],
-            AUTHOR_EMAIL: None,
-            IMAGEURL: None,
-            CREATED: created_time,
-            COLLECTED: current_time,
-            KIND: SEC_FILING,
-            RSS_FEED: feed_url,
-        }
-
-        if extra_fields:
-            item.update(extra_fields)
+        tags = ['sec', 'edgar']
+        if filing_type:
+            tags.append(filing_type.lower())
+        if accession_number:
+            tags.append(accession_number)
+        item[TAGS] = tags
 
         return cleanup_item(item)
 
@@ -656,16 +587,11 @@ class SECFilingCollector:
         if excluded_url(url):
             return None
 
-        try:
-            text = await self._fetch_rss(url)
-        except aiohttp.ClientConnectorCertificateError:
-            if not (www_url := with_www(url)):
-                raise
-            text = await self._fetch_rss(www_url)
-
-        feed = feedparser.parse(text)
-        if not feed.entries:
+        feed = await _fetch_feed(self.session, url)
+        if not feed:
             return None
+
+        source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].get('link'))
 
         async def _process_entry(entry):
             zip_data = None
@@ -687,14 +613,12 @@ class SECFilingCollector:
 
                 return self._build_filing_item(
                     entry=entry,
+                    feed=feed,
                     feed_url=url,
+                    site_url=source_url,
                     content=markdown_content,
-                    extra_fields={
-                        'filing_type': self._extract_filing_type(entry.get('title', '')),
-                        'accession_number': self._extract_accession_number(guid),
-                        'zip_url': guid,
-                        'source_files': [f[0] for f in html_files],
-                    }
+                    filing_type=self._extract_filing_type(entry.get('title', '')),
+                    accession_number=self._extract_accession_number(guid)
                 )
             except Exception as e:
                 log.warning(

@@ -1,8 +1,9 @@
 __author__ = "Soumit Salman Rahman"
 __license__ = "MIT"
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 from .apicollectors import (
+    APICollectorBase,
     RSSFeedCollector,
     RedditCollector,
     HackerNewsCollector,
@@ -27,10 +28,11 @@ from .normalize import (
     exclude_content,
     excluded_url,
     cleanup_item,
-    guess_article_type,
+    guess_content_type,
 )
 
 __all__ = [
+    "APICollectorBase",
     "RSSFeedCollector",
     "RedditCollector",
     "HackerNewsCollector",
@@ -53,7 +55,7 @@ __all__ = [
     "exclude_content",
     "excluded_url",
     "cleanup_item",
-    "guess_article_type",
+    "guess_content_type",
     "MAX_HTML_SIZE",
     "MAX_PDF_SIZE",
     "TIMEOUT",

@@ -64,6 +64,13 @@ NEWS_TAGS = {"news", "headline", "press release", "announcement"}
 BLOG_TAGS = {"blog", "newsletter", "analysis", "opinion", "review"}
 PODCAST_SITENAMES = {"podcast", "show", "episode"}
 PODCAST_TAGS = {"podcast", "episode", "show"}
+SEC_URL_KIND = {
+    "https://www.sec.gov/news/pressreleases.rss": NEWS,
+    "https://www.sec.gov/news/statements.rss": BLOG,
+    "https://www.sec.gov/news/speeches-statements.rss": BLOG,
+    "https://www.sec.gov/enforcement-litigation/administrative-proceedings/rss": NEWS,
+    "https://www.sec.gov/enforcement-litigation/litigation-releases/rss": NEWS,
+}
 
 EXCLUDED_URL_PATTERNS = [
     r"\.(png|jpeg|jpg|gif|webp|mp4|avi|mkv|mp3|wav)$",
@@ -90,10 +97,12 @@ EXCLUDED_AUTHORS = [
     "[no-author]", "noreply", "hidden", "admin", "isbpostadmin", "unknown", "anonymous",
 ]
 
-
-def guess_article_type(bean: dict) -> str | None:
+def guess_content_type(bean: dict, feed_url: str = None) -> str | None:
     if not bean:
         return None
+
+    if feed_url and feed_url in SEC_URL_KIND:
+        return SEC_URL_KIND[feed_url]
 
     url = (bean.get(URL) or "").lower()
     base_url = (bean.get(BASE_URL) or "").lower()
@@ -124,6 +133,8 @@ def guess_article_type(bean: dict) -> str | None:
 
     if "/news/" in url:
         return NEWS
+
+    
 
     return None
 

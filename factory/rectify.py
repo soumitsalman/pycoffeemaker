@@ -433,11 +433,21 @@ def _sip_to_str(sip: dict) -> str:
 def rectify_beans_id_and_embeddings():
     import psycopg
     from nlp import create_embedder
+    from psycopg_pool import ConnectionPool
+    from pgvector.psycopg import register_vector
     from utils import generate_uuid
     from workers.workercache.clscache import ClassificationCache
 
-    beansack_conn = psycopg.connect(os.getenv("BEANSACK_CONNECTION_STRING"))
-    cupboard_conn = psycopg.connect(os.getenv("CUPBOARD_CONNECTION_STRING"))
+    beansack_pool = ConnectionPool(
+        os.getenv("BEANSACK_CONNECTION_STRING"),
+        min_size=1, max_size=4, timeout=60, max_idle=60,
+        configure=register_vector,
+    )
+    cupboard_pool = ConnectionPool(
+        os.getenv("CUPBOARD_CONNECTION_STRING"),
+        min_size=1, max_size=4, timeout=60, max_idle=60,
+        configure=register_vector,
+    )
 
     cls_cache = ClassificationCache(
         os.getenv('CLASSIFICATION_CACHE', '.cache/clsstore'),
@@ -446,21 +456,21 @@ def rectify_beans_id_and_embeddings():
         }
     )
 
-    beansack_conn.execute("ALTER TABLE beans ADD COLUMN IF NOT EXISTS emb_v2 vector(320);")
-    beansack_conn.commit()
-    cupboard_conn.execute("ALTER TABLE sips ADD COLUMN IF NOT EXISTS emb_v2 vector(320);")
-    cupboard_conn.commit()
+    with beansack_pool.connection() as conn:
+        conn.execute("ALTER TABLE beans ADD COLUMN IF NOT EXISTS emb_v2 vector(320);")
+        conn.commit()
+    with cupboard_pool.connection() as conn:
+        conn.execute("ALTER TABLE sips ADD COLUMN IF NOT EXISTS emb_v2 vector(320);")
+        conn.commit()
 
     BEAN_EXPR = """
     SELECT url, content FROM beans b
-    WHERE url > %(last_url)s AND emb_v2 IS NULL
-    ORDER BY url
+    WHERE emb_v2 IS NULL
     LIMIT %(limit)s
     """
     SIP_EXPR = """
     SELECT id, digest FROM sips
-    WHERE kind = 'signal' AND id > %(last_id)s AND emb_v2 IS NULL
-    ORDER BY id
+    WHERE kind = 'signal' AND emb_v2 IS NULL
     LIMIT %(limit)s
     """
     BATCH_SIZE = os.getenv("BATCH_SIZE", 16)
@@ -472,11 +482,14 @@ def rectify_beans_id_and_embeddings():
         wait=wait_exponential(multiplier=1, min=1, max=10),
         reraise=True,
     )
-    def _update_beans_batch(cur, data):
-        cur.executemany(
-            "UPDATE beans SET id = %s, emb_v2 = %s::vector WHERE url = %s",
-            data,
-        )
+    def _update_beans_batch(data):
+        with beansack_pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "UPDATE beans SET id = %s, emb_v2 = %s::vector WHERE url = %s",
+                    data,
+                )
+            conn.commit()
 
     @retry(
         retry=retry_if_exception_type((psycopg.OperationalError, psycopg.InterfaceError)),
@@ -484,61 +497,52 @@ def rectify_beans_id_and_embeddings():
         wait=wait_exponential(multiplier=1, min=1, max=10),
         reraise=True,
     )
-    def _update_sips_batch(cur, data):
-        cur.executemany(
-            "UPDATE sips SET emb_v2 = %s::vector WHERE id = %s",
-            data,
-        )
+    def _update_sips_batch(data):
+        with cupboard_pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "UPDATE sips SET emb_v2 = %s::vector WHERE id = %s",
+                    data,
+                )
+            conn.commit()
 
     with create_embedder(os.getenv("EMBEDDER_PATH"), int(os.getenv("EMBEDDER_CONTEXT_LEN"))) as embedder:
         # ── Loop 1: Beans ──
-        total_beans = beansack_conn.execute("SELECT count(*) FROM beans").fetchone()[0]
+        with beansack_pool.connection() as bconn:
+            total_beans = bconn.execute("SELECT count(*) FROM beans WHERE emb_v2 IS NULL").fetchone()[0]
         with tqdm(total=total_beans, desc="Rectifying beans", unit="beans") as pbar:
-            last_url = ""
-            while beans := beansack_conn.execute(BEAN_EXPR, {"last_url": last_url, "limit": BATCH_SIZE}).fetchall():
+            while True:
+                with beansack_pool.connection() as bconn:
+                    beans = bconn.execute(BEAN_EXPR, {"limit": BATCH_SIZE}).fetchall()
+                if not beans:
+                    break
                 urls = [b[0] for b in beans]
                 vectors = embedder.embed_documents([b[1][:MAX_DOCUMENT_LEN] for b in beans])
                 ids = [generate_uuid(url) for url in urls]
 
                 cls_cache.store(BEANS, [{ID: url, EMBEDDING: vec} for url, vec in zip(urls, vectors)])
-
-                with beansack_conn.cursor() as cur:
-                    _update_beans_batch(
-                        cur,
-                        [(id, vec, url) for id, vec, url in zip(ids, vectors, urls)]
-                    )
-                beansack_conn.commit()
-
-                with cupboard_conn.cursor() as cur:
-                    _update_sips_batch(
-                        cur,
-                        [(vec, id) for id, vec in zip(ids, vectors)]
-                    )
-                cupboard_conn.commit()
-
+                _update_beans_batch([(id, vec, url) for id, vec, url in zip(ids, vectors, urls)])
+                _update_sips_batch([(vec, id) for id, vec in zip(ids, vectors)])
                 pbar.update(len(beans))
-                last_url = beans[-1][0]
 
         # ── Loop 2: Cupboard signal sips ──
-        total_sips = cupboard_conn.execute("SELECT count(*) FROM sips WHERE kind = 'signal'").fetchone()[0]
+        with cupboard_pool.connection() as conn:
+            total_sips = conn.execute("SELECT count(*) FROM sips WHERE kind = 'signal' AND emb_v2 IS NULL").fetchone()[0]
         with tqdm(total=total_sips, desc="Rectifying signal sips", unit="sips") as pbar:
             last_id = ""
-            while sips := cupboard_conn.execute(SIP_EXPR, {"last_id": last_id, "limit": BATCH_SIZE}).fetchall():
+            while True:
+                with cupboard_pool.connection() as conn:
+                    sips = conn.execute(SIP_EXPR, {"limit": BATCH_SIZE}).fetchall()
+                if not sips:
+                    break
                 texts = [_sip_to_str({DIGEST: s[1]}) for s in sips]
                 vectors = embedder.embed_documents(texts)
 
-                with cupboard_conn.cursor() as cur:
-                    _update_sips_batch(
-                        cur,
-                        [(vec.tolist(), sip[0]) for sip, vec in zip(sips, vectors)]
-                    )
-                cupboard_conn.commit()
-
+                _update_sips_batch([(vec.tolist(), sip[0]) for sip, vec in zip(sips, vectors)])
                 pbar.update(len(sips))
-                last_id = sips[-1][0]
 
-        beansack_conn.close()
-        cupboard_conn.close()    
+        beansack_pool.close()
+        cupboard_pool.close()    
 
 
 # adding data porting logic
