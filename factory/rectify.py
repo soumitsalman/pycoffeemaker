@@ -457,7 +457,7 @@ def rectify_beans_id_and_embeddings():
     )
 
     with beansack_pool.connection() as conn:
-        conn.execute("ALTER TABLE beans ADD COLUMN IF NOT EXISTS emb_v2 vector(320);")
+        conn.execute("ALTER TABLE beans ADD COLUMN IF NOT EXISTS emb_v2 vector(320), ADD COLUMN IF NOT EXISTS id uuid;")
         conn.commit()
     with cupboard_pool.connection() as conn:
         conn.execute("ALTER TABLE sips ADD COLUMN IF NOT EXISTS emb_v2 vector(320);")
@@ -517,13 +517,19 @@ def rectify_beans_id_and_embeddings():
                 if not beans:
                     break
                 urls = [b[0] for b in beans]
-                vectors = embedder.embed_documents([b[1][:MAX_DOCUMENT_LEN] for b in beans])
                 ids = [generate_uuid(url) for url in urls]
+                texts = [b[1][:MAX_DOCUMENT_LEN] for b in beans]
+                
+                try:
+                    vectors = embedder.embed_documents(texts)
+                except Exception as e:
+                    vectors = [embedder(t) for t in texts]
 
                 cls_cache.store(BEANS, [{ID: url, EMBEDDING: vec} for url, vec in zip(urls, vectors)])
                 _update_beans_batch([(id, vec, url) for id, vec, url in zip(ids, vectors, urls)])
                 _update_sips_batch([(vec, id) for id, vec in zip(ids, vectors)])
                 pbar.update(len(beans))
+                
 
         # ── Loop 2: Cupboard signal sips ──
         with cupboard_pool.connection() as conn:
