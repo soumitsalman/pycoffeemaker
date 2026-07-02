@@ -30,4 +30,5 @@ s3fs
 rfc3339
 tenacity
 aioboto3
+Brotli
 surrealdb

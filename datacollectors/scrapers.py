@@ -2,7 +2,8 @@ import os
 import json
 import asyncio
 import aiohttp
-import lxml.html
+import json
+from readability import Document
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from lxml.cssselect import CSSSelector
@@ -35,8 +36,8 @@ _METADATA_SELECTORS = {
 }
 _METADATA_CSS = {key: [CSSSelector(sel) for sel in selector.split(", ")] for key, selector in _METADATA_SELECTORS.items()}
 _HTML_REQUEST_HEADERS = {
-    "User-Agent": USER_AGENT,
-    # 'Accept-encoding': 'gzip, deflate',
+    "User-Agent": BROWSER_USER_AGENT,
+    'Accept-encoding': 'gzip, deflate, br',
     'Accept': "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5,application/signed-exchange;v=b3;q=0.9"
 }
 
@@ -57,31 +58,69 @@ def _parse_metadata(url: str, html: str) -> dict:
     """Process worker: single lxml parse for metadata only."""
     return _get_metadata(url, lxml.html.fromstring(html))
 
-def _parse_page(url: str, html: str) -> dict:
-    """Process worker: parse html into metadata + readable content."""
-    from readability import Document
-
-    html = sanitize_html_for_xml(html)
-    tree = lxml.html.fromstring(html)
-    metadata = _get_metadata(url, tree)
-    title = metadata.get("meta_title")
-    if not title:
-        title_tags = tree.xpath("//title")
-        if title_tags:
-            title = " ".join(title_tags[0].text_content().split())
-    doc = Document(tree, url=url)
-    try:
-        summary_html = doc.summary(html_partial=True)
-        content = strip_html_tags(summary_html)
-    except Exception:
-        content = strip_html_tags(html) or " ".join(tree.text_content().split())
-    body = {
-        TITLE: title,
-        AUTHOR: metadata.get(AUTHOR),
-        CONTENT: content,
+def _parse_html_body(url: str, html: str) -> dict:
+    doc = Document(html, url=url)
+    return {
+        CONTENT: strip_html_tags(doc.summary(html_partial=True)),
+        TITLE: doc.short_title() or doc.title(),
+        AUTHOR: doc.author()
     }
-    body.update(metadata)
-    return body
+
+def _parse_jsonld_body(url: str, html: str) -> dict | None:    
+    if jsonld := _extract_jsonld_content(html):
+        return {
+            TITLE: jsonld.get(TITLE),
+            CONTENT: jsonld.get(CONTENT),
+            AUTHOR: jsonld.get(AUTHOR),
+        }
+    return {}
+
+def _extract_jsonld_content(html: str) -> dict | None:
+    """Extract article content from JSON-LD schema.org data (fallback for JS-rendered pages)."""
+    
+    scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.DOTALL)
+    for s in scripts:
+        try:
+            data = json.loads(s)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(data, dict) or '@graph' not in data:
+            continue
+        for item in data['@graph']:
+            if item.get('@type') not in ('NewsArticle', 'Article'):
+                continue
+            result = {}
+            if item.get('headline'):
+                result[TITLE] = item['headline']
+            if item.get('description'):
+                result[CONTENT] = item['description']
+            try:
+                author = item.get('author')
+                if isinstance(author, dict) and author.get('name'):
+                    result[AUTHOR] = author['name']
+                elif isinstance(author, list) and author:
+                    a = author[0]
+                    if isinstance(a, dict) and a.get('name'):
+                        result[AUTHOR] = a['name']
+            except (TypeError, KeyError, IndexError):
+                pass
+            if item.get('datePublished'):
+                result[CREATED] = parse_date(item['datePublished'])
+            if result.get(CONTENT):
+                return result
+    return None
+
+
+def _parse_page(url: str, html: str) -> dict:
+    """Process worker: parse html into metadata + readable content."""  
+    body = _parse_jsonld_body(url, html)
+    if not body:  
+        body = _parse_html_body(url, html)
+    if not body.get(CONTENT):
+        return None
+    
+    metadata = _parse_metadata(url, html)
+    return body | metadata
 
 def _convert_pdf_to_markdown(path: str) -> str:
     """Process worker: convert a PDF file to markdown."""
@@ -115,7 +154,7 @@ class AsyncWebScraper:
             connector=aiohttp.TCPConnector(limit=self.batch_size, limit_per_host=(self.batch_size>>1) or 1),
             headers=_HTML_REQUEST_HEADERS, 
             timeout=aiohttp.ClientTimeout(total=TIMEOUT),
-            raise_for_status=True
+            raise_for_status=True,
         )
         return self
         
@@ -152,11 +191,14 @@ class AsyncWebScraper:
     )
     async def _scrape_html(self, url: str) -> str | None:
         async with self.throttle, self.session.get(url) as response:
-            gate = exclude_content(response, html_only=True)
+            gate = is_excluded_content(response, html_only=True)
             if gate.excluded:
                 return None
             body = await response.content.read(gate.max_size)
-            return body.decode(gate.charset, errors="replace")
+            html = body.decode(gate.charset, errors="replace")
+            # Cloudflare sometimes serves a JS shell instead of full HTML — retry
+            if '<body' in html:
+                return html
 
     @retry(
         retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
@@ -168,7 +210,7 @@ class AsyncWebScraper:
         import tempfile
 
         async with self.throttle, self.session.get(url) as response:
-            gate = exclude_content(response)
+            gate = is_excluded_content(response)
             if gate.excluded:
                 return None
 

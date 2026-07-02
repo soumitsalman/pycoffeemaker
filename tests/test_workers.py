@@ -174,7 +174,7 @@ def test_collector_orch():
     cache_settings = {
         BEANS: {"id_key": URL},
         PUBLISHERS: {"id_key": BASE_URL},
-        CHATTERS: {"id_key": "id"}
+        CHATTERS: {"id_key": ID}
     }
     orch = Collector(
         AsyncStateCache(os.getenv("PROCESSING_CACHE"), cache_settings),
@@ -182,30 +182,6 @@ def test_collector_orch():
     )
     # sources = """/home/soumitsr/codes/pycoffeemaker/factory/feeds.yaml"""
     # sources = f"{os.path.dirname(__file__)}/sources-1.yaml"
-    # sources = """
-    # sources:
-    #     reddit:
-    #         - news
-    #         - worldnews
-    #         - InternationalNews
-    #         - GlobalNews
-    #         - GlobalMarketNews
-    #         - FinanceNews
-    #         - StockNews
-    #         - CryptoNews
-    #         - energyStocks
-    #     rss:
-    #         - https://newatlas.com/index.rss
-    #         - https://www.channele2e.com/feed/topic/latest
-    #         - https://www.ghacks.net/feed/
-    #         - https://thenewstack.io/feed
-    #         - https://scitechdaily.com/feed/
-    #         - https://www.techradar.com/feeds/articletype/news
-    #         - https://www.geekwire.com/feed/
-    #         - https://investorplace.com/content-feed/
-    #     ychackernews:
-    #         - https://hacker-news.firebaseio.com/v0/newstories.json
-    # """
     sources = """
     sources:
         reddit:
@@ -217,8 +193,32 @@ def test_collector_orch():
             - FinanceNews
             - StockNews
             - CryptoNews
-            - energyStocks       
+            - energyStocks
+        rss:
+            - https://newatlas.com/index.rss
+            - https://www.channele2e.com/feed/topic/latest
+            - https://www.ghacks.net/feed/
+            - https://thenewstack.io/feed
+            - https://scitechdaily.com/feed/
+            - https://www.techradar.com/feeds/articletype/news
+            - https://www.geekwire.com/feed/
+            - https://investorplace.com/content-feed/
+        ychackernews:
+            - https://hacker-news.firebaseio.com/v0/newstories.json
     """
+    # sources = """
+    # sources:
+    #     reddit:
+    #         - news
+    #         - worldnews
+    #         - InternationalNews
+    #         - GlobalNews
+    #         - GlobalMarketNews
+    #         - FinanceNews
+    #         - StockNews
+    #         - CryptoNews
+    #         - energyStocks       
+    # """
     # sources = """
     # sources:
     #     rss:

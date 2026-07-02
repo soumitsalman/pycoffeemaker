@@ -109,6 +109,7 @@ def test_reddit_collector_json():
         async with RedditCollector(batch_size=32) as collector:
             for sub in subreddits:
                 items = await collector.collect(sub, mode="json", limit=10)
+                ic(items)
                 ic(sub, len(items) if items else 0)
                 if items:
                     assert all(item.get("url") for item in items), f"Missing URL in items from r/{sub}"
@@ -127,7 +128,8 @@ def test_reddit_collector_rss():
     async def run():
         async with RedditCollector(batch_size=16) as collector:
             for sub in subreddits:
-                items = await collector.collect(sub, mode="rss")
+                items = await collector.collect(sub, mode="rss", limit=10)
+                ic(items)
                 ic(sub, len(items) if items else 0)
                 if items:
                     assert all(item.get("url") for item in items), f"Missing URL in items from r/{sub}"
@@ -146,6 +148,7 @@ def test_reddit_collector_api():
     async def run():
         async with RedditCollector(batch_size=16) as collector:
             items = await collector.collect("news", mode="api")
+            ic(items)
             ic(len(items) if items else 0)
             if items:
                 assert all(item.get("url") for item in items), "Missing URL in API items"
@@ -197,11 +200,12 @@ def test_hackernews_collector_all():
 def test_sec_filing_collector():
     from datacollectors import SECFilingCollector
 
-    sec_rss_url = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=10-K&dateb=&owner=include&count=10&search_text=&action=getcompany&output=atom"
+    sec_rss_url = "https://www.sec.gov/Archives/edgar/usgaap.rss.xml"
 
     async def run():
         async with SECFilingCollector(batch_size=4) as collector:
             items = await collector.collect(sec_rss_url)
+            ic(items)
             ic("SEC filings", len(items) if items else 0)
             if items:
                 assert all(item.get("kind") == "sec_filing" for item in items), "Non-SEC filing kind"
@@ -221,7 +225,8 @@ def test_async_web_scraper_page():
 
     urls = [
         "https://www.sec.gov/newsroom/speeches-statements/atkins-statement-minimum-pricing-increments-access-fee-caps-061126",
-        "https://financebuzz.com/southern-lake-towns-afford-social-security",
+        "https://www.sec.gov/files/litigation/admin/2026/34-105807.pdf"
+        "https://newatlas.com/bicycles/amflow-suv-ebike-terrain-dji-motor-avinox-tl-carbon/",
         "https://financebuzz.com/professional-skills-more-valuable-after-60",
         "https://financebuzz.com/avoid-buying-rv-in-retirement",
         "https://financebuzz.com/trader-joes-pantry-items-june-2025",
@@ -248,14 +253,15 @@ def test_async_web_scraper_pages():
 
     urls = [
         "https://www.sec.gov/newsroom/speeches-statements/atkins-statement-minimum-pricing-increments-access-fee-caps-061126",
-        "https://financebuzz.com/southern-lake-towns-afford-social-security",
+        "https://www.sec.gov/files/litigation/admin/2026/34-105807.pdf",
+        "https://newatlas.com/bicycles/amflow-suv-ebike-terrain-dji-motor-avinox-tl-carbon/",
         "https://financebuzz.com/professional-skills-more-valuable-after-60",
     ]
 
     async def run():
         async with AsyncWebScraper() as scraper:
             results = await scraper.scrape_pages(urls)
-            ic(len(results))
+            ic(results)
             assert len(results) == len(urls), "Result count mismatch"
             for url, result in zip(urls, results):
                 if result:

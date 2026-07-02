@@ -22,27 +22,8 @@ from .normalize import *
 
 log = get_logger(__name__)
 
-
-class APICollectorBase:
-    session: aiohttp.ClientSession = None
-
-    def __init__(self, batch_size: int):
-        self.batch_size = batch_size
-
-    async def __aenter__(self):
-        self.session = aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit=self.batch_size, limit_per_host=self.batch_size or 1),
-            timeout=aiohttp.ClientTimeout(total=TIMEOUT),
-        )
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.session:
-            await self.session.close()
-            self.session = None
-
-
 _RSS_REQUEST_HEADERS = {
+    "User-Agent": BROWSER_USER_AGENT,
     'Accept-encoding': 'gzip, deflate',
     'Accept-Language': 'en-US,en;q=0.9',
     'A-IM': 'feed',
@@ -205,7 +186,7 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
         TITLE: entry.get('title'),
         SUMMARY: summary,
         CONTENT: content,
-        AUTHOR: entry.get('author'),
+        AUTHOR: strip_html_tags(entry.get('author')),
         ARTICLE_LANGUAGE: language,
         SITE_LANGUAGE: feed.get('language'),
         TAGS: [tag.lower() for tag in (tags or []) if isinstance(tag, str) and tag.strip()],
@@ -240,14 +221,6 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
     })
 
     return cleanup_item(item)
-
-
-# def _collect_rss_entries(feed, feed_url: str, site_url: str, default_kind: str) -> list[dict]:
-#     items = []
-#     for entry, entry_link in _extract_rss_entries(feed, feed_url, site_url):
-#         items.append(_build_rss_item(feed, feed_url, site_url, entry, default_kind, entry_link=entry_link))
-#     return items
-
 
 def _parse_reddit_rss_entry(entry) -> tuple[str | None, str | None, str | None]:
     raw = entry.content[0]['value'] if isinstance(entry.content, list) else entry.get('content', '')
@@ -409,6 +382,24 @@ def _build_hackernews_item(story: dict, default_kind: str):
     return cleanup_item(item)
 
 
+class APICollectorBase:
+    session: aiohttp.ClientSession = None
+
+    def __init__(self, batch_size: int):
+        self.batch_size = batch_size
+
+    async def __aenter__(self):
+        self.session = aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(limit=self.batch_size, limit_per_host=self.batch_size or 1),
+            timeout=aiohttp.ClientTimeout(total=TIMEOUT),
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            await self.session.close()
+            self.session = None
+
 class RSSFeedCollector(APICollectorBase):
     _STATEMENT_URLS = {
         "https://www.sec.gov/news/statements.rss",
@@ -435,7 +426,7 @@ class RSSFeedCollector(APICollectorBase):
         items = []
         for entry, entry_link in _extract_rss_entries(feed, feed_url, site_url):
             item = _build_rss_item(feed, feed_url, site_url, entry, BLOG, entry_link=entry_link)
-            item[AUTHOR] = entry.get('description', '')
+            item[AUTHOR] = strip_html_tags(entry.get('description', ''))
             items.append(cleanup_item(item))
         return items
 

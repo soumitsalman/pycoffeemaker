@@ -163,7 +163,7 @@ def is_pdf(url: str | None = None, content_type: str | None = None) -> bool:
     return is_pdf_content(content_type) or bool(url and is_pdf_url(url))
 
 
-def exclude_content(response: ClientResponse, *, html_only: bool = False) -> ContentGate:
+def is_excluded_content(response: ClientResponse, *, html_only: bool = False) -> ContentGate:
     url = str(response.url)
     content_type = response.content_type
     content_length = response.content_length
