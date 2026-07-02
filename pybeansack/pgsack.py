@@ -619,11 +619,14 @@ class PGSack(Beansack):
         
 def create_db(conn_str: str) -> PGSack:
     """Create the new tables, views, indexes etc."""
-    db = PGSack(conn_str)  # Just to ensure the DB is reachable
     with open(os.path.join(os.path.dirname(__file__), 'pgsack.sql'), 'r') as sql_file:
-        init_sql = sql_file.read()         
-    db.execute(init_sql)
-    return db
+        init_sql = sql_file.read()      
+
+    pool = ConnectionPool(conn_str, timeout=PG_TIMEOUT)
+    pool.open()
+    with pool.connection() as conn:
+        conn.execute(init_sql)
+    return PGSack(pool)
 
 def _store_parquet(db, file_path: Path, table_name: str, override: bool = False):
     """Load a parquet file into a database table, converting embedding columns to lists."""
