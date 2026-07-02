@@ -184,8 +184,11 @@ class PGSack(Beansack):
         if not items: return 0
 
         pk = _PRIMARY_KEYS[table]
-        if columns: data = [bean.model_dump(include=set(columns) | ({pk} if pk else {})) for bean in items]
-        else: data = [bean.model_dump() for bean in items]
+        data = items # default assumption is that items are already dicts
+        # convert BaseModel to dict if needed
+        if isinstance(items[0], BaseModel):
+            if columns: data = [bean.model_dump(include=set(columns) | ({pk} if pk else {})) for bean in items]
+            else: data = [bean.model_dump() for bean in items]
         
         setters = sql.SQL(', ').join(
             sql.Composed([
@@ -208,6 +211,8 @@ class PGSack(Beansack):
     def update_beans(self, beans: list[Bean], columns: list[str] = None):
         """Partially update a list of Beans in the database."""
         if not beans: return 0
+        for bean in beans:
+            bean.embedding = Vector(bean.embedding)
         return self._update(BEANS, beans, columns)
     
     # def update_embeddings(self, beans: list[Bean]):

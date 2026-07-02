@@ -12,3 +12,4 @@ RETRY_COUNT = 3
 RETRY_JITTER = (1, 30)
 MAX_HTML_SIZE = int(os.getenv("MAX_HTML_SIZE", 4 << 20))
 MAX_PDF_SIZE = int(os.getenv("MAX_PDF_SIZE", 16 << 20))
+SEC_RSS_TIMEOUT = int(os.getenv("SEC_RSS_TIMEOUT", 180))

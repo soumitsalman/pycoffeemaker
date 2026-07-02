@@ -1,4 +1,5 @@
 from functools import cached_property
+from uuid import UUID
 from typing_extensions import deprecated
 from rfc3339 import rfc3339
 from pydantic import BaseModel, Field, ConfigDict
@@ -65,6 +66,7 @@ class Chatter(BaseModel):
 
 class Publisher(BaseModel):
     """Metadata of the website, publication or social medium from which an article or chatter is sourced."""
+    id: Optional[UUID] = Field(default=None, description="The unique identifier of the publisher.")
     source: str = Field(min_length=1, description="The publisher ID/domain name of the publisher. This matches the source field in Bean.")
     base_url: str = Field(min_length=1, description="The base URL of the publisher.")
     site_name: Optional[str] = Field(default=None, description="The name of the site.")
@@ -93,6 +95,7 @@ class Publisher(BaseModel):
 
 class Bean(BaseModel):    
     """Metadata of an article such as a news or blog post."""
+    id: Optional[UUID] = Field(default=None, description="The unique identifier of the article.")
     url: str = Field(description="The URL of the article.")
     kind: Optional[str] = Field(default=None, description="The content type of the article, e.g., news, blog, oped, job, post.")
     source: Optional[str] = Field(default=None, description="The publisher ID of the article.")

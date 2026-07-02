@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sys
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from utils.env import load_coffeemaker_env
@@ -11,9 +12,6 @@ from utils.env import load_coffeemaker_env
 load_coffeemaker_env()
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
-from itertools import batched, chain
-from urllib.parse import urljoin, urlparse
 
 from icecream import ic
 from tqdm import tqdm
@@ -21,13 +19,7 @@ from tqdm import tqdm
 from pybeansack import create_client
 from pybeansack.database import *
 from pybeansack.models import *
-from coffeemaker.processingcache.pgcache import ClassificationCache as PGClassificationCache
-from coffeemaker.processingcache.firecache import (
-    ClassificationCache as FireClassificationCache,
-)
 
-RELATED = "related"
-LIMIT = 40000
 
 
 log_dir, log_file = os.getenv("LOG_DIR"), None
@@ -421,9 +413,137 @@ def recitify_embeddings_and_classifications():
     db.close()
     cls_cache.close()
 
+def _sip_to_str(sip: dict) -> str:
+    from workers.analyzerorch import _PRIORITY_DIGEST_KEYS, _OUTLOOK_KEYS, _ENTITY_KEYS, _entity_tags, _value_to_str
+    lines = []
+    if digest := sip.get(DIGEST):        
+        for key in _PRIORITY_DIGEST_KEYS:
+            if v := digest.get(key):
+                lines.append(f"{key}:{_value_to_str(v)}")
+        for key, v in digest.items():
+            if not v or key in _PRIORITY_DIGEST_KEYS or key in _OUTLOOK_KEYS:
+                continue
+            lines.append(f"{key}:{_value_to_str(v)}")
+        for key in _OUTLOOK_KEYS:
+            if v := digest.get(key):
+                lines.append(f"{key}:{_value_to_str(v)}")
+    return "\n".join(lines)
+
+
+def rectify_beans_id_and_embeddings():
+    import psycopg
+    from nlp import create_embedder
+    from utils import generate_uuid
+    from workers.workercache.clscache import ClassificationCache
+
+    beansack_conn = psycopg.connect(os.getenv("BEANSACK_CONNECTION_STRING"))
+    cupboard_conn = psycopg.connect(os.getenv("CUPBOARD_CONNECTION_STRING"))
+
+    cls_cache = ClassificationCache(
+        os.getenv('CLASSIFICATION_CACHE', '.cache/clsstore'),
+        table_settings={
+            BEANS: {"vector_length": 320, "distance_func": "l2"},
+        }
+    )
+
+    beansack_conn.execute("ALTER TABLE beans ADD COLUMN IF NOT EXISTS emb_v2 vector(320);")
+    beansack_conn.commit()
+    cupboard_conn.execute("ALTER TABLE sips ADD COLUMN IF NOT EXISTS emb_v2 vector(320);")
+    cupboard_conn.commit()
+
+    BEAN_EXPR = """
+    SELECT url, content FROM beans b
+    WHERE url > %(last_url)s AND emb_v2 IS NULL
+    ORDER BY url
+    LIMIT %(limit)s
+    """
+    SIP_EXPR = """
+    SELECT id, digest FROM sips
+    WHERE kind = 'signal' AND id > %(last_id)s AND emb_v2 IS NULL
+    ORDER BY id
+    LIMIT %(limit)s
+    """
+    BATCH_SIZE = os.getenv("BATCH_SIZE", 16)
+    MAX_DOCUMENT_LEN = int(os.getenv("MAX_DOCUMENT_LEN", 8192)) << 1
+
+    @retry(
+        retry=retry_if_exception_type((psycopg.OperationalError, psycopg.InterfaceError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True,
+    )
+    def _update_beans_batch(cur, data):
+        cur.executemany(
+            "UPDATE beans SET id = %s, emb_v2 = %s::vector WHERE url = %s",
+            data,
+        )
+
+    @retry(
+        retry=retry_if_exception_type((psycopg.OperationalError, psycopg.InterfaceError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True,
+    )
+    def _update_sips_batch(cur, data):
+        cur.executemany(
+            "UPDATE sips SET emb_v2 = %s::vector WHERE id = %s",
+            data,
+        )
+
+    with create_embedder(os.getenv("EMBEDDER_PATH"), int(os.getenv("EMBEDDER_CONTEXT_LEN"))) as embedder:
+        # ── Loop 1: Beans ──
+        total_beans = beansack_conn.execute("SELECT count(*) FROM beans").fetchone()[0]
+        with tqdm(total=total_beans, desc="Rectifying beans", unit="beans") as pbar:
+            last_url = ""
+            while beans := beansack_conn.execute(BEAN_EXPR, {"last_url": last_url, "limit": BATCH_SIZE}).fetchall():
+                urls = [b[0] for b in beans]
+                vectors = embedder.embed_documents([b[1][:MAX_DOCUMENT_LEN] for b in beans])
+                ids = [generate_uuid(url) for url in urls]
+
+                cls_cache.store(BEANS, [{ID: url, EMBEDDING: vec} for url, vec in zip(urls, vectors)])
+
+                with beansack_conn.cursor() as cur:
+                    _update_beans_batch(
+                        cur,
+                        [(id, vec, url) for id, vec, url in zip(ids, vectors, urls)]
+                    )
+                beansack_conn.commit()
+
+                with cupboard_conn.cursor() as cur:
+                    _update_sips_batch(
+                        cur,
+                        [(vec, id) for id, vec in zip(ids, vectors)]
+                    )
+                cupboard_conn.commit()
+
+                pbar.update(len(beans))
+                last_url = beans[-1][0]
+
+        # ── Loop 2: Cupboard signal sips ──
+        total_sips = cupboard_conn.execute("SELECT count(*) FROM sips WHERE kind = 'signal'").fetchone()[0]
+        with tqdm(total=total_sips, desc="Rectifying signal sips", unit="sips") as pbar:
+            last_id = ""
+            while sips := cupboard_conn.execute(SIP_EXPR, {"last_id": last_id, "limit": BATCH_SIZE}).fetchall():
+                texts = [_sip_to_str({DIGEST: s[1]}) for s in sips]
+                vectors = embedder.embed_documents(texts)
+
+                with cupboard_conn.cursor() as cur:
+                    _update_sips_batch(
+                        cur,
+                        [(vec.tolist(), sip[0]) for sip, vec in zip(sips, vectors)]
+                    )
+                cupboard_conn.commit()
+
+                pbar.update(len(sips))
+                last_id = sips[-1][0]
+
+        beansack_conn.close()
+        cupboard_conn.close()    
+
+
 # adding data porting logic
 if __name__ == "__main__":
-    recitify_embeddings_and_classifications()
+    rectify_beans_id_and_embeddings()
     # migrate_classification_cache_pg_to_fire(
     #     pg_conn_str=os.getenv("PROCESSING_CACHE")+"/clsstore",
     #     fire_db_path=".cache/clsstore",

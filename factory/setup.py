@@ -25,7 +25,7 @@ def create_classification_embeddings():
     with create_embedder(os.getenv('EMBEDDER_PATH'), 512) as embedder:
         categories = pd.DataFrame(
             {
-                "id": classifications[CATEGORIES],
+                ID: classifications[CATEGORIES],
                 EMBEDDING: embedder([f"topic/domain={cat}" for cat in classifications[CATEGORIES]])
             }
         )
@@ -33,7 +33,7 @@ def create_classification_embeddings():
 
         sentiments = pd.DataFrame(
             {
-                "id": classifications[SENTIMENTS],
+                ID: classifications[SENTIMENTS],
                 EMBEDDING: embedder([f"sentiment={s}" for s in classifications[SENTIMENTS]])
             }
         )
@@ -56,25 +56,10 @@ def create_processing_cache(db_path: str):
         {
             BEANS: {"id_key": URL},
             PUBLISHERS: {"id_key": BASE_URL},
-            CHATTERS: {"id_key": "id"}
+            CHATTERS: {"id_key": ID}
         }
     ).close()
 
-def create_classification_cache():
-    from workers.workercache.clscache import ClassificationCache
-    cls_cache = ClassificationCache(
-        os.getenv('CLASSIFICATION_CACHE'), 
-        {
-            BEANS: {"id_key": URL, "vector_length": 384, "distance_func": "l2"},
-            "categories": {"id_key": "category", "vector_length": 384, "distance_func": "cosine"},
-            "sentiments": {"id_key": "sentiment", "vector_length": 384, "distance_func": "cosine"}
-        }
-    )
-    categories, sentiments = create_classification_embeddings()
-    cls_cache.store("categories", categories.to_dict(orient="records"))
-    cls_cache.store("sentiments", sentiments.to_dict(orient="records"))
-    cls_cache.close()
-    
 
 def hydrate_classification_cache(window: int = 90):
     from workers.workercache.pgcache import StateCache
@@ -121,6 +106,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.beansack: create_beansack(*args.beansack)
     if args.pgcache: create_processing_cache(args.pgcache)
-    if args.clscache: create_classification_cache()
     if args.hydrate_clscache: hydrate_classification_cache(args.hydrate_clscache)
     if args.cls_files: create_classification_files()

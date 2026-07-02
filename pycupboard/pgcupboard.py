@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS sips (
     kind TEXT NOT NULL,
     created TIMESTAMPTZ NOT NULL,    
     source UUID,    
-    embedding vector(384) NOT NULL,
+    embedding vector(320) NOT NULL,
     tags TEXT[], 
     tags_fts tsvector GENERATED ALWAYS AS (
         to_tsvector('simple', immutable_tags_to_text(tags))

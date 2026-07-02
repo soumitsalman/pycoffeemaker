@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS beans (
     restricted_content BOOLEAN,
 
     -- CLASSIFICATION FIELDS
-    embedding vector(384), -- vector length is not easily mutable once set, so hardcoding it for now
+    embedding vector(320), -- vector length is not easily mutable once set, so hardcoding it for now
     categories VARCHAR[],
     sentiments VARCHAR[],
 
@@ -187,9 +187,9 @@ CREATE INDEX IF NOT EXISTS idx_beans_regions ON beans USING gin(regions);
 CREATE INDEX IF NOT EXISTS idx_beans_tags ON beans USING gin(tags);
 -- vector search
 CREATE INDEX IF NOT EXISTS idx_beans_embedding_hnsw_cosine ON beans USING hnsw (embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 64);
-CREATE INDEX IF NOT EXISTS idx_beans_embedding_hnsw_l2 ON beans USING hnsw (embedding vector_l2_ops)
-    WITH (m = 16, ef_construction = 64);
+    WITH (m = 24, ef_construction = 128);
+-- CREATE INDEX IF NOT EXISTS idx_beans_embedding_hnsw_l2 ON beans USING hnsw (embedding vector_l2_ops)
+--     WITH (m = 16, ef_construction = 64);
 
 -- publishers
 CREATE INDEX IF NOT EXISTS idx_publishers_source ON publishers(source);

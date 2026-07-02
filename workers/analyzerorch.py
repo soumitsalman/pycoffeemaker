@@ -307,7 +307,7 @@ class Clusterer:
         self.batch_size = batch_size  
 
     def cluster_beans(self, beans: list[dict]):
-        self.cls_cache.store(BEANS, beans)  
+        self.cls_cache.store(BEANS, [{ID: b[URL], EMBEDDING: b[EMBEDDING]} for b in beans])  
         related_list = self.cls_cache.batch_search(BEANS, [bean[EMBEDDING] for bean in beans], distance=CLUSTER_EPS, top_n=CLUSTER_LIMIT)
         return clean_updates([            
             {

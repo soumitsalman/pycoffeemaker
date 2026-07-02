@@ -6,7 +6,8 @@ import os
 import random
 import uuid
 import yaml
-from datacollectors import APICollectorAsync, AsyncWebScraper, POST
+import aiohttp
+from datacollectors import RSSFeedCollector, RedditCollector, HackerNewsCollector, SECFilingCollector, AsyncWebScraper, POST
 from utils.fields import (
     ARTICLE_LANGUAGE,
     AUTHOR,
@@ -116,7 +117,10 @@ _COLLECTOR_CACHE = ".cache/collector"
 
 class Collector:
     cache: AsyncStateCacheBase
-    apicollector: APICollectorAsync
+    rss_collector: RSSFeedCollector
+    reddit_collector: RedditCollector
+    hn_collector: HackerNewsCollector
+    sec_filing_collector: SECFilingCollector
     webscraper: AsyncWebScraper
     beans_collected: int
     publishers_collected: int
@@ -124,7 +128,11 @@ class Collector:
     def __init__(self, cache: AsyncStateCacheBase, batch_size: int = BATCH_SIZE):
         self.cache = cache
         self.batch_size = batch_size
-        self.apicollector = APICollectorAsync(batch_size<<6)
+        self.session = None
+        self.rss_collector = None
+        self.reddit_collector = None
+        self.hn_collector = None
+        self.sec_filing_collector = None
         self.webscraper = AsyncWebScraper(batch_size<<6)
         # self.scraper_queue = AsyncQueue(f"{_COLLECTOR_CACHE}/scraper", chunksize=self.batch_size<<1, tempdir=_COLLECTOR_CACHE)
 
@@ -278,9 +286,16 @@ class Collector:
     async def _collect(self, source_type, source):
         to_triage = None
         try:
-            if source_type == "ychackernews": to_triage = await self.apicollector.collect_ychackernews(source)
-            elif source_type == "reddit": to_triage = await self.apicollector.collect_subreddit_json(source)
-            elif source_type == "rss": to_triage = await self.apicollector.collect_rssfeed(source)
+            if source_type == "ychackernews":
+                to_triage = await self.hn_collector.collect(source)
+            elif source_type == "reddit":
+                to_triage = await self.reddit_collector.collect(source, mode="json")
+            elif source_type == "rss":
+                to_triage = await self.rss_collector.collect(source)
+            elif source_type == "sec_edgar":
+                to_triage = await self.sec_filing_collector.collect(source)
+            elif source_type in ("sec_press", "sec_statements", "sec_enforcement"):
+                to_triage = await self.rss_collector.collect(source, source_type=source_type)
         except Exception as e:
             log.warning(
                 event="collection failed",
@@ -334,12 +349,28 @@ class Collector:
         log.info(event="starting collectors")
 
         self._init_run()
-        async with self.cache, self.apicollector, self.webscraper:
-            await asyncio.gather(
-                self._run_collectors(sources),
-                # self._run_scraper(),
-                return_exceptions=True
-            )
+        
+        # Create aiohttp session and initialize collectors with session
+        self.session = aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(limit=self.batch_size<<6, limit_per_host=(self.batch_size<<5) or 1),
+            timeout=aiohttp.ClientTimeout(total=300),
+        )
+        self.rss_collector = RSSFeedCollector(self.session)
+        self.reddit_collector = RedditCollector(self.session)
+        self.hn_collector = HackerNewsCollector(self.session)
+        self.sec_filing_collector = SECFilingCollector(self.session)
+        
+        try:
+            async with self.cache, self.webscraper:
+                await asyncio.gather(
+                    self._run_collectors(sources),
+                    # self._run_scraper(),
+                    return_exceptions=True
+                )
+        finally:
+            if self.session:
+                await self.session.close()
+                
         # await self.scraper_queue.close()
         # shutil.rmtree(_COLLECTOR_CACHE, ignore_errors=True)
         log.info(event="total collected", beans=self.beans_collected, publishers=self.publishers_collected)
