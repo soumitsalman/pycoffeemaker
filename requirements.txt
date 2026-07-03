@@ -37,4 +37,4 @@ rfc3339
 tenacity
 aioboto3
 Brotli
-html2text
+html-to-markdown

@@ -230,15 +230,15 @@ def test_async_web_scraper_page():
         "https://financebuzz.com/professional-skills-more-valuable-after-60",
         "https://financebuzz.com/avoid-buying-rv-in-retirement",
         "https://financebuzz.com/trader-joes-pantry-items-june-2025",
-        "https://financebuzz.com/cities-getting-caseys-june-2025",
-        "https://financebuzz.com/costco-home-decor-guests-want-june-2025",
+        "https://www.startupdaily.net/topic/politics-news-analysis/launchvic-marries-into-innovation-victoria/",
+        "https://startupwhale.com/how-much-do-onlyfans-models-make/",
     ]
 
     async def run():
         async with AsyncWebScraper() as scraper:
             for url in urls:
                 result = await scraper.scrape_page(url)
-                ic(url, bool(result))
+                ic(url, result)
                 if result:
                     assert result.get("content"), f"Missing content from {url}"
                     assert result.get("url") == url, f"URL mismatch from {url}"

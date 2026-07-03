@@ -1,4 +1,5 @@
 import asyncio
+from itertools import batched
 import json
 import logging
 import os
@@ -506,36 +507,30 @@ def rectify_beans_id_and_embeddings():
                 )
             conn.commit()
 
+    def _get_beans(limit: int):
+        with beansack_pool.connection() as bconn:
+            beans = bconn.execute(BEAN_EXPR, {"limit": limit}).fetchall()
+        return beans
+
     with create_embedder(os.getenv("EMBEDDER_PATH"), int(os.getenv("EMBEDDER_CONTEXT_LEN"))) as embedder:
         # ── Loop 1: Beans ──
-        with beansack_pool.connection() as bconn:
-            total_beans = bconn.execute("SELECT count(*) FROM beans WHERE emb_v2 IS NULL").fetchone()[0]
-        with tqdm(total=total_beans, desc="Rectifying beans", unit="beans") as pbar:
-            while True:
-                with beansack_pool.connection() as bconn:
-                    beans = bconn.execute(BEAN_EXPR, {"limit": BATCH_SIZE}).fetchall()
-                if not beans:
-                    break
-                urls = [b[0] for b in beans]
-                ids = [generate_uuid(url) for url in urls]
-                texts = [b[1][:MAX_DOCUMENT_LEN] for b in beans]
-                
-                try:
-                    vectors = embedder.embed_documents(texts)
-                except Exception as e:
-                    vectors = [embedder(t) for t in texts]
-
+        batches = batched(_get_beans(50000), BATCH_SIZE)
+        for chunk in tqdm(iterable=batches, desc="Rectifying beans", unit="bean_batch"):
+            urls = [b[0] for b in chunk]
+            ids = [generate_uuid(url) for url in urls]
+            texts = [b[1][:MAX_DOCUMENT_LEN] for b in chunk]
+            try:
+                vectors = embedder.embed_documents(texts)
                 cls_cache.store(BEANS, [{ID: url, EMBEDDING: vec} for url, vec in zip(urls, vectors)])
                 _update_beans_batch([(id, vec, url) for id, vec, url in zip(ids, vectors, urls)])
                 _update_sips_batch([(vec, id) for id, vec in zip(ids, vectors)])
-                pbar.update(len(beans))
-                
+            except:
+                pass            
 
         # ── Loop 2: Cupboard signal sips ──
         with cupboard_pool.connection() as conn:
             total_sips = conn.execute("SELECT count(*) FROM sips WHERE kind = 'signal' AND emb_v2 IS NULL").fetchone()[0]
         with tqdm(total=total_sips, desc="Rectifying signal sips", unit="sips") as pbar:
-            last_id = ""
             while True:
                 with cupboard_pool.connection() as conn:
                     sips = conn.execute(SIP_EXPR, {"limit": BATCH_SIZE}).fetchall()

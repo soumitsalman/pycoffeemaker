@@ -9,7 +9,6 @@ from urllib.parse import urljoin
 import aiohttp
 import asyncpraw
 import feedparser
-import html2text
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -131,7 +130,7 @@ def _extract_body(entry: feedparser.FeedParserDict) -> tuple[str, str]:
         content = entry.content[0]['value'] if isinstance(entry.content, list) else entry.content
     if 'summary' in entry:
         summary = entry.summary
-    return strip_html_tags(summary), strip_html_tags(content or summary)
+    return html_to_markdown(summary), html_to_markdown(content or summary)
 
 
 def _extract_tags(entry: feedparser.FeedParserDict) -> list[str]:
@@ -230,7 +229,7 @@ def _parse_reddit_rss_entry(entry) -> tuple[str | None, str | None, str | None]:
         doc = lxml.html.fromstring(raw)
         md = doc.xpath('//div[@class="md"]')
         if md:
-            selftext = strip_html_tags(lxml.html.tostring(md[0], encoding='unicode'))
+            selftext = html_to_markdown(lxml.html.tostring(md[0], encoding='unicode'))
         for a in doc.xpath('//a'):
             href, text = a.get('href', ''), (a.text_content() or '').strip()
             if text == '[link]' and not external_url and 'reddit.com' not in href:
@@ -365,7 +364,7 @@ def _build_hackernews_item(story: dict, default_kind: str):
         URL: url,
         KIND: kind,
         TITLE: story.get('title'),
-        CONTENT: strip_html_tags(story['text']) if 'text' in story else None,
+        CONTENT: html_to_markdown(story['text']) if 'text' in story else None,
         AUTHOR: story.get('by'),
         SOURCE: source,
         BASE_URL: base_url,
@@ -522,10 +521,6 @@ class HackerNewsCollector(APICollectorBase):
 class SECFilingCollector(APICollectorBase):
     def __init__(self, batch_size: int):
         super().__init__(batch_size)
-        self.html_converter = html2text.HTML2Text()
-        self.html_converter.ignore_links = False
-        self.html_converter.ignore_images = False
-        self.html_converter.body_width = 0
 
     async def _download_zip(self, url: str) -> bytes:
         async with self.session.get(url) as resp:
@@ -542,9 +537,6 @@ class SECFilingCollector(APICollectorBase):
                     content = zf.read(file_info.filename).decode('utf-8', errors='ignore')
                     html_files.append((file_info.filename, content))
         return html_files
-
-    def _html_to_markdown(self, html_content: str) -> str:
-        return self.html_converter.handle(html_content)
 
     @staticmethod
     def _extract_filing_type(title: str) -> str:
@@ -600,7 +592,7 @@ class SECFilingCollector(APICollectorBase):
                     return None
 
                 primary_filename, primary_html = html_files[0]
-                markdown_content = self._html_to_markdown(primary_html)
+                markdown_content = html_to_markdown(primary_html)
 
                 return self._build_filing_item(
                     entry=entry,

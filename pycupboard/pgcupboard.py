@@ -6,7 +6,7 @@ from datetime import datetime
 from itertools import batched, chain
 from typing import Any
 from tenacity import retry, stop_after_attempt, wait_fixed
-from psycopg_pool import AsyncConnectionPool
+from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pgvector.psycopg import Vector, register_vector_async
 from psycopg import sql
 from psycopg.types.json import Jsonb
@@ -27,14 +27,11 @@ def _clean_null_bytes(obj):
         return obj.replace("\u0000", "NULL_BYTE")
     return obj
 
-
-
 PG_TIMEOUT = int(os.getenv('PG_TIMEOUT', 300))
 PG_WORKERS = int(os.getenv('PG_WORKERS', 4))
 BATCH_SIZE = 512
 RETRY_COUNT = 3
 RETRY_DELAY = 15
-
 
 _INIT_STMTS = """
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -129,7 +126,6 @@ class Cupboard:
             configure=register_vector_async
         )
         await self.pool.open()
-        await self._init_schema()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
@@ -139,10 +135,6 @@ class Cupboard:
         if self.pool:
             await self.pool.close()
             self.pool = None
-
-    async def _init_schema(self):
-        async with self.pool.connection() as conn:
-            await conn.execute(_INIT_STMTS)
 
     async def store_sips(self, sips: list[Sip]) -> int:
         """Store a list of sips in the database."""
@@ -316,3 +308,11 @@ class Cupboard:
 
     async def optimize(self):
         pass
+
+def create_db(conn_str: str):
+    pool = ConnectionPool(conn_str, timeout=PG_TIMEOUT)
+    pool.open()
+    with pool.connection() as conn:
+        conn.execute(_INIT_STMTS)
+    pool.close()
+    return Cupboard(conn_str)

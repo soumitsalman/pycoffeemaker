@@ -5,8 +5,8 @@ import tldextract
 from aiohttp import ClientResponse
 from dataclasses import dataclass
 from dateutil.parser import parse as date_parser
+from html_to_markdown import convert
 from urllib.parse import urljoin, urlparse, urlunparse
-
 from utils.dates import ensure_utc, now
 from utils.fields import (
     ARTICLE_LANGUAGE,
@@ -238,6 +238,16 @@ def strip_html_tags(html):
     except Exception:
         text = re.sub(r"<[^>]+>", " ", html)
     return " ".join(text.split())
+
+
+def html_to_markdown(html: str | None) -> str | None:
+    if not html:
+        return None
+    try:        
+        md = convert(html).content.strip()
+        return md or None
+    except Exception:
+        return strip_html_tags(html)
 
 
 def full_url(base_url: str, target_url: str) -> str:

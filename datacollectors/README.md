@@ -38,7 +38,7 @@ Import from `datacollectors` or `datacollectors.utils`.
 | `guess_article_type(bean)` | Infer `kind` from URL, source, tags, site name |
 | `excluded_url(url)` | Skip media/gallery/video URLs and Russian-owned domains (pre-fetch) |
 | `exclude_content(response)` | Gate response by URL, content-type, and size; returns `ContentGate` |
-| `extract_base_url`, `extract_source`, `parse_date`, `strip_html_tags` | Shared parsing helpers |
+| `extract_base_url`, `extract_source`, `parse_date`, `strip_html_tags`, `html_to_markdown` | Shared parsing helpers |
 
 ## Output format
 
@@ -53,8 +53,8 @@ Each collector returns `list[dict]` (or `None` on empty/failure). One dict is on
     "source": "example",
     "kind": "news",
     "title": "...",
-    "summary": "...",           # plain text
-    "content": "...",           # plain text; may be short from RSS
+    "summary": "...",           # markdown (from RSS HTML when present)
+    "content": "...",           # markdown; may be short from RSS
     "author": "...",
     "author_email": None,
     "created": datetime(..., tzinfo=UTC),
@@ -105,7 +105,7 @@ Internal shape before merging into beans:
 ```python
 {
     "url": "...",
-    "markdown": "...",       # cleaned article text
+    "markdown": "...",       # article body as markdown
     "title", "meta_title", "description", "author",
     "published_time", "top_image", "keywords", "language", ...
 }

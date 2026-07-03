@@ -1,4 +1,5 @@
 import json
+import random
 from utils.logs import get_logger
 import os
 import asyncio
@@ -124,6 +125,7 @@ class BeansackPorter:
 
 CUPBOARD_SIGNAL_KIND = "signal"
 CUPBOARD_SIGNAL_URL_PREFIX = "https://api.cafecito.tech/espresso/signals/"
+MAX_TAGS = 50
 class CupboardPorter:
     cache: AsyncStateCacheBase
 
@@ -136,7 +138,16 @@ class CupboardPorter:
         for bean in beans:            
             bean.pop(SOURCE)
             bean[KIND] = "event:"+bean[KIND]
-            bean[TAGS] = merge_tags(bean.get(CATEGORIES), bean.get(SENTIMENTS), bean.get(DIGEST, {}).get(TAGS))
+            tags = merge_tags(
+                bean.get(CATEGORIES), 
+                bean[DIGEST].get(TAGS), 
+                bean[DIGEST].get("regions"),
+                bean[DIGEST].get("people"),
+                bean[DIGEST].get("products"),
+                bean[DIGEST].get("companies"),                
+                bean[DIGEST].get("stock_tickers")
+            )
+            if tags: bean[TAGS] = random.sample(tags, min(len(tags), MAX_TAGS))
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):
@@ -187,8 +198,10 @@ class CupboardPorter:
                 SOURCE: DEFAULT_SOURCE,
                 KIND: CUPBOARD_SIGNAL_KIND,
                 ID: generate_id(url),
-                URL: url
+                URL: url,                
             })  
+            if tags := comp.get(TAGS):
+                comp[TAGS] = random.sample(tags, min(len(tags), MAX_TAGS))
         return composites              
 
     async def hydrate_signals(self, db: Cupboard, target_state: str):

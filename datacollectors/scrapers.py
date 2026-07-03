@@ -62,7 +62,7 @@ def _parse_html_body(url: str, html: str) -> dict:
     doc = Document(html, url=url)
     try:
         return {
-            CONTENT: strip_html_tags(doc.summary(html_partial=True)),
+            CONTENT: html_to_markdown(doc.summary(html_partial=True)),
             TITLE: doc.short_title() or doc.title(),
             AUTHOR: doc.author()
         }
@@ -114,14 +114,15 @@ def _extract_jsonld_content(html: str) -> dict | None:
                 return result
     return None
 
-
 def _parse_page(url: str, html: str) -> dict:
     """Process worker: parse html into metadata + readable content."""  
-    body = _parse_jsonld_body(url, html)
-    if not body:  
-        body = _parse_html_body(url, html)
-    if not body.get(CONTENT):
-        return None
+    is_content_valid = lambda body: body.get(CONTENT) and len(body.get(CONTENT).strip()) >= MIN_CONTENT_SIZE
+    body = _parse_html_body(url, html)
+    if not is_content_valid(body):
+        # fallback to JSON-LD
+        body = _parse_jsonld_body(url, html)
+        if not is_content_valid(body):
+            return None
     
     metadata = _parse_metadata(url, html)
     return body | metadata
@@ -651,7 +652,7 @@ class WebCrawler:
 
         ret = {
             "url": result.url,
-            "markdown": strip_html_tags(result.cleaned_html) #_clean_markdown(result.markdown)
+            "markdown": html_to_markdown(result.cleaned_html),
         }
         if content := (json.loads(result.extracted_content) if result.extracted_content else None):
             metadata = content[0]

@@ -13,7 +13,7 @@ from .apicollectors import (
     HACKERNEWS_STORIES_URLS,
 )
 from .scrapers import WebCrawler, AsyncWebScraper
-from .settings import MAX_HTML_SIZE, MAX_PDF_SIZE, TIMEOUT, SEC_RSS_TIMEOUT
+from .settings import MAX_HTML_SIZE, MAX_PDF_SIZE, TIMEOUT
 from .normalize import (
     POST,
     BLOG,
@@ -59,5 +59,4 @@ __all__ = [
     "MAX_HTML_SIZE",
     "MAX_PDF_SIZE",
     "TIMEOUT",
-    "SEC_RSS_TIMEOUT",
 ]
