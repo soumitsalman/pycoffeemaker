@@ -144,7 +144,6 @@ class PGSack(Beansack):
         counts = list(_store_executor.map(insert_chunk, store_batches))
         return sum(counts)
 
-
     def store_beans(self, beans: list[Bean]):
         """Store a list of Beans in the database."""
         return self._store(BEANS, beans)
