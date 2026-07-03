@@ -474,7 +474,7 @@ def rectify_beans_id_and_embeddings():
     WHERE kind = 'signal' AND emb_v2 IS NULL
     LIMIT %(limit)s
     """
-    BATCH_SIZE = os.getenv("BATCH_SIZE", 16)
+    BATCH_SIZE = int(os.getenv("BATCH_SIZE", 16))
     MAX_DOCUMENT_LEN = int(os.getenv("MAX_DOCUMENT_LEN", 8192)) << 1
 
     @retry(
