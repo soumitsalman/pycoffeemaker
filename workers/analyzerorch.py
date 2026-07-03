@@ -439,15 +439,19 @@ class Consolidator:
                 composite_updates, bean_updates = [], []
                 for group, br in zip(chunk, briefings):
                     if not br: continue
-
-                    composite_updates.append({
+                    
+                    consolidated_item = {
                         ID: now().strftime("%Y_%m_%d") + "_" + hashlib.sha1(br.briefing.encode("utf-8")).hexdigest(),
                         CREATED: max(b[CREATED] for b in group['data']), 
                         EMBEDDING: group[EMBEDDING],
-                        TAGS: merge_tags(br.tags, *[b.get(CATEGORIES, []) for b in group['data']]),
                         DIGEST: br.model_dump(),
                         RELATED: [b[URL] for b in group['data']]
-                    })
+                    } 
+                    if tags := merge_tags(*[b.get(TAGS, []) for b in group['data']]):
+                        consolidated_item[TAGS] = tags
+                        consolidated_item[DIGEST] |= {TAGS: tags}
+                        
+                    composite_updates.append(consolidated_item)
                     bean_updates.extend({URL: b[URL]} for b in group['data'])
 
                 log.info(event="consolidated composites", composites=len(composite_updates), beans=len(bean_updates))
