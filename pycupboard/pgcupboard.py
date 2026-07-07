@@ -7,7 +7,8 @@ from itertools import batched, chain
 from typing import Any
 from tenacity import retry, stop_after_attempt, wait_fixed
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
-from pgvector.psycopg import Vector, register_vector_async
+from pgvector.psycopg import register_vector_async
+from pgvector import Vector
 from psycopg import sql
 from psycopg.types.json import Jsonb
 from icecream import ic

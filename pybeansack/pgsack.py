@@ -8,7 +8,8 @@ from itertools import batched, chain
 import pandas as pd
 from psycopg import sql
 from psycopg_pool import ConnectionPool
-from pgvector.psycopg import register_vector, Vector
+from pgvector.psycopg import register_vector
+from pgvector import Vector
 from .models import *
 from utils.collections import non_null_fields
 from .database import *

@@ -10,11 +10,8 @@ icecream
 python-dotenv
 msgpack
 textcase
-zvec
-scikit-learn
 openai
 aiofiles
-persist-queue
 structlog
 pydantic
 pyarrow

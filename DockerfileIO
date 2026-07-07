@@ -1,16 +1,6 @@
 # This docker is for mostly io bound tasks such as collector and composer
 # It is not built to run cpu/gpu intensive tasks like indexer and digestor unless they are remote/openai api
 
-# Build stage
-# FROM python:3.13-slim-bookworm AS iobuilder
-
-# WORKDIR /worker
-
-# COPY pybeansack/requirements.txt pybeansack-requirements.txt
-# COPY requirements-io.txt requirements.txt
-
-# RUN pip install --prefix=/pythonlibs -r pybeansack-requirements.txt
-# RUN pip install --prefix=/pythonlibs -r requirements.txt
 
 # Final stage
 FROM python:3.13-slim-bookworm
@@ -18,7 +8,6 @@ FROM python:3.13-slim-bookworm
 # Set the working directory
 WORKDIR /worker
 
-# COPY --from=iobuilder /pythonlibs /usr/local
 COPY . .
 RUN pip install --no-cache -r requirements-io.txt
 

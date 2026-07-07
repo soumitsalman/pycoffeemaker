@@ -9,7 +9,8 @@ from typing import Any, Optional
 from pydantic import BaseModel
 from .base import *
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
-from pgvector.psycopg import register_vector, Vector
+from pgvector.psycopg import register_vector
+from pgvector import Vector
 from icecream import ic
 from tenacity import retry, stop_after_attempt, wait_fixed
 
