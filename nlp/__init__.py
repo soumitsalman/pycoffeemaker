@@ -25,6 +25,6 @@ __all__ = [
 
 from .embedders import *
 from .analysts import *
-from .schemas import *
+from .models import *
 from .validators import valid_tags
 from .runtime import clear_gpu_cache, is_cuda_oom

@@ -139,10 +139,10 @@ class Digest(Entities):
             "Then explain mechanism/how, impact/why it matters, and effects/response/outlook. "
         ),
     )
-    tags: List[str] = Field(
-        default_factory=list,
-        description="List of search,classification,clustering keywords/phrases. max_length<=10. exclude_pattern=N tags.",
-    )
+    # tags: List[str] = Field(
+    #     default_factory=list,
+    #     description="List of search,classification,clustering keywords/phrases. max_length<=10. exclude_pattern=N tags.",
+    # )
     regions: List[str] = Field(
         default_factory=list,
         description="List of specified names geographic regions/locations. max_length<=10. exclude_pattern=N countries.",

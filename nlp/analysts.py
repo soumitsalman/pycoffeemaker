@@ -9,7 +9,7 @@ from collections import defaultdict
 from typing import Optional, Type
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_random
-from .schemas import *
+from .models import *
 from .runtime import *
 from .text import split_parts
 from icecream import ic

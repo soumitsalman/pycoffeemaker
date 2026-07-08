@@ -37,7 +37,12 @@ class BeansackPorter:
         for bean in beans:
             if digest := bean.get(DIGEST):
                 if not isinstance(digest, dict): continue
-                if entities := merge_tags(digest.get('people'), digest.get('companies'), digest.get('products'), digest.get('stock_tickers')):
+                if entities := merge_tags(
+                    digest.get('people'), 
+                    digest.get('companies'), 
+                    digest.get('products'), 
+                    digest.get('stock_tickers')
+                ):
                     bean[ENTITIES] = entities
                 if regions := digest.get('regions'):
                     bean[REGIONS] = regions
@@ -145,7 +150,8 @@ class CupboardPorter:
                 bean[DIGEST].get("people"),
                 bean[DIGEST].get("products"),
                 bean[DIGEST].get("companies"),                
-                bean[DIGEST].get("stock_tickers")
+                bean[DIGEST].get("stock_tickers"),
+                bean[DIGEST].get("macro_context")
             )
             if tags: bean[TAGS] = random.sample(tags, min(len(tags), MAX_TAGS))
         return [Sip(**bean) for bean in beans]

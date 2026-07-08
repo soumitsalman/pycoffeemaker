@@ -17,7 +17,7 @@ nlp/
 ├── __init__.py          # exports: create_embedder, create_text_analyst, Digest, …
 ├── embedders.py         # EmbedderBase + backends; create_embedder()
 ├── analysts.py          # TextAnalystBase + backends; create_text_analyst(); EntityExtractor
-├── schemas.py           # Digest, Briefing, domain-specific digest schemas
+├── models.py           # Digest, Briefing, domain-specific digest schemas
 ├── runtime.py           # model-path prefixes, run_batch, GPU helpers
 ├── requirements.txt
 └── deprecated/          # legacy digestors, prompts (not used by current API)
