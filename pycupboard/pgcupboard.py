@@ -87,7 +87,7 @@ CREATE INDEX IF NOT EXISTS idx_sips_created ON sips(created);
 CREATE INDEX IF NOT EXISTS idx_sips_source ON sips(source);
 CREATE INDEX IF NOT EXISTS idx_sips_tags ON sips(tags);
 CREATE INDEX IF NOT EXISTS idx_sips_tags_fts ON sips USING gin(tags_fts);
-CREATE INDEX IF NOT EXISTS idx_sips_embedding_hnsw ON sips USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+CREATE INDEX IF NOT EXISTS idx_sips_embedding_hnsw ON sips USING hnsw (embedding vector_cosine_ops) WITH (m = 24, ef_construction = 128);
 
 CREATE INDEX IF NOT EXISTS idx_sources_base_url ON sources(base_url);
 
