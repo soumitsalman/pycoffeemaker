@@ -284,8 +284,8 @@ def hydrate_classification_cache(cache_dir):
     cls_cache = ClassificationCache(cache_dir, table_settings={BEANS: {"id_key": URL, "distance_func": "l2"}})
 
     QUERY = """
-    SELECT url, emb_v2 FROM beans 
-    WHERE url > %s AND emb_v2 IS NOT NULL 
+    SELECT url, embedding FROM beans 
+    WHERE url > %s AND embedding IS NOT NULL 
     ORDER BY url LIMIT 16384
     """
     def get_beans(last_url: str):
@@ -295,7 +295,6 @@ def hydrate_classification_cache(cache_dir):
                 cols = [desc[0] for desc in cur.description]
                 items = [dict(zip(cols, row)) for row in rows]
                 for item in items:
-                    item[EMBEDDING] = item.pop("emb_v2")
                     item[ID] = item.pop("url")
         return items
 
@@ -384,25 +383,18 @@ def rectify_beans_id_and_embeddings():
     cls_cache = ClassificationCache(
         os.getenv('CLASSIFICATION_CACHE', '.cache/clsstore'),
         table_settings={
-            BEANS: {"vector_length": int(os.getenv("VECTOR_LEN")), "distance_func": "l2"},
+            BEANS: {"distance_func": "l2"},
         }
     )
 
-    with beansack_pool.connection() as conn:
-        conn.execute("ALTER TABLE beans ADD COLUMN IF NOT EXISTS emb_v2 vector(320), ADD COLUMN IF NOT EXISTS id uuid;")
-        conn.commit()
-    with cupboard_pool.connection() as conn:
-        conn.execute("ALTER TABLE sips ADD COLUMN IF NOT EXISTS emb_v2 vector(320);")
-        conn.commit()
-
     BEAN_EXPR = """
     SELECT url, content FROM beans b
-    WHERE emb_v2 IS NULL
+    WHERE embedding IS NULL
     LIMIT %(limit)s
     """
     SIP_EXPR = """
     SELECT id, digest FROM sips
-    WHERE kind = 'signal' AND emb_v2 IS NULL
+    WHERE kind = 'signal' AND embedding IS NULL
     LIMIT %(limit)s
     """
     BATCH_SIZE = int(os.getenv("BATCH_SIZE", 16))
@@ -418,7 +410,7 @@ def rectify_beans_id_and_embeddings():
         with beansack_pool.connection() as conn:
             with conn.cursor() as cur:
                 cur.executemany(
-                    "UPDATE beans SET id = %s, emb_v2 = %s::vector WHERE url = %s",
+                    "UPDATE beans SET id = %s, embedding = %s::vector WHERE url = %s",
                     data,
                 )
             conn.commit()
@@ -433,7 +425,7 @@ def rectify_beans_id_and_embeddings():
         with cupboard_pool.connection() as conn:
             with conn.cursor() as cur:
                 cur.executemany(
-                    "UPDATE sips SET emb_v2 = %s::vector WHERE id = %s",
+                    "UPDATE sips SET embedding = %s::vector WHERE id = %s",
                     data,
                 )
             conn.commit()
@@ -460,7 +452,7 @@ def rectify_beans_id_and_embeddings():
 
         # ── Loop 2: Cupboard signal sips ──
         with cupboard_pool.connection() as conn:
-            total_sips = conn.execute("SELECT count(*) FROM sips WHERE kind = 'signal' AND emb_v2 IS NULL").fetchone()[0]
+            total_sips = conn.execute("SELECT count(*) FROM sips WHERE kind = 'signal' AND embedding IS NULL").fetchone()[0]
         with tqdm(total=total_sips, desc="Rectifying signal sips", unit="sips") as pbar:
             while True:
                 with cupboard_pool.connection() as conn:
