@@ -9,7 +9,8 @@ DIGESTOR_BATCH=128
 CONSOLIDATOR_BATCH=128
 ARGS_FILE="/etc/thundercompute/pipeline.args"
 
-LOG="/home/ubuntu/pycoffeemaker/.logs/pipeline.log"
+mkdir -p /home/ubuntu/.logs
+LOG="/home/ubuntu/.logs/pipeline.log"
 WORKDIR="/home/ubuntu/pycoffeemaker"
 SCRIPT="$WORKDIR/run_pipeline.sh"
 
@@ -80,6 +81,7 @@ fi
     sleep 10
     "${RUNAS[@]}" bash -lc "
         export HOME=/home/ubuntu
+        export LOG_DIR=/home/ubuntu/.logs
         export PROCESSING_WINDOW=7
         export VLLM_MAX_NUM_BATCHED_TOKENS=98304
         export VLLM_MAX_NUM_SEQS=256
