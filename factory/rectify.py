@@ -471,8 +471,8 @@ def rectify_beans_id_and_embeddings():
 
 # adding data porting logic
 if __name__ == "__main__":
-    # rectify_beans_id_and_embeddings()
-    hydrate_classification_cache(os.getenv("CLASSIFICATION_CACHE"))
+    rectify_beans_id_and_embeddings()
+    # hydrate_classification_cache(os.getenv("CLASSIFICATION_CACHE"))
     # migrate_classification_cache(
     #     from_lance=".cache/",
     #     to_pg=os.getenv("PROCESSING_CACHE") + "/clsstore",

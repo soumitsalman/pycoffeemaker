@@ -10,6 +10,7 @@ CONSOLIDATOR_BATCH=128
 ARGS_FILE="/etc/thundercompute/pipeline.args"
 
 mkdir -p /home/ubuntu/.logs
+chown -R ubuntu:ubuntu /home/ubuntu/.logs
 LOG="/home/ubuntu/.logs/pipeline.log"
 WORKDIR="/home/ubuntu/pycoffeemaker"
 SCRIPT="$WORKDIR/run_pipeline.sh"
