@@ -9,8 +9,8 @@ SERVICE="thundercompute-tasks"
 ARGS_FILE="/etc/thundercompute/pipeline.args"
 
 # Deploy-time defaults — edit here before reinstall/redeploy.
-EMBEDDER_BATCH=448
-CLUSTERING_BATCH=448
+EMBEDDER_BATCH=96
+CLUSTERING_BATCH=256
 DIGESTOR_BATCH=128
 CONSOLIDATOR_BATCH=128
 
