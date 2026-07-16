@@ -108,14 +108,32 @@ class Embedder:
         return beans
 
     def embed_beans(self, beans: list[dict]):
-        vectors = self.embedder.embed_documents([bean[CONTENT][:MAX_DOCUMENT_LEN<<1] for bean in beans])
-        # NOTE: updating in place for future extension when I put the embeddings in the queue for clustering
-        [
-            b.update({EMBEDDING: vec})
-            for b, vec in zip(beans, vectors)
-            if vec and len(vec) == VECTOR_LEN
-        ]        
-        return beans        
+        try:
+            vectors = self.embedder.embed_documents(
+                [bean[CONTENT][:MAX_DOCUMENT_LEN << 1] for bean in beans]
+            )
+        except Exception as e:
+            if not is_cuda_oom(e):
+                raise
+
+            clear_gpu_cache()
+            if len(beans) == 1:
+                log.warning(
+                    event="skipped embedding after cuda oom",
+                    source=beans[0].get(SOURCE),
+                    url=beans[0].get(URL),
+                )
+                return []
+
+            midpoint = (len(beans) + 1) // 2
+            return self.embed_beans(beans[:midpoint]) + self.embed_beans(beans[midpoint:])
+
+        # Do not advance beans with missing or invalid embeddings.
+        return [
+            {**bean, EMBEDDING: vector}
+            for bean, vector in zip(beans, vectors)
+            if vector and len(vector) == VECTOR_LEN
+        ]
 
     @log_runtime(logger=log)
     def run(self): 
@@ -124,6 +142,8 @@ class Embedder:
             for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=EMBEDDED, batch_size=self.batch_size):
                 try:
                     updates = self.embed_beans(chunk)
+                    if not updates:
+                        continue
                     log.info(event="embedded", source=chunk[0][SOURCE], num_items=len(updates))
                     updates = self.classify_beans(updates)
                     log.info(event="classified", source=chunk[0][SOURCE], num_items=len(updates))
@@ -131,9 +151,7 @@ class Embedder:
                     updates = clean_updates(updates) 
                     count = self.cache.set(BEANS, EMBEDDED, updates)
                     total += (count or len(updates))
-                except Exception as e:
-                    if is_cuda_oom(e):
-                        clear_gpu_cache()
+                except Exception:
                     log.error(event="failed embedding and classifying",
                         source=chunk[0][SOURCE],
                         num_items=len(chunk),

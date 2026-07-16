@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Runtime fallback defaults (manual runs without install).
-EMBEDDER_BATCH=96
+EMBEDDER_BATCH=128
 CLUSTERING_BATCH=448
 DIGESTOR_BATCH=128
 CONSOLIDATOR_BATCH=128
