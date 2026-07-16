@@ -1,7 +1,3 @@
-__author__ = "Soumit Salman Rahman"
-__license__ = "MIT"
-__version__ = "1.0.2"
-
 __all__ = [
     'models', 
     'Bean', 'Chatter', 'Publisher', "TrendingBean", "AggregatedBean", 
@@ -11,16 +7,12 @@ __all__ = [
     "BEANS", "PUBLISHERS", "CHATTERS", "RELATED_BEANS", "DATETIME"
 ] 
 
-from typing import Literal
 from .ducksack import DuckSack
 from .lancesack import LanceSack
 from .pgsack import PGSack
 from .models import *
 from .simplevectordb import *
 from .cdnstore import *
-from utils.config import BEANSACK_CLEANUP_WINDOW, CLUSTER_EPS, VECTOR_LEN
-from utils.dates import ndays_ago, ndays_ago_str, now
-from utils.collections import non_null_fields
 from .database import *
 
 DB_TYPE = Literal["duckdb", "duck", "lancedb", "lance", "ducklake", "dl", "postgres", "postgresql", "pg"]

@@ -22,9 +22,7 @@ from utils.fields import (
 )
 from utils.ids import generate_uuid
 
-generate_id = generate_uuid
 DEFAULT_SOURCE = generate_uuid("https://cafecito.tech")
-
 
 class Sip(BaseModel):
     id: Optional[UUID] = Field(default=None)
@@ -40,12 +38,12 @@ class Sip(BaseModel):
     def model_post_init(self, __context):
         if not self.id:
             if self.url:
-                self.id = generate_id(self.url)
+                self.id = generate_uuid(self.url)
             else:
                 raise ValueError("Sip must have a `url` or `id`")
         if not self.source:
             if self.base_url:
-                self.source = generate_id(self.base_url)
+                self.source = generate_uuid(self.base_url)
             else:
                 self.source = DEFAULT_SOURCE
 
@@ -62,6 +60,6 @@ class Source(BaseModel):
     def model_post_init(self, __context):
         if not self.id:
             if self.base_url:
-                self.id = generate_id(self.base_url)
+                self.id = generate_uuid(self.base_url)
             else:
                 self.id = DEFAULT_SOURCE

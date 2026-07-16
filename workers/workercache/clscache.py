@@ -3,7 +3,7 @@ from itertools import batched, chain
 import os
 from typing import Any, Optional
 from pathlib import Path
-from utils import generate_uuid
+from utils import generate_uuid, VECTOR_LEN
 from uuid import UUID
 import zvec
 from icecream import ic
@@ -32,7 +32,7 @@ class ClassificationCache:
                     vectors=zvec.VectorSchema(
                         EMBEDDING, 
                         data_type=zvec.DataType.VECTOR_FP32, 
-                        dimension=setting["vector_length"],
+                        dimension=VECTOR_LEN,
                         index_param=zvec.HnswIndexParam(METRIC_MAP.get(setting.get("distance_func"), zvec.MetricType.L2))
                     ),
                     fields=[

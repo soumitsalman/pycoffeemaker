@@ -110,7 +110,6 @@ class PGSack(Beansack):
         non_existing_ids = self._query_scalars(SQL_DEDUP, {"ids": ids})
         return [item for item in items if get_id(item) in non_existing_ids]
 
-    @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
     def _store(self, table: str, items: list[dict | BaseModel]) -> int:
         if not items: return 0
 
@@ -138,6 +137,7 @@ class PGSack(Beansack):
             for chunk in batched(data, BATCH_SIZE)
         ]
 
+        @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
         def insert_chunk(chunk: dict):
             with self.pool.connection() as conn:
                 return conn.execute(chunk["expr"], params=chunk["params"], binary=True).rowcount

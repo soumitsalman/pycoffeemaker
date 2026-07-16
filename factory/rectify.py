@@ -137,82 +137,6 @@ def migrate_classification_cache(from_lance, to_pg):
     to_cache.close()
 
 
-def migrate_classification_cache_pg_to_fire(
-    pg_conn_str: str = None,
-    fire_db_path: str = "./firecache",
-    batch_size: int = 256,
-    vector_length: int = 384,
-    distance_func: str = "l2",
-):
-    """Migrate ClassificationCache from PostgreSQL to Firebird/zvec.
-
-    Args:
-        pg_conn_str: PostgreSQL connection string (default: PROCESSING_CACHE env)
-        fire_db_path: Target Firebird/zvec database path
-        batch_size: Number of rows per batch
-        vector_length: Embedding dimension
-        distance_func: Distance function (l2 or cosine)
-    """
-    if pg_conn_str is None:
-        pg_conn_str = os.getenv("PROCESSING_CACHE")
-
-    if not pg_conn_str:
-        raise ValueError("PG connection string not provided")
-
-    table_settings={
-        BEANS: {
-            "id_key": URL,
-            "vector_length": vector_length,
-            "distance_func": distance_func,
-        },
-    }
-
-    from_cache = PGClassificationCache(pg_conn_str, table_settings)
-    to_cache = FireClassificationCache(fire_db_path, table_settings)
-
-    with from_cache.pool.connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM beans")
-            total = cur.fetchone()[0]
-
-
-    def fetch_batch(offset):
-        with from_cache.pool.connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"SELECT url, embedding FROM beans WHERE embedding IS NOT NULL LIMIT {batch_size} OFFSET {offset}"
-                )
-                rows = cur.fetchall()
-                items = [
-                    {
-                        "url": row[0],
-                        "embedding": row[1].tolist() if hasattr(row[1], "tolist") else row[1],
-                    }
-                    for row in rows
-                ]
-                if items:
-                    return to_cache.store(BEANS, items)
-        return 0
-
-    # with tqdm(total=total, desc="Migrating PG→Fire") as pbar:
-    #     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-    #         futures = [
-    #             executor.submit(fetch_batch, offset)
-    #             for offset in range(0, total, batch_size)
-    #         ]
-    #         for future in futures:
-    #             pbar.update(future.result())
-
-    list(map(
-        fetch_batch, 
-        tqdm(range(0, total, batch_size), desc="Migrated", total=(total//batch_size)+1)
-    ))
-
-    from_cache.close()
-    to_cache.close()
-    ic("Migration complete")
-
-
 def cleanup_bean_tags():
     from pybeansack import create_client
 
@@ -453,7 +377,7 @@ def rectify_beans_id_and_embeddings():
     cls_cache = ClassificationCache(
         os.getenv('CLASSIFICATION_CACHE', '.cache/clsstore'),
         table_settings={
-            BEANS: {"vector_length": 320, "distance_func": "l2"},
+            BEANS: {"vector_length": int(os.getenv("VECTOR_LEN")), "distance_func": "l2"},
         }
     )
 
@@ -549,13 +473,7 @@ def rectify_beans_id_and_embeddings():
 # adding data porting logic
 if __name__ == "__main__":
     rectify_beans_id_and_embeddings()
-    # migrate_classification_cache_pg_to_fire(
-    #     pg_conn_str=os.getenv("PROCESSING_CACHE")+"/clsstore",
-    #     fire_db_path=".cache/clsstore",
-    #     batch_size=512,
-    #     vector_length=384,
-    #     distance_func="l2",
-    # )
+
     # migrate_classification_cache(
     #     from_lance=".cache/",
     #     to_pg=os.getenv("PROCESSING_CACHE") + "/clsstore",

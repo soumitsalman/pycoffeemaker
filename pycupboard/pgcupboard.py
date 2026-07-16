@@ -105,8 +105,6 @@ SIP_COLUMNS = [ID, CREATED, KIND, SOURCE, EMBEDDING, TAGS, DIGEST, URL, BASE_URL
 SOURCE_COLUMNS = [ID, DOMAIN_NAME, BASE_URL, SITE_NAME, DESCRIPTION, FAVICON, RSS_FEED]
 RELATION_COLUMNS = [FROM_ID, TO_ID, RELATIONSHIP]
 
-from utils.config import VECTOR_LEN
-
 
 class Cupboard:
     pool: AsyncConnectionPool
@@ -201,7 +199,7 @@ class Cupboard:
         def _sip_id(ref: str | UUID) -> uuid.UUID | None:
             if isinstance(ref, UUID): return ref
             # no need to resolve urls to ids because the ids are deterministic based on the url
-            if isinstance(ref, str): return generate_id(ref)
+            if isinstance(ref, str): return generate_uuid(ref)
             
         # step 2: build relation rows
         relation_rows: list[tuple[uuid.UUID, uuid.UUID, str]] = []

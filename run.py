@@ -7,10 +7,10 @@ from datetime import datetime as dt
 from dotenv import load_dotenv
 
 MAX_WORKERS = os.cpu_count() * os.cpu_count()
-EMBEDDER_CONTEXT_LEN = 512
-EXTRACTOR_CONTEXT_LEN = 4096
-DIGESTOR_CONTEXT_LEN = 32768
-CONSOLIDATOR_CONTEXT_LEN = 65536
+DEFAULT_EMBEDDER_CONTEXT_LEN = 512
+DEFAULT_EXTRACTOR_CONTEXT_LEN = 4096
+DEFAULT_DIGESTOR_CONTEXT_LEN = 32768
+DEFAULT_CONSOLIDATOR_CONTEXT_LEN = 65536
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(CURR_DIR, ".env"), override=True)
@@ -50,7 +50,7 @@ parser.add_argument(
 )
 
 from workers.workercache.pgcache import AsyncStateCache, StateCache
-from workers.states import BEANSACKED, CATEGORIES, CUPBOARDED, SENTIMENTS, COMPOSITES, BEANS, PUBLISHERS, CHATTERS, ID
+from workers.states import BEANSACKED, CUPBOARDED, COMPOSITES, BEANS, PUBLISHERS, CHATTERS, ID
 from utils.fields import URL, BASE_URL
 from pybeansack import create_client
 
@@ -85,7 +85,7 @@ if __name__ == "__main__":
             cache=cache,
             model_path=os.environ["EMBEDDER_PATH"],
             context_len=int(
-                os.getenv("EMBEDDER_CONTEXT_LEN", EMBEDDER_CONTEXT_LEN)
+                os.getenv("EMBEDDER_CONTEXT_LEN", DEFAULT_EMBEDDER_CONTEXT_LEN)
             ),
             batch_size=batch_size,
             categories=f"{CURR_DIR}/factory/categories.parquet",
@@ -112,7 +112,7 @@ if __name__ == "__main__":
             cache=cache,
             model_path=os.environ["EXTRACTOR_PATH"],
             context_len=int(
-                os.getenv("EXTRACTOR_CONTEXT_LEN", EXTRACTOR_CONTEXT_LEN)
+                os.getenv("EXTRACTOR_CONTEXT_LEN", DEFAULT_EXTRACTOR_CONTEXT_LEN)
             ),
             batch_size=batch_size,
         ).run()
@@ -127,7 +127,7 @@ if __name__ == "__main__":
             cache=cache,
             model_path=os.environ["DIGESTOR_PATH"],
             context_len=int(
-                os.getenv("DIGESTOR_CONTEXT_LEN", DIGESTOR_CONTEXT_LEN)
+                os.getenv("DIGESTOR_CONTEXT_LEN", DEFAULT_DIGESTOR_CONTEXT_LEN)
             ),
             batch_size=batch_size,
         ).run()     
@@ -142,7 +142,7 @@ if __name__ == "__main__":
             cache=cache,
             model_path=os.environ["CONSOLIDATOR_PATH"],
             context_len=int(
-                os.getenv("CONSOLIDATOR_CONTEXT_LEN", CONSOLIDATOR_CONTEXT_LEN)
+                os.getenv("CONSOLIDATOR_CONTEXT_LEN", DEFAULT_CONSOLIDATOR_CONTEXT_LEN)
             ),
             batch_size=batch_size,
             base_url=os.getenv("CONSOLIDATOR_BASE_URL"),

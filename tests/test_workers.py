@@ -484,7 +484,7 @@ def test_cache():
         st_cache.close()
 
     if False:
-        VECTOR_LEN = 384
+        from utils import VECTOR_LEN
         cls_cache = ClassificationCache(
             ".test/cache",
             {

@@ -27,6 +27,7 @@ from nlp import (
 from utils.fields import (
     CONTENT, CREATED, SUMMARY, TAGS, TITLE, URL, SOURCE, KIND, AUTHOR,
 )
+from utils import VECTOR_LEN
 from datacollectors import POST
 
 from .states import *
@@ -35,7 +36,6 @@ from icecream import ic
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
 MAX_DOCUMENT_LEN = int(os.getenv("MAX_DOCUMENT_LEN", 4096)) # 16KB
-from utils.config import VECTOR_LEN
 
 log = get_logger("analyzerworker")
 

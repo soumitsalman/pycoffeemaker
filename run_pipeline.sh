@@ -17,7 +17,7 @@ COLLECTOR_TIMEOUT=120
 MAX_DOCUMENT_LEN=6144
 
 EMBEDDER_PATH=codefuse-ai/F2LLM-v2-80M
-EMBEDDER_CONTEXT_LEN=4096
+EMBEDDER_CONTEXT_LEN=8192
 VECTOR_LEN=320
 
 EXTRACTOR_PATH=knowledgator/modern-gliner-bi-base-v1.0
@@ -28,7 +28,7 @@ CLUSTER_EPS=0.145
 VLLM_ENABLE_V1_MULTIPROCESSING=0
 
 DIGESTOR_PATH=vllm://nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
-DIGESTOR_CONTEXT_LEN=16384
+DIGESTOR_CONTEXT_LEN=8192
 DIGESTOR_TEMPERATURE=0.4
 DIGESTOR_TOP_P=0.95
 DIGESTOR_REPETITION_PENALTY=1.2
@@ -53,7 +53,7 @@ RUN_CONSOLIDATOR=0
 RUN_PORTER=0
 
 COLLECTOR_BATCH_SIZE=128
-EMBEDDER_BATCH_SIZE=512
+EMBEDDER_BATCH_SIZE=128
 EXTRACTOR_BATCH_SIZE=24
 CLUSTERING_BATCH_SIZE=128
 DIGESTOR_BATCH_SIZE=32
@@ -164,11 +164,12 @@ backup_clscache() {
     local -a aws_s3_args=(--endpoint-url "$s3_endpoint")
     local backup_bucket="s3://cafecito-archives-new/processingcache"
     local dump_file="$clscache_root/clscache.tar.gz"
+    local s3_key="clscache-${VECTOR_LEN}.tar.gz"
 
     echo "=== [STARTING] ZVEC Classification Cache Backup ==="
     tar -czf "$dump_file" -C "$clscache_root" "$clscache_name"
     AWS_SHARED_CREDENTIALS_FILE="$aws_credentials_file" AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}" \
-        aws s3 cp "$dump_file" "$backup_bucket/" "${aws_s3_args[@]}"
+        aws s3 cp "$dump_file" "$backup_bucket/$s3_key" "${aws_s3_args[@]}"
     rm -f "$dump_file"
     echo "=== [FINISHED] ZVEC Classification Cache Backup ==="
 }
@@ -180,11 +181,12 @@ restore_clscache() {
     local -a aws_s3_args=(--endpoint-url "$s3_endpoint")
     local backup_bucket="s3://cafecito-archives-new/processingcache"
     local dump_file="$clscache_root/clscache.tar.gz"
+    local s3_key="clscache-${VECTOR_LEN}.tar.gz"
 
     echo "=== [STARTING] ZVEC Classification Cache Restore ==="
     mkdir -p "$clscache_root"
     AWS_SHARED_CREDENTIALS_FILE="$aws_credentials_file" AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}" \
-        aws s3 cp "$backup_bucket/clscache.tar.gz" "$dump_file" "${aws_s3_args[@]}"
+        aws s3 cp "$backup_bucket/$s3_key" "$dump_file" "${aws_s3_args[@]}"
     tar -xzf "$dump_file" -C "$clscache_root"
     rm -f "$dump_file"
     echo "=== [FINISHED] ZVEC Classification Cache Restore ==="

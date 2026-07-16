@@ -1,7 +1,3 @@
-__author__ = "Soumit Salman Rahman"
-__license__ = "MIT"
-__version__ = "1.0.3"
-
 __all__ = [
     "Entities",
     "Digest",
