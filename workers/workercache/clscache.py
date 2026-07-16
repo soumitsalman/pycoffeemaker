@@ -49,15 +49,15 @@ class ClassificationCache:
         ts = datetime.now(tz=timezone.utc).timestamp()
         docs = [
             zvec.Doc(
-                id=(item[ID] if isinstance(item[ID], UUID) else generate_uuid(item[ID])).hex,
+                id=generate_uuid(item[ID]).hex,
                 vectors={EMBEDDING: item[EMBEDDING]},
-                fields={ID: str(item[ID]), TS: ts},
+                fields={ID: item[ID], TS: ts},
             )
             for item in items
         ]
         conn = self.collections[object_type]
-        results = chain(*(conn.insert(chunk) for chunk in batched(docs, 1024)))        
-        return len([r for r in results if r.code == 0])
+        results = [conn.insert(chunk) for chunk in batched(docs, 1024)]
+        return len([r for r in chain(*results) if r.ok()])
 
     def search(self, object_type: str, embedding: list[float], distance: Optional[float] = None, top_n: int = DEFAULT_TOPN) -> list[str]:        
         results = self.collections[object_type].query(

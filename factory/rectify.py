@@ -276,29 +276,36 @@ def hydrate_processing_cache(cache_dir, batch_size):
                     "hydrated", extra={"source": "processed beans", "num_items": offset}
                 )
 
-    if True:
-        offset = 0
-        cls_cache = ClassificationStore(cache_dir, {BEANS: URL})
-        while beans := db.query_latest_beans(
-            conditions=["embedding IS NOT NULL"],
-            limit=batch_size,
-            offset=offset,
-            columns=[URL, EMBEDDING],
-        ):
-            offset += len(beans)
-            count = cls_cache.store(
-                BEANS,
-                [
-                    bean.model_dump(exclude_none=True, exclude_unset=True)
-                    for bean in beans
-                ],
-            )
-            logging.info(
-                "hydrated:cls_cache", extra={"source": offset, "num_items": count}
-            )
-        cls_cache.close()
+def hydrate_classification_cache(cache_dir):
+    from workers.workercache.clscache import ClassificationCache
+    from pybeansack import create_client
 
-    state_store.close()
+    db = create_client(db_type="pg", pg_connection_string=os.getenv("BEANSACK_CONNECTION_STRING"))
+    cls_cache = ClassificationCache(cache_dir, table_settings={BEANS: {"id_key": URL, "distance_func": "l2"}})
+
+    QUERY = """
+    SELECT url, emb_v2 FROM beans 
+    WHERE url > %s AND emb_v2 IS NOT NULL 
+    ORDER BY url LIMIT 16384
+    """
+    def get_beans(last_url: str):
+        with db.pool.connection() as conn:
+            with conn.execute(QUERY, (last_url, )) as cur:
+                rows = cur.fetchall()
+                cols = [desc[0] for desc in cur.description]
+                items = [dict(zip(cols, row)) for row in rows]
+                for item in items:
+                    item[EMBEDDING] = item.pop("emb_v2")
+                    item[ID] = item.pop("url")
+        return items
+
+    last_url = ""
+    while beans := get_beans(last_url):
+        count = cls_cache.store(BEANS, beans)
+        ic(last_url, count)
+        last_url = beans[-1][ID]
+    
+    
     db.close()
 
 
@@ -472,8 +479,8 @@ def rectify_beans_id_and_embeddings():
 
 # adding data porting logic
 if __name__ == "__main__":
-    rectify_beans_id_and_embeddings()
-
+    # rectify_beans_id_and_embeddings()
+    hydrate_classification_cache(os.getenv("CLASSIFICATION_CACHE"))
     # migrate_classification_cache(
     #     from_lance=".cache/",
     #     to_pg=os.getenv("PROCESSING_CACHE") + "/clsstore",
