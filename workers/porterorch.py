@@ -15,8 +15,8 @@ from pybeansack.models import (
     SUMMARY_LENGTH, TAGS, TITLE, TITLE_LENGTH, URL,
 )
 from pycupboard.pgcupboard import Cupboard
-from pycupboard.models import Sip, Source, DEFAULT_SOURCE, generate_id
-
+from pycupboard.models import Sip, Source, DEFAULT_SOURCE
+from utils import generate_uuid
 from .states import *
 from .tags import merge_tags
 from icecream import ic
@@ -203,7 +203,7 @@ class CupboardPorter:
             comp.update({
                 SOURCE: DEFAULT_SOURCE,
                 KIND: CUPBOARD_SIGNAL_KIND,
-                ID: generate_id(url),
+                ID: generate_uuid(url),
                 URL: url,                
             })  
             if tags := comp.get(TAGS):
