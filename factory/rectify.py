@@ -380,13 +380,6 @@ def rectify_beans_id_and_embeddings():
         configure=register_vector,
     )
 
-    cls_cache = ClassificationCache(
-        os.getenv('CLASSIFICATION_CACHE', '.cache/clsstore'),
-        table_settings={
-            BEANS: {"distance_func": "l2"},
-        }
-    )
-
     BEAN_EXPR = """
     SELECT url, content FROM beans b
     WHERE embedding IS NULL
@@ -444,7 +437,6 @@ def rectify_beans_id_and_embeddings():
             texts = [b[1][:MAX_DOCUMENT_LEN] for b in chunk]
             try:
                 vectors = embedder.embed_documents(texts)
-                cls_cache.store(BEANS, [{ID: url, EMBEDDING: vec} for url, vec in zip(urls, vectors)])
                 _update_beans_batch([(id, vec, url) for id, vec, url in zip(ids, vectors, urls)])
                 _update_sips_batch([(vec, id) for id, vec in zip(ids, vectors)])
             except:

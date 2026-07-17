@@ -1,6 +1,4 @@
 import asyncio
-import shutil
-from itertools import batched
 from utils.logs import get_logger, log_runtime_async
 import os
 import random
@@ -37,7 +35,6 @@ from utils.fields import (
 )
 from .workercache.base import AsyncStateCacheBase
 from .states import *
-from persistqueue import AsyncQueue, Empty
 from icecream import ic
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count()))
