@@ -430,7 +430,7 @@ def rectify_beans_id_and_embeddings():
 
     with create_embedder(os.getenv("EMBEDDER_PATH"), int(os.getenv("EMBEDDER_CONTEXT_LEN"))) as embedder:
         # ── Loop 1: Beans ──
-        batches = list(batched(_get_beans(50000), BATCH_SIZE))
+        batches = list(batched(_get_beans(200000), BATCH_SIZE))
         for chunk in tqdm(total=len(batches), iterable=batches, desc="Rectifying beans", unit="bean_batch"):
             urls = [b[0] for b in chunk]
             ids = [generate_uuid(url) for url in urls]
