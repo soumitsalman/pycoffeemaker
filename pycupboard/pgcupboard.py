@@ -13,6 +13,7 @@ from psycopg import sql
 from psycopg.types.json import Jsonb
 from icecream import ic
 
+from utils import VECTOR_LEN
 from .models import *
 
 log = logging.getLogger("cupboard")
@@ -139,7 +140,7 @@ class Cupboard:
         """Store a list of sips in the database."""
         if not sips: return 0
 
-        sips = [sip for sip in sips if sip.digest and sip.embedding]
+        sips = [sip for sip in sips if sip.digest and sip.embedding and len(sip.embedding) == VECTOR_LEN]
         for sip in sips:
             sip.embedding = Vector(sip.embedding)
             sip.digest = Jsonb(_clean_null_bytes(sip.digest))

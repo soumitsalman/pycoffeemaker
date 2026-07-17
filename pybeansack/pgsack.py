@@ -147,6 +147,7 @@ class PGSack(Beansack):
 
     def store_beans(self, beans: list[Bean]):
         """Store a list of Beans in the database."""
+        beans = [bean for bean in beans if bean.embedding and len(bean.embedding) == VECTOR_LEN]
         return self._store(BEANS, beans)
     
     def store_related(self, related_beans: list[dict]):

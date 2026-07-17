@@ -407,7 +407,13 @@ class Consolidator:
     def _get_beans(self, **kwargs) -> list[dict]:
         beans = self.cache.get(BEANS, **{k:v for k,v in kwargs.items() if v})
         # remove content, summary, and title from beans to save memory
-        beans = [b for b in beans if b.get(EMBEDDING) and b.get(DIGEST) and not any(tag in IGNORE_WORD_GAMES for tag in b.get(TAGS, []))]
+        beans = [
+            b for b in beans 
+            if b.get(EMBEDDING) \
+                and len(b.get(EMBEDDING)) == VECTOR_LEN \
+                and b.get(DIGEST) \
+                and not any(tag in IGNORE_WORD_GAMES for tag in b.get(TAGS, []))
+        ]
         for bean in beans:
             bean.pop(CONTENT, None)
             bean.pop(SUMMARY, None)
