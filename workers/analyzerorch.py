@@ -116,7 +116,7 @@ class Embedder:
             if not is_cuda_oom(e):
                 raise
 
-            clear_gpu_cache()
+            # clear_gpu_cache()
             if len(beans) == 1:
                 log.warning(
                     event="skipped embedding after cuda oom",
