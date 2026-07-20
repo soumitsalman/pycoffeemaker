@@ -258,6 +258,8 @@ class AsyncWebScraper:
                 body = error.partial
 
             if gate.is_pdf:
+                if len(body) > gate.max_size:
+                    return None
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as pdf:
                     path = pdf.name
                     pdf.write(body)

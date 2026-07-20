@@ -15,8 +15,7 @@ RUN mkdir -p .cache/collector
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
-    COLLECTOR_SOURCES=/worker/factory/feeds.yaml \
-    BATCH_SIZE=256
+    COLLECTOR_SOURCES=/worker/factory/feeds.yaml 
 
 # Use ENTRYPOINT to make the container more flexible with arguments
-ENTRYPOINT python run.py --mode $MODE
+ENTRYPOINT python run.py --mode $MODE --batch_size $BATCH_SIZE

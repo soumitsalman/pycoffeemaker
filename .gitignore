@@ -62,11 +62,7 @@ flagged
 DEPRECATE*
 
 # graphify
-graphify-out/graph.html
-graphify-out/.graphify_python
-graphify-out/.graphify_root
-graphify-out/.rebuild.lock
-graphify-out/cost.json
+graphify-out
 
 # Misc
 .n8n

@@ -130,7 +130,7 @@ class Collector:
         self.reddit_collector = RedditCollector(batch_size)
         self.hn_collector = HackerNewsCollector(batch_size)
         self.sec_filing_collector = SECFilingCollector(batch_size)
-        self.webscraper = AsyncWebScraper(batch_size<<6)
+        self.webscraper = AsyncWebScraper(batch_size<<3)
 
     def _split_item(self, item: dict):
         if not item:
