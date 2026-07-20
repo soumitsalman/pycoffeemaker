@@ -4,7 +4,7 @@ import os
 import random
 import uuid
 import yaml
-from datacollectors import RSSFeedCollector, RedditCollector, HackerNewsCollector, SECFilingCollector, AsyncWebScraper, POST
+from datacollectors import RSSFeedCollector, GovInfoRSSCollector, RedditCollector, HackerNewsCollector, SECFilingCollector, AsyncWebScraper, POST
 from utils.fields import (
     ARTICLE_LANGUAGE,
     AUTHOR,
@@ -114,6 +114,7 @@ _COLLECTOR_CACHE = ".cache/collector"
 class Collector:
     cache: AsyncStateCacheBase
     rss_collector: RSSFeedCollector
+    govinfo_collector: GovInfoRSSCollector
     reddit_collector: RedditCollector
     hn_collector: HackerNewsCollector
     sec_filing_collector: SECFilingCollector
@@ -125,6 +126,7 @@ class Collector:
         self.cache = cache
         self.batch_size = batch_size
         self.rss_collector = RSSFeedCollector(batch_size)
+        self.govinfo_collector = GovInfoRSSCollector(batch_size)
         self.reddit_collector = RedditCollector(batch_size)
         self.hn_collector = HackerNewsCollector(batch_size)
         self.sec_filing_collector = SECFilingCollector(batch_size)
@@ -286,6 +288,8 @@ class Collector:
                 to_triage = await self.reddit_collector.collect(source, mode="json")
             elif source_type == "rss":
                 to_triage = await self.rss_collector.collect(source)
+            elif source_type == "govinfo":
+                to_triage = await self.govinfo_collector.collect(source)
             elif source_type == "sec_edgar":
                 to_triage = await self.sec_filing_collector.collect(source)
         except Exception as e:
@@ -342,6 +346,7 @@ class Collector:
 
         async with (
             self.rss_collector,
+            self.govinfo_collector,
             self.reddit_collector,
             self.hn_collector,
             self.sec_filing_collector,

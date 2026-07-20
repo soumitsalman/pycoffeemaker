@@ -5,6 +5,7 @@ __version__ = "1.0.2"
 from .apicollectors import (
     APICollectorBase,
     RSSFeedCollector,
+    GovInfoRSSCollector,
     RedditCollector,
     HackerNewsCollector,
     SECFilingCollector,
@@ -34,6 +35,7 @@ from .normalize import (
 __all__ = [
     "APICollectorBase",
     "RSSFeedCollector",
+    "GovInfoRSSCollector",
     "RedditCollector",
     "HackerNewsCollector",
     "SECFilingCollector",

@@ -5,10 +5,12 @@ import re
 import time
 from utils.logs import get_logger
 import os
-from urllib.parse import urljoin
+from html import unescape
+from urllib.parse import urljoin, urlparse
 import aiohttp
 import asyncpraw
 import feedparser
+from lxml import html as lxml_html
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -417,7 +419,7 @@ class RSSFeedCollector(APICollectorBase):
         source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].get('link'))
         if url in self._STATEMENT_URLS: items = self._extract_sec_statements_rss_entries(feed, url, source_url)
         else: items = self._extract_default_rss_entries(feed, url, source_url, NEWS)
-            
+
         return _return_collected(extract_source(source_url), items)
 
     @staticmethod
@@ -436,6 +438,110 @@ class RSSFeedCollector(APICollectorBase):
             items.append(_build_rss_item(feed, feed_url, site_url, entry, default_kind, entry_link=entry_link))
         return items
 
+
+class GovInfoRSSCollector(APICollectorBase):
+    """Collect GovInfo package feeds using their downloadable content URLs."""
+
+    _HOST = "www.govinfo.gov"
+    _CONTENT_LINK_RE = re.compile(
+        r"^/content/pkg/(?P<package>[^/]+)/(?P<format>html|text|pdf)/[^/?#]+\.(?P<extension>htm|html|txt|pdf)$",
+        re.IGNORECASE,
+    )
+    _FORMAT_PRIORITY = {"htm": 0, "html": 0, "txt": 0, "pdf": 1}
+
+    def __init__(self, batch_size: int):
+        super().__init__(batch_size)
+
+    @classmethod
+    def _select_content_url(cls, entry) -> str | None:
+        package_id = str(entry.get("guid") or entry.get("id") or "").strip()
+        description = entry.get("description") or ""
+        if not package_id or not description:
+            return None
+        try:
+            document = lxml_html.fragment_fromstring(unescape(description), create_parent="div")
+        except (TypeError, ValueError):
+            return None
+
+        candidates = []
+        for anchor in document.xpath(".//a[@href]"):
+            href = anchor.get("href", "").strip()
+            parsed = urlparse(href)
+            if parsed.scheme != "https" or parsed.netloc.lower() != cls._HOST:
+                continue
+            match = cls._CONTENT_LINK_RE.fullmatch(parsed.path)
+            if not match or match.group("package") != package_id:
+                continue
+            extension = match.group("extension").lower()
+            candidates.append((cls._FORMAT_PRIORITY[extension], href))
+        return min(candidates, default=(None, None))[1]
+
+    @classmethod
+    def _guid_content_urls(cls, package_id: str) -> list[str]:
+        base = f"https://{cls._HOST}/content/pkg/{package_id}"
+        return [
+            f"{base}/html/{package_id}.htm",
+            f"{base}/html/{package_id}.html",            
+            f"{base}/pdf/{package_id}.pdf",
+            f"{base}/text/{package_id}.txt",
+        ]
+
+    async def _probe_guid_content_url(self, package_id: str) -> str | None:
+        for candidate in self._guid_content_urls(package_id):
+            try:
+                async with self.session.head(candidate, allow_redirects=True) as response:
+                    status = response.status
+            except (aiohttp.ClientError, asyncio.TimeoutError):
+                continue
+
+            if 200 <= status < 300:
+                return candidate
+            if status not in (405, 501):
+                continue
+
+            try:
+                async with self.session.get(candidate, allow_redirects=True) as response:
+                    if 200 <= response.status < 300:
+                        return candidate
+            except (aiohttp.ClientError, asyncio.TimeoutError):
+                continue
+
+        log.debug(event="govinfo_content_unavailable", package_id=package_id)
+        return None
+
+    async def _extract_entries_with_fallback(self, feed, feed_url: str, site_url: str) -> list[dict]:
+        items = []
+        for entry in feed.entries:
+            package_id = str(entry.get("guid") or entry.get("id") or "").strip()
+            content_url = self._select_content_url(entry)
+            if not content_url and package_id:
+                content_url = await self._probe_guid_content_url(package_id)
+            if not content_url:
+                log.debug(event="govinfo_content_unavailable", feed=feed_url, package_id=package_id)
+                continue
+            items.append(_build_rss_item(feed, feed_url, site_url, entry, NEWS, entry_link=content_url))
+        return items
+
+    @classmethod
+    def _extract_entries(cls, feed, feed_url: str, site_url: str) -> list[dict]:
+        items = []
+        for entry in feed.entries:
+            content_url = cls._select_content_url(entry)
+            if not content_url:
+                log.debug(event="govinfo_content_unavailable", feed=feed_url, package_id=entry.get("guid") or entry.get("id"))
+                continue
+            items.append(_build_rss_item(feed, feed_url, site_url, entry, NEWS, entry_link=content_url))
+        return items
+
+    async def collect(self, url: str) -> list[dict]:
+        if excluded_url(url):
+            return None
+        feed = await _fetch_feed(self.session, url)
+        if not feed:
+            return None
+        site_url = _get_site_url(feed.feed.get("link"), url)
+        items = await self._extract_entries_with_fallback(feed, url, site_url)
+        return _return_collected("govinfo", items)
 
 class RedditCollector(APICollectorBase):
     def __init__(self, batch_size: int):
@@ -501,7 +607,6 @@ class RedditCollector(APICollectorBase):
         for entry, entry_link in _extract_rss_entries(feed, feed_url, site_url):
             items.append(_build_reddit_rss_item(entry, subreddit_name, default_kind, entry_link=entry_link))
         return items
-
 
 
 class HackerNewsCollector(APICollectorBase):

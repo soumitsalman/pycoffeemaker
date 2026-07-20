@@ -27,3 +27,5 @@ tenacity
 aioboto3
 Brotli
 html_to_markdown
+pymupdf
+pypdf

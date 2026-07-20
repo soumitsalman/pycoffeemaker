@@ -127,11 +127,37 @@ def _parse_page(url: str, html: str) -> dict:
     metadata = _parse_metadata(url, html)
     return body | metadata
 
-def _convert_pdf_to_markdown(path: str) -> str:
-    """Process worker: convert a PDF file to markdown."""
-    import pymupdf4llm
+def _extract_pdf_text(path: str) -> str | None:
+    """Process worker: extract PDF text with an independent fallback."""
+    try:
+        import pymupdf
+        with pymupdf.open(path) as document:
+            content = "\n".join(page.get_text("text") for page in document)
+        if content.strip():
+            return content
+        raise ValueError("PyMuPDF extracted no text")
+    except Exception as primary_error:
+        log.warning(
+            event="pymupdf PDF extraction failed; using pypdf fallback",
+            source=path,
+            num_items=1,
+            error_type=primary_error.__class__.__name__,
+            error_details=str(primary_error),
+        )
 
-    return pymupdf4llm.to_markdown(path, use_ocr=False)
+    try:
+        from pypdf import PdfReader
+        content = "\n".join(page.extract_text() or "" for page in PdfReader(path, strict=False).pages)
+        return content or None
+    except Exception as fallback_error:
+        log.warning(
+            event="pypdf PDF extraction failed",
+            source=path,
+            num_items=1,
+            error_type=fallback_error.__class__.__name__,
+            error_details=str(fallback_error),
+        )
+        return None
 
 def _title_from_url(url: str) -> str | None:
     try:
@@ -192,8 +218,8 @@ class AsyncWebScraper:
     async def _parse_in_process(self, parser, url: str, html: str) -> dict:
         return await self._run_in_process("parse_pool", parser, url, html)
 
-    async def _convert_pdf_in_process(self, path: str) -> str:
-        return await self._run_in_process("pdf_pool", _convert_pdf_to_markdown, path)
+    async def _extract_pdf_in_process(self, path: str) -> str | None:
+        return await self._run_in_process("pdf_pool", _extract_pdf_text, path)
 
     @retry(
         retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
@@ -226,16 +252,17 @@ class AsyncWebScraper:
             if gate.excluded:
                 return None
 
+            try:
+                body = await response.content.readexactly(gate.max_size+1)
+            except asyncio.IncompleteReadError as error:
+                body = error.partial
+
             if gate.is_pdf:
-                body = await response.content.read(gate.max_size + 1)
-                if len(body) > gate.max_size:
-                    return None
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as pdf:
                     path = pdf.name
                     pdf.write(body)
                 return "pdf", gate.url, path
 
-            body = await response.content.read(gate.max_size)
             return "html", gate.url, body.decode(gate.charset, errors="replace")
 
     @retry(
@@ -257,12 +284,12 @@ class AsyncWebScraper:
             kind, final_url, body = scraped
             if kind == "pdf":
                 try:
-                    markdown = await self._convert_pdf_in_process(body)
-                    if not markdown: return None
+                    content = await self._extract_pdf_in_process(body)
+                    if not content: return None
                     return {
                         KIND: FINANCIAL_REPORT,
                         TITLE: _title_from_url(final_url) or _title_from_url(url),
-                        CONTENT: markdown,
+                        CONTENT: content,
                     }
                 finally:
                     try: os.unlink(body)

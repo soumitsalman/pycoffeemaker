@@ -12,7 +12,7 @@ tldextract
 praw
 asyncpraw
 readability-lxml
-pymupdf4llm
+pymupdf
 icecream
 python-dotenv
 structlog
@@ -36,3 +36,4 @@ tenacity
 aioboto3
 Brotli
 html-to-markdown
+pypdf
