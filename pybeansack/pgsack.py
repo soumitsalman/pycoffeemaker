@@ -11,7 +11,7 @@ from psycopg_pool import ConnectionPool
 from pgvector.psycopg import register_vector
 from pgvector import Vector
 from .models import *
-from utils.collections import non_null_fields
+from utils import non_null_fields, clear_null_bytes
 from .database import *
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -148,6 +148,11 @@ class PGSack(Beansack):
     def store_beans(self, beans: list[Bean]):
         """Store a list of Beans in the database."""
         beans = [bean for bean in beans if bean.embedding and len(bean.embedding) == VECTOR_LEN]
+        for bean in beans:
+            bean.title = clear_null_bytes(bean.title)
+            bean.summary = clear_null_bytes(bean.summary)
+            bean.content = clear_null_bytes(bean.content)
+
         return self._store(BEANS, beans)
     
     def store_related(self, related_beans: list[dict]):
@@ -599,21 +604,11 @@ class PGSack(Beansack):
     #     self.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY _materialized_chatter_aggregates;")
         
     def optimize(self):
-        self.execute(f"""
-        DELETE FROM beans 
-        WHERE collected < CURRENT_DATE - INTERVAL '{BEANSACK_CLEANUP_WINDOW}';        
-        
-        DELETE FROM chatters 
-        WHERE collected < CURRENT_DATE - INTERVAL '{BEANSACK_CLEANUP_WINDOW}';
-        """)        
+        tables = [BEANS, CHATTERS, PUBLISHERS, RELATED_BEANS]
+        with ThreadPoolExecutor(max_workers=3) as exec:
+            for tab in tables:
+                exec.submit(self.execute(f"DELETE FROM {tab} WHERE collected < CURRENT_TIMESTAMP - INTERVAL '{CLEANUP_WINDOW}';"))
         self.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY trend_aggregates;")
-        # NOTE: ideally this should be before the refresh but the current deletion is a hit or miss
-        self.execute("""
-        DELETE FROM related_beans rb 
-        WHERE NOT EXISTS (
-            SELECT 1 FROM beans WHERE url = rb.url
-        );
-        """)
     
     def close(self):        
         self.pool.close()

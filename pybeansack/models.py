@@ -6,8 +6,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 
-from utils.config import BEANSACK_CLEANUP_WINDOW, CLUSTER_EPS, VECTOR_LEN
-from utils.dates import ndays_ago, ndays_ago_str, now
+from utils import CLUSTER_EPS, VECTOR_LEN, ndays_ago, ndays_ago_str, now
 from utils.fields import *
 
 # CHANNEL = "social media group/forum"

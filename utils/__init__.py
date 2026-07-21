@@ -1,7 +1,7 @@
 """Project-wide utilities (logging, dates, ids, fields)."""
 
 from .collections import merge_lists, non_null_fields
-from .config import BEANSACK_CLEANUP_WINDOW, CLUSTER_EPS, VECTOR_LEN
+from .config import CLEANUP_WINDOW, CLUSTER_EPS, VECTOR_LEN
 from .dates import ensure_utc, ndays_ago, ndays_ago_str, now
 from .ids import generate_uuid
 from .logs import (
@@ -12,11 +12,13 @@ from .logs import (
     log_runtime,
     log_runtime_async,
 )
+from .texts import clear_null_bytes
 
 __all__ = [
-    "BEANSACK_CLEANUP_WINDOW",
+    "CLEANUP_WINDOW",
     "CLUSTER_EPS",
     "VECTOR_LEN",
+    "clear_null_bytes",
     "bind_run_context",
     "clear_run_context",
     "configure_logging",

@@ -109,7 +109,7 @@ class BeansackPorter:
                 self.hydrate_related(db, target_state), 
                 self.hydrate_chatters(db, target_state)
             ))
-            if sum(counts): await asyncio.to_thread(db.optimize) # self._fire_and_forget_optimize(db)
+            if sum(counts): await asyncio.to_thread(db.optimize)
             return sum(counts)
 
         counts = await asyncio.gather(*[
@@ -120,12 +120,6 @@ class BeansackPorter:
         total_ported = sum(counts)
         log.info(event=f"total {target_state}", num_items=total_ported)
         return total_ported
-
-    @classmethod
-    def _fire_and_forget_optimize(cls, db):
-        """Run optimize in a daemon thread outside asyncio's executor to avoid shutdown hangs."""
-        t = threading.Thread(target=db.optimize, daemon=True, name="optimize-bg")
-        t.start()
 
 
 CUPBOARD_SIGNAL_KIND = "signal"

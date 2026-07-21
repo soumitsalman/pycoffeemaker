@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS chatters (
 CREATE TABLE IF NOT EXISTS related_beans (
     url VARCHAR NOT NULL,
     related_url VARCHAR NOT NULL,
+    collected TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (url, related_url)
 );
 
@@ -200,6 +201,7 @@ CREATE INDEX IF NOT EXISTS idx_chatters_collected ON chatters(collected DESC);
 
 -- related_beans
 CREATE INDEX IF NOT EXISTS idx_related_beans_related_url ON related_beans(related_url);
+CREATE INDEX IF NOT EXISTS idx_related_beans_collected ON related_beans(collected DESC);
 CREATE INDEX IF NOT EXISTS idx_chatters_chatter_url ON chatters(chatter_url);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_trend_agg_url ON trend_aggregates(url);

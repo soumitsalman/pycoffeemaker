@@ -13,21 +13,10 @@ from psycopg import sql
 from psycopg.types.json import Jsonb
 from icecream import ic
 
-from utils import VECTOR_LEN
+from utils import VECTOR_LEN, CLEANUP_WINDOW, clear_null_bytes
 from .models import *
 
 log = logging.getLogger("cupboard")
-
-
-def _clean_null_bytes(obj):
-    """Recursively remove null bytes (\\u0000) from all strings in the object."""
-    if isinstance(obj, dict):
-        return {k: _clean_null_bytes(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [_clean_null_bytes(v) for v in obj]
-    elif isinstance(obj, str):
-        return obj.replace("\u0000", "NULL_BYTE")
-    return obj
 
 PG_TIMEOUT = int(os.getenv('PG_TIMEOUT', 300))
 PG_WORKERS = int(os.getenv('PG_WORKERS', 4))
@@ -60,7 +49,8 @@ CREATE TABLE IF NOT EXISTS sips (
     ) STORED,
     digest JSONB,       
     url TEXT, -- used for deriving id 
-    base_url TEXT-- used for deriving source 
+    base_url TEXT, -- used for deriving source
+    ts DATE DEFAULT CURRENT_DATE
 );
 
 CREATE TABLE IF NOT EXISTS sources (
@@ -70,7 +60,8 @@ CREATE TABLE IF NOT EXISTS sources (
     site_name TEXT,
     description TEXT,
     favicon TEXT,
-    rss_feed TEXT
+    rss_feed TEXT,
+    ts DATE DEFAULT CURRENT_DATE
 );
 
 CREATE TABLE IF NOT EXISTS relations (
@@ -78,6 +69,7 @@ CREATE TABLE IF NOT EXISTS relations (
     from_id UUID NOT NULL,
     to_id UUID NOT NULL,
     relationship TEXT NOT NULL,
+    ts DATE DEFAULT CURRENT_DATE
     UNIQUE(from_id, to_id, relationship)
 );
 
@@ -143,7 +135,7 @@ class Cupboard:
         sips = [sip for sip in sips if sip.digest and sip.embedding and len(sip.embedding) == VECTOR_LEN]
         for sip in sips:
             sip.embedding = Vector(sip.embedding)
-            sip.digest = Jsonb(_clean_null_bytes(sip.digest))
+            sip.digest = Jsonb(clear_null_bytes(sip.digest))
 
         row_placeholder = sql.SQL("(" + ",".join(["%s"] * len(SIP_COLUMNS)) + ")")
         store_batches = [
@@ -306,8 +298,15 @@ class Cupboard:
             results = [Sip(**dict(zip(cols, row))) async for row in cur]
         return results
 
+    async def _execute(self, expr, params = None):
+        async with self.pool.connection() as conn:
+            await conn.execute(expr, params)
+
     async def optimize(self):
-        pass
+        tables = ["sips", "sources", "relations"]
+        exprs = list(map(lambda tab: f"DELETE FROM {tab} WHERE ts < CURRENT_DATE - INTERVAL '{CLEANUP_WINDOW}';", tables))
+        await asyncio.gather(*[self._execute(exp) for exp in exprs])
+        
 
 def create_db(conn_str: str):
     pool = ConnectionPool(conn_str, timeout=PG_TIMEOUT)

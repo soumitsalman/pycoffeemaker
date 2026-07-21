@@ -11,7 +11,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ra
 
 from .database import *
 from .models import *
-from utils.config import BEANSACK_CLEANUP_WINDOW, CLUSTER_EPS, VECTOR_LEN
+from utils.config import CLEANUP_WINDOW, CLUSTER_EPS, VECTOR_LEN
 from utils.dates import ndays_ago, ndays_ago_str, now
 
 log = logging.getLogger(__name__)
