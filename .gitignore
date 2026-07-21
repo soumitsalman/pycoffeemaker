@@ -60,6 +60,7 @@ SmolLM2*
 soumitsr*
 flagged
 DEPRECATE*
+factory/rectify_related_beans.py
 
 # graphify
 graphify-out
