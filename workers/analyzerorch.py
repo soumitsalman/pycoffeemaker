@@ -24,9 +24,7 @@ from nlp import (
     clear_gpu_cache,
     is_cuda_oom,
 )
-from utils.fields import (
-    CONTENT, CREATED, SUMMARY, TAGS, TITLE, URL, SOURCE, KIND, AUTHOR,
-)
+from utils.fields import *
 from utils import VECTOR_LEN
 from datacollectors import POST
 
@@ -44,6 +42,17 @@ def clean_updates(updates: list[dict]) -> list[dict]:
         for k in [k for k, v in update.items() if not v]:
             update.pop(k)
     return updates
+
+_CONSOLIDATED_DIGEST_TAG_FIELDS = (
+    TAGS, REGIONS, PEOPLE, PRODUCTS, COMPANIES, STOCK_TICKERS,
+)
+
+def merge_consolidated_tags(beans: list[dict]) -> list[str]:
+    """Combine classification and digest tags from a consolidation group."""
+    return merge_tags(
+        *(bean.get(CATEGORIES) for bean in beans),
+        *(bean[DIGEST].get(field) for bean in beans for field in _CONSOLIDATED_DIGEST_TAG_FIELDS),
+    )
 
 def decache_beans(cache: StateCacheBase, states: list[str], exclude_states: list[str], batch_size: int = BATCH_SIZE) -> list[dict]:
     beans = cache.get(BEANS, states=states, exclude_states=exclude_states)
@@ -471,7 +480,7 @@ class Consolidator:
                         DIGEST: br.model_dump(),
                         RELATED: [b[URL] for b in group['data']]
                     } 
-                    if tags := merge_tags(*[b.get(TAGS, []) for b in group['data']]):
+                    if tags := merge_consolidated_tags(group['data']):
                         consolidated_item[TAGS] = tags
                         consolidated_item[DIGEST] |= {TAGS: tags}
                         

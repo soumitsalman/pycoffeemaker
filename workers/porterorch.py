@@ -1,6 +1,7 @@
 import json
 import random
 from utils.logs import get_logger
+from utils.fields import *
 import os
 import asyncio
 import threading
@@ -38,13 +39,13 @@ class BeansackPorter:
             if digest := bean.get(DIGEST):
                 if not isinstance(digest, dict): continue
                 if entities := merge_tags(
-                    digest.get('people'), 
-                    digest.get('companies'), 
-                    digest.get('products'), 
-                    digest.get('stock_tickers')
+                    digest.get(PEOPLE), 
+                    digest.get(COMPANIES), 
+                    digest.get(PRODUCTS), 
+                    digest.get(STOCK_TICKERS)
                 ):
                     bean[ENTITIES] = entities
-                if regions := digest.get('regions'):
+                if regions := digest.get(REGIONS):
                     bean[REGIONS] = regions
         return [Bean(**bean) for bean in beans]
 
@@ -140,11 +141,11 @@ class CupboardPorter:
             tags = merge_tags(
                 bean.get(CATEGORIES), 
                 bean[DIGEST].get(TAGS), 
-                bean[DIGEST].get("regions"),
-                bean[DIGEST].get("people"),
-                bean[DIGEST].get("products"),
-                bean[DIGEST].get("companies"),                
-                bean[DIGEST].get("stock_tickers"),
+                bean[DIGEST].get(REGIONS),
+                bean[DIGEST].get(PEOPLE),
+                bean[DIGEST].get(PRODUCTS),
+                bean[DIGEST].get(COMPANIES),                
+                bean[DIGEST].get(STOCK_TICKERS),
                 bean[DIGEST].get("macro_context")
             )
             if tags: bean[TAGS] = random.sample(tags, min(len(tags), MAX_TAGS))
