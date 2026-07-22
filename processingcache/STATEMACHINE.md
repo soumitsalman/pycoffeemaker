@@ -1,6 +1,6 @@
 # State cache (processing state machine)
 
-Workers share a **state cache**: durable storage for in-flight documents. Each orchestrator decides what to process with `get()` and records progress with `set()`. Implementations live under `workers/workercache/` (default: PostgreSQL via `PROCESSING_CACHE`; alternates in `extensions/`). All expose the same `StateCacheBase` / `AsyncStateCacheBase` API.
+Workers share a **state cache**: durable storage for in-flight documents. Each orchestrator decides what to process with `get()` and records progress with `set()`. Implementations live under `processingcache/` (default: PostgreSQL via `PROCESSING_CACHE`; alternates in `extensions/`). All expose the same `StateCacheBase` / `AsyncStateCacheBase` API.
 
 ## Concepts
 

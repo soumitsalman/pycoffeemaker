@@ -1,26 +1,28 @@
-# NLP — Embeddings & Micro-Agents
+# NLP — Embeddings & Text Analysts
 
 > **Canonical location:** this package lives in the [pycoffeemaker](https://github.com/soumitsalman/pycoffeemaker) monorepo at `nlp/`. The standalone GitHub repo is archived.
 
 Lightweight NLP utilities for [Pycoffeemaker](../README.md):
 
 - **Embeddings** — vectorize text for retrieval and semantic search
-- **Micro-agents** — structured extraction (entities, events, briefing fields) via Pydantic schemas
-- **Named entities** — GLiNER-based extraction (`EntityExtractor`)
+- **Text analysts** — structured extraction (digest/briefing fields) via Pydantic schemas
+- **Named entities** — GLiNER-based extraction (`EntityExtractor` → `Entities`)
+- **Tag helpers** — normalize/merge tag lists used by workers
 
-Public API (see `__init__.py`): `create_embedder`, `create_micro_agent`, `Digest`, `Briefing`, `EntityExtractor`, and selected backend classes.
+Public API (see `__init__.py`): `create_embedder`, `create_text_analyst`, `Digest`, `Briefing`, `Entities`, `EntityExtractor`, `normalize_tags` / `merge_tags` / `merge_lists`, and selected backend classes.
 
 ## Package layout
 
 ```
 nlp/
-├── __init__.py          # exports: create_embedder, create_text_analyst, Digest, …
+├── __init__.py          # public exports
 ├── embedders.py         # EmbedderBase + backends; create_embedder()
-├── analysts.py          # TextAnalystBase + backends; create_text_analyst(); EntityExtractor
-├── models.py           # Digest, Briefing, domain-specific digest schemas
-├── runtime.py           # model-path prefixes, run_batch, GPU helpers
-├── requirements.txt
-└── deprecated/          # legacy digestors, prompts (not used by current API)
+├── analysts.py          # TextAnalystBase + backends; create_text_analyst()
+├── extractors.py        # EntityExtractor (GLiNER → Entities)
+├── models.py            # Entities, Digest, Briefing, domain-specific schemas
+├── normalize.py         # normalize_tags, merge_tags, merge_lists, field cleanup
+├── formatters.py        # schema/text formatting helpers for analysts
+└── runtime.py           # model-path prefixes, run_batch, GPU helpers
 
 Integration tests live in the repo-root `tests/` directory (`test_nlp.py`, fixtures in `texts-for-nlp.json`).
 ```
@@ -30,9 +32,8 @@ Integration tests live in the repo-root `tests/` directory (`test_nlp.py`, fixtu
 From the repo root (so `nlp` is on `PYTHONPATH`):
 
 ```bash
-pip install -r nlp/requirements.txt
-# or full stack:
 pip install -r requirements.txt
+# IO-only hosts can use requirements-io.txt instead
 ```
 
 ## Quickstart
@@ -56,14 +57,14 @@ with embedder:
     qvec = embedder.embed_query("What will change in developer tooling?")  # list[float]
 ```
 
-### Structured extraction (micro-agent)
+### Structured extraction (text analyst)
 
 ```python
-from nlp import create_micro_agent, Digest
+from nlp import create_text_analyst, Digest
 
 article = "Long article text to summarize and extract intelligence from..."
 
-agent = create_micro_agent(
+analyst = create_text_analyst(
     model_path="LiquidAI/LFM2.5-1.2B-Instruct",
     context_len=32768,
     instruction="Extract structured intelligence per the schema.",
@@ -71,8 +72,8 @@ agent = create_micro_agent(
     output_model=Digest,
 )
 
-with agent:
-    results = agent.run_batch([article])
+with analyst:
+    results = analyst.run_batch([article])
 
 digest = results[0]
 print(digest.model_dump())
@@ -81,8 +82,8 @@ print(digest.model_dump())
 #### Batching
 
 ```python
-with agent:
-    digests = agent.run_batch([article, article])  # list[Digest | None]
+with analyst:
+    digests = analyst.run_batch([article, article])  # list[Digest | None]
 ```
 
 ### Named entity extraction
@@ -95,24 +96,24 @@ with EntityExtractor(
     context_len=4096,
     threshold=0.4,
 ) as extractor:
-    entities = extractor.run_batch([article])  # list[Digest | None]
+    entities = extractor.run_batch([article])  # list[Entities | None]
 ```
 
 ## Backend selection
 
-`create_embedder` / `create_micro_agent` pick a backend from the model path (and optional remote credentials).
+`create_embedder` / `create_text_analyst` pick a backend from the model path (and optional remote credentials).
 
 | Prefix / signal | Backend | Use case |
 |-----------------|---------|----------|
-| (none) | `TransformerEmbeddings` / `TransformerMicroAgent` | HuggingFace Hub or local path |
+| (none) | `TransformerEmbeddings` / `TransformerTextAnalyst` | HuggingFace Hub or local path |
 | `onnx://` | `ORTEmbeddings` | ONNX Runtime (embeddings only) |
 | `openvino://` | `OVEmbeddings` | OpenVINO (embeddings only) |
 | `llamacpp://` | `LlamaCppEmbeddings` | llama.cpp GGUF (embeddings only) |
-| `vllm://` | `VLLMEmbedder` / `VLLMMicroAgent` | vLLM batched inference |
+| `vllm://` | `VLLMEmbedder` / `VLLMTextAnalyst` | vLLM batched inference |
 | `infinity://` | `InfinityEmbeddings` | `infinity_emb` in-process embeddings |
-| `base_url` + `api_key` (kwargs) | `RemoteEmbeddings` / `RemoteMicroAgent` | OpenAI-compatible HTTP API |
+| `base_url` + `api_key` (kwargs) | `RemoteEmbeddings` / `RemoteTextAnalyst` | OpenAI-compatible HTTP API |
 
-Prefix constants live in `utils.py`.
+Prefix constants live in `runtime.py`.
 
 Examples:
 
@@ -135,8 +136,8 @@ create_embedder(
     api_key="sk-...",
 )
 
-# Remote micro-agent (requires both base_url and api_key)
-create_micro_agent(
+# Remote text analyst (requires both base_url and api_key)
+create_text_analyst(
     model_path="openai/gpt-oss-20b",
     context_len=32768,
     output_model=Briefing,
@@ -154,37 +155,40 @@ create_micro_agent(
 - `embed_query(query)` → `list[float]`
 - Use as context manager: `with embedder:`
 
-**`create_micro_agent(model_path, context_len=32768, instruction=None, input_template=None, output_model=Digest, **kwargs)`** → `MicroAgentBase`
+**`create_text_analyst(model_path, context_len=32768, instruction=None, input_template=None, output_model=Digest, enable_thinking=False, max_new_tokens=2048, **kwargs)`** → `TextAnalystBase`
 
 - `run_batch(list[str])` → `list[BaseModel | None]` (type depends on `output_model`)
 - Remote backend: pass `base_url` and `api_key` in `kwargs`
-- `vllm://` prefix selects `VLLMMicroAgent`
-- Use as context manager: `with agent:`
+- `vllm://` prefix selects `VLLMTextAnalyst`
+- Use as context manager: `with analyst:`
 
-**`EntityExtractor(model_path, context_len=4096, threshold=0.5)`** — separate from micro-agents; maps GLiNER labels into `Digest` fields via `run_batch`.
+**`EntityExtractor(model_path, context_len=4096, threshold=0.5)`** — separate from text analysts; maps GLiNER labels into `Entities` via `run_batch`.
 
 ## Return types
 
 - Embeddings: `list[float]` or `list[list[float]]`
-- Micro-agents: Pydantic models (`Digest`, `Briefing`, or domain subclasses in `models.py`) when `output_model` is set; `None` if parsing fails
-- Legacy markdown/compressed parsers: `parse_markdown`, `parse_compressed` in `agents.py` (also used internally when `output_model` is unset)
+- Text analysts: Pydantic models (`Digest`, `Briefing`, or domain subclasses in `models.py`) when `output_model` is set; `None` if parsing fails
+- NER: `Entities` (people, companies, regions, products, stock_tickers)
+- Legacy markdown/compressed parsers: `parse_markdown`, `parse_compressed` in `analysts.py` (also used internally when `output_model` is unset)
 
 ## Coffeemaker integration
 
-`workers/analyzerorch.py` wires this package into the pipeline:
+Workers wire this package into the pipeline:
 
-| Worker mode | NLP API |
-|-------------|---------|
-| `EMBEDDER` | `create_embedder` |
-| `EXTRACTOR` | `EntityExtractor` |
-| `DIGESTOR`, `CONSOLIDATOR` | `create_micro_agent` + `Digest` / `Briefing` |
+| Worker mode | Module | NLP API |
+|-------------|--------|---------|
+| `EMBEDDER` | `workers/analyzerorch.py` | `create_embedder` |
+| `EXTRACTOR` | `workers/analyzerorch.py` | `EntityExtractor` |
+| `DIGESTOR` | `workers/analyzerorch.py` | `create_text_analyst` + `Digest` |
+| `CONSOLIDATOR` | `workers/consolidatororch.py` | `create_text_analyst` + `Briefing` |
 
 ## Implementation notes
 
 - Embedder backends: `embedders.py` (`RemoteEmbeddings`, `LlamaCppEmbeddings`, `TransformerEmbeddings`, `OVEmbeddings`, `ORTEmbeddings`, `VLLMEmbedder`, `InfinityEmbeddings`)
-- Micro-agent backends: `agents.py` (`TransformerMicroAgent`, `VLLMMicroAgent`, `RemoteMicroAgent`)
-- NER: `agents.py` (`EntityExtractor`)
-- Schemas: `models.py` (`Digest`, `Briefing`, `AINewsDigest`, `FinancialMarketsNewsSummary`, …)
+- Text-analyst backends: `analysts.py` (`TransformerTextAnalyst`, `VLLMTextAnalyst`, `RemoteTextAnalyst`)
+- NER: `extractors.py` (`EntityExtractor`)
+- Schemas: `models.py` (`Entities`, `Digest`, `Briefing`, `AINewsDigest`, `FinancialMarketsNewsSummary`, …)
+- Tag/list helpers: `normalize.py` (`normalize_tags`, `merge_tags`, `merge_lists`)
 
 ### Tests
 

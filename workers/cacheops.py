@@ -10,7 +10,7 @@ def _clean_updates(updates: list[dict]) -> list[dict]:
 
 def encache_beans(cache: StateCacheBase, state: str, beans: list[dict]):
     from icecream import ic
-    count = cache.set(BEANS, state, ic(_clean_updates(beans)))
+    count = ic(cache.set(BEANS, state, ic(_clean_updates(beans))))
     return count if count is not None else len(beans)
 
 def decache_beans(cache: StateCacheBase, states: list[str], exclude_states: list[str], batch_size: int, *, log) -> list[dict]:

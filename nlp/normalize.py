@@ -65,7 +65,6 @@ _NORMALIZE_FUNCTIONS = {
     "products": normalize_tags,
     "companies": normalize_tags,    
     "entities": normalize_tags,
-    "tags": normalize_tags,
     "stock_tickers": normalize_stock_tickers,    
     "macro_context": normalize_context_tag,
     "cross_domain_impacts": normalize_cross_domain_impacts,

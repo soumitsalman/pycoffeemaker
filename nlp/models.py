@@ -26,9 +26,7 @@ _TAG_LIST_ITEM_MAX_LEN = {
     "companies": _TAG_MAX_LEN,
     "entities": _TAG_MAX_LEN,
     "stock_tickers": _TICKER_MAX_LEN,
-    "tags": _TAG_MAX_LEN,
-    "impacted_domains": _TAG_MAX_LEN,
-    
+    "impacted_domains": _TAG_MAX_LEN,    
 }
 
 _MODEL_DUMP_DEFAULTS = {

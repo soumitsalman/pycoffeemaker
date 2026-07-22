@@ -109,7 +109,10 @@ class Embedder:
 
         # Do not advance beans with missing or invalid embeddings.
         return [
-            {**bean, EMBEDDING: vector}
+            {
+                URL: bean[URL], 
+                EMBEDDING: vector
+            }
             for bean, vector in zip(beans, vectors)
             if vector and len(vector) == VECTOR_LEN
         ]
@@ -154,7 +157,7 @@ class Extractor:
         self.extractor = EntityExtractor(
             model_path=model_path,
             context_len=context_len,
-            threshold=0.35,
+            threshold=0.31,
             batch_size=batch_size,
         )
         self.batch_size = batch_size

@@ -34,7 +34,7 @@ class BeansackPorter:
     def prep_beans(cls, beans: list[dict]):
         """Merges beans, replaces content with cdn url"""
         for bean in beans:
-            if entity_pack := bean.get(ENTITIES):                
+            if entity_pack := bean.pop(ENTITIES, None):                
                 if entities := merge_lists(
                     entity_pack.get(PEOPLE), 
                     entity_pack.get(COMPANIES), 
@@ -44,8 +44,6 @@ class BeansackPorter:
                     bean[ENTITIES] = entities
                 if regions := entity_pack.get(REGIONS):
                     bean[REGIONS] = regions
-
-            print(bean.get(ENTITIES), bean.get(REGIONS))
         return [Bean(**bean) for bean in beans]
 
     async def hydrate_beans(self, db: Beansack, target_state: str):
@@ -154,7 +152,7 @@ class CupboardPorter:
                 entity_tags,
                 bean[DIGEST].get("macro_context")
             )
-            print(bean[DIGEST])
+            ic(bean[DIGEST])
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):

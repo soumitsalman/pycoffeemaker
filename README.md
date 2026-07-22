@@ -13,7 +13,6 @@ pycoffeemaker/
 ├── machine_ops.py         # Start/stop GPU cloud instances (TensorDock, Azure)
 ├── requirements.txt       # Full deps (GPU/LLM workloads)
 ├── requirements-io.txt    # IO-only deps (collector, porter)
-├── Dockerfile             # CPU image (collector + light analysis)
 ├── DockerfileGPU          # CUDA image (digestor, vLLM, etc.)
 ├── DockerfileIO           # Slim IO image
 ├── docker-compose.yaml    # Local stack: pgcache, mongo, postgres, workers, azurite, crawl4ai
@@ -23,17 +22,21 @@ pycoffeemaker/
 │   ├── classifications.yaml  # Topic/sentiment labels
 │   ├── setup.py / migrate.py / rectify.py  # DB setup & maintenance
 │   ├── install-thundercompute-s6-tasks.sh  # s6 boot task installer (ThunderCompute)
-│   ├── thundercompute-s6-tasks.sh          # Boot entry: run_pipeline.sh at VM start
+│   └── thundercompute-s6-tasks.sh          # Boot entry: run_pipeline.sh at VM start
 ├── workers/               # Orchestrators (operators)
 │   ├── collectororch.py   # COLLECTOR
-│   ├── analyzerorch.py    # EMBEDDER, CLUSTERING, EXTRACTOR, DIGESTOR, CONSOLIDATOR
+│   ├── analyzerorch.py    # EMBEDDER, CLUSTERING, EXTRACTOR, DIGESTOR
+│   ├── consolidatororch.py # CONSOLIDATOR
 │   ├── porterorch.py      # PORTER → Beansack + Cupboard
-│   ├── utils.py           # State names, field constants
-│   └── workercache/       # Fault-tolerant state store (pg, sqlite, firebird, surreal)
-│       ├── base.py        # StateCacheBase / AsyncStateCacheBase
-│       ├── pgcache.py     # Default PostgreSQL state cache (PROCESSING_CACHE)
-│       ├── clscache.py    # Classification vector store (CLASSIFICATION_CACHE)
-│       └── extensions/    # Alternate backends (sqlite, firebird, surreal, pg+cls)
+│   ├── states.py          # Cache table names + pipeline state constants
+│   └── cacheops.py        # Shared bean encache/decache helpers
+├── processingcache/       # Fault-tolerant state store (pg, sqlite, firebird, surreal)
+│   ├── base.py            # StateCacheBase / AsyncStateCacheBase
+│   ├── pgcache.py         # Default PostgreSQL state cache (PROCESSING_CACHE)
+│   ├── clscache.py        # Classification vector store (CLASSIFICATION_CACHE)
+│   ├── extensions/        # Alternate backends (sqlite, firebird, surreal, pg+cls)
+│   └── STATEMACHINE.md    # Schema and read/write patterns
+├── utils/                 # Shared logging, dates, ids, fields, env loading
 ├── datacollectors/        # RSS, APIs, async web scrapers (see datacollectors/README.md)
 ├── nlp/                   # Embeddings, digests, NER (see nlp/README.md)
 ├── pybeansack/            # Bean/Chatter/Publisher models + DB backends (see pybeansack/README.md)
@@ -54,7 +57,7 @@ pycoffeemaker/
 | Consolidate | `CONSOLIDATOR` | Group related digests into composite briefings/signals |
 | Port | `PORTER` | Push finished beans/chatters/publishers to Beansack (PG) and Cupboard |
 
-Processing is **idempotent**: each item moves through named states in `workers/workercache`; already-done work is skipped.
+Processing is **idempotent**: each item moves through named states in `processingcache`; already-done work is skipped.
 
 ## Pipeline scheduling
 
@@ -79,7 +82,7 @@ Each flag enables a stage and sets its `--batch_size`. Omit flags for stages you
 | `CONSOLIDATOR` | `consolidated` | composite briefings → Cupboard signals |
 | `PORTER` | `beansacked` / `cupboarded` | rows in Beansack / Cupboard |
 
-State merge rules: `workers/workercache/STATEMACHINE.md`.
+State merge rules: `processingcache/STATEMACHINE.md`.
 
 ### Resource model and order
 
@@ -128,22 +131,28 @@ Suggested cadence: collector ~2×/day; embedder/clustering/extractor/digestor ~3
 ### `workers/` — orchestrators
 
 - **Collector** (`collectororch.py`): reads `COLLECTOR_SOURCES` (default `factory/feeds.yaml`), uses `datacollectors` for RSS/API/scrape; writes `collected` state.
-- **Embedder / Clustering / Extractor / Digestor / Consolidator** (`analyzerorch.py`): read from cache by state, call `nlp`, write next state (`embedded`, `clustered`, `extracted`, `digested`, `consolidated`).
+- **Embedder / Clustering / Extractor / Digestor** (`analyzerorch.py`): read from cache by state, call `nlp`, write next state (`embedded`, `clustered`, `extracted`, `digested`).
+- **Consolidator** (`consolidatororch.py`): composite briefings from related beans → `consolidated`.
 - **Porter** (`porterorch.py`): `BeansackPorter` + `CupboardPorter` hydrate downstream DBs from cache.
+- **States / cache helpers**: `states.py` (table + state constants), `cacheops.py` (shared encache/decache).
 
 ### [`datacollectors/`](datacollectors/README.md)
 
 `APICollectorAsync`, `AsyncWebScraper`—shared field constants (`URL`, `CONTENT`, `SOURCE`, etc.). See [datacollectors/README.md](datacollectors/README.md) for feeds, scrape settings, and normalization.
 
-### `workers/workercache/`
+### `processingcache/`
 
-Fault-tolerant state machine used by all orchestrators. Default backend: `pgcache.StateCache` / `pgcache.AsyncStateCache` via `PROCESSING_CACHE`. `clscache.ClassificationCache` backs `CLUSTERING` (`CLASSIFICATION_CACHE`). Alternate backends live under `extensions/` (sqlite, firebird, surreal). State flow: `workers/workercache/STATEMACHINE.md`.
+Fault-tolerant state machine used by all orchestrators. Default backend: `pgcache.StateCache` / `pgcache.AsyncStateCache` via `PROCESSING_CACHE`. `clscache.ClassificationCache` backs `CLUSTERING` (`CLASSIFICATION_CACHE`). Alternate backends live under `extensions/` (sqlite, firebird, surreal). State flow: `processingcache/STATEMACHINE.md`.
 
 Tracks per-object processing states (`beans`, `publishers`, `chatters`, `composites`).
 
+### `utils/`
+
+Shared helpers used across workers and entrypoints: logging, dates/ids, field constants, env loading (`utils.env.load_coffeemaker_env`).
+
 ### [`nlp/`](nlp/README.md)
 
-Embeddings (`create_embedder`), structured extraction (`create_text_analyst` / `Digest`, `Briefing`), NER (`EntityExtractor`). Supports local HF, vLLM, ONNX, OpenVINO, remote OpenAI-compatible APIs. Details: [nlp/README.md](nlp/README.md).
+Embeddings (`create_embedder`), structured extraction (`create_text_analyst` / `Digest`, `Briefing`), NER (`EntityExtractor` / `Entities`). Supports local HF, vLLM, ONNX, OpenVINO, remote OpenAI-compatible APIs. Details: [nlp/README.md](nlp/README.md).
 
 ### [`pybeansack/`](pybeansack/README.md)
 
@@ -164,7 +173,7 @@ Operational config: feed lists, `pipeline-defaults.env`, classification taxonomi
 - Python 3.10+ (Docker images use 3.10 or 3.13)
 - `factory/pipeline-defaults.env` for checked-in pipeline defaults; `.env` at repo root for secrets and local overrides
 - Model paths for analyzer modes (`EMBEDDER_PATH`, `EXTRACTOR_PATH`, `DIGESTOR_PATH`, `CONSOLIDATOR_PATH`)
-- `PROCESSING_CACHE` — state DB connection (default: PostgreSQL via `workers/workercache/pgcache.py`; see `extensions/` for sqlite, firebird, surreal)
+- `PROCESSING_CACHE` — state DB connection (default: PostgreSQL via `processingcache/pgcache.py`; see `extensions/` for sqlite, firebird, surreal)
 - For `PORTER`: `BEANSACK_CONNECTION_STRING`, `CUPBOARD_CONNECTION_STRING`
 
 ### Install (local)
@@ -212,7 +221,7 @@ Python entrypoints load `factory/pipeline-defaults.env` first, then `.env`; dupl
 | `EXTRACTOR_PATH`, `EXTRACTOR_CONTEXT_LEN` | EXTRACTOR |
 | `DIGESTOR_PATH`, `DIGESTOR_CONTEXT_LEN` | DIGESTOR |
 | `CONSOLIDATOR_PATH`, `CONSOLIDATOR_BASE_URL`, `CONSOLIDATOR_API_KEY` | CONSOLIDATOR (remote LLM optional) |
-| `CLASSIFICATION_CACHE` | Vector store for `CLUSTERING` (`workers/workercache/clscache.py`, zvec) |
+| `CLASSIFICATION_CACHE` | Vector store for `CLUSTERING` (`processingcache/clscache.py`, zvec) |
 | `BEANSACK_CONNECTION_STRING` | PORTER |
 | `CUPBOARD_CONNECTION_STRING` | PORTER |
 | `LOG_DIR` | Optional hourly logfmt log file; otherwise logfmt to stderr |
@@ -251,7 +260,6 @@ CONSOLIDATOR_REPETITION_PENALTY=1.15
 
 | File | Use |
 |------|-----|
-| `Dockerfile` | CPU PyTorch; collector + embedder defaults |
 | `DockerfileGPU` | CUDA 12.8; digestor / GPU LLM |
 | `DockerfileIO` | Slim Python 3.13; IO-bound modes only |
 
@@ -279,15 +287,6 @@ docker compose up pgcache localmongo localpostgres   # infra only
 ```
 
 Services include: `pgcache` (pgvector), `localmongo`, `localpostgres`, `localcollector`, `localdigestor`, `localcrawler` (crawl4ai), `azurite`. Compose env uses legacy mode names in places (`INDEXER`, `COMPOSER`); current `run.py` modes are listed above.
-
-### Cloud GPU ops
-
-`machine_ops.py` starts/stops TensorDock or Azure instances:
-
-```bash
-python machine_ops.py --provider tensordock --action stop
-# Requires TD_INSTANCE_ID, TD_API_KEY or AZ_AUTH_URL, GPU_PROVIDER
-```
 
 ### Cloud GPU ops
 
@@ -367,10 +366,10 @@ Ensure `.env` is configured (`PROCESSING_CACHE`, model paths, etc.) before boot;
 | Package | README | Topics |
 |---------|--------|--------|
 | **datacollectors** | [datacollectors/README.md](datacollectors/README.md) | RSS/API/scrape collectors, field normalization, `APICollectorAsync`, `AsyncWebScraper`, crawl4ai |
-| **nlp** | [nlp/README.md](nlp/README.md) | Embeddings, digestors, NER, model backends (`create_embedder`, `create_text_analyst`, `EntityExtractor`) |
+| **nlp** | [nlp/README.md](nlp/README.md) | Embeddings, text analysts, NER, model backends (`create_embedder`, `create_text_analyst`, `EntityExtractor`) |
 | **pybeansack** | [pybeansack/README.md](pybeansack/README.md) | Bean/Chatter/Publisher models, PG/Lance/Duck/DuckLake backends, queries, porting |
 
 ## Further reading
 
 - [`AGENTS.md`](AGENTS.md) — design overview for agents/tools
-- [`workers/workercache/STATEMACHINE.md`](workers/workercache/STATEMACHINE.md) — state machine schema and worker read/write flow
+- [`processingcache/STATEMACHINE.md`](processingcache/STATEMACHINE.md) — state machine schema and worker read/write flow

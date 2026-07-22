@@ -206,7 +206,7 @@ def _merge_consolidated_tags(beans: list[dict]) -> list[str]:
     """Combine classification and digest tags from a consolidation group."""
     return merge_tags(
         *(bean.get(CATEGORIES) for bean in beans),
-        *(bean[ENTITIES].get(field) for bean in beans for field in _CONSOLIDATED_DIGEST_TAG_FIELDS),
+        *(bean[ENTITIES].get(field) for bean in beans if bean.get(ENTITIES) for field in _CONSOLIDATED_DIGEST_TAG_FIELDS),
     )
 
 def _entity_tags(entities: dict) -> list:
