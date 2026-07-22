@@ -11,7 +11,7 @@ from psycopg_pool import ConnectionPool
 from pgvector.psycopg import register_vector
 from pgvector import Vector
 from .models import *
-from utils import non_null_fields, clear_null_bytes
+from utils import non_null_fields, clear_null_bytes, CLEANUP_WINDOW
 from .database import *
 from tenacity import retry, stop_after_attempt, wait_fixed
 
