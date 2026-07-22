@@ -44,6 +44,7 @@ __pycache__
 .aws
 
 # NLP / model artifacts
+.tools
 .models
 .delete-models
 .outputs

@@ -14,13 +14,16 @@ __all__ = [
     "VLLMTextAnalyst",
     "RemoteTextAnalyst",
     "EntityExtractor",
-    "valid_tags",
+    "normalize_tags",
+    "merge_lists",
+    "merge_tags",
     "clear_gpu_cache",
     "is_cuda_oom",
 ]
 
 from .embedders import *
+from .extractors import *
 from .analysts import *
 from .models import *
-from .validators import valid_tags
+from .normalize import merge_tags, merge_lists, normalize_tags
 from .runtime import clear_gpu_cache, is_cuda_oom

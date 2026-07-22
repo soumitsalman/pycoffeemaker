@@ -1,4 +1,3 @@
-import logging
 import threading
 import os
 import numpy as np
@@ -9,10 +8,8 @@ from tenacity import before_sleep_log, retry, stop_after_attempt, wait_random
 from .runtime import *
 from icecream import ic
 
-log = logging.getLogger(__name__)
-
 try: import torch
-except: log.warning("PyTorch Not Available", extra={'source': __file__, 'num_items': 1})
+except: print("[WARNING] PyTorch Not Available. Only `LlamaCppEmbeddings` and `RemoteEmbeddings` will work. Run `pip install torch`.")
 
 VECTOR = list[float]
 

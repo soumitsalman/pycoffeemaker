@@ -5,14 +5,16 @@ from typing import Any, Optional
 from pathlib import Path
 from utils import generate_uuid, VECTOR_LEN
 from uuid import UUID
-import zvec
 from icecream import ic
+
+try: import zvec
+except: print("[WARNING] zvec missing from .venv. `ClassificationCache` will not work. Run `pip install zvec`")
 
 ID = "id"
 TS = "ts"
 EMBEDDING = "embedding"
-METRIC_MAP = {"l2": zvec.MetricType.L2, "cosine": zvec.MetricType.COSINE}
 DEFAULT_TOPN = 10
+# METRIC_MAP = {"l2": zvec.MetricType.L2, "cosine": zvec.MetricType.COSINE}
 
 class ClassificationCache:
     def __init__(self, db_path: str, table_settings: dict[str, dict[str, Any]]):

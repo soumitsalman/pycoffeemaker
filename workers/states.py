@@ -1,15 +1,3 @@
-from utils.collections import merge_lists
-from utils.fields import (
-    BRIEFING,
-    CATEGORIES,
-    DIGEST,
-    EMBEDDING,
-    ENTITIES,
-    ID,
-    RELATED,
-    SENTIMENTS,
-)
-
 # Cache table names
 BEANS = "beans"
 COMPOSITES = "composites"

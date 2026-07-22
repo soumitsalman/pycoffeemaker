@@ -49,10 +49,9 @@ parser.add_argument(
     help="Operation mode (COLLECTOR, EMBEDDER, DIGESTOR, EXTRACTOR, CLUSTERING, CONSOLIDATOR, PORTER)",
 )
 
-from workers.workercache.pgcache import AsyncStateCache, StateCache
-from workers.states import BEANSACKED, CUPBOARDED, COMPOSITES, BEANS, PUBLISHERS, CHATTERS, ID
-from utils.fields import URL, BASE_URL
-from pybeansack import create_client
+from processingcache import AsyncStateCache, StateCache, ClassificationCache
+from workers.states import BEANSACKED, CUPBOARDED, COMPOSITES, BEANS, PUBLISHERS, CHATTERS
+from utils.fields import URL, BASE_URL, ID
 
 if __name__ == "__main__":
     # Use command line args if provided, otherwise fall back to env vars
@@ -94,7 +93,6 @@ if __name__ == "__main__":
 
     elif mode == "CLUSTERING":
         from workers.analyzerorch import Clusterer
-        from workers.workercache.clscache import ClassificationCache
         
         cls_cache = ClassificationCache(
             os.getenv('CLASSIFICATION_CACHE', f'{CURR_DIR}/.cache/clsstore'), 
@@ -130,10 +128,12 @@ if __name__ == "__main__":
                 os.getenv("DIGESTOR_CONTEXT_LEN", DEFAULT_DIGESTOR_CONTEXT_LEN)
             ),
             batch_size=batch_size,
+            base_url=os.getenv("DIGESTOR_BASE_URL"),
+            api_key=os.getenv("DIGESTOR_API_KEY"),
         ).run()     
 
     elif mode == "CONSOLIDATOR":
-        from workers.analyzerorch import Consolidator
+        from workers.consolidatororch import Consolidator
         
         if v2_mode := os.getenv("CONSOLIDATOR_VLLM_USE_V2_MODEL_RUNNER"): 
             os.environ["VLLM_USE_V2_MODEL_RUNNER"] = v2_mode
@@ -152,6 +152,7 @@ if __name__ == "__main__":
     elif mode == "PORTER":
         from workers.porterorch import BeansackPorter, CupboardPorter
         from pycupboard.pgcupboard import Cupboard
+        from pybeansack import create_client
 
         async def run_porter():
             beansack_db = create_client("pg", pg_connection_string=os.getenv("BEANSACK_CONNECTION_STRING"))

@@ -1,11 +1,10 @@
 from datetime import date
-from typing import Any, Dict, List, Literal, Optional, Union, get_args, get_origin
-import types
+from typing import Dict, List, Literal, Optional
 from functools import cached_property
-from typing_extensions import deprecated
 from pydantic import BaseModel, Field
 
-from .validators import cleanup_fields, model_text_schema, text_value
+from .normalize import normalize_fields, merge_lists
+from .formatters import model_text_schema, text_value, apply_model_json_constraints
 
 _TAG_MAX_LEN = 50
 _TAGS_MAX_COUNT = 10
@@ -26,25 +25,11 @@ _TAG_LIST_ITEM_MAX_LEN = {
     "products": _TAG_MAX_LEN,
     "companies": _TAG_MAX_LEN,
     "entities": _TAG_MAX_LEN,
+    "stock_tickers": _TICKER_MAX_LEN,
     "tags": _TAG_MAX_LEN,
     "impacted_domains": _TAG_MAX_LEN,
+    
 }
-
-_DIGEST_LIST_ITEM_MAX_LEN = {
-    **_TAG_LIST_ITEM_MAX_LEN,
-    "stock_tickers": _TICKER_MAX_LEN,
-}
-
-
-def _apply_model_json_constraints(schema: dict, list_item_max_len: dict[str, int]) -> dict:
-    for name, definition in schema["properties"].items():
-        if "anyOf" in definition:
-            definition["type"] = "string"
-            del definition["anyOf"]
-        if item_max := list_item_max_len.get(name):
-            items = definition.setdefault("items", {"type": "string"})
-            items["maxLength"] = item_max
-    return schema
 
 _MODEL_DUMP_DEFAULTS = {
     "exclude_none": True,
@@ -52,16 +37,9 @@ _MODEL_DUMP_DEFAULTS = {
     "exclude_defaults": True,
 }
 
-class Entities(BaseModel):
-    # keywords
-    regions: List[str] = Field(default_factory=list, description="List of specified names geographic regions/locations. max_length<=10. exclude_pattern=N countries.")
-    people: List[str] = Field(default_factory=list, description="List of specified names of people - CEOs,political leaders,influential figures. max_length<=10. exclude_pattern=N leaders.")
-    products: List[str] = Field(default_factory=list, description="List of specified names products/services. max_length<=10. exclude_pattern=N products.")
-    companies: List[str] = Field(default_factory=list, description="List of specified names companies/organizations. max_length<=10. exclude_pattern=N companies.")
-    stock_tickers: List[str] = Field(default_factory=list, description="List of specified stock ticker symbols. max_length<=10. exclude_pattern=N stock tickers.")    
-    
+class _NLPBaseModel(BaseModel):
     def model_post_init(self, __context):
-        cleanup_fields(self, __context)
+        normalize_fields(self)
 
     @classmethod
     def model_text_schema(cls):
@@ -69,12 +47,7 @@ class Entities(BaseModel):
 
     @classmethod
     def model_json_schema(cls):
-        schema = super().model_json_schema()
-        for name, definition in schema["properties"].items():
-            if 'anyOf' in definition:
-                definition['type']="string"
-                del definition['anyOf']
-        return schema
+        return apply_model_json_constraints(super().model_json_schema())
 
     def model_dump(self, **kwargs):
         return super().model_dump(**(_MODEL_DUMP_DEFAULTS | kwargs))
@@ -83,7 +56,18 @@ class Entities(BaseModel):
         return text_value(self)
 
 
-class Digest(Entities):
+class Entities(_NLPBaseModel):
+    regions: List[str] = Field(default_factory=list, description="List of specified names geographic regions/locations. max_length<=10. exclude_pattern=N countries.")
+    people: List[str] = Field(default_factory=list, description="List of specified names of people - CEOs,political leaders,influential figures. max_length<=10. exclude_pattern=N leaders.")
+    products: List[str] = Field(default_factory=list, description="List of specified names products/services. max_length<=10. exclude_pattern=N products.")
+    companies: List[str] = Field(default_factory=list, description="List of specified names companies/organizations. max_length<=10. exclude_pattern=N companies.")
+    stock_tickers: List[str] = Field(default_factory=list, description="List of specified stock ticker symbols. max_length<=10. exclude_pattern=N stock tickers.")    
+ 
+    @property
+    def tags(self):
+        return merge_lists(self.regions, self.people, self.products, self.companies, self.stock_tickers)
+
+class Digest(_NLPBaseModel):
     """Main digest/key points of an article/news/blog/report"""        
     actions: List[str] = Field(
         default_factory=list,
@@ -139,40 +123,58 @@ class Digest(Entities):
             "Then explain mechanism/how, impact/why it matters, and effects/response/outlook. "
         ),
     )
-    # tags: List[str] = Field(
-    #     default_factory=list,
-    #     description="List of search,classification,clustering keywords/phrases. max_length<=10. exclude_pattern=N tags.",
-    # )
-    regions: List[str] = Field(
-        default_factory=list,
-        description="List of specified names geographic regions/locations. max_length<=10. exclude_pattern=N countries.",
-    )
-    people: List[str] = Field(
-        default_factory=list,
-        description="List of specified names of people - CEOs,political leaders,influential figures. max_length<=10. exclude_pattern=N leaders.",
-    )
-    products: List[str] = Field(
-        default_factory=list,
-        description="List of specified names products/services. max_length<=10. exclude_pattern=N products.",
-    )
-    companies: List[str] = Field(
-        default_factory=list,
-        description="List of specified names companies/organizations. max_length<=10. exclude_pattern=N companies.",
-    )
-    stock_tickers: List[str] = Field(
-        default_factory=list,
-        description="List of specified stock ticker symbols. max_length<=10. exclude_pattern=N stock tickers.",
-    )
+    
 
-    @classmethod
-    def model_json_schema(cls):
-        return _apply_model_json_constraints(
-            super().model_json_schema(),
-            _DIGEST_LIST_ITEM_MAX_LEN,
+_BRIEFING_EVENTS_MAX_COUNT = 40
+_BRIEFING_LIST_MAX_COUNT = 10
+
+_BRIEFING_IMPACT_LEVEL_MAX_LEN = 15
+_BRIEFING_FORECAST_MAX_LEN = 300
+_BRIEFING_BRIEFING_MAX_LEN = 1000
+
+class Briefing(_NLPBaseModel):
+    """Intelligence briefing from a stream of events."""           
+    events: list[str] = Field(
+        default_factory=list,
+        description=(
+            "List of atomic factual event sentences in chronological order. max_length<=40."
+            "Format per item: YYYY-MM-DD Actor verb object/effect with key metric if available. Plain sentence only. "
+            "Avoid angle brackets, labels, semicolon lists, or field:value fragments."
         )
-
-    def model_dump(self, **kwargs):
-        return super().model_dump(**(_MODEL_DUMP_DEFAULTS | kwargs))
+    )
+    drivers: list[str] = Field(
+        default_factory=list,
+        description=(
+            "List of atomic causal sentences specifying the actions/macro_contexts driving the events. max_length<=10. "
+            "Format per item: plain sentence stating cause and resulting effect. "
+            "Avoid angle brackets, labels, chain-of-thought, or field:value fragments."
+        )
+    )
+    impacts: list[str] = Field(
+        default_factory=list,
+        description=(
+            "List of atomic observed impact sentences. "
+            "Format per item: affected party verb measurable effect with key metric if available. Plain sentence only. max_length<=10. "
+            "Avoid angle brackets, labels, speculation, or field:value fragments."
+        )
+    )
+    impacted_domains: list[str] = Field(
+        default_factory=list,
+        description="List of domains impacted by the events sequence. max_length<=10. exclude_pattern=N domains.",
+    )
+    impact_level: str = Field(
+        description="Specified overall impact of the events sequence. ALLOWED: null, low, medium, high, critical, transformative"
+    )
+    forecast: str = Field(
+        description="1-sentence specifying short-term forecast grounded in observed impacts or null if not decipherable. Plain sentence only. Avoid hedged narrative, reasoning trace, labels, or field:value fragments."
+    )
+    briefing: str = Field(
+        description=(
+            "Intelligence briefing of the events (<=3sentences). "
+            "Include time/date, larger context, actors, events, targets/affected parties, with key metrics/comparisons. "
+            "Then explain mechanism/how, impact/why it matters, and effects/response/outlook. "
+        )
+    )
 
 
 # ────────────────────────────────────────────────
@@ -180,8 +182,6 @@ class Digest(Entities):
 # ────────────────────────────────────────────────
 
 class AINewsDigest(Digest):
-    people: List[str] = Field(default_factory=list, description="List of names of key researchers, authors or quoted experts")
-    products: List[str] = Field(default_factory=list, description="List of specified products/models/technologies/agents/frameworks. ex: Grok, ChatGPT, Claude Opus, Linux. Exclude=generic,grouped/aggregated qualifications - 3 new products.")    
     benchmark_scores: List[str] = Field(default_factory=list, description="List of reported performance numbers on standard benchmarks (key: benchmark name, value: score)")
     claimed_productivity_lift: Optional[str] = Field(None, description="Reported productivity/efficiency gain")
     enterprise_adoption_rate: Optional[str] = Field(None, description="Reported adoption/usage rate")
@@ -627,81 +627,4 @@ class FinancialDocumentSummary(Digest):
     material_event_description: Optional[str] = Field(
         None, description="For 8-K: what triggered the filing"
     )
-
-
-_BRIEFING_EVENTS_MAX_COUNT = 40
-_BRIEFING_LIST_MAX_COUNT = 10
-
-_BRIEFING_IMPACT_LEVEL_MAX_LEN = 15
-_BRIEFING_FORECAST_MAX_LEN = 300
-_BRIEFING_BRIEFING_MAX_LEN = 1000
-
-_BRIEFING_LIST_ITEM_MAX_LEN = {
-    k: _TAG_LIST_ITEM_MAX_LEN[k] for k in ("impacted_domains", "tags")
-}
-
-
-class Briefing(BaseModel):
-    """Intelligence briefing from a stream of events."""           
-    events: list[str] = Field(
-        default_factory=list,
-        description=(
-            "List of atomic factual event sentences in chronological order. max_length<=40."
-            "Format per item: YYYY-MM-DD Actor verb object/effect with key metric if available. Plain sentence only. "
-            "Avoid angle brackets, labels, semicolon lists, or field:value fragments."
-        )
-    )
-    drivers: list[str] = Field(
-        default_factory=list,
-        description=(
-            "List of atomic causal sentences specifying the actions/macro_contexts driving the events. max_length<=10. "
-            "Format per item: plain sentence stating cause and resulting effect. "
-            "Avoid angle brackets, labels, chain-of-thought, or field:value fragments."
-        )
-    )
-    impacts: list[str] = Field(
-        default_factory=list,
-        description=(
-            "List of atomic observed impact sentences. "
-            "Format per item: affected party verb measurable effect with key metric if available. Plain sentence only. max_length<=10. "
-            "Avoid angle brackets, labels, speculation, or field:value fragments."
-        )
-    )
-    impacted_domains: list[str] = Field(
-        default_factory=list,
-        description="List of domains impacted by the events sequence. max_length<=10. exclude_pattern=N domains.",
-    )
-    impact_level: str = Field(
-        description="Specified overall impact of the events sequence. ALLOWED: null, low, medium, high, critical, transformative"
-    )
-    forecast: str = Field(
-        description="1-sentence specifying short-term forecast grounded in observed impacts or null if not decipherable. Plain sentence only. Avoid hedged narrative, reasoning trace, labels, or field:value fragments."
-    )
-    briefing: str = Field(
-        description=(
-            "Intelligence briefing of the events (<=3sentences). "
-            "Include time/date, larger context, actors, events, targets/affected parties, with key metrics/comparisons. "
-            "Then explain mechanism/how, impact/why it matters, and effects/response/outlook. "
-        )
-    )
-
-    def model_post_init(self, __context):
-        cleanup_fields(self, __context)
-
-    @classmethod
-    def model_text_schema(cls):
-        return model_text_schema(cls)
-
-    @classmethod
-    def model_json_schema(cls):
-        return _apply_model_json_constraints(
-            super().model_json_schema(),
-            _BRIEFING_LIST_ITEM_MAX_LEN,
-        )
-
-    def model_dump(self, **kwargs):
-        return super().model_dump(**(_MODEL_DUMP_DEFAULTS | kwargs))
-
-    def __str__(self):
-        return text_value(self)
 

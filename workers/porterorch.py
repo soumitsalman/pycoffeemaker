@@ -1,14 +1,12 @@
-import json
 import random
 from utils.logs import get_logger
 from utils.fields import *
 import os
 import asyncio
-import threading
 from itertools import chain
 from typing import Any
 
-from .workercache.base import AsyncStateCacheBase
+from processingcache import AsyncStateCacheBase
 from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
 from pybeansack.models import (
     BASE_URL, CATEGORIES, CONTENT, CONTENT_LENGTH, CREATED, EMBEDDING, ENTITIES,
@@ -19,7 +17,7 @@ from pycupboard.pgcupboard import Cupboard
 from pycupboard.models import Sip, Source, DEFAULT_SOURCE
 from utils import generate_uuid
 from .states import *
-from .tags import merge_tags
+from nlp import merge_lists, normalize_tags
 from icecream import ic
 
 log = get_logger("porterworker")
@@ -36,23 +34,24 @@ class BeansackPorter:
     def prep_beans(cls, beans: list[dict]):
         """Merges beans, replaces content with cdn url"""
         for bean in beans:
-            if digest := bean.get(DIGEST):
-                if not isinstance(digest, dict): continue
-                if entities := merge_tags(
-                    digest.get(PEOPLE), 
-                    digest.get(COMPANIES), 
-                    digest.get(PRODUCTS), 
-                    digest.get(STOCK_TICKERS)
+            if entity_pack := bean.get(ENTITIES):                
+                if entities := merge_lists(
+                    entity_pack.get(PEOPLE), 
+                    entity_pack.get(COMPANIES), 
+                    entity_pack.get(PRODUCTS), 
+                    entity_pack.get(STOCK_TICKERS)
                 ):
                     bean[ENTITIES] = entities
-                if regions := digest.get(REGIONS):
+                if regions := entity_pack.get(REGIONS):
                     bean[REGIONS] = regions
+
+            print(bean.get(ENTITIES), bean.get(REGIONS))
         return [Bean(**bean) for bean in beans]
 
     async def hydrate_beans(self, db: Beansack, target_state: str):
         if beans := await self.cache.get(
             BEANS,
-            states=[COLLECTED, EMBEDDED, DIGESTED],
+            states=[COLLECTED, EMBEDDED, EXTRACTED],
             exclude_states=target_state,
         ):  
             log.info(event="porting:beans", to="beansack", num_items=len(beans))  
@@ -123,6 +122,7 @@ class BeansackPorter:
         return total_ported
 
 
+CUPBOARD_EVENT_KIND = "event"
 CUPBOARD_SIGNAL_KIND = "signal"
 CUPBOARD_SIGNAL_URL_PREFIX = "https://api.cafecito.tech/espresso/signals/"
 MAX_TAGS = 50
@@ -137,24 +137,30 @@ class CupboardPorter:
         beans = [bean for bean in beans if bean.get(DIGEST)]
         for bean in beans:            
             bean.pop(SOURCE)
-            bean[KIND] = "event:"+bean[KIND]
-            tags = merge_tags(
-                bean.get(CATEGORIES), 
-                bean[DIGEST].get(TAGS), 
-                bean[DIGEST].get(REGIONS),
-                bean[DIGEST].get(PEOPLE),
-                bean[DIGEST].get(PRODUCTS),
-                bean[DIGEST].get(COMPANIES),                
-                bean[DIGEST].get(STOCK_TICKERS),
+            bean[KIND] = CUPBOARD_EVENT_KIND     
+            entity_tags = []       
+            if entity_pack := bean.get(ENTITIES):
+                bean[DIGEST] |= entity_pack
+                entity_tags = merge_lists(
+                    entity_pack.get(PEOPLE), 
+                    entity_pack.get(COMPANIES), 
+                    entity_pack.get(PRODUCTS), 
+                    entity_pack.get(STOCK_TICKERS),
+                    entity_pack.get(REGIONS),
+                )
+            bean[TAGS] = merge_lists(
+                normalize_tags(bean.get(TAGS)),
+                bean.get(CATEGORIES),
+                entity_tags,
                 bean[DIGEST].get("macro_context")
             )
-            if tags: bean[TAGS] = random.sample(tags, min(len(tags), MAX_TAGS))
+            print(bean[DIGEST])
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):
         if beans := await self.cache.get(
             BEANS,
-            states=[COLLECTED, EMBEDDED, DIGESTED],
+            states=[COLLECTED, EMBEDDED, EXTRACTED, DIGESTED],
             exclude_states=target_state,
         ):  
             log.info(event="porting:events", to="cupboard", num_items=len(beans))             

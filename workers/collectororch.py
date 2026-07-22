@@ -33,7 +33,7 @@ from utils.fields import (
     TITLE,
     URL,
 )
-from .workercache.base import AsyncStateCacheBase
+from processingcache import AsyncStateCacheBase
 from .states import *
 from icecream import ic
 

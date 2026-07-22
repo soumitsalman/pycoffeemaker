@@ -4,10 +4,10 @@ set -euo pipefail
 
 # Runtime fallback defaults (manual runs without install).
 EMBEDDER_BATCH=128
-CLUSTERING_BATCH=448
+CLUSTERING_BATCH=256
+EXTRACTOR_BATCH=32
 DIGESTOR_BATCH=128
 CONSOLIDATOR_BATCH=128
-ARGS_FILE="/etc/thundercompute/pipeline.args"
 
 mkdir -p /home/ubuntu/.logs
 chown -R ubuntu:ubuntu /home/ubuntu/.logs
@@ -15,51 +15,13 @@ LOG="/home/ubuntu/.logs/pipeline.log"
 WORKDIR="/home/ubuntu/pycoffeemaker"
 SCRIPT="$WORKDIR/run_pipeline.sh"
 
-resolve_preset() {
-    case "$1" in
-        embedder)
-            ARGS=(--embedder "$EMBEDDER_BATCH")
-            ;;
-        digestor)
-            ARGS=(--clustering "$CLUSTERING_BATCH" --digestor "$DIGESTOR_BATCH")
-            ;;
-        embedder_digestor)
-            ARGS=(
-                --embedder "$EMBEDDER_BATCH"
-                --clustering "$CLUSTERING_BATCH"
-                --digestor "$DIGESTOR_BATCH"
-            )
-            ;;
-        consolidator)
-            ARGS=(--consolidator "$CONSOLIDATOR_BATCH")
-            ;;
-        all)
-            ARGS=(
-                --embedder "$EMBEDDER_BATCH"
-                --clustering "$CLUSTERING_BATCH"
-                --digestor "$DIGESTOR_BATCH"
-                --consolidator "$CONSOLIDATOR_BATCH"
-            )
-            ;;
-        *)
-            echo "unknown preset: $1 (expected embedder, digestor, embedder_digestor, consolidator, all)" >&2
-            return 1
-            ;;
-    esac
-}
-
-if [[ $# -gt 0 && "$1" == --* ]]; then
-    ARGS=("$@")
-elif [[ $# -gt 0 ]]; then
-    resolve_preset "$1"
-elif [[ -f "$ARGS_FILE" ]]; then
-    mapfile -t ARGS < "$ARGS_FILE"
-elif [[ -f /etc/thundercompute/pipeline.mode ]]; then
-    MODE="$(cat /etc/thundercompute/pipeline.mode)"
-    resolve_preset "$MODE"
-else
-    resolve_preset all
-fi
+ARGS=(
+    --embedder "$EMBEDDER_BATCH"
+    --extractor "$EXTRACTOR_BATCH"
+    --clustering "$CLUSTERING_BATCH"
+    --digestor "$DIGESTOR_BATCH"
+    --consolidator "$CONSOLIDATOR_BATCH"
+)
 
 ARGS_QUOTED="$(printf '%q ' "${ARGS[@]}")"
 

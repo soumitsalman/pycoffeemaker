@@ -61,3 +61,16 @@ BRIEFING = "briefing"
 # Cupboard / related-article keys
 RELATED_URL = "related_url"
 DOMAIN_NAME = "domain_name"
+
+def non_null_fields(items: list[dict]) -> list[str]:
+    return list({k for item in items for k, v in item.items() if v is not None})
+
+def clear_null_bytes(obj):
+    """Recursively remove null bytes (\\u0000) from all strings in the object."""
+    if isinstance(obj, dict):
+        return {k: clear_null_bytes(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clear_null_bytes(v) for v in obj]
+    elif isinstance(obj, str):
+        return obj.replace("\u0000", "NULL_BYTE")
+    return obj
