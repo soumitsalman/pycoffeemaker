@@ -32,18 +32,16 @@ CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 4))
 
 BRIEFING_SYS = """
 TASK=CREATE intelligence_briefing FROM event_stream
+INPUT=intelligence_briefing_specification,event_stream
+RESPONSE=JSON,matching schema,compact
 RULES=
 selection:identify_dominant_theme_from_most_common_related_items;exclude_outliers
 grounding:only_items_linked_to_thesis;strict_tracing;no_synthesis_of_unrelated_items
 phrasing:plain_sentences,structured,dynamic,specific,granular,direct
 tone:informative,objective,concrete,analytical,data_driven
-avoid:forced_unification,clickbait,sensationalism,ambiguity,vagueness,generic_phrasing,speculative_narrative,emotive_language,technical_inconsistencies,political_biases
-RESPONSE=JSON object matching schema
-"""
-BRIEFING_INST = """
-CREATE intelligence_briefing FROM event_stream
-BRIEFING_ELEMENTS=
-{description}
+avoid:ambiguity,generic_phrasing,generic_quantification,emotive_language,
+avoid:mathematical_inconsistencies,date_inconsistencies,time_tense_inconsistencies
+avoid:markdown,prose,code_fences,null_placeholders,implied_information,newline_char
 STEPS=
 0.CLUSTER event_items BY shared related,actions,events,impacts FROM event_stream
 1.CREATE dominant_theme_or_main_thesis FROM the largest/most_coherent cluster WHERE items CONTAIN SAME(related OR causal link)
@@ -52,8 +50,11 @@ STEPS=
 4.DETERMINE relationships between related,actions,events,impacts FROM retained_items
 5.DETERMINE causal_chain driving or preceding the retained events FROM retained_items
 6.DETERMINE impacts,implications,target_groups,forecast FROM retained_items
-CONSTRAINTS=
-USE retained_items ONLY
+7.DETERMINE confidence level on the collective facts/actions FROM retained_items
+"""
+BRIEFING_INST = """
+INTELLIGENCE_BRIEFING_SPECIFICATION=
+{description}
 EVENT_STREAM=
 {input_text}
 """

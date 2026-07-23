@@ -161,16 +161,24 @@ class Briefing(_NLPBaseModel):
         description="List of domains impacted by the events sequence. max_length<=10. exclude_pattern=N domains.",
     )
     impact_level: str = Field(
-        description="Specified overall impact of the events sequence. ALLOWED: null, low, medium, high, critical, transformative"
+        description="Combined impact of the events sequence. ALLOWED: null, low, medium, high, critical, transformative"
     )
     forecast: str = Field(
-        description="1-sentence specifying short-term forecast grounded in observed impacts or null if not decipherable. Plain sentence only. Avoid hedged narrative, reasoning trace, labels, or field:value fragments."
+        description="plain-sentence specifying short-term forecast grounded in observed impacts or null if not decipherable. Plain sentence only. Avoid hedged narrative, reasoning trace, labels, or field:value fragments."
     )
     briefing: str = Field(
         description=(
             "Intelligence briefing of the events (<=3sentences). "
             "Include time/date, larger context, actors, events, targets/affected parties, with key metrics/comparisons. "
             "Then explain mechanism/how, impact/why it matters, and effects/response/outlook. "
+        )
+    )
+    confidence: str = Field(
+        description=(
+            "Confidence/trust level on the events."
+            "Mutually exclusive set of facts/actions -> low."
+            "Multiple instances of similar facts -> high"
+            "ALLOWED: null, low, medium, high, critical."
         )
     )
 

@@ -25,7 +25,7 @@ _NOISY_LOGGERS = (
     "asyncprawcore", "asyncpraw", "dammit", "UnicodeDammit",
     "urllib3", "connectionpool",
 )
-_APP_LOGGERS = ("app", "collectorworker", "analyzerworker", "porterworker", "processingcache")
+_APP_LOGGERS = ("app", "collectorworker", "analyzerworker", "porterworker", "consolidatorworker", "processingcache")
 
 PREFERRED_KEY_ORDER = ("source", "num_items", "links", "error_type", "error_details")
 LOGFMT = ProcessorFormatter(

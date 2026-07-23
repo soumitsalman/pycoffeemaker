@@ -21,28 +21,30 @@ EMBEDDER_CONTEXT_LEN=8192
 VECTOR_LEN=320
 
 EXTRACTOR_PATH=knowledgator/modern-gliner-bi-base-v1.0
-EXTRACTOR_CONTEXT_LEN=4096
+EXTRACTOR_CONTEXT_LEN=2048
 
 CLUSTER_EPS=0.45
 
 VLLM_ENABLE_V1_MULTIPROCESSING=0
 
-# TODO: replace with qwen3.5-4B-super-coder
-# DIGESTOR_TEMPERATURE=0.7
-# DIGESTOR_TOP_P=0.99
-# DIGESTOR_TOP_K=60
-DIGESTOR_PATH=vllm://nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+# Thinking mode for general tasks: temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0
+# Thinking mode for precise coding tasks (e.g. WebDev): temperature=0.6, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=0.0, repetition_penalty=1.0
+# Instruct (or non-thinking) mode for general tasks: temperature=0.7, top_p=0.8, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0
+# Instruct (or non-thinking) mode for reasoning tasks: temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0
+DIGESTOR_PATH=vllm://Qwen/Qwen3.5-4B
 DIGESTOR_CONTEXT_LEN=8192
-DIGESTOR_TEMPERATURE=0.3
+DIGESTOR_TEMPERATURE=0.6
 DIGESTOR_TOP_P=0.95
-DIGESTOR_REPETITION_PENALTY=1.25
+DIGESTOR_TOP_K=20
+DIGESTOR_REPETITION_PENALTY=1.0
 
-CONSOLIDATOR_PATH=vllm://nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+CONSOLIDATOR_PATH=vllm://Qwen/Qwen3.5-4B
 CONSOLIDATOR_CONTEXT_LEN=16384
-CONSOLIDATOR_TEMPERATURE=0.8
+CONSOLIDATOR_TEMPERATURE=0.6
 CONSOLIDATOR_TOP_P=0.95
-CONSOLIDATOR_REPETITION_PENALTY=1.25
-CONSOLIDATION_EPS=0.53
+CONSOLIDATOR_TOP_K=20
+CONSOLIDATOR_REPETITION_PENALTY=1.0
+CONSOLIDATION_EPS=0.65
 CONSOLIDATION_MAX_SIZE=48
 # shellcheck disable=SC1091
 [[ -f "$WORKING_DIR/.env" ]] && source "$WORKING_DIR/.env"

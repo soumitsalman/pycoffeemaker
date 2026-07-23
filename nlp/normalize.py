@@ -70,6 +70,7 @@ _NORMALIZE_FUNCTIONS = {
     "cross_domain_impacts": normalize_cross_domain_impacts,
     "event_type": normalize_context_tag,
     "impact_level": normalize_impact_or_risk,
+    "confidence": normalize_impact_or_risk,
     "future_outlook": normalize_future_outlook,
     "forecast": normalize_future_outlook,
     "actions": normalize_actions_and_briefing,
