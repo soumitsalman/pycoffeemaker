@@ -45,10 +45,7 @@ fi
     "${RUNAS[@]}" bash -lc "
         export HOME=/home/ubuntu
         export LOG_DIR=/home/ubuntu/.logs
-        export PROCESSING_WINDOW=7
-        export VLLM_MAX_NUM_BATCHED_TOKENS=98304
-        export VLLM_MAX_NUM_SEQS=256
-        export VLLM_GPU_MEMORY_UTILIZATION=0.95
+        export PROCESSING_WINDOW=2
         cd '$WORKDIR'
         echo '=== [S6 BOOT $(date -u +%Y-%m-%dT%H:%M:%SZ)] ==='
         exec bash '$SCRIPT' $ARGS_QUOTED
