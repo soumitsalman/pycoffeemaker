@@ -144,6 +144,7 @@ class TrendingBean(Bean):
     subscribers: Optional[int] = Field(default=None, description="The number of subscribers.")
     related: Optional[int] = Field(default=None, description="The size of the cluster.")
     related_urls: Optional[list[str]] = Field(default=None, description="Related bean URLs.")
+    cluster_id: Optional[str] = Field(default=None, description="Cluster representative URL.")
     trend_score: Optional[int] = Field(default=None, description="The trend score of the bean.")
 
     model_config = ConfigDict(

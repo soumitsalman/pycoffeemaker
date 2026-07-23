@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS relations (
     from_id UUID NOT NULL,
     to_id UUID NOT NULL,
     relationship TEXT NOT NULL,
-    ts DATE DEFAULT CURRENT_DATE
+    ts DATE DEFAULT CURRENT_DATE,
     UNIQUE(from_id, to_id, relationship)
 );
 

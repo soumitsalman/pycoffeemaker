@@ -28,6 +28,7 @@ $$;
 -- CONTENT TABLES
 CREATE TABLE IF NOT EXISTS beans (
     -- CORE FIELDS
+    id UUID,
     url VARCHAR NOT NULL PRIMARY KEY,
     kind VARCHAR,
     title VARCHAR,
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS beans (
 );
 
 CREATE TABLE IF NOT EXISTS publishers (
+    id UUID,
     source VARCHAR NOT NULL PRIMARY KEY,
     base_url VARCHAR NOT NULL,
     site_name VARCHAR,
@@ -127,6 +129,24 @@ WITH
         FROM related_beans
         GROUP BY url
     ),
+    related_freq AS (
+        SELECT related_url AS cand, COUNT(*)::int AS cnt
+        FROM related_beans
+        GROUP BY related_url
+    ),
+    cluster_candidates AS (
+        SELECT url AS bean_url, url AS cand FROM related_beans
+        UNION
+        SELECT url, related_url FROM related_beans
+    ),
+    cluster_ids AS (
+        SELECT DISTINCT ON (cc.bean_url)
+            cc.bean_url AS url,
+            cc.cand AS cluster_id
+        FROM cluster_candidates cc
+        LEFT JOIN related_freq rf ON rf.cand = cc.cand
+        ORDER BY cc.bean_url, COALESCE(rf.cnt, 0) DESC, cc.cand
+    ),
     active AS (
         SELECT url FROM chatter_stats
         UNION
@@ -140,11 +160,13 @@ WITH
             COALESCE(cg.subscribers, 0) as subscribers,
             COALESCE(cg.shares, 0) as shares,
             COALESCE(rg.related, 0) as related,
-            GREATEST(DATE(b.created), COALESCE(cg.updated, DATE(b.created))) as updated
+            GREATEST(DATE(b.created), COALESCE(cg.updated, DATE(b.created))) as updated,
+            ci.cluster_id
         FROM active a
         INNER JOIN beans b ON b.url = a.url
         LEFT JOIN chatter_stats cg ON a.url = cg.url
         LEFT JOIN related_stats rg ON a.url = rg.url
+        LEFT JOIN cluster_ids ci ON ci.url = a.url
     )
 SELECT
     *,
@@ -155,7 +177,7 @@ WHERE GREATEST(likes, comments, shares, related) > 0;
 CREATE OR REPLACE VIEW trending_beans_view AS
 SELECT
     b.*,
-    tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score
+    tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id
 FROM beans b
 INNER JOIN trend_aggregates tr ON b.url = tr.url;
 
@@ -167,7 +189,7 @@ WITH related_groups AS (
 )
 SELECT
     b.*,
-    tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score,
+    tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id,
     rel.related_urls,
     p.base_url, p.site_name, p.description, p.favicon, p.rss_feed
 FROM beans b
@@ -183,14 +205,11 @@ CREATE INDEX IF NOT EXISTS idx_beans_source ON beans(source);
 CREATE INDEX IF NOT EXISTS idx_beans_categories ON beans USING gin(categories);
 CREATE INDEX IF NOT EXISTS idx_beans_entities ON beans USING gin(entities);
 CREATE INDEX IF NOT EXISTS idx_beans_regions ON beans USING gin(regions);
-
 -- tags search
 CREATE INDEX IF NOT EXISTS idx_beans_tags ON beans USING gin(tags);
 -- vector search
 CREATE INDEX IF NOT EXISTS idx_beans_embedding_hnsw_cosine ON beans USING hnsw (embedding vector_cosine_ops)
     WITH (m = 24, ef_construction = 128);
--- CREATE INDEX IF NOT EXISTS idx_beans_embedding_hnsw_l2 ON beans USING hnsw (embedding vector_l2_ops)
---     WITH (m = 16, ef_construction = 64);
 
 -- publishers
 CREATE INDEX IF NOT EXISTS idx_publishers_source ON publishers(source);
