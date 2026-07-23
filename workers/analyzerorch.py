@@ -313,7 +313,7 @@ class Clusterer:
     @log_runtime(logger=log)
     def run(self):
         total = 0
-        for chunk in decache_beans(self.cache, states=EMBEDDED, exclude_states=CLUSTERED, batch_size=self.batch_size):
+        for chunk in decache_beans(self.cache, states=EMBEDDED, exclude_states=CLUSTERED, batch_size=self.batch_size, log=log):
             # no need for try-except since this does not have a OOM issue
             updates = self.cluster_beans(chunk)
             log.info(event="clustered", source=chunk[0].get(SOURCE, chunk[0][URL]), num_items=len(updates))
