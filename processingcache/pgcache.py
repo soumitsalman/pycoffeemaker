@@ -65,7 +65,7 @@ class StateCache(StateCacheBase):
             num_workers=PG_WORKERS,
         )
         self.pool.open()
-        self._init_db()
+        # self._init_db()
 
     def _init_db(self):
         with self.pool.connection() as conn:
@@ -170,7 +170,8 @@ class AsyncStateCache(AsyncStateCacheBase):
             num_workers=PG_WORKERS,
         )
         await self.pool.open()
-        await self._init_db()
+        # TODO: extract it as a separate create_cache method
+        # await self._init_db()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

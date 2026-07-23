@@ -152,7 +152,6 @@ class CupboardPorter:
                 entity_tags,
                 bean[DIGEST].get("macro_context")
             )
-            ic(bean[DIGEST])
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):
