@@ -147,7 +147,7 @@ class CupboardPorter:
                     entity_pack.get(REGIONS),
                 )
             bean[TAGS] = merge_lists(
-                normalize_tags(bean.get(TAGS)),
+                normalize_tags(bean.get(TAGS) or []),
                 bean.get(CATEGORIES),
                 entity_tags,
                 bean[DIGEST].get("macro_context")
