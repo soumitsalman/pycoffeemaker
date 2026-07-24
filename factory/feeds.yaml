@@ -200,6 +200,7 @@ sources:
   - https://www.govinfo.gov/rss/uscourts-wyd.xml
   - https://www.govinfo.gov/rss/usreports.xml
   rss:
+  - https://www.americanbanker.com/feed?rss=true
   - http://acquired.libsyn.com/rss
   - http://addyosmani.com/rss.xml
   - http://bastian.rieck.me/blog/index.xml
@@ -3348,7 +3349,6 @@ sources:
   - https://www.altivlabs.com/blog-feed.xml
   - https://www.amantulsyan.com/rss.xml
   - https://www.amediaoperator.com/feed/
-  - https://www.americanbanker.com/index.rss
   - https://www.amitmerchant.com/feed.xml
   - https://www.amnesty.org/en/feed/
   - https://www.amos.org.au/feed/
