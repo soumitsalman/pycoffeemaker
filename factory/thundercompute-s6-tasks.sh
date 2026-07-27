@@ -44,8 +44,7 @@ fi
     sleep 10
     "${RUNAS[@]}" bash -lc "
         export HOME=/home/ubuntu
-        export LOG_DIR=/home/ubuntu/.logs
-        export PROCESSING_WINDOW=2
+        export PROCESSING_WINDOW=3
         cd '$WORKDIR'
         echo '=== [S6 BOOT $(date -u +%Y-%m-%dT%H:%M:%SZ)] ==='
         exec bash '$SCRIPT' $ARGS_QUOTED
