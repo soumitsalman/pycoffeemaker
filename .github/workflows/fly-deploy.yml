@@ -1,0 +1,46 @@
+# See https://fly.io/docs/app-guides/continuous-deployment-with-github-actions/
+
+name: Fly Deploy CoffeeMaker Collector and Porter
+on:
+  push:
+    branches: [main]
+    # Deploy only when the IO image (collector/porter) or this workflow/config changes.
+    paths:
+      - ".github/workflows/fly-deploy.yml"
+      - "datacollectors/**"
+      - "factory/feeds.yaml"
+      - "nlp/**"
+      - "processingcache/**"
+      - "pybeansack/**"
+      - "pycupboard/**"
+      - "utils/**"
+      - "workers/**"
+      - "DockerfileIO"
+      - ".dockerignore"
+      - "fly.collector.toml"
+      - "fly.porter.toml"
+      - "requirements-io.txt"
+      - "run.py"
+  workflow_dispatch:
+jobs:
+  deploy-collector:
+    name: Deploy CoffeeMaker Collector
+    runs-on: ubuntu-latest
+    concurrency: deploy-coffeemaker-collector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --config ./fly.collector.toml --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.COLLECTOR_DEPLOY_TOKEN }}
+
+  deploy-porter:
+    name: Deploy CoffeeMaker Porter
+    runs-on: ubuntu-latest
+    concurrency: deploy-coffeemaker-porter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --config ./fly.porter.toml --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.PORTER_DEPLOY_TOKEN }}

@@ -1,0 +1,24 @@
+# fly.toml app configuration file generated for coffeemaker-porter-job on 2026-07-27T12:37:08-04:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'coffeemaker-porter-job'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'DockerfileIO'
+  ignorefile = '.dockerignore'
+
+[env]
+  BATCH_SIZE = '512'
+  MODE = 'PORTER'
+  PG_WORKERS = '8'
+  PROCESSING_WINDOW = '7'
+
+[[restart]]
+  policy = 'never'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '2048mb'
