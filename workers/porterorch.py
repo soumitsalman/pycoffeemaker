@@ -146,12 +146,16 @@ class CupboardPorter:
                     entity_pack.get(STOCK_TICKERS),
                     entity_pack.get(REGIONS),
                 )
-            bean[TAGS] = merge_lists(
+
+            if tags := merge_lists(
                 normalize_tags(bean.get(TAGS) or []),
-                bean.get(CATEGORIES),
-                entity_tags,
-                bean[DIGEST].get("macro_context")
-            )
+                entity_tags
+            ):
+                bean[TAGS] = merge_lists(
+                    bean.get(CATEGORIES),                    
+                    bean[DIGEST].get("macro_context"),
+                    random.sample(tags, min(MAX_TAGS, len(tags)))
+                )
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):

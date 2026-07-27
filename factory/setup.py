@@ -2,7 +2,6 @@ import sys
 import os
 
 
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from utils.env import load_coffeemaker_env
 
@@ -50,16 +49,18 @@ def create_classification_files():
 def create_processing_cache(db_path: str):
     """Seed cache with classification embeddings"""
 
-    from workers.workercache.pgcache import StateCache
-    StateCache(
+    from processingcache.pgcache import create_db
+    from workers.states import COMPOSITES, BEANS, PUBLISHERS, CHATTERS
+    res = create_db(
         db_path, 
         {
             BEANS: {"id_key": URL},
             PUBLISHERS: {"id_key": BASE_URL},
-            CHATTERS: {"id_key": ID}
+            CHATTERS: {"id_key": ID},
+            COMPOSITES: {"id_key": ID},
         }
-    ).close()
-
+    )
+    print("Created new processing cache at", res)
 
 def hydrate_classification_cache(window: int = 90):
     from workers.workercache.pgcache import StateCache

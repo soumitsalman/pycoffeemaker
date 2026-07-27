@@ -353,7 +353,16 @@ CREATE TABLE IF NOT EXISTS {table} (
 );
 CREATE INDEX IF NOT EXISTS {table}_id_idx ON {table}(id);
 CREATE INDEX IF NOT EXISTS {table}_state_idx ON {table}(state);
+CREATE INDEX IF NOT EXISTS {table}_ts_idx ON {table}(ts);
 """
+
+def create_db(conn_str: str, table_settings: dict[str, dict[str, Any]]):
+    pool = ConnectionPool(conn_str, timeout=PG_TIMEOUT)
+    pool.open()
+    with pool.connection() as conn:
+        conn.execute(_create_state_tables_sql(table_settings))
+    pool.close()
+    return pool.conninfo
 
 def _create_state_tables_sql(table_settings: dict[str, dict[str, Any]]):
     exprs = [
