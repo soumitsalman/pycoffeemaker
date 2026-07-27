@@ -11,7 +11,7 @@ CONSOLIDATOR_BATCH=128
 
 mkdir -p /home/ubuntu/.logs
 chown -R ubuntu:ubuntu /home/ubuntu/.logs
-LOG="/home/ubuntu/.logs/pipeline.log"
+LOG="/home/ubuntu/.logs/pipeline-$(date +%Y-%m-%d-%H-%M-%S).log"
 WORKDIR="/home/ubuntu/pycoffeemaker"
 SCRIPT="$WORKDIR/run_pipeline.sh"
 
