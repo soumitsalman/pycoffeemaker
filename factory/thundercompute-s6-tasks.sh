@@ -25,8 +25,6 @@ ARGS=(
 
 ARGS_QUOTED="$(printf '%q ' "${ARGS[@]}")"
 
-mkdir -p "$WORKDIR/.logs"
-
 if pgrep -f "$SCRIPT" >/dev/null 2>&1; then
     echo "=== [S6 BOOT $(date -u +%Y-%m-%dT%H:%M:%SZ)] pipeline already running, skipping ===" >>"$LOG"
     exit 0

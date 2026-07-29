@@ -134,8 +134,10 @@ class Cupboard:
 
         sips = [sip for sip in sips if sip.digest and sip.embedding and len(sip.embedding) == VECTOR_LEN]
         for sip in sips:
-            sip.embedding = Vector(sip.embedding)
-            sip.digest = Jsonb(clear_null_bytes(sip.digest))
+            _ensure_sip_id(sip)
+            _ensure_source_id(sip)
+            _ensure_embedding(sip)
+            _ensure_non_null_bytes(sip)
 
         row_placeholder = sql.SQL("(" + ",".join(["%s"] * len(SIP_COLUMNS)) + ")")
         store_batches = [
@@ -155,6 +157,9 @@ class Cupboard:
     async def store_sources(self, sources: list[Source]) -> int:
         if not sources:
             return 0
+
+        for source in sources:
+            _ensure_source_id(source)
 
         row_placeholder = sql.SQL("(" + ",".join(["%s"] * len(SOURCE_COLUMNS)) + ")")
         store_batches = [
@@ -315,3 +320,19 @@ def create_db(conn_str: str):
         conn.execute(_INIT_STMTS)
     pool.close()
     return Cupboard(conn_str)
+
+def _ensure_sip_id(sip: Sip):
+    if not sip.id:
+        if sip.url: sip.id = generate_uuid(sip.url)
+        else: raise ValueError("Sip must have a `url` or `id`")
+
+def _ensure_source_id(item: Source | Sip):
+    if not item.id:
+        if item.base_url: item.id = generate_uuid(item.base_url)
+        else: item.id = DEFAULT_SOURCE
+
+def _ensure_non_null_bytes(item: Sip):
+    item.digest = Jsonb(clear_null_bytes(item.digest))
+
+def _ensure_embedding(item: Sip):    
+    item.embedding = Vector(item.embedding)

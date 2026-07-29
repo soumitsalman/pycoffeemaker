@@ -63,15 +63,16 @@ def create_processing_cache(db_path: str):
     print("Created new processing cache at", res)
 
 def hydrate_classification_cache(window: int = 90):
-    from workers.workercache.pgcache import StateCache
-    from workers.workercache.clscache import ClassificationCache
+    from pybeansack import PGSack
+    from processingcache import ClassificationCache
 
-    proc_cache = StateCache(os.getenv('PROCESSING_CACHE'), {BEANS: {"id_key": URL}})
+    db = PGSack(os.getenv('BEANSACK_CONNECTION_STRING'))
     cls_cache = ClassificationCache(os.getenv('CLASSIFICATION_CACHE'), {BEANS: {"id_key": URL}})
     
-    if beans := proc_cache.get(BEANS, states="embedded", window=window):
-        beans = [bean for bean in beans if bean.get("embedding")]
+    if beans := db.query_latest_beans(created=ndays_ago(window), conditions=["embedding IS NOT NULL"], columns=[URL, EMBEDDING]):
+        beans = [bean for bean in beans]
         print("hydrating:cls_cache", len(beans))
+        beans = [{ID: bean.url, EMBEDDING: bean.embedding} for bean in beans]
         print("hydrated:cls_cache", cls_cache.store(BEANS, beans))
     cls_cache.close()
 

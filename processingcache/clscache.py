@@ -14,9 +14,10 @@ ID = "id"
 TS = "ts"
 EMBEDDING = "embedding"
 DEFAULT_TOPN = 10
-# METRIC_MAP = {"l2": zvec.MetricType.L2, "cosine": zvec.MetricType.COSINE}
 
 class ClassificationCache:
+    METRIC_MAP = {"l2": zvec.MetricType.L2, "cosine": zvec.MetricType.COSINE}
+
     def __init__(self, db_path: str, table_settings: dict[str, dict[str, Any]]):
         self.db_path = db_path
         self.table_settings = table_settings
@@ -28,14 +29,14 @@ class ClassificationCache:
             path = os.path.join(self.db_path, tab)
             if os.path.exists(path): 
                 coll = zvec.open(path)
-            else:
+            else:                
                 schema = zvec.CollectionSchema(
                     name=tab,
                     vectors=zvec.VectorSchema(
                         EMBEDDING, 
                         data_type=zvec.DataType.VECTOR_FP32, 
                         dimension=VECTOR_LEN,
-                        index_param=zvec.HnswIndexParam(METRIC_MAP.get(setting.get("distance_func"), zvec.MetricType.L2))
+                        index_param=zvec.HnswIndexParam(self.METRIC_MAP.get(setting.get("distance_func"), zvec.MetricType.L2))
                     ),
                     fields=[
                         zvec.FieldSchema(ID, zvec.DataType.STRING),

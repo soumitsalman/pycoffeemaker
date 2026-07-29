@@ -11,7 +11,7 @@ from psycopg_pool import ConnectionPool
 from pgvector.psycopg import register_vector
 from pgvector import Vector
 from .models import *
-from utils import non_null_fields, clear_null_bytes, CLEANUP_WINDOW
+from utils import generate_uuid, non_null_fields, clear_null_bytes, CLEANUP_WINDOW
 from .database import *
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -149,6 +149,7 @@ class PGSack(Beansack):
         """Store a list of Beans in the database."""
         beans = [bean for bean in beans if bean.embedding and len(bean.embedding) == VECTOR_LEN]
         for bean in beans:
+            _ensure_bean_id(bean)
             bean.title = clear_null_bytes(bean.title)
             bean.summary = clear_null_bytes(bean.summary)
             bean.content = clear_null_bytes(bean.content)
@@ -160,6 +161,8 @@ class PGSack(Beansack):
     
     def store_publishers(self, publishers: list[Publisher]):
         """Store a list of Publishers in the database."""
+        for publisher in publishers:
+            _ensure_publisher_id(publisher)
         return self._store(PUBLISHERS, publishers)
     
     @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
@@ -270,6 +273,9 @@ class PGSack(Beansack):
                 rows = cur.fetchall()
                 cols = [desc[0] for desc in cur.description]
                 items = [dict(zip(cols, row)) for row in rows]
+        for item in items:
+            if EMBEDDING in item and isinstance(item[EMBEDDING], Vector):
+                item[EMBEDDING] = item[EMBEDDING].to_list()
         return items    
 
     @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
@@ -702,6 +708,21 @@ def _limit(limit: int = 0, offset: int = 0) -> tuple[str, dict]:
         expr += "OFFSET %(offset)s "
         params['offset'] = offset
     return expr, params
+
+def _ensure_bean_id(bean: Bean):
+    if not bean.id:
+        if bean.url: bean.id = generate_uuid(bean.url)
+        else: raise ValueError("Bean must have a `url` or `id`")
+
+def _ensure_publisher_id(publisher: Publisher):
+    if not publisher.id:
+        if publisher.base_url: publisher.id = generate_uuid(publisher.base_url)
+        else: raise ValueError("Publisher must have a `base_url` or `id`")
+
+def _ensure_chatter_id(chatter: Chatter):
+    if not chatter.id:
+        if chatter.source: chatter.id = generate_uuid(chatter.source)
+        else: raise ValueError("Chatter must have a `source` or `id`")
         
 def split_from_to(dt: DATETIME) -> tuple[datetime, datetime|None]:
     if isinstance(dt, datetime): return dt, None

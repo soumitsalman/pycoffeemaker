@@ -53,6 +53,8 @@ CONSOLIDATOR_REPETITION_PENALTY=1.25
 CONSOLIDATION_EPS=0.65
 CONSOLIDATION_MAX_SIZE=48
 
+BACKUP_BUCKET="${BACKUP_BUCKET:-s3://cafecito-archives-new/processingcache}"
+
 # shellcheck disable=SC1091
 [[ -f "$WORKING_DIR/.env" ]] && source "$WORKING_DIR/.env"
 set +a
@@ -175,14 +177,13 @@ backup_clscache() {
     local aws_credentials_file="${AWS_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
     local s3_endpoint="${S3_ENDPOINT:-https://t3.storage.dev}"
     local -a aws_s3_args=(--endpoint-url "$s3_endpoint")
-    local backup_bucket="s3://cafecito-archives-new/processingcache"
     local dump_file="$clscache_root/clscache.tar.gz"
     local s3_key="clscache-${VECTOR_LEN}.tar.gz"
 
     echo "=== [STARTING] ZVEC Classification Cache Backup ==="
     tar -czf "$dump_file" -C "$clscache_root" "$clscache_name"
     AWS_SHARED_CREDENTIALS_FILE="$aws_credentials_file" AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}" \
-        aws s3 cp "$dump_file" "$backup_bucket/$s3_key" "${aws_s3_args[@]}"
+        aws s3 cp "$dump_file" "$BACKUP_BUCKET/$s3_key" "${aws_s3_args[@]}"
     rm -f "$dump_file"
     echo "=== [FINISHED] ZVEC Classification Cache Backup ==="
 }
@@ -192,14 +193,13 @@ restore_clscache() {
     local aws_credentials_file="${AWS_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
     local s3_endpoint="${S3_ENDPOINT:-https://t3.storage.dev}"
     local -a aws_s3_args=(--endpoint-url "$s3_endpoint")
-    local backup_bucket="s3://cafecito-archives-new/processingcache"
     local dump_file="$clscache_root/clscache.tar.gz"
     local s3_key="clscache-${VECTOR_LEN}.tar.gz"
 
     echo "=== [STARTING] ZVEC Classification Cache Restore ==="
     mkdir -p "$clscache_root"
     AWS_SHARED_CREDENTIALS_FILE="$aws_credentials_file" AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}" \
-        aws s3 cp "$backup_bucket/$s3_key" "$dump_file" "${aws_s3_args[@]}"
+        aws s3 cp "$BACKUP_BUCKET/$s3_key" "$dump_file" "${aws_s3_args[@]}"
     tar -xzf "$dump_file" -C "$clscache_root"
     rm -f "$dump_file"
     echo "=== [FINISHED] ZVEC Classification Cache Restore ==="
@@ -207,6 +207,21 @@ restore_clscache() {
 
 COLLECTOR_PID=""
 PORTER_PID=""
+CLUSTERING_PID=""
+PIPELINE_STATUS=0
+
+shutdown() {
+    local trap_status=$?
+    local status=$PIPELINE_STATUS
+    [[ $status -eq 0 && $trap_status -ne 0 ]] && status=$trap_status
+    echo "=== [FINISHED PIPELINE] status=$status ==="
+    if [[ -n "${SHUTDOWN_URL:-}" ]]; then
+        curl -fsS -X POST "$SHUTDOWN_URL" || true
+    else
+        echo "SHUTDOWN_URL not set; skipping shutdown" >&2
+    fi
+}
+trap shutdown EXIT
 
 echo "=== [STARTING PIPELINE] ==="
 
@@ -216,10 +231,8 @@ if [[ $RUN_COLLECTOR -eq 1 ]]; then
 fi
 
 if [[ $RUN_EMBEDDER -eq 1 ]]; then
-    run_embedder
+    run_embedder || PIPELINE_STATUS=$?
 fi
-
-CLUSTERING_PID=""
 
 if [[ $RUN_CLUSTERING -eq 1 ]]; then
     run_clustering &
@@ -227,19 +240,19 @@ if [[ $RUN_CLUSTERING -eq 1 ]]; then
 fi
 
 if [[ $RUN_EXTRACTOR -eq 1 ]]; then
-    run_extractor
+    run_extractor || PIPELINE_STATUS=$?
 fi
 
 if [[ $RUN_DIGESTOR -eq 1 ]]; then
-    run_digestor
+    run_digestor || PIPELINE_STATUS=$?
 fi
 
 if [[ -n "$CLUSTERING_PID" ]]; then
-    wait "$CLUSTERING_PID"
+    wait "$CLUSTERING_PID" || PIPELINE_STATUS=$?
 fi
 
 if [[ $RUN_CONSOLIDATOR -eq 1 ]]; then
-    run_consolidator
+    run_consolidator || PIPELINE_STATUS=$?
 fi
 
 if [[ $RUN_PORTER -eq 1 ]]; then
@@ -248,13 +261,10 @@ if [[ $RUN_PORTER -eq 1 ]]; then
 fi
 
 if [[ -n "$COLLECTOR_PID" ]]; then
-    wait "$COLLECTOR_PID"
+    wait "$COLLECTOR_PID" || PIPELINE_STATUS=$?
 fi
 if [[ -n "$PORTER_PID" ]]; then
-    wait "$PORTER_PID"
+    wait "$PORTER_PID" || PIPELINE_STATUS=$?
 fi
 
-echo "=== [FINISHED PIPELINE] ==="
-
-: "${SHUTDOWN_URL:?SHUTDOWN_URL not set in .env}"
-curl -fsS -X POST "$SHUTDOWN_URL"
+exit "$PIPELINE_STATUS"

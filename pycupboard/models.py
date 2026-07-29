@@ -35,18 +35,6 @@ class Sip(BaseModel):
     url: Optional[str] = Field(default=None)
     base_url: Optional[str] = Field(default=None)
 
-    def model_post_init(self, __context):
-        if not self.id:
-            if self.url:
-                self.id = generate_uuid(self.url)
-            else:
-                raise ValueError("Sip must have a `url` or `id`")
-        if not self.source:
-            if self.base_url:
-                self.source = generate_uuid(self.base_url)
-            else:
-                self.source = DEFAULT_SOURCE
-
 
 class Source(BaseModel):
     id: Optional[UUID] = Field(default=None)
@@ -56,10 +44,3 @@ class Source(BaseModel):
     description: Optional[str] = Field(default=None)
     favicon: Optional[str] = Field(default=None)
     rss_feed: Optional[str] = Field(default=None)
-
-    def model_post_init(self, __context):
-        if not self.id:
-            if self.base_url:
-                self.id = generate_uuid(self.base_url)
-            else:
-                self.id = DEFAULT_SOURCE
