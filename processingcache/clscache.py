@@ -7,7 +7,9 @@ from utils import generate_uuid, VECTOR_LEN
 from uuid import UUID
 from icecream import ic
 
-try: import zvec
+try: 
+    import zvec
+    METRIC_MAP = {"l2": zvec.MetricType.L2, "cosine": zvec.MetricType.COSINE}
 except: print("[WARNING] zvec missing from .venv. `ClassificationCache` will not work. Run `pip install zvec`")
 
 ID = "id"
@@ -16,8 +18,6 @@ EMBEDDING = "embedding"
 DEFAULT_TOPN = 10
 
 class ClassificationCache:
-    METRIC_MAP = {"l2": zvec.MetricType.L2, "cosine": zvec.MetricType.COSINE}
-
     def __init__(self, db_path: str, table_settings: dict[str, dict[str, Any]]):
         self.db_path = db_path
         self.table_settings = table_settings
@@ -36,7 +36,7 @@ class ClassificationCache:
                         EMBEDDING, 
                         data_type=zvec.DataType.VECTOR_FP32, 
                         dimension=VECTOR_LEN,
-                        index_param=zvec.HnswIndexParam(self.METRIC_MAP.get(setting.get("distance_func"), zvec.MetricType.L2))
+                        index_param=zvec.HnswIndexParam(METRIC_MAP.get(setting.get("distance_func"), zvec.MetricType.L2))
                     ),
                     fields=[
                         zvec.FieldSchema(ID, zvec.DataType.STRING),
