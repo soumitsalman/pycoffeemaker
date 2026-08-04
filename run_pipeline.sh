@@ -59,6 +59,12 @@ BACKUP_BUCKET="${BACKUP_BUCKET:-s3://cafecito-archives-new/processingcache}"
 [[ -f "$WORKING_DIR/.env" ]] && source "$WORKING_DIR/.env"
 set +a
 
+S5CMD_BIN="${S5CMD_BIN:-$HOME/go/bin/s5cmd}"
+S3_ENDPOINT="${S3_ENDPOINT:-https://t3.storage.dev}"
+export AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID:-}"
+export AWS_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY:-}"
+export AWS_DEFAULT_REGION="${S3_REGION:-auto}"
+
 RUN_COLLECTOR=0
 RUN_EMBEDDER=0
 RUN_EXTRACTOR=0
@@ -172,37 +178,50 @@ run_porter() {
 }
 
 backup_clscache() {
+    require_s3_clscache
+
     local clscache_root="$WORKING_DIR/.cache"
     local clscache_name="clscache"
-    local aws_credentials_file="${AWS_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
-    local s3_endpoint="${S3_ENDPOINT:-https://t3.storage.dev}"
-    local -a aws_s3_args=(--endpoint-url "$s3_endpoint")
     local dump_file="$clscache_root/clscache.tar.gz"
     local s3_key="clscache-${VECTOR_LEN}.tar.gz"
 
     echo "=== [STARTING] ZVEC Classification Cache Backup ==="
     tar -czf "$dump_file" -C "$clscache_root" "$clscache_name"
-    AWS_SHARED_CREDENTIALS_FILE="$aws_credentials_file" AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}" \
-        aws s3 cp "$dump_file" "$BACKUP_BUCKET/$s3_key" "${aws_s3_args[@]}"
+    "$S5CMD_BIN" --endpoint-url "$S3_ENDPOINT" cp \
+        "$dump_file" "$BACKUP_BUCKET/$s3_key"
     rm -f "$dump_file"
     echo "=== [FINISHED] ZVEC Classification Cache Backup ==="
 }
 
 restore_clscache() {
+    require_s3_clscache
+
     local clscache_root="$WORKING_DIR/.cache"
-    local aws_credentials_file="${AWS_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
-    local s3_endpoint="${S3_ENDPOINT:-https://t3.storage.dev}"
-    local -a aws_s3_args=(--endpoint-url "$s3_endpoint")
     local dump_file="$clscache_root/clscache.tar.gz"
     local s3_key="clscache-${VECTOR_LEN}.tar.gz"
 
     echo "=== [STARTING] ZVEC Classification Cache Restore ==="
     mkdir -p "$clscache_root"
-    AWS_SHARED_CREDENTIALS_FILE="$aws_credentials_file" AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}" \
-        aws s3 cp "$BACKUP_BUCKET/$s3_key" "$dump_file" "${aws_s3_args[@]}"
+    "$S5CMD_BIN" --endpoint-url "$S3_ENDPOINT" cp \
+        "$BACKUP_BUCKET/$s3_key" "$dump_file"
     tar -xzf "$dump_file" -C "$clscache_root"
     rm -f "$dump_file"
     echo "=== [FINISHED] ZVEC Classification Cache Restore ==="
+}
+
+require_s3_clscache() {
+    if [[ -z "${S3_ACCESS_KEY_ID:-}" ]]; then
+        echo "Error: S3_ACCESS_KEY_ID is required for clscache backup/restore" >&2
+        return 1
+    fi
+    if [[ -z "${S3_SECRET_ACCESS_KEY:-}" ]]; then
+        echo "Error: S3_SECRET_ACCESS_KEY is required for clscache backup/restore" >&2
+        return 1
+    fi
+    if [[ ! -x "$S5CMD_BIN" ]]; then
+        echo "Error: s5cmd not found or not executable at $S5CMD_BIN" >&2
+        return 1
+    fi
 }
 
 COLLECTOR_PID=""

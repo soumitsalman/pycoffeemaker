@@ -36,12 +36,17 @@ echo "=== Updating package lists and installing dependencies ==="
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y build-essential python3.12-venv python3-dev ninja-build cmake
 
-echo "=== Installing AWS CLI ==="
-sudo apt install -y unzip
-curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
-unzip -q /tmp/awscliv2.zip -d /tmp
-sudo /tmp/aws/install
-rm -rf /tmp/aws /tmp/awscliv2.zip
+echo "=== Installing s5cmd ==="
+S5CMD_VERSION="${S5CMD_VERSION:-2.3.0}"
+S5CMD_INSTALL_DIR="${S5CMD_INSTALL_DIR:-$HOME/go/bin}"
+mkdir -p "$S5CMD_INSTALL_DIR"
+curl -fsSL \
+    "https://github.com/peak/s5cmd/releases/download/v${S5CMD_VERSION}/s5cmd_${S5CMD_VERSION}_Linux-64bit.tar.gz" \
+    -o /tmp/s5cmd.tar.gz
+tar -xzf /tmp/s5cmd.tar.gz -C "$S5CMD_INSTALL_DIR" s5cmd
+chmod +x "$S5CMD_INSTALL_DIR/s5cmd"
+rm -f /tmp/s5cmd.tar.gz
+echo "s5cmd installed at $S5CMD_INSTALL_DIR/s5cmd"
 
 echo "=== Download dependencies and make venv ==="
 python3 -m venv .venv
@@ -58,6 +63,10 @@ case "$MODE" in
         ;;
 esac
 pip install -r pybeansack/requirements.txt
+echo "=== S3 configuration checklist ==="
+echo "Ensure .env contains S3_ACCESS_KEY_ID"
+echo "Ensure .env contains S3_SECRET_ACCESS_KEY"
+echo "Ensure .env contains S3_ENDPOINT and S3_REGION"
 mkdir -p .cache/clscache .logs
 # echo "=== Installing psql tools ==="
 
