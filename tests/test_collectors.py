@@ -269,6 +269,28 @@ def test_async_web_scraper_pages():
 
     asyncio.run(run())
 
+@pytest.mark.integration
+@pytest.mark.scrape
+def test_async_web_scraper_pdfs():
+    from datacollectors import AsyncWebScraper
+
+    urls = [
+        "https://sample-files.com/downloads/documents/pdf/sample-pdf-a4-size-65kb.pdf",
+        "https://www.sec.gov/files/litigation/admin/2026/34-105807.pdf",
+        "https://sample-files.com/downloads/documents/pdf/dev-example.pdf",
+        "https://sample-files.com/downloads/documents/pdf/sample-20-page-pdf-a4-size.pdf",
+    ]
+
+    async def run():
+        async with AsyncWebScraper() as scraper:
+            results = await scraper.scrape_pages(urls)
+            ic(results)
+            assert len(results) == len(urls), "Result count mismatch"
+            for url, result in zip(urls, results):
+                if result:
+                    assert result.get("content"), f"Missing content from {url}"
+
+    asyncio.run(run())
 
 @pytest.mark.integration
 @pytest.mark.scrape

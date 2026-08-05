@@ -11,7 +11,7 @@ WORKDIR /worker
 COPY . .
 RUN pip install --no-cache -r requirements-io.txt
 
-RUN mkdir -p .cache/collector
+RUN mkdir -p .cache
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \

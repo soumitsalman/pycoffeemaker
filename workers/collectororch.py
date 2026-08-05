@@ -1,5 +1,4 @@
 import asyncio
-from utils.logs import get_logger, log_runtime_async
 import os
 import random
 import uuid
@@ -33,6 +32,8 @@ from utils.fields import (
     TITLE,
     URL,
 )
+from utils import now_str, get_logger, log_runtime_async
+from persistqueue import AsyncQueue
 from processingcache import AsyncStateCacheBase
 from .states import *
 from icecream import ic
@@ -206,11 +207,11 @@ class Collector:
             if storable_bean_items:
                 tg.create_task(self._cache_beans(storable_bean_items))
             if scrapable_bean_items:
-                tg.create_task(self._scrape_beans(scrapable_bean_items))
+                tg.create_task(self._queue_scrape(BEANS, scrapable_bean_items))
             if storable_publisher_items:
                 tg.create_task(self._cache_publishers(storable_publisher_items))
             if scrapable_publisher_items:
-                tg.create_task(self._scrape_publishers(scrapable_publisher_items))
+                tg.create_task(self._queue_scrape(PUBLISHERS, scrapable_publisher_items))
 
     async def _cache_beans(self, beans: list[dict]):
         if not beans: return
@@ -239,12 +240,6 @@ class Collector:
         count = await self.cache.set(CHATTERS, COLLECTED, pkg)
         if count is not None: log.info(event="cached", source=chatters[0].get(FORUM, chatters[0][SOURCE]), chatters=count)
         else: log.info(event="caching", source=chatters[0].get(FORUM, chatters[0][SOURCE]), chatters=len(chatters))
-
-    async def _queue_scrape(self, kind: str, items: list[dict]):
-        if not items: return
-        if items := await self.cache.deduplicate(kind, COLLECTED, items):            
-            await self.scraper_queue.put_nowait((kind, items))
-        return items
 
     async def _scrape_beans(self, beans: list[dict]):
         if not beans: return
@@ -309,33 +304,42 @@ class Collector:
             for func in collector_funcs[offset::self.batch_size]:
                 await self._collect(*func)
 
-        await asyncio.gather(*(work(offset) for offset in range(self.batch_size)), return_exceptions=True)        
+        await asyncio.gather(*(work(offset) for offset in range(self.batch_size)), return_exceptions=True)       
+        await self.scraper_queue.put_nowait((None, None)) # end of collection marker
+        log.info(event="collection completed")
 
+    async def _queue_scrape(self, kind: str, items: list[dict]):
+        if not items: return
 
-    # async def _run_scraper(self):
-    #     """Run the scrapers - flushing the buffers when full or worker is done."""      
-    #     BUFFER_SIZE = self.batch_size<<1
-    #     beans_buffer, publishers_buffer = [], []        
-    #     while items := await self.scraper_queue.get():
-    #         kind, items = items
-    #         if kind == BEANS: beans_buffer.extend(items)
-    #         elif kind == PUBLISHERS: publishers_buffer.extend(items)
+        if items := await self.cache.deduplicate(kind, COLLECTED, items):            
+            await self.scraper_queue.put_nowait((kind, items))
+        return items
 
-    #         if len(beans_buffer) >= BUFFER_SIZE:
-    #             await self._scrape_beans(beans_buffer)
-    #             beans_buffer = []
-    #         if len(publishers_buffer) >= BUFFER_SIZE:
-    #             await self._scrape_publishers(publishers_buffer)
-    #             publishers_buffer = []
+    async def _run_scrapers(self):
+        """Run the scrapers - flushing the buffers when full or worker is done."""      
+        BUFFER_SIZE = self.batch_size<<1
+                
+        exit_next = False
+        beans_buffer, publishers_buffer = [], []
+        while not exit_next:            
+            kind, items = await self.scraper_queue.get()
 
-    #     await asyncio.gather(
-    #         self._scrape_beans(beans_buffer), 
-    #         self._scrape_publishers(publishers_buffer)
-    #     )
+            if kind == BEANS: beans_buffer.extend(items)
+            elif kind == PUBLISHERS: publishers_buffer.extend(items)
+            else: exit_next = True
 
+            if exit_next or len(beans_buffer) >= BUFFER_SIZE or len(publishers_buffer) >= BUFFER_SIZE:
+                await asyncio.gather(
+                    self._scrape_beans(beans_buffer), 
+                    self._scrape_publishers(publishers_buffer)
+                )
+                beans_buffer, publishers_buffer = [], []
+        log.info(event="scraping completed")
+    
     def _init_run(self):
         self.beans_collected = 0
-        self.publishers_collected = 0   
+        self.publishers_collected = 0
+        self.scraper_queue = AsyncQueue(path=f".cache/scrape-queue-{now_str()}", tempdir=".cache")
 
     @log_runtime_async(logger=log)
     async def run(self, sources):
@@ -353,7 +357,10 @@ class Collector:
             self.webscraper,
             self.cache
         ):
-            await self._run_collectors(sources)
+            await asyncio.gather(
+                self._run_collectors(sources), 
+                self._run_scrapers()
+            )
         log.info(event="collection completed", beans=self.beans_collected, publishers=self.publishers_collected)
 
 # async def _get_many(queue: AsyncQueue, batch_size: int):

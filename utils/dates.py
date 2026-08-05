@@ -1,17 +1,16 @@
 from datetime import datetime, timedelta, timezone
 
-
 def now() -> datetime:
     return datetime.now(timezone.utc)
 
+def now_str() -> str:
+    return now().strftime("%Y-%m-%d-%H-%M-%S")
 
 def ndays_ago(days: int) -> datetime:
     return now() - timedelta(days=days)
 
-
 def ndays_ago_str(days: int) -> str:
     return ndays_ago(days).strftime("%Y-%m-%d")
-
 
 def ensure_utc(dt: datetime | None) -> datetime | None:
     if dt is None:

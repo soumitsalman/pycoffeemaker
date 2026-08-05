@@ -128,36 +128,47 @@ def _parse_page(url: str, html: str) -> dict:
     return body | metadata
 
 def _extract_pdf_text(path: str) -> str | None:
-    """Process worker: extract PDF text with an independent fallback."""
-    try:
-        import pymupdf
-        with pymupdf.open(path) as document:
-            content = "\n".join(page.get_text("text") for page in document)
-        if content.strip():
-            return content
-        raise ValueError("PyMuPDF extracted no text")
-    except Exception as primary_error:
-        log.warning(
-            event="pymupdf PDF extraction failed; using pypdf fallback",
+    import anydoc
+
+    try: return anydoc.to_markdown(path)
+    except: log.warning(
+            event="anydoc PDF extraction failed",
             source=path,
             num_items=1,
-            error_type=primary_error.__class__.__name__,
-            error_details=str(primary_error),
+            exc_info=True,
         )
 
-    try:
-        from pypdf import PdfReader
-        content = "\n".join(page.extract_text() or "" for page in PdfReader(path, strict=False).pages)
-        return content or None
-    except Exception as fallback_error:
-        log.warning(
-            event="pypdf PDF extraction failed",
-            source=path,
-            num_items=1,
-            error_type=fallback_error.__class__.__name__,
-            error_details=str(fallback_error),
-        )
-        return None
+# def _extract_pdf_text(path: str) -> str | None:
+#     """Process worker: extract PDF text with an independent fallback."""
+#     try:
+#         import pymupdf
+#         with pymupdf.open(path) as document:
+#             content = "\n".join(page.get_text("text") for page in document)
+#         if content.strip():
+#             return content
+#         raise ValueError("PyMuPDF extracted no text")
+#     except Exception as primary_error:
+#         log.warning(
+#             event="pymupdf PDF extraction failed; using pypdf fallback",
+#             source=path,
+#             num_items=1,
+#             error_type=primary_error.__class__.__name__,
+#             error_details=str(primary_error),
+#         )
+
+#     try:
+#         from pypdf import PdfReader
+#         content = "\n".join(page.extract_text() or "" for page in PdfReader(path, strict=False).pages)
+#         return content or None
+#     except Exception as fallback_error:
+#         log.warning(
+#             event="pypdf PDF extraction failed",
+#             source=path,
+#             num_items=1,
+#             error_type=fallback_error.__class__.__name__,
+#             error_details=str(fallback_error),
+#         )
+#         return None
 
 def _title_from_url(url: str) -> str | None:
     try:

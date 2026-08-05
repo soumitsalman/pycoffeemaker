@@ -169,7 +169,7 @@ def test_classifier_static_label_search():
 @pytest.mark.orch_collector
 def test_collector_orch():
     from workers.collectororch import Collector
-    from workers.workercache.pgcache import AsyncStateCache
+    from processingcache.pgcache import AsyncStateCache
 
     cache_settings = {
         BEANS: {"id_key": URL},
