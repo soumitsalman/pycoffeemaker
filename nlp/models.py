@@ -55,11 +55,11 @@ class _NLPBaseModel(BaseModel):
 
 
 class Entities(_NLPBaseModel):
-    regions: List[str] = Field(default_factory=list, description="List of specified names geographic regions/locations. max_length<=10. exclude_pattern=N countries.")
-    people: List[str] = Field(default_factory=list, description="List of specified names of people - CEOs,political leaders,influential figures. max_length<=10. exclude_pattern=N leaders.")
-    products: List[str] = Field(default_factory=list, description="List of specified names products/services. max_length<=10. exclude_pattern=N products.")
-    companies: List[str] = Field(default_factory=list, description="List of specified names companies/organizations. max_length<=10. exclude_pattern=N companies.")
-    stock_tickers: List[str] = Field(default_factory=list, description="List of specified stock ticker symbols. max_length<=10. exclude_pattern=N stock tickers.")    
+    regions: List[str] = Field(default_factory=list, description="List of specified names geographic regions/locations. max_items<=10. exclude_pattern=N countries.")
+    people: List[str] = Field(default_factory=list, description="List of specified names of people - CEOs,political leaders,influential figures. max_items<=10. exclude_pattern=N leaders.")
+    products: List[str] = Field(default_factory=list, description="List of specified names products/services. max_items<=10. exclude_pattern=N products.")
+    companies: List[str] = Field(default_factory=list, description="List of specified names companies/organizations. max_items<=10. exclude_pattern=N companies.")
+    stock_tickers: List[str] = Field(default_factory=list, description="List of specified stock ticker symbols. max_items<=10. exclude_pattern=N stock tickers.")    
  
     @property
     def tags(self):
@@ -67,12 +67,11 @@ class Entities(_NLPBaseModel):
 
 class Digest(_NLPBaseModel):
     """Main digest/key points of an article/news/blog/report"""        
-    actions: List[str] = Field(
+    activities: List[str] = Field(
         default_factory=list,
         description=(
-            "List of atomic factual event/datapoint sentences. max_length<=10. "
-            "Format per item: YYYY-MM-DD Actor verb object/effect with key metric if available. Plain sentence only. "
-            "Avoid angle brackets, labels, semicolon lists, or field:value fragments."
+            "List: Atomic factual activity/fact/datapoint. max_items<=10. "            
+            "Format: YYYY-MM-DD Actor verb object/effect with key metric if available. Simple sentence. Exclude angle brackets, labels, delimited lists, field:value."
         ),
     )
     # "model_release, agent_launch, enterprise_adoption_case, safety_regulation_update, multimodal_breakthrough\n"
@@ -89,8 +88,10 @@ class Digest(_NLPBaseModel):
     )
     impact_level: Optional[str] = Field(
         None,
-        description="Specified impact of the events on primary domain/context. "
-        "ALLOWED: null, low, medium, high, critical, transformative",
+        description=(
+            "Specified impact of the events on primary domain/context. "
+            "ALLOWED: null, low, medium, high, critical, transformative"
+        ),
     )
     # "Examples:\n"
     # "- Cybersecurity: Increased risk of data breaches due to new vulnerabilities\n"
@@ -100,8 +101,8 @@ class Digest(_NLPBaseModel):
     cross_domain_impacts: List[str] = Field(
         default_factory=list,
         description=(
-            "List of secondary domains and associated impacts. max_length<=5. "
-            "Format per item: DOMAIN: 1-sentence impact. Avoid angle brackets."
+            "List: Secondary domains and associated impacts. max_items<=5. "
+            "Format: DOMAIN: 1-sentence impact. Avoid angle brackets."
         )
     )
     # "Examples: US-Iran conflict, Red Sea disruption, Tariff volatility, Rare earth controls, Arctic shipping rivalry, Africa mineral conflict, Cyber arms race escalation etc."     
@@ -135,30 +136,27 @@ class Briefing(_NLPBaseModel):
     events: list[str] = Field(
         default_factory=list,
         description=(
-            "List of atomic factual event sentences in chronological order. max_length<=40."
-            "Format per item: YYYY-MM-DD Actor verb object/effect with key metric if available. Plain sentence only. "
-            "Avoid angle brackets, labels, semicolon lists, or field:value fragments."
+            "List: Atomic factual event. max_items<=40. Chronological order. "
+            "Format: YYYY-MM-DD Actor verb object/effect with key metric if available. Simple sentence. Exclude angle brackets, labels, delimited lists, field:value."
         )
     )
     drivers: list[str] = Field(
         default_factory=list,
         description=(
-            "List of atomic causal sentences specifying the actions/macro_contexts driving the events. max_length<=10. "
-            "Format per item: plain sentence stating cause and resulting effect. "
-            "Avoid angle brackets, labels, chain-of-thought, or field:value fragments."
+            "List: Atomic causal sentence. max_items<=10. "
+            "Format: Simple sentence stating cause and resulting effect. Exclude angle brackets, labels, delimited lists, field:value."
         )
     )
     impacts: list[str] = Field(
         default_factory=list,
         description=(
-            "List of atomic observed impact sentences. "
-            "Format per item: affected party verb measurable effect with key metric if available. Plain sentence only. max_length<=10. "
-            "Avoid angle brackets, labels, speculation, or field:value fragments."
+            "List: Atomic observed impact. max_items<=10. "
+            "Format: Affected party verb measurable effect with key metric if available. Simple sentence. Exclude angle brackets, labels, delimited lists, field:value."
         )
     )
     impacted_domains: list[str] = Field(
         default_factory=list,
-        description="List of domains impacted by the events sequence. max_length<=10. exclude_pattern=N domains.",
+        description="List: Domains impacted by the events sequence. max_items<=10. avoid_pattern='N domains'.",
     )
     impact_level: str = Field(
         description="Combined impact of the events sequence. ALLOWED: null, low, medium, high, critical, transformative"
@@ -175,9 +173,9 @@ class Briefing(_NLPBaseModel):
     )
     confidence: str = Field(
         description=(
-            "Confidence/trust level on the events."
-            "Mutually exclusive set of facts/actions -> low."
-            "Multiple instances of similar facts -> high"
+            "Confidence/trust level on the events. "
+            "Mutually exclusive set of facts/actions -> low. "
+            "Multiple instances of similar facts -> high. "
             "ALLOWED: null, low, medium, high, critical."
         )
     )

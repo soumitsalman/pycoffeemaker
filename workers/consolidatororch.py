@@ -40,8 +40,8 @@ grounding:only_items_linked_to_thesis;strict_tracing;no_synthesis_of_unrelated_i
 phrasing:plain_sentences,structured,dynamic,specific,granular,direct
 tone:informative,objective,concrete,analytical,data_driven
 avoid:ambiguity,generic_phrasing,generic_quantification,emotive_language,
-avoid:mathematical_inconsistencies,date_inconsistencies,time_tense_inconsistencies
 avoid:markdown,prose,code_fences,null_placeholders,implied_information,newline_char
+remove:mathematical_inconsistencies,date_inconsistencies,time_tense_inconsistencies,speculations
 STEPS=
 0.CLUSTER event_items BY shared related,actions,events,impacts FROM event_stream
 1.CREATE dominant_theme_or_main_thesis FROM the largest/most_coherent cluster WHERE items CONTAIN SAME(related OR causal link)

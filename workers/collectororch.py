@@ -316,9 +316,7 @@ class Collector:
         return items
 
     async def _run_scrapers(self):
-        """Run the scrapers - flushing the buffers when full or worker is done."""      
-        BUFFER_SIZE = self.batch_size<<1
-                
+        """Run the scrapers - flushing the buffers when full or worker is done."""                      
         exit_next = False
         beans_buffer, publishers_buffer = [], []
         while not exit_next:            
@@ -328,7 +326,7 @@ class Collector:
             elif kind == PUBLISHERS: publishers_buffer.extend(items)
             else: exit_next = True
 
-            if exit_next or len(beans_buffer) >= BUFFER_SIZE or len(publishers_buffer) >= BUFFER_SIZE:
+            if exit_next or (len(beans_buffer)+len(publishers_buffer)) >= self.batch_size:
                 await asyncio.gather(
                     self._scrape_beans(beans_buffer), 
                     self._scrape_publishers(publishers_buffer)
