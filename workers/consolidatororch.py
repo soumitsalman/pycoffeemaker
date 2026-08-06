@@ -31,29 +31,43 @@ CONSOLIDATION_MAX_SIZE = int(os.getenv("CONSOLIDATION_MAX_SIZE", 64))
 CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 4))
 
 BRIEFING_SYS = """
-TASK=CREATE intelligence_briefing FROM event_stream
-INPUT=intelligence_briefing_specification,event_stream
-RESPONSE=JSON,matching schema,compact
-RULES=
-selection:identify_dominant_theme_from_most_common_related_items;exclude_outliers
-grounding:only_items_linked_to_thesis;strict_tracing;no_synthesis_of_unrelated_items
-phrasing:plain_sentences,structured,dynamic,specific,granular,direct
-tone:informative,objective,concrete,analytical,data_driven
-avoid:ambiguity,generic_phrasing,generic_quantification,emotive_language,
-avoid:markdown,prose,code_fences,null_placeholders,implied_information,newline_char
-remove:mathematical_inconsistencies,date_inconsistencies,time_tense_inconsistencies,speculations
-STEPS=
-0.CLUSTER event_items BY shared related,actions,events,impacts FROM event_stream
-1.CREATE dominant_theme_or_main_thesis FROM the largest/most_coherent cluster WHERE items CONTAIN SAME(related OR causal link)
-2.FILTER event_items FROM event_stream BY relation TO dominant_theme
-3.DISCARD item WHERE NOT EXIST IN (dominant_theme OR retained_items)
-4.DETERMINE relationships between related,actions,events,impacts FROM retained_items
-5.DETERMINE causal_chain driving or preceding the retained events FROM retained_items
-6.DETERMINE impacts,implications,target_groups,forecast FROM retained_items
-7.DETERMINE confidence level on the collective facts/actions FROM retained_items
+TASK:
+Create INTELLIGENCE_BRIEFING from EVENT_STREAM
+
+OUTPUT:
+json_only|schema_strict|traceable_evidence_only|omit_null_fields
+
+SELECTION: 
+Cluster events by shared actors,actions,causes,impacts,targets 
+Select the largest coherent causally related cluster 
+Exclude outliers and unrelated events 
+Retain only items traceable to the dominant thesis 
+Never combine unrelated items into one narrative 
+
+DERIVATION: 
+Order retained events chronologically 
+Derive drivers only from explicit causal evidence 
+Derive impacts only from observed effects 
+Forecast only from traceable trajectories
+Confidence reflects corroboration and consistency
+
+RULES:
+language=en-US
+style=compact|specific|atomic|objective|analytical
+sentences=simple_sentences_only
+missing_information=omit
+quantities=exact_values_only
+dates=YYYY-MM-DD when explicitly available|omit if unavailable
+consistency=dates|tense|units|math
+
+NEVER_EMIT:
+markdown|prose|code_fences|newline|angle_brackets|delimited_list
+assumptions|inferences|implied_assessments
+generic_quantities|generic_phrasing|emotive_language
+unsupported_values|labels_not_required_by_schema
 """
 BRIEFING_INST = """
-INTELLIGENCE_BRIEFING_SPECIFICATION=
+INTELLIGENCE_BRIEFING=
 {description}
 EVENT_STREAM=
 {input_text}

@@ -56,7 +56,7 @@ class _NLPBaseModel(BaseModel):
 
 class Entities(_NLPBaseModel):
     regions: List[str] = Field(default_factory=list, description="List of specified names geographic regions/locations. max_items<=10. exclude_pattern=N countries.")
-    people: List[str] = Field(default_factory=list, description="List of specified names of people - CEOs,political leaders,influential figures. max_items<=10. exclude_pattern=N leaders.")
+    people: List[str] = Field(default_factory=list, description="List of specified names of people (CXOs,political leaders,influential figures). max_items<=10. exclude_pattern=N leaders.")
     products: List[str] = Field(default_factory=list, description="List of specified names products/services. max_items<=10. exclude_pattern=N products.")
     companies: List[str] = Field(default_factory=list, description="List of specified names companies/organizations. max_items<=10. exclude_pattern=N companies.")
     stock_tickers: List[str] = Field(default_factory=list, description="List of specified stock ticker symbols. max_items<=10. exclude_pattern=N stock tickers.")    
@@ -70,8 +70,9 @@ class Digest(_NLPBaseModel):
     activities: List[str] = Field(
         default_factory=list,
         description=(
-            "List: Atomic factual activity/fact/datapoint. max_items<=10. "            
-            "Format: YYYY-MM-DD Actor verb object/effect with key metric if available. Simple sentence. Exclude angle brackets, labels, delimited lists, field:value."
+            "list=Activities,facts,events. "
+            "max_items<=10. "            
+            "format=YYYY-MM-DD Actor verb object/effect with key metric if available."
         ),
     )
     # "model_release, agent_launch, enterprise_adoption_case, safety_regulation_update, multimodal_breakthrough\n"
@@ -84,13 +85,13 @@ class Digest(_NLPBaseModel):
     # "oil_price_shock, gdp_forecast_revision, inflation_spike, rate_cut_signal, commodity_demand_shift\n"
     event_type: Optional[str] = Field(
         None,
-        description="Primary aggregated event type(<=3words) or null if not decipherable. ",
+        description="Primary aggregated event type(<=3words).",
     )
     impact_level: Optional[str] = Field(
         None,
         description=(
             "Specified impact of the events on primary domain/context. "
-            "ALLOWED: null, low, medium, high, critical, transformative"
+            "allowed=null,low,medium,high,critical,transformative."
         ),
     )
     # "Examples:\n"
@@ -101,25 +102,26 @@ class Digest(_NLPBaseModel):
     cross_domain_impacts: List[str] = Field(
         default_factory=list,
         description=(
-            "List: Secondary domains and associated impacts. max_items<=5. "
-            "Format: DOMAIN: 1-sentence impact. Avoid angle brackets."
+            "list=Secondary domains: impacts. "
+            "max_items<=5. "
+            "format=DOMAIN: 1 simple sentence impact."
         )
     )
     # "Examples: US-Iran conflict, Red Sea disruption, Tariff volatility, Rare earth controls, Arctic shipping rivalry, Africa mineral conflict, Cyber arms race escalation etc."     
-    macro_context: str = Field(
-        ...,
-        description="Primary geopolitical,trade,economic or technological context driving the events(<=4words) or null if not decipherable. ",
+    macro_context: Optional[str] = Field(
+        None,
+        description="Primary overarching geopolitical, trade, economic, technological context driving the events(<=4words).",
     )
-    future_outlook: Optional[str] = Field(
+    forecast: Optional[str] = Field(
         default=None,
-        description="1-sentence specifying future outlook/trajectory or null if not specified. ",
+        description="Future outlook, trajectory or forecast if traceable else omit. ",
     )
     briefing: str = Field(
         ...,
         description=(
             "Intelligence briefing of the events (<=2sentences). "
             "Include time/date, larger context, actors, events, targets/affected parties, with key metrics/comparisons. "
-            "Then explain mechanism/how, impact/why it matters, and effects/response/outlook. "
+            "Explain mechanism/how, impact/why it matters, effects/response/outlook. "
         ),
     )
     
@@ -136,47 +138,54 @@ class Briefing(_NLPBaseModel):
     events: list[str] = Field(
         default_factory=list,
         description=(
-            "List: Atomic factual event. max_items<=40. Chronological order. "
-            "Format: YYYY-MM-DD Actor verb object/effect with key metric if available. Simple sentence. Exclude angle brackets, labels, delimited lists, field:value."
+            "list=Chronological sequence of events. "
+            "max_items<=40. "
+            "format=YYYY-MM-DD Actor verb object/effect with key metric if available."
         )
     )
     drivers: list[str] = Field(
         default_factory=list,
         description=(
-            "List: Atomic causal sentence. max_items<=10. "
-            "Format: Simple sentence stating cause and resulting effect. Exclude angle brackets, labels, delimited lists, field:value."
+            "list=Explicitly supported causal relationships. "
+            "max_items<=10. "
+            "format=Cause produced resulting effect."
         )
     )
     impacts: list[str] = Field(
         default_factory=list,
         description=(
-            "List: Atomic observed impact. max_items<=10. "
-            "Format: Affected party verb measurable effect with key metric if available. Simple sentence. Exclude angle brackets, labels, delimited lists, field:value."
+            "list=Atomic observed impacts. "
+            "max_items<=10. "
+            "format=Affected party verb measurable effect with key metric if available."
         )
     )
     impacted_domains: list[str] = Field(
         default_factory=list,
-        description="List: Domains impacted by the events sequence. max_items<=10. avoid_pattern='N domains'.",
+        description="list=Domains impacted by the events sequence. max_items<=10.",
     )
     impact_level: str = Field(
-        description="Combined impact of the events sequence. ALLOWED: null, low, medium, high, critical, transformative"
+        description="Combined impact of the events sequence. allowed=null,low,medium,high,critical,transformative."
     )
-    forecast: str = Field(
-        description="plain-sentence specifying short-term forecast grounded in observed impacts or null if not decipherable. Plain sentence only. Avoid hedged narrative, reasoning trace, labels, or field:value fragments."
+    forecast: Optional[str] = Field(
+        default=None,
+        description="Future outlook, trajectory or forecast if traceable else omit.",
     )
     briefing: str = Field(
         description=(
             "Intelligence briefing of the events (<=3sentences). "
             "Include time/date, larger context, actors, events, targets/affected parties, with key metrics/comparisons. "
-            "Then explain mechanism/how, impact/why it matters, and effects/response/outlook. "
+            "Explain mechanism/how, impact/why it matters, and effects/response/outlook. "
         )
     )
-    confidence: str = Field(
+    confidence: Optional[str] = Field(
+        default=None,
         description=(
-            "Confidence/trust level on the events. "
-            "Mutually exclusive set of facts/actions -> low. "
-            "Multiple instances of similar facts -> high. "
-            "ALLOWED: null, low, medium, high, critical."
+            "Confidence in retained events. "
+            "allowed=low,medium,high. "
+            "low: conflicting or isolated evidence. "
+            "medium: consistent limited evidence. "
+            "high: multiple corroborating events. "
+            "omit if unsupported."
         )
     )
 
