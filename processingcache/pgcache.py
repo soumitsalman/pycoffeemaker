@@ -125,9 +125,11 @@ class StateCache(StateCacheBase):
         expr = _EXISTS_SQL.format(table=object_type)
         with self.pool.connection() as conn:
             existing_ids = _read(conn, expr, {"state": state, "ids": ids})
-        return [
-            item for item, item_id in zip(items, ids) if item_id not in existing_ids
-        ]
+        deduped = {
+            item_id:item for item, item_id in zip(items, ids) 
+            if item_id not in existing_ids
+        }
+        return list(deduped.values())
 
     def optimize(self):
         with self.pool.connection() as conn:
@@ -225,9 +227,11 @@ class AsyncStateCache(AsyncStateCacheBase):
         expr = _EXISTS_SQL.format(table=object_type)
         async with self.pool.connection() as conn:
             existing_ids = await _read_async(conn, expr, {"state": state, "ids": ids})
-        return [
-            item for item, item_id in zip(items, ids) if item_id not in existing_ids
-        ]
+        deduped = {
+            item_id:item for item, item_id in zip(items, ids) 
+            if item_id not in existing_ids
+        }
+        return list(deduped.values())
 
     async def optimize(self):
         async with self.pool.connection() as conn:

@@ -305,7 +305,7 @@ class Collector:
                 await self._collect(*func)
 
         await asyncio.gather(*(work(offset) for offset in range(self.batch_size)), return_exceptions=True)       
-        await self.scraper_queue.put_nowait((None, None)) # end of collection marker
+        await self.scraper_queue.put_nowait(None) # end of collection marker
         log.info(event="collection completed")
 
     async def _queue_scrape(self, kind: str, items: list[dict]):
@@ -316,23 +316,26 @@ class Collector:
         return items
 
     async def _run_scrapers(self):
-        """Run the scrapers - flushing the buffers when full or worker is done."""                      
-        exit_next = False
+        """Run the scrapers - flushing the buffers when full."""                      
         beans_buffer, publishers_buffer = [], []
-        while not exit_next:            
-            kind, items = await self.scraper_queue.get()
-
-            if kind == BEANS: beans_buffer.extend(items)
-            elif kind == PUBLISHERS: publishers_buffer.extend(items)
-            else: exit_next = True
-            
-            # NOTE: publishers are more often than not duplicate so increase the batch size
-            if exit_next or (len(beans_buffer) >= self.batch_size) or (len(publishers_buffer) >= self.batch_size<<1):
-                await asyncio.gather(
-                    self._scrape_beans(beans_buffer), 
-                    self._scrape_publishers(publishers_buffer)
-                )
-                beans_buffer, publishers_buffer = [], []
+        while items := await self.scraper_queue.get():            
+            kind, items = items
+            if kind == BEANS: 
+                beans_buffer.extend(items)
+                if len(beans_buffer) >= self.batch_size:
+                    await self._scrape_beans(beans_buffer)
+                    beans_buffer = []
+            elif kind == PUBLISHERS: 
+                publishers_buffer.extend(items)
+                if len(publishers_buffer) >= self.batch_size:
+                    await self._scrape_publishers(publishers_buffer)
+                    publishers_buffer = []
+         
+        # flush the buffers
+        await asyncio.gather(
+            self._scrape_beans(beans_buffer),
+            self._scrape_publishers(publishers_buffer)
+        )            
         log.info(event="scraping completed")
     
     def _init_run(self):
