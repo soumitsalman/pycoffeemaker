@@ -325,8 +325,9 @@ class Collector:
             if kind == BEANS: beans_buffer.extend(items)
             elif kind == PUBLISHERS: publishers_buffer.extend(items)
             else: exit_next = True
-
-            if exit_next or (len(beans_buffer)+len(publishers_buffer)) >= self.batch_size:
+            
+            # NOTE: publishers are more often than not duplicate so increase the batch size
+            if exit_next or (len(beans_buffer) >= self.batch_size) or (len(publishers_buffer) >= self.batch_size<<1):
                 await asyncio.gather(
                     self._scrape_beans(beans_buffer), 
                     self._scrape_publishers(publishers_buffer)
