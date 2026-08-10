@@ -362,8 +362,7 @@ class AsyncWebScraper:
         if not result:
             return None
 
-        item = {
-            **bean,
+        bean.update({
             KIND: bean.get(KIND) or result.get(KIND),
             TITLE: bean.get(TITLE) or result.get("meta_title") or result.get(TITLE),
             SUMMARY: bean.get(SUMMARY) or result.get("description"),
@@ -380,15 +379,15 @@ class AsyncWebScraper:
             FAVICON: full_url(extract_base_url(bean.get(URL)), result.get('favicon')) if result.get('favicon') else None,
             RSS_FEED: full_url(extract_base_url(bean.get(URL)), result.get("rss_feed")) if result.get("rss_feed") else None,
             IMAGEURL: full_url(bean.get(URL), result.get("top_image")) if result.get("top_image") else bean.get(IMAGEURL),
-        }
+        })
 
         created = result.get(CREATED) or bean.get(CREATED) or bean.get(COLLECTED)
-        item[CREATED] = min(created, bean.get(COLLECTED)) if created and bean.get(COLLECTED) else created
+        bean[CREATED] = min(created, bean.get(COLLECTED)) if created and bean.get(COLLECTED) else created
 
-        if not item.get(KIND):
-            item[KIND] = guess_content_type(item)
+        if not bean.get(KIND):
+            bean[KIND] = guess_content_type(bean)
 
-        return cleanup_item(item)
+        return cleanup_item(bean)
 
     async def scrape_page(self, url: str):
         """Scrape a single URL for both bean and publisher data."""
@@ -415,7 +414,8 @@ class AsyncWebScraper:
     
     async def scrape_beans(self, beans: list[dict]):
         """Augment existing beans with scraped data."""
-        return await asyncio.gather(*[self.scrape_bean(bean) for bean in beans])
+        await asyncio.gather(*(self.scrape_bean(bean) for bean in beans))
+        return beans
         
     async def scrape_bean(self, bean: dict):
         """Scrape a single bean for page data."""

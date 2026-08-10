@@ -244,10 +244,18 @@ class Collector:
     async def _scrape_beans(self, beans: list[dict]):
         if not beans: return
 
-        beans = await self.cache.deduplicate(BEANS, COLLECTED, beans)
+        beans[:] = await self.cache.deduplicate(BEANS, COLLECTED, beans)
         if not beans: return
 
-        beans = storable_beans(await self.webscraper.scrape_beans(beans))
+        await self.webscraper.scrape_beans(beans)
+
+        write_index = 0
+        for bean in beans:
+            if is_bean_storable(bean):
+                beans[write_index] = bean
+                write_index += 1
+        del beans[write_index:]
+
         if not beans: return
 
         log.info(event="scraped", source=beans[0][SOURCE], beans=len(beans))

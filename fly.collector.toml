@@ -11,9 +11,9 @@ primary_region = 'iad'
   ignorefile = '.dockerignore'
 
 [env]
-  BATCH_SIZE = '64'
+  BATCH_SIZE = '48'
   MODE = 'COLLECTOR'
-  COLLECTOR_TIMEOUT = '150'
+  COLLECTOR_TIMEOUT = '120'
   PG_WORKERS = '8'
   PROCESSING_WINDOW = '2'
 
