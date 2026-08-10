@@ -279,9 +279,9 @@ if [[ $RUN_PORTER -eq 1 ]]; then
     PORTER_PID=$!
 fi
 
-if [[ -n "$COLLECTOR_PID" ]]; then
-    wait "$COLLECTOR_PID" || PIPELINE_STATUS=$?
-fi
+# if [[ -n "$COLLECTOR_PID" ]]; then
+#     wait "$COLLECTOR_PID" || PIPELINE_STATUS=$?
+# fi
 if [[ -n "$PORTER_PID" ]]; then
     wait "$PORTER_PID" || PIPELINE_STATUS=$?
 fi
