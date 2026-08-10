@@ -69,6 +69,7 @@ _NORMALIZE_FUNCTIONS = {
     "macro_context": normalize_context_tag,
     "cross_domain_impacts": normalize_cross_domain_impacts,
     "event_type": normalize_context_tag,
+    "impacted_domains": normalize_tags,
     "impact_level": normalize_impact_or_risk,
     "confidence": normalize_impact_or_risk,
     "future_outlook": normalize_texts,
