@@ -67,13 +67,21 @@ class Entities(_NLPBaseModel):
 
 class Digest(_NLPBaseModel):
     """Main digest/key points of an article/news/blog/report"""        
-    activities: List[str] = Field(
+    events: list[str] = Field(
         default_factory=list,
         description=(
-            "list=Activities,facts,events. "
-            "max_items<=10. "            
+            "list=Chronological sequence of facts/events. "
+            "max_items<=40. "
             "format=YYYY-MM-DD Actor verb object/effect with key metric if available."
-        ),
+        )
+    )
+    drivers: list[str] = Field(
+        default_factory=list,
+        description=(
+            "list=Traceable causal relationships between actions and outcomes. "
+            "max_items<=10. "
+            "format=Cause produced resulting effect."
+        )
     )
     # "model_release, agent_launch, enterprise_adoption_case, safety_regulation_update, multimodal_breakthrough\n"
     # "ransomware_attack, zero_day_disclosure, supply_chain_breach, ai_enhanced_exploit, state_sponsored_campaign\n"
@@ -85,10 +93,21 @@ class Digest(_NLPBaseModel):
     # "oil_price_shock, gdp_forecast_revision, inflation_spike, rate_cut_signal, commodity_demand_shift\n"
     event_type: Optional[str] = Field(
         None,
-        description="Primary aggregated event type(<=3words).",
+        description="Primary aggregated event type(<=3words). Omit if NA.",
     )
-    impact_level: Optional[str] = Field(
-        None,
+    impacts: list[str] = Field(
+        default_factory=list,
+        description=(
+            "list=Atomic observed impacts. "
+            "max_items<=10. "
+            "format=Affected party verb measurable effect with key metric if available."
+        )
+    )
+    impacted_domains: list[str] = Field(
+        default_factory=list,
+        description="list=Domains impacted by the events sequence. max_items<=10.",
+    )
+    impact_level: str = Field(
         description=(
             "Specified impact of the events on primary domain/context. "
             "allowed=null,low,medium,high,critical,transformative."
@@ -99,25 +118,24 @@ class Digest(_NLPBaseModel):
     # "- Aviation: Flight delays and cancellations due to air traffic control issues\n"
     # "- Hardware: Supply chain disruptions affecting chip production\n"
     # "- Startups: Emerging companies facing funding challenges\n"
-    cross_domain_impacts: List[str] = Field(
-        default_factory=list,
-        description=(
-            "list=Secondary domains: impacts. "
-            "max_items<=5. "
-            "format=DOMAIN: 1 simple sentence impact."
-        )
-    )
+    # cross_domain_impacts: List[str] = Field(
+    #     default_factory=list,
+    #     description=(
+    #         "list=Secondary domains: impacts. "
+    #         "max_items<=5. "
+    #         "format=DOMAIN: 1 simple sentence impact."
+    #     )
+    # )
     # "Examples: US-Iran conflict, Red Sea disruption, Tariff volatility, Rare earth controls, Arctic shipping rivalry, Africa mineral conflict, Cyber arms race escalation etc."     
     macro_context: Optional[str] = Field(
         None,
-        description="Primary overarching geopolitical, trade, economic, technological context driving the events(<=4words).",
+        description="Primary overarching geopolitical, trade, economic, technological context driving the events(<=4words). Omit if NA.",
     )
     forecast: Optional[str] = Field(
         default=None,
-        description="Future outlook, trajectory or forecast if traceable else omit. ",
+        description="Traceable future outlook, trajectory or forecast. Omit if NA.",
     )
     briefing: str = Field(
-        ...,
         description=(
             "Intelligence briefing of the events (<=2sentences). "
             "Include time/date, larger context, actors, events, targets/affected parties, with key metrics/comparisons. "
@@ -138,7 +156,7 @@ class Briefing(_NLPBaseModel):
     events: list[str] = Field(
         default_factory=list,
         description=(
-            "list=Chronological sequence of events. "
+            "list=Chronological sequence of facts/events. "
             "max_items<=40. "
             "format=YYYY-MM-DD Actor verb object/effect with key metric if available."
         )
@@ -146,7 +164,7 @@ class Briefing(_NLPBaseModel):
     drivers: list[str] = Field(
         default_factory=list,
         description=(
-            "list=Explicitly supported causal relationships. "
+            "list=Traceable causal relationships between actions and outcomes. "
             "max_items<=10. "
             "format=Cause produced resulting effect."
         )
@@ -168,7 +186,7 @@ class Briefing(_NLPBaseModel):
     )
     forecast: Optional[str] = Field(
         default=None,
-        description="Future outlook, trajectory or forecast if traceable else omit.",
+        description="Traceable future outlook, trajectory or forecast. Omit if NA.",
     )
     briefing: str = Field(
         description=(

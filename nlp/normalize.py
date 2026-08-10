@@ -8,12 +8,21 @@ from pydantic import BaseModel
 _TAG_MAX_LEN = 50
 _TICKER_MAX_LEN = 6
 
-_UNDETERMINED = {"n/a", "na", "none", "unmentioned", "not mentioned", "unspecified", "undetermined", "not specified", "not found", "null"}
+_UNDETERMINED = {"n/a", "na", "none", "unmentioned", "not mentioned", "unspecified", "not mentioned", "unstated", "unavailable", "not mentioned", "undetermined", "not specified", "not found", "null"}
 _IMPACT_LEVELS = {"low", "medium", "high", "critical", "transformative"}
 
 
-_strip = lambda txt: txt.strip().replace('\n', ' ')
 _snake = lambda s: re.sub(r'_+', '_', textcase.snake(s)).strip('_')
+
+def normalize_text(text: str):
+    if not text: return
+    text = text.strip().replace('\n', ' ')
+    if text and text.lower() not in _UNDETERMINED: return text
+
+def normalize_texts(items: str | list[str]):    
+    if isinstance(items, str): return normalize_text(items)
+    elif isinstance(items, list): return [nrm_item for item in items if (nrm_item := normalize_text(item))]
+    raise ValueError("Wrong item types. Should `str` | `list[str]`")
 
 def normalize_names(items: list[str]):
     """Remove leading/trailing non-alphanumeric characters, filter out empty and undetermined values, and deduplicate while preserving original casing of first occurrence."""
@@ -22,11 +31,6 @@ def normalize_names(items: list[str]):
     texts = map(lambda text: re.sub(r"^[\W_]+|[\W_]+$", "", text).strip(), items)
     texts = filter(lambda tag: tag and len(tag) <= _TAG_MAX_LEN and tag.lower() not in _UNDETERMINED, texts)
     return list({item.lower(): item for item in texts}.values())
-
-def normalize_actions_and_briefing(items: str | list[str]):    
-    if isinstance(items, str): return _strip(items)
-    elif isinstance(items, list): return [_strip(item) for item in items if item.strip()]
-    raise ValueError("Wrong item types. Should `str` | `list[str]`")
 
 def normalize_stock_tickers(items: list[str]):
     return list(filter(lambda x: len(x) <= _TICKER_MAX_LEN and x.isupper(), normalize_names(items)))
@@ -42,10 +46,6 @@ def normalize_context_tag(tag: str):
     tag = _snake(tag)
     if len(tag) <= _TAG_MAX_LEN and tag not in _UNDETERMINED:
         return tag
-
-def normalize_future_outlook(outlook: str):
-    if outlook and outlook.lower() not in _UNDETERMINED:
-        return outlook
 
 def normalize_cross_domain_impacts(impacts: list[str]):
     if not impacts: return impacts
@@ -71,11 +71,13 @@ _NORMALIZE_FUNCTIONS = {
     "event_type": normalize_context_tag,
     "impact_level": normalize_impact_or_risk,
     "confidence": normalize_impact_or_risk,
-    "future_outlook": normalize_future_outlook,
-    "forecast": normalize_future_outlook,
-    "actions": normalize_actions_and_briefing,
-    "events": normalize_actions_and_briefing,
-    "briefing": normalize_actions_and_briefing
+    "future_outlook": normalize_texts,
+    "forecast": normalize_texts,
+    "actions": normalize_texts,
+    "activities": normalize_texts,
+    "events": normalize_texts,
+    "drivers": normalize_texts,    
+    "briefing": normalize_texts
 }
 def normalize_fields(data):
     for field, normalize_func in _NORMALIZE_FUNCTIONS.items():
