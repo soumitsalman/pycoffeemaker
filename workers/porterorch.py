@@ -160,9 +160,9 @@ class CupboardPorter:
                     random.sample(tags, min(MAX_TAGS, len(tags)))
                 )
 
-            # normalize activities field name
-            if activities := bean.get[DIGEST].pop("events", None):
-                bean[DIGEST]["events"] = activities
+            # renaming events fields for consistency
+            if activities := bean[DIGEST].pop("events", None):
+                bean[DIGEST]["activities"] = activities
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):
@@ -220,9 +220,9 @@ class CupboardPorter:
             if tags := comp.get(TAGS):
                 comp[TAGS] = random.sample(tags, min(len(tags), MAX_TAGS))
 
-            # normalize activities field name
-            if activities := comp.get[DIGEST].pop("events", None):
-                comp[DIGEST]["events"] = activities
+            # renaming events fields for consistency
+            if activities := comp[DIGEST].pop("events", None):
+                comp[DIGEST]["activities"] = activities
         return [Sip(**comp) for comp in composites], composites              
 
     async def hydrate_signals(self, db: Cupboard, target_state: str):
