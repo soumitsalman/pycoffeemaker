@@ -135,7 +135,6 @@ class Cupboard:
         sips = [sip for sip in sips if sip.digest and sip.embedding and len(sip.embedding) == VECTOR_LEN]
         for sip in sips:
             _ensure_sip_id(sip)
-            _ensure_source_id(sip)
             _ensure_embedding(sip)
             _ensure_non_null_bytes(sip)
 
@@ -325,6 +324,9 @@ def _ensure_sip_id(sip: Sip):
     if not sip.id:
         if sip.url: sip.id = generate_uuid(sip.url)
         else: raise ValueError("Sip must have a `url` or `id`")
+    if not sip.source:
+        if sip.base_url: sip.source = generate_uuid(sip.base_url)
+        else: raise ValueError("Sip must have a `base_url` or `source`")
 
 def _ensure_source_id(item: Source | Sip):
     if not item.id:
