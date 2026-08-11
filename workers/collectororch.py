@@ -196,10 +196,10 @@ class Collector:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(self._cache_chatters(chatters))
             tg.create_task(self._cache_beans(filtered_list(beans, is_bean_storable)))
-            tg.create_task(self._scrape_beans(filtered_list(beans, is_bean_scrapable)))
+            tg.create_task(self._queue_scrape(BEANS, filtered_list(beans, is_bean_scrapable)))
             del beans
             tg.create_task(self._cache_publishers(filtered_list(publishers, is_publisher_storable)))
-            tg.create_task(self._scrape_publishers(filtered_list(publishers, is_publisher_scrapable)))
+            tg.create_task(self._queue_scrape(PUBLISHERS, filtered_list(publishers, is_publisher_scrapable)))
             del publishers
 
     async def _cache_beans(self, beans: list[dict]):
@@ -244,25 +244,23 @@ class Collector:
         if not beans: return
 
         beans[:] = await self.cache.deduplicate(BEANS, COLLECTED, beans)
-        if not beans: return
-
-        beans[:] = filtered_list(await self.webscraper.scrape_beans(beans), is_bean_storable)
-        if not beans: return
-
-        log.info(event="scraped", source=beans[0][SOURCE], beans=len(beans))
-        await self._cache_beans(beans)
+        while beans:
+            storable = filtered_list(await self.webscraper.scrape_beans(beans[0: self.batch_size]), is_bean_storable)
+            if storable:                 
+                log.info(event="scraped", source=storable[0][SOURCE], beans=len(storable))
+                await self._cache_beans(storable)
+            del beans[0: self.batch_size]
 
     async def _scrape_publishers(self, publishers: list[dict]):        
         if not publishers: return
 
         publishers[:] = await self.cache.deduplicate(PUBLISHERS, COLLECTED, publishers)
-        if not publishers: return
-
-        publishers[:] = filtered_list(await self.webscraper.scrape_publishers(publishers), is_publisher_storable)
-        if not publishers: return
-
-        log.info(event="scraped", source=publishers[0][SOURCE], publishers=len(publishers))
-        await self._cache_publishers(publishers)
+        while publishers:
+            storable = filtered_list(await self.webscraper.scrape_publishers(publishers[0: self.batch_size]), is_publisher_storable)
+            if storable:                 
+                log.info(event="scraped", source=storable[0][SOURCE], publishers=len(storable))
+                await self._cache_publishers(storable)
+            del publishers[0: self.batch_size]
 
     def _get_collector_funcs(self, sources):
         # shuffling the sources to introduce randomness in failures
@@ -311,11 +309,7 @@ class Collector:
 
     async def _queue_scrape(self, kind: str, items: list[dict]):
         if not items: return
-        
-        await asyncio.gather(*(
-            self.scraper_queue.put_nowait((kind, items[i:i+self.batch_size])) 
-            for i in range(0, len(items), self.batch_size)
-        ))
+        await self.scraper_queue.put_nowait((kind, items))
 
     async def _run_scrapers(self):
         """Run the scrapers - flushing the buffers when full."""                      
@@ -338,7 +332,7 @@ class Collector:
             self._scrape_beans(beans_buffer),
             self._scrape_publishers(publishers_buffer)
         )            
-        log.info(event="scraping completed")
+        log.info(event="scrapers completed")
     
     def _init_run(self):
         self.beans_collected = 0
