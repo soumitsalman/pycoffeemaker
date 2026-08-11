@@ -61,20 +61,18 @@ is_bean_storable = lambda bean: (
     and bean.get("content_length", 0) >= WORDS_THRESHOLD_FOR_STORING
     and not any(tag in bean.get(TITLE, '').lower() for tag in IGNORE_WORD_GAMES)
 )
-storable_beans = lambda beans: list(filter(is_bean_storable, beans)) if beans else beans
 is_bean_scrapable = lambda bean: (
     bean
     and bean.get(KIND) != POST
-    and bean.get("content_length", 0) < WORDS_THRESHOLD_FOR_STORING
-    and not any(tag in bean.get(TITLE, '').lower() for tag in IGNORE_WORD_GAMES)
+    and bean.get('content_length', 0) < WORDS_THRESHOLD_FOR_STORING
+    and not any(tag in (bean.get(TITLE) or "").lower() for tag in IGNORE_WORD_GAMES)
 )
-scrapable_beans = lambda beans: list(filter(is_bean_scrapable, beans)) if beans else beans
-
 is_publisher_storable = lambda publisher: publisher and any(field in publisher for field in [SITE_NAME, FAVICON, DESCRIPTION])
-storable_publishers = lambda publishers: list(filter(is_publisher_storable, publishers)) if publishers else publishers
 is_publisher_scrapable = lambda publisher: publisher and not any(field in publisher for field in [SITE_NAME, FAVICON, DESCRIPTION])
-scrapable_publishers = lambda publishers: list(filter(is_publisher_scrapable, publishers)) if publishers else publishers
 
+def filtered_list(items: list[dict], filter_func) -> list[dict]:
+    if not items: return items
+    return list(filter(filter_func, items))
 
 def validate_bean_item(item: dict) -> bool:
     if not item:
@@ -194,52 +192,53 @@ class Collector:
 
         beans, chatters, publishers = self._split_items(items)
         del items
-        storable_bean_items = storable_beans(beans)
-        scrapable_bean_items = scrapable_beans(beans)
-        del beans
-        storable_publisher_items = storable_publishers(publishers)
-        scrapable_publisher_items = scrapable_publishers(publishers)
-        del publishers
 
         async with asyncio.TaskGroup() as tg:
-            if chatters:
-                tg.create_task(self._cache_chatters(chatters))
-            if storable_bean_items:
-                tg.create_task(self._cache_beans(storable_bean_items))
-            if scrapable_bean_items:
-                tg.create_task(self._queue_scrape(BEANS, scrapable_bean_items))
-            if storable_publisher_items:
-                tg.create_task(self._cache_publishers(storable_publisher_items))
-            if scrapable_publisher_items:
-                tg.create_task(self._queue_scrape(PUBLISHERS, scrapable_publisher_items))
+            tg.create_task(self._cache_chatters(chatters))
+            tg.create_task(self._cache_beans(filtered_list(beans, is_bean_storable)))
+            tg.create_task(self._queue_scrape(BEANS, filtered_list(beans, is_bean_scrapable)))
+            del beans
+            tg.create_task(self._cache_publishers(filtered_list(publishers, is_publisher_storable)))
+            tg.create_task(self._queue_scrape(PUBLISHERS, filtered_list(publishers, is_publisher_scrapable)))
+            del publishers
 
     async def _cache_beans(self, beans: list[dict]):
         if not beans: return
 
-        count = await self.cache.set(BEANS, COLLECTED, beans)
-        if count is not None: 
-            log.info(event="cached", source=beans[0][SOURCE], beans=count)
-            self.beans_collected += count
+        source_marker, item_count = beans[0][SOURCE], len(beans)
+        cached_count = await self.cache.set(BEANS, COLLECTED, beans)
+        beans.clear()
+
+        if cached_count is not None: 
+            log.info(event="cached", source=source_marker, beans=cached_count)
+            self.beans_collected += cached_count
         else: 
-            log.info(event="caching", source=beans[0][SOURCE], beans=len(beans))
+            log.info(event="caching", source=source_marker, beans=item_count)
         
     async def _cache_publishers(self, publishers: list[dict]):
         if not publishers: return
 
-        count = await self.cache.set(PUBLISHERS, COLLECTED, publishers)
-        if count is not None: 
-            log.info(event="cached", source=publishers[0][SOURCE], publishers=count)
-            self.publishers_collected += count
+        source_marker, item_count = publishers[0][SOURCE], len(publishers)
+        cached_count = await self.cache.set(PUBLISHERS, COLLECTED, publishers)        
+        publishers.clear()
+
+        if cached_count is not None: 
+            log.info(event="cached", source=source_marker, publishers=cached_count)
+            self.publishers_collected += cached_count
         else: 
-            log.info(event="caching", source=publishers[0][SOURCE], publishers=len(publishers))
+            log.info(event="caching", source=source_marker, publishers=item_count)
 
     async def _cache_chatters(self, chatters: list[dict]):
         if not chatters: return
 
+        source_marker, item_count = chatters[0].get(FORUM, chatters[0][SOURCE]), len(chatters)
         pkg = [{"id": str(uuid.uuid4()), "chatters": chatters}]
-        count = await self.cache.set(CHATTERS, COLLECTED, pkg)
-        if count is not None: log.info(event="cached", source=chatters[0].get(FORUM, chatters[0][SOURCE]), chatters=count)
-        else: log.info(event="caching", source=chatters[0].get(FORUM, chatters[0][SOURCE]), chatters=len(chatters))
+        cached_count = await self.cache.set(CHATTERS, COLLECTED, pkg)
+        chatters.clear()
+        pkg.clear()
+
+        if cached_count is not None: log.info(event="cached", source=source_marker, chatters=cached_count)
+        else: log.info(event="caching", source=source_marker, chatters=item_count)
 
     async def _scrape_beans(self, beans: list[dict]):
         if not beans: return
@@ -247,15 +246,7 @@ class Collector:
         beans[:] = await self.cache.deduplicate(BEANS, COLLECTED, beans)
         if not beans: return
 
-        await self.webscraper.scrape_beans(beans)
-
-        write_index = 0
-        for bean in beans:
-            if is_bean_storable(bean):
-                beans[write_index] = bean
-                write_index += 1
-        del beans[write_index:]
-
+        beans[:] = filtered_list(await self.webscraper.scrape_beans(beans), is_bean_storable)
         if not beans: return
 
         log.info(event="scraped", source=beans[0][SOURCE], beans=len(beans))
@@ -264,10 +255,10 @@ class Collector:
     async def _scrape_publishers(self, publishers: list[dict]):        
         if not publishers: return
 
-        publishers = await self.cache.deduplicate(PUBLISHERS, COLLECTED, publishers)
+        publishers[:] = await self.cache.deduplicate(PUBLISHERS, COLLECTED, publishers)
         if not publishers: return
 
-        publishers = storable_publishers(await self.webscraper.scrape_publishers(publishers))
+        publishers[:] = filtered_list(await self.webscraper.scrape_publishers(publishers), is_publisher_storable)
         if not publishers: return
 
         log.info(event="scraped", source=publishers[0][SOURCE], publishers=len(publishers))
@@ -312,16 +303,19 @@ class Collector:
             for func in collector_funcs[offset::self.batch_size]:
                 await self._collect(*func)
 
-        await asyncio.gather(*(work(offset) for offset in range(self.batch_size)), return_exceptions=True)       
+        async with asyncio.TaskGroup() as tg:
+            for offset in range(self.batch_size):
+                tg.create_task(work(offset))
         await self.scraper_queue.put_nowait(None) # end of collection marker
-        log.info(event="collection completed")
+        log.info(event="collectors completed")
 
     async def _queue_scrape(self, kind: str, items: list[dict]):
         if not items: return
-
-        if items := await self.cache.deduplicate(kind, COLLECTED, items):            
-            await self.scraper_queue.put_nowait((kind, items))
-        return items
+        
+        await asyncio.gather(*(
+            self.scraper_queue.put_nowait((kind, items[i:i+self.batch_size])) 
+            for i in range(0, len(items), self.batch_size)
+        ))
 
     async def _run_scrapers(self):
         """Run the scrapers - flushing the buffers when full."""                      
@@ -349,7 +343,7 @@ class Collector:
     def _init_run(self):
         self.beans_collected = 0
         self.publishers_collected = 0
-        self.scraper_queue = AsyncQueue(path=f".cache/scrape-queue-{now_str()}", tempdir=".cache")
+        self.scraper_queue = AsyncQueue(path=f".cache/scrape-queue-{now_str()}", tempdir=".cache", chunksize=2)
 
     @log_runtime_async(logger=log)
     async def run(self, sources):

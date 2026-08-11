@@ -8,13 +8,15 @@ Backend processing engine for **Project Cafecito**: collect web content, enrich 
 pycoffeemaker/
 ├── run.py                 # Entry: --mode, --batch_size; loads .env
 ├── run_pipeline.sh        # Multi-stage scheduler (GPU/CPU/IO ordering)
-├── machine_ops.py         # GPU cloud start/stop (TensorDock, Azure)
-├── factory/               # feeds.yaml, pipeline-defaults.env, classifications.yaml, migrate/rectify
-├── workers/               # Orchestrators + state cache
+├── factory/               # feeds.yaml, classifications.yaml, migrations, setup/restore scripts
+├── workers/               # Stage orchestrators
+├── processingcache/       # Shared processing state machine + cache backends
 ├── datacollectors/        # RSS/API/scrapers (APICollectorAsync, AsyncWebScraper)
 ├── nlp/                   # Embeddings, digests, NER (vendored package; see nlp/README.md)
 ├── pybeansack/            # Bean/Chatter/Publisher models + DB backends (vendored package)
 ├── pycupboard/            # Sip/Source + Cupboard (Cortado)
+├── utils/                 # Env/config/log/date/field helpers used across workers
+├── graphify-out/          # Generated code graph artifacts and reports
 └── tests/                 # Integration tests
 ```
 
@@ -31,7 +33,7 @@ One **mode** per process. Orchestrators are unaware of each other; coordination 
 | `CLUSTERING` | `analyzerorch.py` | Related-article clustering (`CLASSIFICATION_CACHE`) | CPU-heavy |
 | `EXTRACTOR` | `analyzerorch.py` | NER (people, orgs, regions, tickers) via GLiNER | GPU |
 | `DIGESTOR` | `analyzerorch.py` | Structured digests (gist, highlights) via LLM | GPU |
-| `CONSOLIDATOR` | `analyzerorch.py` | Composite briefings from related beans | GPU or remote API |
+| `CONSOLIDATOR` | `consolidatororch.py` | Composite briefings from related beans | GPU or remote API |
 | `PORTER` | `porterorch.py` | `BeansackPorter` + `CupboardPorter` → PG Beansack + Cupboard | IO |
 
 ### Scheduling (`run_pipeline.sh`)
@@ -74,11 +76,11 @@ Suggested cadence: collector ~2×/day; embedder/clustering/extractor/digestor ~3
 
 **Configuration** — `factory/pipeline-defaults.env` holds checked-in defaults for deployment convenience (model paths, context lengths, analyzer tuning). Python entrypoints load it first via `utils/env.load_coffeemaker_env`, then `.env` at repo root with override. Without a local `.env`, workers use those defaults as-is. Put secrets and host-specific overrides (`PROCESSING_CACHE`, `BEANSACK_CONNECTION_STRING`, API keys, alternate `EMBEDDER_PATH`, etc.) in `.env` only. `run_pipeline.sh` sources `.env` for shell-level vars (e.g. `SHUTDOWN_URL`).
 
-### State machine (`workers/workercache/`)
+### State machine (`processingcache/`)
 
 Fault-tolerant warehouse: per-type tables (`beans`, `publishers`, `chatters`, `composites`) with `state`, `ts`, `data`, optional `id`. Workers prefer bulk insert/delete over update. Default backend: PostgreSQL (`pgcache.py`) via `PROCESSING_CACHE`; alternates in `extensions/` (sqlite/Turso, firebird, surreal, pg+cls).
 
-Schema and read/write patterns: `workers/workercache/STATEMACHINE.md`. State constants: `workers/utils.py`.
+Schema and read/write patterns: `processingcache/STATEMACHINE.md`. State constants: `workers/states.py`.
 
 Bean pipeline (simplified): `collected` → `embedded` → `classified` / `clustered` → `extracted` / `digested` → `consolidated` → `beansacked` / `cupboarded`.
 
@@ -105,7 +107,9 @@ Storage: `pybeansack.create_client("pg"\|"lance"\|"duck"\|"dl", ...)`. Cupboard:
 
 - **`datacollectors/`** — shared field constants (`URL`, `CONTENT`, `SOURCE`, …); `apicollectors.py`, `scrapers.py`
 - **`nlp/`** — `create_embedder`, `create_micro_agent`, `Digest`, `EntityExtractor`; local HF, vLLM, ONNX, remote APIs
-- **`factory/`** — `feeds.yaml` (`COLLECTOR_SOURCES`), `classifications.yaml`, DB setup/migrations (not runtime libs)
+- **`factory/`** — `feeds.yaml` (`COLLECTOR_SOURCES`), `classifications.yaml`, parquet label assets, DB setup/migrations
+- **`processingcache/`** — cache/state-machine interfaces plus PostgreSQL and extension backends
+- **`utils/`** — shared env/config/date/log/field helpers used by entrypoints and workers
 
 ## graphify
 

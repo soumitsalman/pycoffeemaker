@@ -3,6 +3,7 @@ import json
 import zipfile
 import re
 import time
+import tempfile
 from utils.logs import get_logger
 import os
 from html import unescape
@@ -15,7 +16,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_fixed, wait_random
-from io import BytesIO
 from itertools import chain
 from utils.fields import *
 from .settings import *
@@ -627,21 +627,30 @@ class SECFilingCollector(APICollectorBase):
     def __init__(self, batch_size: int):
         super().__init__(batch_size)
 
-    async def _download_zip(self, url: str) -> bytes:
+    async def _download_zip(self, url: str) -> str:
         async with self.session.get(url) as resp:
-            return await resp.read()
+            resp.raise_for_status()
+            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as archive:
+                archive_path = archive.name
+                async for chunk in resp.content.iter_chunked(1024 * 1024):
+                    archive.write(chunk)
+            return archive_path
 
-    def _extract_html_from_zip(self, zip_data: bytes) -> list[tuple[str, str]]:
-        html_files = []
-        with zipfile.ZipFile(BytesIO(zip_data)) as zf:
-            for file_info in zf.infolist():
-                if file_info.is_dir():
-                    continue
-                filename = Path(file_info.filename).name.lower()
-                if filename.endswith(('.html', '.htm')):
-                    content = zf.read(file_info.filename).decode('utf-8', errors='ignore')
-                    html_files.append((file_info.filename, content))
-        return html_files
+    def _extract_html_from_zip(self, archive_path: str) -> tuple[str, str] | None:
+        with zipfile.ZipFile(archive_path) as archive:
+            member = next(
+                (
+                    info for info in archive.infolist()
+                    if not info.is_dir()
+                    and Path(info.filename).name.lower().endswith((".html", ".htm"))
+                ),
+                None
+            )
+            if not member:
+                return None
+            with archive.open(member) as source:
+                content = source.read().decode("utf-8", errors="ignore")
+            return member.filename, content
 
     @staticmethod
     def _extract_filing_type(title: str) -> str:
@@ -682,21 +691,21 @@ class SECFilingCollector(APICollectorBase):
         source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].get('link'))
 
         async def _process_entry(entry):
-            zip_data = None
+            archive_path = None
             try:
                 guid = getattr(entry, 'guid', None) or entry.get('guid')
                 if not guid:
                     return None
 
-                zip_data = await self._download_zip(guid)
-                if not zip_data:
+                archive_path = await self._download_zip(guid)
+                if not archive_path:
                     return None
 
-                html_files = self._extract_html_from_zip(zip_data)
-                if not html_files:
+                primary_html_file = self._extract_html_from_zip(archive_path)
+                if not primary_html_file:
                     return None
 
-                primary_filename, primary_html = html_files[0]
+                primary_filename, primary_html = primary_html_file
                 markdown_content = html_to_markdown(primary_html)
 
                 return self._build_filing_item(
@@ -716,7 +725,11 @@ class SECFilingCollector(APICollectorBase):
                 )
                 return None
             finally:
-                del zip_data
+                if archive_path:
+                    try:
+                        os.unlink(archive_path)
+                    except FileNotFoundError:
+                        pass
 
         tasks = [_process_entry(entry) for entry in feed.entries]
         results = await asyncio.gather(*tasks, return_exceptions=True)

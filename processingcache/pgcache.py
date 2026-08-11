@@ -187,19 +187,18 @@ class AsyncStateCache(AsyncStateCacheBase):
         state: str,
         items: list[dict[str, Any]] | list[BaseModel],
     ):
-        rows = _create_rows(self.id_keys[object_type], state, items)
-        if not rows:
-            return
-
-        async with self.pool.connection() as conn:            
-            results = [
-                await conn.execute(
-                    _insert_state_multivalues_sql(object_type, len(chunk)),
-                    list(chain.from_iterable(chunk)),
+        if not items: return
+        
+        count = 0
+        async with self.pool.connection() as conn:  
+            for chunk in batched(items, BATCH_SIZE):  
+                rows = _create_rows(self.id_keys[object_type], state, chunk)
+                result = await conn.execute(
+                    _insert_state_multivalues_sql(object_type, len(rows)),
+                    list(chain.from_iterable(rows)),
                 )
-                for chunk in batched(rows, BATCH_SIZE)
-            ]
-            count = sum(result.rowcount for result in results)
+                count += result.rowcount
+                del rows, result
         return count
 
     @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
@@ -338,9 +337,6 @@ def _create_rows(
     state: str,
     items: list[dict[str, Any]] | list[BaseModel],
 ):
-    if not items:
-        return
-
     ts = datetime.now(tz=timezone.utc)
     return [
         (get_field_val(item, id_key), state, ts, encode_data(item)) for item in items

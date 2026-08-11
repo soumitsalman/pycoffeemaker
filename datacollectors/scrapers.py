@@ -19,7 +19,7 @@ from icecream import ic
 log = get_logger(__name__)
 
 PARSE_CONCURRENCY = int(os.getenv("PARSE_CONCURRENCY", min(4, os.cpu_count())))  # max DOM trees in memory at once
-PDF_CONCURRENCY = int(os.getenv("PDF_CONCURRENCY", 2))  # PDF conversion is CPU/native-heavy; keep it isolated from HTML parsing
+PDF_CONCURRENCY = int(os.getenv("PDF_CONCURRENCY", 4))  # PDF conversion is CPU/native-heavy; keep it isolated from HTML parsing
 
 _METADATA_SELECTORS = {
     'site_name': "meta[property='og:site_name'], meta[property='sitename'], meta[itemprop='name']",
@@ -138,37 +138,6 @@ def _extract_pdf_text(path: str) -> str | None:
             exc_info=True,
         )
 
-# def _extract_pdf_text(path: str) -> str | None:
-#     """Process worker: extract PDF text with an independent fallback."""
-#     try:
-#         import pymupdf
-#         with pymupdf.open(path) as document:
-#             content = "\n".join(page.get_text("text") for page in document)
-#         if content.strip():
-#             return content
-#         raise ValueError("PyMuPDF extracted no text")
-#     except Exception as primary_error:
-#         log.warning(
-#             event="pymupdf PDF extraction failed; using pypdf fallback",
-#             source=path,
-#             num_items=1,
-#             error_type=primary_error.__class__.__name__,
-#             error_details=str(primary_error),
-#         )
-
-#     try:
-#         from pypdf import PdfReader
-#         content = "\n".join(page.extract_text() or "" for page in PdfReader(path, strict=False).pages)
-#         return content or None
-#     except Exception as fallback_error:
-#         log.warning(
-#             event="pypdf PDF extraction failed",
-#             source=path,
-#             num_items=1,
-#             error_type=fallback_error.__class__.__name__,
-#             error_details=str(fallback_error),
-#         )
-#         return None
 
 def _title_from_url(url: str) -> str | None:
     try:
@@ -182,9 +151,7 @@ def _title_from_url(url: str) -> str | None:
 _HTML_MARKERS = ("<!doctype", "<html", "<body", "<article", "<main")
 
 def _is_parseable_html(html: str | None) -> bool:
-    if not html or not html.strip():
-        return False
-    return any(marker in html for marker in _HTML_MARKERS)
+    if html: return any(marker in html for marker in _HTML_MARKERS)
 
 class AsyncWebScraper:
     session: aiohttp.ClientSession = None
@@ -238,45 +205,43 @@ class AsyncWebScraper:
         wait=wait_random(*RETRY_JITTER),
         reraise=True,
     )
-    async def _scrape_html(self, url: str) -> str | None:
-        async with self.throttle, self.session.get(url) as response:
-            gate = is_excluded_content(response, html_only=True)
-            if gate.excluded:
-                return None
-            body = await response.content.read(gate.max_size)
-            html = body.decode(gate.charset, errors="replace")
-            # Cloudflare sometimes serves a JS shell instead of full HTML — retry
-            if '<body' in html:
-                return html
+    async def _scrape_body(self, url: str):
+        async with self.throttle:
+            async with self.session.get(url) as response:
+                gate = is_excluded_content(response)
+                if gate.excluded: return
 
-    @retry(
-        retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
-        stop=stop_after_attempt(RETRY_COUNT),
-        wait=wait_random(*RETRY_JITTER),
-        reraise=True,
-    )
+                try:
+                    body = await response.content.readexactly(gate.max_size+1)
+                except asyncio.IncompleteReadError as error:
+                    body = error.partial
+                return gate, body
+
+    
+    async def _scrape_html(self, url: str) -> str | None:
+        gate, body = await self._scrape_body(url)
+        if gate.excluded or gate.is_pdf: return None
+
+        html = body.decode(gate.charset, errors="replace")
+        # Cloudflare sometimes serves a JS shell instead of full HTML — retry
+        if '<body' in html:
+            return html
+
     async def _scrape_content_body(self, url: str) -> tuple[str, str, str] | None:
         import tempfile
 
-        async with self.throttle, self.session.get(url) as response:
-            gate = is_excluded_content(response)
-            if gate.excluded:
+        gate, body = await self._scrape_body(url)
+        if gate.excluded: return
+
+        if gate.is_pdf:
+            if len(body) > gate.max_size:
                 return None
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as pdf:
+                path = pdf.name
+                pdf.write(body)
+            return "pdf", gate.url, path
 
-            try:
-                body = await response.content.readexactly(gate.max_size+1)
-            except asyncio.IncompleteReadError as error:
-                body = error.partial
-
-            if gate.is_pdf:
-                if len(body) > gate.max_size:
-                    return None
-                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as pdf:
-                    path = pdf.name
-                    pdf.write(body)
-                return "pdf", gate.url, path
-
-            return "html", gate.url, body.decode(gate.charset, errors="replace")
+        return "html", gate.url, body.decode(gate.charset, errors="replace")
 
     @retry(
         retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
@@ -290,38 +255,29 @@ class AsyncWebScraper:
 
     async def _scrape_content(self, url: str):
         if excluded_url(url): return None
+        
         try:
-            scraped = await self._scrape_content_body(url)
-            if not scraped: return None
+            kind, final_url, body = await self._scrape_content_body(url)
+            if not body: return None
 
-            kind, final_url, body = scraped
-            if kind == "pdf":
-                try:
+            async with self.parse_throttle:
+                if kind == "pdf":
                     content = await self._extract_pdf_in_process(body)
+                    os.unlink(body)
                     if not content: return None
                     return {
-                        KIND: FINANCIAL_REPORT,
                         TITLE: _title_from_url(final_url) or _title_from_url(url),
                         CONTENT: content,
                     }
-                finally:
-                    try: os.unlink(body)
-                    except OSError: pass
 
-            if not _is_parseable_html(body):
-                return None
-
-            result = await self._parse_in_process(_parse_page, final_url, body)
-            del body
-            return result
+                if _is_parseable_html(body):
+                    return await self._parse_in_process(_parse_page, final_url, body)
+            
         except Exception as e:
             log.debug(event=f"content scraping failed - {e.__class__.__name__} {e}",
                 source=url,
-                num_items=1,
-                error_type=e.__class__.__name__,
-                error_details=str(e),
+                exc_info=True,
             )
-            return None
 
     async def _scrape_site(self, base_url: str):
         """Scrape a single site for publisher data."""
@@ -414,7 +370,9 @@ class AsyncWebScraper:
     
     async def scrape_beans(self, beans: list[dict]):
         """Augment existing beans with scraped data."""
-        await asyncio.gather(*(self.scrape_bean(bean) for bean in beans))
+        async with asyncio.TaskGroup() as tg:
+            for bean in beans:
+                tg.create_task(self.scrape_bean(bean))
         return beans
         
     async def scrape_bean(self, bean: dict):
