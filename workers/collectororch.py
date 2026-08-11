@@ -196,10 +196,10 @@ class Collector:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(self._cache_chatters(chatters))
             tg.create_task(self._cache_beans(filtered_list(beans, is_bean_storable)))
-            tg.create_task(self._queue_scrape(BEANS, filtered_list(beans, is_bean_scrapable)))
+            tg.create_task(self._scrape_beans(filtered_list(beans, is_bean_scrapable)))
             del beans
             tg.create_task(self._cache_publishers(filtered_list(publishers, is_publisher_storable)))
-            tg.create_task(self._queue_scrape(PUBLISHERS, filtered_list(publishers, is_publisher_scrapable)))
+            tg.create_task(self._scrape_publishers(filtered_list(publishers, is_publisher_scrapable)))
             del publishers
 
     async def _cache_beans(self, beans: list[dict]):
