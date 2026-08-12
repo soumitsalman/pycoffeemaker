@@ -315,7 +315,7 @@ class Collector:
     async def _queue_scrape(self, kind: str, items: list[dict]):
         if not items: return
 
-        chunk_size = max(self.batch_size//_SCRAPER_ADJUSTMENT, _SCRAPER_ADJUSTMENT)
+        chunk_size = max(self.batch_size>>_SCRAPER_ADJUSTMENT, _SCRAPER_ADJUSTMENT)
         await asyncio.gather(*(self.scraper_queue.put_nowait((kind, items[i: i + chunk_size])) for i in range(0, len(items), chunk_size)))
         items[:] = []
 
