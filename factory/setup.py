@@ -24,16 +24,16 @@ def create_classification_embeddings():
     with create_embedder(os.getenv('EMBEDDER_PATH'), os.getenv('EMBEDDER_CONTEXT_LEN')) as embedder:
         categories = pd.DataFrame(
             {
-                ID: classifications[CATEGORIES],
-                EMBEDDING: embedder([f"topic/domain={cat}" for cat in classifications[CATEGORIES]])
+                ID: [category[ID] for category in classifications[CATEGORIES]],
+                EMBEDDING: embedder([f"Instruct: Given a question, retrieve passages that can help answer the question.\nQuery: Content related to {category['description']}" for category in classifications[CATEGORIES]])
             }
         )
         ic(categories.sample(n=3))
 
         sentiments = pd.DataFrame(
             {
-                ID: classifications[SENTIMENTS],
-                EMBEDDING: embedder([f"sentiment={s}" for s in classifications[SENTIMENTS]])
+                ID: [sentiment[ID] for sentiment in classifications[SENTIMENTS]],
+                EMBEDDING: embedder([f"Instruct: Given a question, retrieve passages that can help answer the question.\nQuery: Content with {sentiment['description']}" for sentiment in classifications[SENTIMENTS]])
             }
         )
         ic(sentiments.sample(n=3))
