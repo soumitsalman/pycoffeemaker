@@ -108,7 +108,9 @@ def parse_sources(sources: str) -> dict:
 
 log = get_logger("collectorworker")
 
-_COLLECTOR_CACHE = ".cache/collector"
+_SCRAPER_QUEUE = ".cache/scraper-queue"
+_SCRAPER_ADJUSTMENT = 4
+
 
 class Collector:
     cache: AsyncStateCacheBase
@@ -129,7 +131,7 @@ class Collector:
         self.reddit_collector = RedditCollector(batch_size)
         self.hn_collector = HackerNewsCollector(batch_size)
         self.sec_filing_collector = SECFilingCollector(batch_size)
-        self.webscraper = AsyncWebScraper(batch_size<<4)
+        self.webscraper = AsyncWebScraper(batch_size<<_SCRAPER_ADJUSTMENT)
 
     def _split_item(self, item: dict):
         if not item:
@@ -313,7 +315,7 @@ class Collector:
     async def _queue_scrape(self, kind: str, items: list[dict]):
         if not items: return
 
-        chunk_size = max(self.batch_size>>8, 4)
+        chunk_size = max(self.batch_size//_SCRAPER_ADJUSTMENT, _SCRAPER_ADJUSTMENT)
         await asyncio.gather(*(self.scraper_queue.put_nowait((kind, items[i: i + chunk_size])) for i in range(0, len(items), chunk_size)))
         items[:] = []
 
@@ -334,7 +336,7 @@ class Collector:
     def _init_run(self):
         self.beans_collected = 0
         self.publishers_collected = 0
-        self.scraper_queue = AsyncQueue(path=f".cache/scrape-queue-{now_str()}", tempdir=".cache", chunksize=self.batch_size)
+        self.scraper_queue = AsyncQueue(path=f"{_SCRAPER_QUEUE}-{now_str()}", tempdir="/tmp", chunksize=_SCRAPER_ADJUSTMENT)
 
     async def _end_run(self):
         import shutil
