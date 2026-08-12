@@ -17,7 +17,6 @@ WORKDIR="/home/ubuntu/pycoffeemaker"
 SCRIPT="$WORKDIR/run_pipeline.sh"
 
 ARGS=(
-    --collector "$COLLECTOR_BATCH"
     --embedder "$EMBEDDER_BATCH"
     --extractor "$EXTRACTOR_BATCH"
     --clustering "$CLUSTERING_BATCH"
