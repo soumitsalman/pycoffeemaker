@@ -314,7 +314,6 @@ class Collector:
             for offset in range(self.batch_size):
                 tg.create_task(work(offset))
         
-        await asyncio.gather(*(self.scraper_queue.put_nowait(None) for _ in range(self.batch_size<<1)))
         log.info(event="collectors completed")
 
     async def _run_scrapers(self):
