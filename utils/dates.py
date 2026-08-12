@@ -12,6 +12,9 @@ def ndays_ago(days: int) -> datetime:
 def ndays_ago_str(days: int) -> str:
     return ndays_ago(days).strftime("%Y-%m-%d")
 
+def date_str(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%d")
+
 def ensure_utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None

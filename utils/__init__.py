@@ -32,4 +32,5 @@ __all__ = [
     "ndays_ago_str",
     "now",
     "now_str",
+    "date_str",
 ]

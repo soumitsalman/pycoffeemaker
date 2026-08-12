@@ -20,7 +20,7 @@ from nlp import (
     is_cuda_oom,
 )
 from utils.fields import *
-from utils import VECTOR_LEN
+from utils import VECTOR_LEN, date_str
 from datacollectors import POST
 from .cacheops import *
 from .states import *
@@ -259,9 +259,8 @@ class Digestor:
 
     @classmethod
     def _article_to_str(cls, article: dict) -> str:
-        text = f"reported:{article[CREATED].strftime('%Y-%m-%d')}\n"
         if (article.get(KIND) == POST) and article.get(AUTHOR):
-            text += f"author:{article[AUTHOR]}\n"
+            text += f"author:{article[AUTHOR]}\ndate:{date_str(article[CREATED])}\n"
         return text + article[CONTENT][:MAX_DOCUMENT_LEN<<2]
 
     def digest_beans(self, beans: list[dict]):

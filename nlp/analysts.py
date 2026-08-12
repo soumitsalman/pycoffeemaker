@@ -9,6 +9,8 @@ from collections import defaultdict
 from typing import Optional, Type
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_random
+
+from utils import now_str
 from .models import *
 from .runtime import *
 from .normalize import split_parts
@@ -68,13 +70,15 @@ class TextAnalystBase(ABC):
     def create_prompt(self, msg: str):
         prompt = []        
         input_text = msg[:self.max_prompt_len<<2] # this is a heuristic
-        if self.instruction: prompt.append({"role": "system", "content": self.instruction})
+        if self.instruction: prompt.append({"role": "system", "content": f"SYSTEM_DATE:\n{now_str()}\n"+self.instruction})
         prompt.append({
             "role": "user", 
             "content": self.input_template.format(
-                description=self.output_model.model_text_schema(), 
-                input_text=input_text
-            ) if self.input_template else input_text
+                    description=self.output_model.model_text_schema(), 
+                    input_text=input_text
+                ) 
+                if self.input_template 
+                else input_text
         })
         return prompt
 
