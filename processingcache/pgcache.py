@@ -223,14 +223,13 @@ class AsyncStateCache(AsyncStateCacheBase):
             return items
 
         ids = get_field_vals(items, self.id_keys[object_type])
+        items[:] = list({id:item for item, id in zip(items, ids)}.values())
+
         expr = _EXISTS_SQL.format(table=object_type)
         async with self.pool.connection() as conn:
             existing_ids = await _read_async(conn, expr, {"state": state, "ids": ids})
-        deduped = {
-            item_id:item for item, item_id in zip(items, ids) 
-            if item_id not in existing_ids
-        }
-        return list(deduped.values())
+        items[:] = [item for item, id in zip(items, ids) if id not in existing_ids]
+        return items
 
     async def optimize(self):
         async with self.pool.connection() as conn:

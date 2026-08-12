@@ -200,7 +200,14 @@ class AsyncWebScraper:
         return await self._run_in_process("pdf_pool", _extract_pdf_text, path)
 
     @retry(
-        retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
+        # Retry transient transport failures only. Do NOT retry TimeoutError:
+        # COLLECTOR_TIMEOUT already waited the full budget; retrying multiplies
+        # hang time (RETRY_COUNT * TIMEOUT) and looks like a scraper deadlock.
+        retry=retry_if_exception_type((
+            aiohttp.ClientConnectorError,
+            aiohttp.ServerDisconnectedError,
+            # aiohttp.ConnectionTimeoutError,
+        )),
         stop=stop_after_attempt(RETRY_COUNT),
         wait=wait_random(*RETRY_JITTER),
         reraise=True,
@@ -244,7 +251,10 @@ class AsyncWebScraper:
         return "html", gate.url, body.decode(gate.charset, errors="replace")
 
     @retry(
-        retry=retry_if_exception_type((TimeoutError, aiohttp.ConnectionTimeoutError)),
+        retry=retry_if_exception_type((
+            aiohttp.ClientConnectorError,
+            aiohttp.ServerDisconnectedError,
+        )),
         stop=stop_after_attempt(RETRY_COUNT),
         wait=wait_random(*RETRY_JITTER),
         reraise=True,
