@@ -259,6 +259,7 @@ class Digestor:
 
     @classmethod
     def _article_to_str(cls, article: dict) -> str:
+        text = ""
         if (article.get(KIND) == POST) and article.get(AUTHOR):
             text += f"author:{article[AUTHOR]}\ndate:{date_str(article[CREATED])}\n"
         return text + article[CONTENT][:MAX_DOCUMENT_LEN<<2]
