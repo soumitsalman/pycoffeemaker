@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from dateutil.parser import parse as date_parser
 from html_to_markdown import convert
 from urllib.parse import urljoin, urlparse, urlunparse
-from utils.dates import ensure_utc, now
+from utils.dates import ensure_utc, now, usable_created
 from utils.fields import (
     ARTICLE_LANGUAGE,
     AUTHOR,
@@ -209,7 +209,8 @@ def extract_domain(url: str) -> str:
 
 def parse_date(date: str):
     try:
-        return date_parser(date, timezones=["UTC"])
+        parsed = ensure_utc(date_parser(date))
+        return parsed if usable_created(parsed) else None
     except Exception:
         return None
 
@@ -290,8 +291,8 @@ def cleanup_item(item: dict) -> dict:
             item[field] = cleanup_text(item.get(field))
 
     item[AUTHOR] = cleanup_author(item.get(AUTHOR))
-    item[CREATED] = item.get(CREATED) or now()
     item[COLLECTED] = item.get(COLLECTED) or now()
+    item[CREATED] = item.get(CREATED) if usable_created(item.get(CREATED)) else item[COLLECTED]
     item[TAGS] = list(set(item.get(TAGS) or []))
     item[TITLE_LENGTH] = count_words(item.get(TITLE))
     item[SUMMARY_LENGTH] = count_words(item.get(SUMMARY))

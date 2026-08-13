@@ -16,6 +16,7 @@ from pybeansack.models import (
 from pycupboard.pgcupboard import Cupboard
 from pycupboard.models import Sip, Source, DEFAULT_SOURCE
 from utils import generate_uuid
+from utils.dates import usable_created
 from .states import *
 from nlp import merge_lists, normalize_tags
 from icecream import ic
@@ -44,6 +45,8 @@ class BeansackPorter:
                     bean[ENTITIES] = entities
                 if regions := entity_pack.get(REGIONS):
                     bean[REGIONS] = regions
+            if not usable_created(bean.get(CREATED)):
+                bean[CREATED] = bean.get(COLLECTED)
         return [Bean(**bean) for bean in beans]
 
     async def hydrate_beans(self, db: Beansack, target_state: str):
@@ -135,6 +138,8 @@ class CupboardPorter:
         beans = [bean for bean in beans if bean.get(DIGEST)]
         for bean in beans:
             bean[KIND] = CUPBOARD_EVENT_KIND
+            if not usable_created(bean.get(CREATED)):
+                bean[CREATED] = bean.get(COLLECTED)
 
             # remove source. this will be calculated from base_url
             bean.pop(SOURCE)

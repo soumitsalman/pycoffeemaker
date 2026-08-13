@@ -44,7 +44,24 @@ HACKERNEWS_ASK_STORIES = "https://hacker-news.firebaseio.com/v0/askstories.json"
 HACKERNEWS_SHOW_STORIES = "https://hacker-news.firebaseio.com/v0/showstories.json"
 HACKERNEWS_STORIES_URLS = [HACKERNEWS_TOP_STORIES, HACKERNEWS_NEW_STORIES, HACKERNEWS_ASK_STORIES, HACKERNEWS_SHOW_STORIES]
 
-from_timestamp = lambda timestamp: min(now(), datetime.fromtimestamp(timestamp, timezone.utc)) if timestamp else now()
+def from_timestamp(timestamp):
+    if not timestamp:
+        return now()
+    try:
+        dt = min(now(), datetime.fromtimestamp(timestamp, timezone.utc))
+    except (OverflowError, OSError, ValueError):
+        return now()
+    return dt if usable_created(dt) else now()
+
+
+def created_from_parsed(published):
+    if not published:
+        return now()
+    try:
+        return from_timestamp(time.mktime(published))
+    except (OverflowError, OSError, ValueError):
+        return now()
+
 reddit_submission_permalink = lambda permalink: f"https://www.reddit.com{permalink}"
 REDDIT_JSON_URL = "https://old.reddit.com/r/{subreddit}.json"
 hackernews_story_metadata = lambda id: f"https://hacker-news.firebaseio.com/v0/item/{id}.json"
@@ -169,8 +186,7 @@ def _extract_main_image(entry: feedparser.FeedParserDict) -> str:
 
 def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedParserDict, default_kind: str, entry_link: str | None = None):
     current_time = now()
-    published_time = entry.get("published_parsed") or entry.get("updated_parsed")
-    created_time = from_timestamp(time.mktime(published_time)) if published_time else current_time
+    created_time = created_from_parsed(entry.get("published_parsed") or entry.get("updated_parsed"))
     summary, content = _extract_body(entry)
     tags = _extract_tags(entry)
     author_email = _extract_author_email(entry)
@@ -246,8 +262,7 @@ def _parse_reddit_rss_entry(entry) -> tuple[str | None, str | None, str | None]:
 def _build_reddit_rss_item(entry, subreddit_name, default_kind: str, entry_link: str | None = None):
     subreddit = f"r/{subreddit_name}"
     current_time = now()
-    published = entry.get("published_parsed") or entry.get("updated_parsed")
-    created = from_timestamp(time.mktime(published)) if published else current_time
+    created = created_from_parsed(entry.get("published_parsed") or entry.get("updated_parsed"))
 
     external_url, comments_url, selftext = _parse_reddit_rss_entry(entry)
     if entry_link is None:

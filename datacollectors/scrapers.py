@@ -49,7 +49,8 @@ def _get_metadata(url: str, tree: lxml.html.HtmlElement):
                 metadata[key] = tags[0].get('content') or tags[0].get('href') or tags[0].get('lang')
                 break
 
-    if 'published_time' in metadata: metadata[CREATED] = parse_date(metadata['published_time'])
+    if published := metadata.pop('published_time', None):
+        metadata[CREATED] = parse_date(published)
     if 'favicon' in metadata: metadata[FAVICON] = full_url(url, metadata['favicon'])
     if 'rss_feed' in metadata: metadata[RSS_FEED] = full_url(url, metadata['rss_feed'])
     return metadata
@@ -645,7 +646,7 @@ class WebCrawler:
             bean[CONTENT] = result.get("markdown")
             bean[TITLE] = bean.get(TITLE) or result.get("title") or result.get("meta_title") # this sequence is important because result['title'] is often crap            
             bean[AUTHOR] = result.get("author") or bean.get(AUTHOR)
-            bean[CREATED] = min(result.get("published_time") or bean.get(CREATED) or bean.get(COLLECTED), current_time)
+            bean[CREATED] = min(result.get(CREATED) or bean.get(CREATED) or bean.get(COLLECTED), current_time)
             bean[SUMMARY] = bean.get(SUMMARY) or result.get("description")
             bean[LANGUAGE] = result.get("language")
             bean[TAGS] = [tag.strip() for tag in result.get('keywords', '').split(',')] if result.get('keywords') else None
@@ -664,8 +665,8 @@ class WebCrawler:
         }
         if content := (json.loads(result.extracted_content) if result.extracted_content else None):
             metadata = content[0]
-            if 'published_time' in metadata:
-                metadata['published_time'] = parse_date(metadata['published_time'])
+            if published := metadata.pop('published_time', None):
+                metadata[CREATED] = parse_date(published)
             if 'top_image' in metadata and not extract_base_url(metadata['top_image']):
                 metadata['top_image'] = urljoin(extract_base_url(result.url), metadata['top_image'])
             if 'favicon' in metadata and not extract_base_url(metadata['favicon']):
