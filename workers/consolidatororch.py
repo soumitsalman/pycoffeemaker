@@ -220,11 +220,13 @@ _CONSOLIDATED_DIGEST_TAG_FIELDS = [
     TAGS, REGIONS, PEOPLE, PRODUCTS, COMPANIES, STOCK_TICKERS,
 ]
 
-def _merge_consolidated_tags(beans: list[dict], tag_fields: list[str]) -> list[str]:
+def _merge_consolidated_tags(beans: list[dict], tag_fields: str | list[str]) -> list[str]:
     """Combine tags from a consolidation group."""
-    get_values = lambda bean, tag_field: bean.get(tag_field) or bean.get(ENTITIES, {}).get(tag_field)
+    if isinstance(tag_fields, str):
+        tag_fields = [tag_fields]
+    get_values = lambda bean, field: bean.get(field) or bean.get(ENTITIES, {}).get(field)
     return merge_tags(
-        *(vals for bean in beans if (vals := get_values(bean, tag_field)) for tag_field in tag_fields),
+        *(vals for bean in beans for field in tag_fields if (vals := get_values(bean, field))),
     )
 
 def _entity_tags(entities: dict) -> list:

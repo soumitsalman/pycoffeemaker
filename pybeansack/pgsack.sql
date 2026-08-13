@@ -28,8 +28,8 @@ $$;
 -- CONTENT TABLES
 CREATE TABLE IF NOT EXISTS beans (
     -- CORE FIELDS
-    id UUID,
-    url VARCHAR NOT NULL PRIMARY KEY,
+    id UUID PRIMARY KEY,
+    url VARCHAR NOT NULL,
     kind VARCHAR,
     title VARCHAR,
     author VARCHAR,
@@ -59,8 +59,8 @@ CREATE TABLE IF NOT EXISTS beans (
 );
 
 CREATE TABLE IF NOT EXISTS publishers (
-    id UUID,
-    source VARCHAR NOT NULL PRIMARY KEY,
+    id UUID PRIMARY KEY,
+    source VARCHAR NOT NULL,
     base_url VARCHAR NOT NULL,
     site_name VARCHAR,
     description TEXT,
@@ -199,6 +199,7 @@ LEFT JOIN publishers p ON b.source = p.source;
 
 -- INDEXES --
 -- beans
+CREATE INDEX IF NOT EXISTS idx_beans_url ON beans(url);
 CREATE INDEX IF NOT EXISTS idx_beans_kind ON beans(kind);
 CREATE INDEX IF NOT EXISTS idx_beans_created ON beans(created DESC);
 CREATE INDEX IF NOT EXISTS idx_beans_source ON beans(source);
@@ -212,6 +213,7 @@ CREATE INDEX IF NOT EXISTS idx_beans_embedding_hnsw_cosine ON beans USING hnsw (
     WITH (m = 24, ef_construction = 128);
 
 -- publishers
+CREATE INDEX IF NOT EXISTS idx_publishers_base_url ON publishers(base_url);
 CREATE INDEX IF NOT EXISTS idx_publishers_source ON publishers(source);
 
 -- chatters
