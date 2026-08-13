@@ -163,9 +163,12 @@ class Consolidator:
                         DIGEST: br.model_dump(),
                         RELATED: [b[URL] for b in group['data']]
                     } 
-                    if tags := _merge_consolidated_tags(group['data']):
+                    
+                    for tag_field in _CONSOLIDATED_DIGEST_TAG_FIELDS:
+                        if tags := _merge_consolidated_tags(group['data'], tag_field):
+                            consolidated_item[DIGEST][tag_field] = tags
+                    if tags := _merge_consolidated_tags(group['data'], _CONSOLIDATED_DIGEST_TAG_FIELDS):
                         consolidated_item[TAGS] = tags
-                        consolidated_item[DIGEST] |= {TAGS: tags}
                         
                     composite_updates.append(consolidated_item)
                     bean_updates.extend({URL: b[URL]} for b in group['data'])
@@ -213,15 +216,15 @@ def _value_to_str(value) -> str:
 _OUTLOOK_KEYS = ("forecast", "future_outlook")
 _PRIORITY_DIGEST_KEYS = ("briefing", "actions")
 _ENTITY_KEYS = tuple(Entities.model_fields)
-_CONSOLIDATED_DIGEST_TAG_FIELDS = (
+_CONSOLIDATED_DIGEST_TAG_FIELDS = [
     TAGS, REGIONS, PEOPLE, PRODUCTS, COMPANIES, STOCK_TICKERS,
-)
+]
 
-def _merge_consolidated_tags(beans: list[dict]) -> list[str]:
-    """Combine classification and digest tags from a consolidation group."""
+def _merge_consolidated_tags(beans: list[dict], tag_fields: list[str]) -> list[str]:
+    """Combine tags from a consolidation group."""
+    get_values = lambda bean, tag_field: bean.get(tag_field) or bean.get(ENTITIES, {}).get(tag_field)
     return merge_tags(
-        *(bean.get(CATEGORIES) for bean in beans),
-        *(bean[ENTITIES].get(field) for bean in beans if bean.get(ENTITIES) for field in _CONSOLIDATED_DIGEST_TAG_FIELDS),
+        *(vals for bean in beans if (vals := get_values(bean, tag_field)) for tag_field in tag_fields),
     )
 
 def _entity_tags(entities: dict) -> list:

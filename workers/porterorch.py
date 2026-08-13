@@ -161,6 +161,8 @@ class CupboardPorter:
                 )
 
             # renaming events fields for consistency
+            if categories := bean[CATEGORIES]:
+                bean[CATEGORIES] = categories
             if briefing := bean[DIGEST].pop("briefing", None):
                 bean[DIGEST][SUMMARY] = briefing
             if event_items := bean[DIGEST].pop("events", None):
