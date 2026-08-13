@@ -161,8 +161,10 @@ class CupboardPorter:
                 )
 
             # renaming events fields for consistency
-            if activities := bean[DIGEST].pop("events", None):
-                bean[DIGEST]["activities"] = activities
+            if briefing := bean[DIGEST].pop("briefing", None):
+                bean[DIGEST][SUMMARY] = briefing
+            if event_items := bean[DIGEST].pop("events", None):
+                bean[DIGEST]["activities"] = event_items
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):
@@ -221,8 +223,10 @@ class CupboardPorter:
                 comp[TAGS] = random.sample(tags, min(len(tags), MAX_TAGS))
 
             # renaming events fields for consistency
-            if activities := comp[DIGEST].pop("events", None):
-                comp[DIGEST]["activities"] = activities
+            if briefing := comp[DIGEST].pop("briefing", None):
+                comp[DIGEST][SUMMARY] = briefing
+            if event_items := comp[DIGEST].pop("events", None):
+                comp[DIGEST]["activities"] = event_items
         return [Sip(**comp) for comp in composites], composites              
 
     async def hydrate_signals(self, db: Cupboard, target_state: str):

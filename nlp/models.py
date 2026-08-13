@@ -137,7 +137,7 @@ class Digest(_NLPBaseModel):
     )
     briefing: str = Field(
         description=(
-            "Intelligence briefing of the events (<=2sentences). "
+            "MANDATORY. Intelligence briefing of the events (<=2sentences). "
             "Include time/date, larger context, actors, events, targets/affected parties, with key metrics/comparisons. "
             "Explain mechanism/how, impact/why it matters, effects/response/outlook. "
         ),
@@ -190,7 +190,7 @@ class Briefing(_NLPBaseModel):
     )
     briefing: str = Field(
         description=(
-            "Intelligence briefing of the events (<=3sentences). "
+            "MANDATORY. Intelligence briefing of the events (<=3sentences). "
             "Include time/date, larger context, actors, events, targets/affected parties, with key metrics/comparisons. "
             "Explain mechanism/how, impact/why it matters, and effects/response/outlook. "
         )
