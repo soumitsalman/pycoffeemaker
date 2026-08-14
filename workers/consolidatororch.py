@@ -48,7 +48,7 @@ DERIVATION:
 Order retained events chronologically 
 Derive drivers only from explicit causal evidence 
 Derive impacts only from observed effects 
-Forecast only from traceable trajectories
+Derive future_outlook/forecast only from traceable trajectories
 Confidence reflects corroboration and consistency
 
 RULES:

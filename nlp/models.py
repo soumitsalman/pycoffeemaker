@@ -131,7 +131,7 @@ class Digest(_NLPBaseModel):
         None,
         description="Primary overarching geopolitical, trade, economic, technological context driving the events(<=4words). Omit if NA.",
     )
-    forecast: Optional[str] = Field(
+    future_outlook: Optional[str] = Field(
         default=None,
         description="Traceable future outlook, trajectory or forecast. Omit if NA.",
     )
@@ -184,7 +184,7 @@ class Briefing(_NLPBaseModel):
     impact_level: str = Field(
         description="Combined impact of the events sequence. allowed=null,low,medium,high,critical,transformative."
     )
-    forecast: Optional[str] = Field(
+    future_outlook: Optional[str] = Field(
         default=None,
         description="Traceable future outlook, trajectory or forecast. Omit if NA.",
     )
