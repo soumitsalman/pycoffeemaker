@@ -38,72 +38,6 @@ from utils.dates import ndays_ago, now
 make_id = lambda text: re.sub(r"[^a-zA-Z0-9]", "-", text.lower())
 
 
-def create_composer_topics_locally():
-    import json
-
-    import pandas as pd
-    import yaml
-    from nlp import embedders
-
-    with open(
-        "/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.yaml", "r"
-    ) as file:
-        topics = yaml.safe_load(file)
-
-    embedder = embedders.from_path(os.getenv("EMBEDDER_PATH"), 512)
-    vecs = embedder(["topic: " + topics[key][DESCRIPTION] for key in topics.keys()])
-    for key, vec in zip(topics.keys(), vecs):
-        topics[key][EMBEDDING] = vec
-
-    with open(
-        "/home/soumitsr/codes/pycoffeemaker/factory/composer-topics.json", "w"
-    ) as file:
-        json.dump(topics, file, indent=2)
-
-
-def split_parquet_into_chunks(
-    src_path: str = "/home/soumitsr/.beansack/main/bean_gists/bean-gists-rectified.parquet",
-    chunk_size: int = 1024,
-    dest_dir: str | None = None,
-    prefix: str = "bean-gists-chunk",
-) -> list[str]:
-    """Read a Parquet file, split it into chunks of `chunk_size` rows and
-    write each chunk as a separate Parquet file.
-
-    Returns the list of written file paths.
-    """
-    import pandas as pd
-
-    if not os.path.exists(src_path):
-        raise FileNotFoundError(f"source parquet not found: {src_path}")
-
-    if dest_dir is None:
-        dest_dir = os.path.dirname(src_path)
-
-    os.makedirs(dest_dir, exist_ok=True)
-
-    # Load dataframe (assumes it fits in memory). If this becomes a problem
-    # we can switch to pyarrow.dataset scanning.
-    df = pd.read_parquet(src_path)
-    total = len(df)
-    ic(f"loaded parquet|rows={total}")
-
-    written = []
-    for i in range(0, total, chunk_size):
-        chunk = df.iloc[i : i + chunk_size]
-        idx = i // chunk_size
-        out_name = f"{prefix}-{idx:04d}.parquet"
-        out_path = os.path.join(dest_dir, out_name)
-        # Use pyarrow engine for compatibility with other code in this repo
-        chunk.to_parquet(out_path, engine="pyarrow")
-        written.append(out_path)
-        ic(f"wrote chunk|{out_path}|rows={len(chunk)}")
-
-    ic(f"wrote_total_chunks|{len(written)}")
-    return written
-
-
-
 def migrate_classification_cache(from_lance, to_pg):
     from pybeansack import SimpleVectorDB
     from coffeemaker.processingcache.firecache import ClassificationCache
@@ -367,7 +301,6 @@ def rectify_beans_id_and_embeddings():
     from psycopg_pool import ConnectionPool
     from pgvector.psycopg import register_vector
     from utils import generate_uuid
-    from workers.workercache.clscache import ClassificationCache
 
     beansack_pool = ConnectionPool(
         os.getenv("BEANSACK_CONNECTION_STRING"),

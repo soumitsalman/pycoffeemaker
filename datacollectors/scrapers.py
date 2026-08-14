@@ -207,7 +207,7 @@ class AsyncWebScraper:
         retry=retry_if_exception_type((
             aiohttp.ClientConnectorError,
             aiohttp.ServerDisconnectedError,
-            # aiohttp.ConnectionTimeoutError,
+            aiohttp.ConnectionTimeoutError,
         )),
         stop=stop_after_attempt(RETRY_COUNT),
         wait=wait_random(*RETRY_JITTER),
