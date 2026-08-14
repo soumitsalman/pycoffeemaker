@@ -109,7 +109,7 @@ def parse_sources(sources: str) -> dict:
 log = get_logger("collectorworker")
 
 _SCRAPER_QUEUE = ".cache/scraper-queue"
-_SCRAPER_CHUNK_SIZE = 16
+_SCRAPER_CHUNK_SIZE = 32
 
 class Collector:
     cache: AsyncStateCacheBase
@@ -266,9 +266,9 @@ class Collector:
         await self._cache_publishers(publishers)
 
     async def _queue_scrape(self, kind: str, items: list[dict]):
+        _scrape = lambda items: self._scrape_beans(items) if kind == BEANS else self._scrape_publishers(items)
         while items:
-            if kind == BEANS: await self._scrape_beans(items[:_SCRAPER_CHUNK_SIZE])
-            elif kind == PUBLISHERS: await self._scrape_publishers(items[:_SCRAPER_CHUNK_SIZE])
+            await _scrape(items[:_SCRAPER_CHUNK_SIZE])
             del items[:_SCRAPER_CHUNK_SIZE]
 
     def _get_collector_funcs(self, sources):
