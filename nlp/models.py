@@ -67,10 +67,11 @@ class Entities(_NLPBaseModel):
 
 class Digest(_NLPBaseModel):
     """Main digest/key points of an article/news/blog/report"""        
-    events: list[str] = Field(
+    key_points: list[str] = Field(
         default_factory=list,
         description=(
-            "list=Chronological sequence of facts/events. "
+            "MANDATORY. "
+            "list=Key points, events sequence, actions sequence, activities. "
             "max_items<=40. "
             "format=YYYY-MM-DD Actor verb object/effect with key metric if available."
         )
@@ -78,7 +79,7 @@ class Digest(_NLPBaseModel):
     drivers: list[str] = Field(
         default_factory=list,
         description=(
-            "list=Traceable causal relationships between actions and outcomes. "
+            "list=Traceable causal relationships between initial actions and outcomes/results. "
             "max_items<=10. "
             "format=Cause produced resulting effect."
         )
@@ -93,14 +94,14 @@ class Digest(_NLPBaseModel):
     # "oil_price_shock, gdp_forecast_revision, inflation_spike, rate_cut_signal, commodity_demand_shift\n"
     event_type: Optional[str] = Field(
         None,
-        description="Primary aggregated event type(<=3words). Omit if NA.",
+        description="Primary aggregated event type(<=3words).",
     )
     impacts: list[str] = Field(
         default_factory=list,
         description=(
-            "list=Atomic observed impacts. "
+            "MANDATORY. "
+            "list=Traceable observed impacts/effects/outcomes/results on affected scope. "
             "max_items<=10. "
-            "format=Affected party verb measurable effect with key metric if available."
         )
     )
     impacted_domains: list[str] = Field(
@@ -129,17 +130,16 @@ class Digest(_NLPBaseModel):
     # "Examples: US-Iran conflict, Red Sea disruption, Tariff volatility, Rare earth controls, Arctic shipping rivalry, Africa mineral conflict, Cyber arms race escalation etc."     
     macro_context: Optional[str] = Field(
         None,
-        description="Primary overarching geopolitical, trade, economic, technological context driving the events(<=4words). Omit if NA.",
+        description="Primary overarching geopolitical, trade, economic, technological context driving the events(<=4words).",
     )
     future_outlook: Optional[str] = Field(
         default=None,
-        description="Traceable future outlook, trajectory or forecast. Omit if NA.",
+        description="Traceable future outlook, trajectory or forecast. Omit if NA",
     )
     briefing: str = Field(
         description=(
             "MANDATORY. Intelligence briefing of the events (<=2sentences). "
-            "Include time/date, larger context, actors, events, targets/affected parties, with key metrics/comparisons. "
-            "Explain mechanism/how, impact/why it matters, effects/response/outlook. "
+            "Include time/date, context, actors, action sequence, mechanisms, affected parties, effects, key metrics, comparisons, significance. "
         ),
     )
     
@@ -156,6 +156,7 @@ class Briefing(_NLPBaseModel):
     events: list[str] = Field(
         default_factory=list,
         description=(
+            "MANDATORY. "
             "list=Chronological sequence of facts/events. "
             "max_items<=40. "
             "format=YYYY-MM-DD Actor verb object/effect with key metric if available."
@@ -172,9 +173,9 @@ class Briefing(_NLPBaseModel):
     impacts: list[str] = Field(
         default_factory=list,
         description=(
-            "list=Atomic observed impacts. "
-            "max_items<=10. "
-            "format=Affected party verb measurable effect with key metric if available."
+            "MANDATORY. "
+            "list=Traceable observed impacts/effects/outcomes/results on affected scope. "
+            "max_items<=10."
         )
     )
     impacted_domains: list[str] = Field(
@@ -203,7 +204,7 @@ class Briefing(_NLPBaseModel):
             "low: conflicting or isolated evidence. "
             "medium: consistent limited evidence. "
             "high: multiple corroborating events. "
-            "omit if unsupported."
+            "omit if NA."
         )
     )
 

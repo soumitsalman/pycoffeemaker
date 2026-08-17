@@ -217,14 +217,14 @@ _OUTLOOK_KEYS = ("forecast", "future_outlook")
 _PRIORITY_DIGEST_KEYS = ("briefing", "actions")
 _ENTITY_KEYS = tuple(Entities.model_fields)
 _CONSOLIDATED_DIGEST_TAG_FIELDS = [
-    TAGS, REGIONS, PEOPLE, PRODUCTS, COMPANIES, STOCK_TICKERS,
+    TAGS, REGIONS, PEOPLE, PRODUCTS, COMPANIES, STOCK_TICKERS, CATEGORIES,
 ]
 
 def _merge_consolidated_tags(beans: list[dict], tag_fields: str | list[str]) -> list[str]:
     """Combine tags from a consolidation group."""
     if isinstance(tag_fields, str):
         tag_fields = [tag_fields]
-    get_values = lambda bean, field: bean.get(field) or bean.get(ENTITIES, {}).get(field)
+    get_values = lambda bean, field: bean.get(field) or bean.get(ENTITIES, {}).get(field) or bean.get(DIGEST, {}).get(field)
     return merge_tags(
         *(vals for bean in beans for field in tag_fields if (vals := get_values(bean, field))),
     )

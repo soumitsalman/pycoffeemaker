@@ -93,6 +93,7 @@ def merge_tags(*tag_values) -> list[str]:
                 for value in tag_values
                 if value
                 for item in ([value] if isinstance(value, str) else value)
+                if item
             )
         )
     )
@@ -104,6 +105,7 @@ def merge_lists(*lists) -> list:
             for value in lists
             if value
             for item in ([value] if isinstance(value, str) else value)
+            if item 
         )
     )
 

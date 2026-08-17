@@ -211,7 +211,7 @@ class TransformerTextAnalyst(TextAnalystBase):
                 from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
                 
                 parser = JsonSchemaParser(self.output_model.model_json_schema())
-                self._sampling_params["prefix_allowed_tokens_fn"] = (
+                self.sampling_params["prefix_allowed_tokens_fn"] = (
                     build_transformers_prefix_allowed_tokens_fn(
                         self._tokenizer.tokenizer, 
                         parser
@@ -254,7 +254,7 @@ class VLLMTextAnalyst(TextAnalystBase):
                 model=self.model_name,
                 max_model_len=self.context_len,
                 trust_remote_code=True,
-                language_model_only=True,
+                # language_model_only=True,
                 # max_num_seqs=VLLM_MAX_NUM_SEQS if VLLM_MAX_NUM_SEQS > 0 else None,
                 # max_num_batched_tokens=VLLM_MAX_NUM_BATCHED_TOKENS if VLLM_MAX_NUM_BATCHED_TOKENS > 0 else None,
                 gpu_memory_utilization=VLLM_GPU_MEMORY_UTILIZATION,

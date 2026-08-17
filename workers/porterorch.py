@@ -155,14 +155,16 @@ class CupboardPorter:
                     entity_pack.get(STOCK_TICKERS),
                     entity_pack.get(REGIONS),
                 )
-            if tags := merge_lists(
+            if tags := merge_lists(                
                 normalize_tags(bean.get(TAGS) or []),
-                entity_tags
+                bean[DIGEST].get("impacted_domains"),
+                entity_tags,
             ):
                 bean[TAGS] = merge_lists(
-                    bean.get(CATEGORIES),                    
                     bean[DIGEST].get("macro_context"),
-                    random.sample(tags, min(MAX_TAGS, len(tags)))
+                    bean[DIGEST].get("event_type"),
+                    bean.get(CATEGORIES),
+                    random.sample(tags, min(MAX_TAGS, len(tags))),
                 )
 
             # renaming events fields for consistency
@@ -170,8 +172,8 @@ class CupboardPorter:
                 bean[CATEGORIES] = categories
             if briefing := bean[DIGEST].pop("briefing", None):
                 bean[DIGEST][SUMMARY] = briefing
-            if event_items := bean[DIGEST].pop("events", None):
-                bean[DIGEST]["activities"] = event_items
+            if event_items := (bean[DIGEST].pop("events", None)):
+                bean[DIGEST]["key_points"] = event_items
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):
@@ -226,14 +228,20 @@ class CupboardPorter:
             })
             
             # create tags
-            if tags := comp.get(TAGS):
-                comp[TAGS] = random.sample(tags, min(len(tags), MAX_TAGS))
+            if tags := merge_lists(
+                comp.get(TAGS),                
+                comp[DIGEST].get('impacted_domains')               
+            ):
+                comp[TAGS] = merge_lists(
+                    comp.get(CATEGORIES),
+                    random.sample(tags, min(len(tags), MAX_TAGS))
+                )
 
             # renaming events fields for consistency
             if briefing := comp[DIGEST].pop("briefing", None):
                 comp[DIGEST][SUMMARY] = briefing
             if event_items := comp[DIGEST].pop("events", None):
-                comp[DIGEST]["activities"] = event_items
+                comp[DIGEST]["key_points"] = event_items
         return [Sip(**comp) for comp in composites], composites              
 
     async def hydrate_signals(self, db: Cupboard, target_state: str):
