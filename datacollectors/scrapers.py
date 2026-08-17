@@ -351,8 +351,9 @@ class AsyncWebScraper:
         created = result.get(CREATED) or bean.get(CREATED) or bean.get(COLLECTED)
         bean[CREATED] = min(created, bean.get(COLLECTED)) if created and bean.get(COLLECTED) else created
 
-        if not bean.get(KIND):
-            bean[KIND] = guess_content_type(bean)
+        detected_kind = guess_content_type(bean)
+        if detected_kind and (not bean.get(KIND) or bean[KIND] in {NEWS, BLOG, SITE}):
+            bean[KIND] = detected_kind
 
         return cleanup_item(bean)
 

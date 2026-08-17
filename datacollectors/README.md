@@ -26,7 +26,14 @@ Import from `datacollectors` or `datacollectors.utils`.
 | `LANGUAGE`, `ARTICLE_LANGUAGE`, `SITE_LANGUAGE` | … | Locale hints |
 | `RESTRICTED_CONTENT` | `restricted_content` | Set when body came from scrape (paywall heuristic) |
 
-**`kind` values:** `post`, `blog`, `news`, `site`, `podcast`, `contract`, `financial_report`, `earnings_report`, `sec_filing`. RSS/HN/Reddit items get `guess_article_type()` when not explicit.
+**`kind` values:**
+
+- Editorial: `post`, `blog`, `news`, `site`, `podcast`, `press_release`, `official_statement`.
+- Business: `contract`, `procurement_notice`, `financial_report`, `earnings_report`, `sec_filing`, `enforcement_action`.
+- Government/legal: `legislative_bill`, `legislative_proposal`, `enacted_law`, `regulation`, `rulemaking_notice`, `court_opinion`, `lawsuit`, `government_report`, `budget_document`, `legislative_record`, `hearing`.
+- Knowledge: `research_paper`, `whitepaper`, `technical_documentation`.
+
+`guess_content_type()` resolves in this order: exact source-feed mapping, authoritative URL, title/summary/tags, body markers, then editorial/social fallbacks. RSS/HN/Reddit items are classified before their generic default is used; scraping may replace only generic kinds with stronger evidence.
 
 **Derived fields** (added by `cleanup_item`): `title_length`, `summary_length`, `content_length`; `base_url` inferred from `url` if missing.
 
@@ -35,7 +42,7 @@ Import from `datacollectors` or `datacollectors.utils`.
 | Function | Purpose |
 |----------|---------|
 | `cleanup_item(item)` | Strip text, normalize tags/dates, set lengths; in-place |
-| `guess_article_type(bean)` | Infer `kind` from URL, source, tags, site name |
+| `guess_content_type(bean)` | Infer `kind` from feed, URL, title, tags, summary, and content |
 | `excluded_url(url)` | Skip media/gallery/video URLs and Russian-owned domains (pre-fetch) |
 | `exclude_content(response)` | Gate response by URL, content-type, and size; returns `ContentGate` |
 | `extract_base_url`, `extract_source`, `parse_date`, `strip_html_tags`, `html_to_markdown` | Shared parsing helpers |

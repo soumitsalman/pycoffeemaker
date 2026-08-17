@@ -272,7 +272,9 @@ def _build_reddit_rss_item(entry, subreddit_name, default_kind: str, entry_link:
     if external_url:
         url = remove_query_params(external_url)
         source = extract_source(url)
-        kind = guess_content_type({URL: url, SOURCE: source, TITLE: entry.get('title')}) or default_kind
+        kind = guess_content_type({
+            URL: url, SOURCE: source, TITLE: entry.get("title"), CONTENT: selftext,
+        }) or default_kind
     else:
         url = entry_link
         source = subreddit
@@ -363,12 +365,15 @@ def _build_hackernews_item(story: dict, default_kind: str):
     current_time = now()
     created_time = from_timestamp(story['time'])
     story_id = story['id']
+    content = html_to_markdown(story['text']) if story.get('text') else None
 
     if story.get('url'):
         url = remove_query_params(story['url'])
         source = extract_source(url)
         tags = []
-        kind = guess_content_type({'URL': url, 'SOURCE': source}) or (SITE if "show hn" in story.get('title', '').lower() else default_kind)
+        kind = guess_content_type({
+            URL: url, SOURCE: source, TITLE: story.get('title'), CONTENT: content,
+        }) or (SITE if "show hn" in story.get('title', "").lower() else default_kind)
     else:
         url = hackernews_story_permalink(story_id)
         source = HACKERNEWS
@@ -381,7 +386,7 @@ def _build_hackernews_item(story: dict, default_kind: str):
         URL: url,
         KIND: kind,
         TITLE: story.get('title'),
-        CONTENT: html_to_markdown(story['text']) if 'text' in story else None,
+        CONTENT: content,
         AUTHOR: story.get('by'),
         SOURCE: source,
         BASE_URL: base_url,

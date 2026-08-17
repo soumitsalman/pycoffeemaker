@@ -48,9 +48,27 @@ NEWS = "news"
 SITE = "site"
 PODCAST = "podcast"
 CONTRACT = "contract"
+PROCUREMENT_NOTICE = "procurement_notice"
 FINANCIAL_REPORT = "financial_report"
 EARNINGS_REPORT = "earnings_report"
 SEC_FILING = "sec_filing"
+PRESS_RELEASE = "press_release"
+OFFICIAL_STATEMENT = "official_statement"
+ENFORCEMENT_ACTION = "enforcement_action"
+LEGISLATIVE_BILL = "legislative_bill"
+LEGISLATIVE_PROPOSAL = "legislative_proposal"
+ENACTED_LAW = "enacted_law"
+REGULATION = "regulation"
+RULEMAKING_NOTICE = "rulemaking_notice"
+COURT_OPINION = "court_opinion"
+LAWSUIT = "lawsuit"
+GOVERNMENT_REPORT = "government_report"
+BUDGET_DOCUMENT = "budget_document"
+LEGISLATIVE_RECORD = "legislative_record"
+HEARING = "hearing"
+RESEARCH_PAPER = "research_paper"
+WHITEPAPER = "whitepaper"
+TECHNICAL_DOCUMENTATION = "technical_documentation"
 
 POST_DOMAINS = {"reddit", "redd", "linkedin", "x", "twitter", "facebook", "ycombinator"}
 BLOG_URLS = {
@@ -64,13 +82,70 @@ NEWS_TAGS = {"news", "headline", "press release", "announcement"}
 BLOG_TAGS = {"blog", "newsletter", "analysis", "opinion", "review"}
 PODCAST_SITENAMES = {"podcast", "show", "episode"}
 PODCAST_TAGS = {"podcast", "episode", "show"}
-SEC_URL_KIND = {
-    "https://www.sec.gov/news/pressreleases.rss": NEWS,
-    "https://www.sec.gov/news/statements.rss": BLOG,
-    "https://www.sec.gov/news/speeches-statements.rss": BLOG,
-    "https://www.sec.gov/enforcement-litigation/administrative-proceedings/rss": NEWS,
-    "https://www.sec.gov/enforcement-litigation/litigation-releases/rss": NEWS,
+SEC_FEED_KIND = {
+    "https://www.sec.gov/news/pressreleases.rss": PRESS_RELEASE,
+    "https://www.sec.gov/news/statements.rss": OFFICIAL_STATEMENT,
+    "https://www.sec.gov/news/speeches-statements.rss": OFFICIAL_STATEMENT,
+    "https://www.sec.gov/enforcement-litigation/administrative-proceedings/rss": ENFORCEMENT_ACTION,
+    "https://www.sec.gov/enforcement-litigation/litigation-releases/rss": ENFORCEMENT_ACTION,
 }
+
+# factory/feeds.yaml has 199 GovInfo collection feeds. The feed slug is a
+# stable, authoritative indicator of document family.
+GOVINFO_FEED_KIND = (
+    (re.compile(r"/rss/bills(?:-enr)?\.xml$"), LEGISLATIVE_BILL),
+    (re.compile(r"/rss/plaw\.xml$"), ENACTED_LAW),
+    (re.compile(r"/rss/(?:statute|uscode)\.xml$"), ENACTED_LAW),
+    (re.compile(r"/rss/cfr\.xml$"), REGULATION),
+    (re.compile(r"/rss/fr\.xml$"), RULEMAKING_NOTICE),
+    (re.compile(r"/rss/uscourts-[a-z0-9]+\.xml$"), COURT_OPINION),
+    (re.compile(r"/rss/usreports\.xml$"), COURT_OPINION),
+    (re.compile(r"/rss/chrg\.xml$"), HEARING),
+    (re.compile(r"/rss/(?:crec|crecb|hjournal|sjournal)\.xml$"), LEGISLATIVE_RECORD),
+    (re.compile(r"/rss/(?:budget|erp)\.xml$"), BUDGET_DOCUMENT),
+    (re.compile(r"/rss/(?:gaoreports|crpt|cprt)\.xml$"), GOVERNMENT_REPORT),
+)
+
+# Ordered from the most authoritative signal to the least.
+URL_KIND_RULES = (
+    (SEC_FILING, re.compile(r"(?:sec\.gov/(?:archives/edgar|ixviewer)|/edgar/data/)")),
+    (PROCUREMENT_NOTICE, re.compile(r"sam\.gov/opp/")),
+    (CONTRACT, re.compile(r"(?:sam\.gov/award/|usaspending\.gov/award/)")),
+    (LEGISLATIVE_BILL, re.compile(r"(?:congress\.gov/(?:bill|legislation)/|govtrack\.us/congress/bills/|legiscan\.com/.*/bill/|govinfo\.gov/content/pkg/bills-)")),
+    (ENACTED_LAW, re.compile(r"(?:congress\.gov/public-law/|govinfo\.gov/content/pkg/(?:plaw|statute|uscode)-)")),
+    (REGULATION, re.compile(r"(?:ecfr\.gov/|govinfo\.gov/content/pkg/cfr-)")),
+    (RULEMAKING_NOTICE, re.compile(r"(?:federalregister\.gov/documents/|regulations\.gov/(?:document|docket)/|govinfo\.gov/content/pkg/fr-)")),
+    (COURT_OPINION, re.compile(r"(?:supremecourt\.gov/opinions/|courtlistener\.com/opinion/|law\.justia\.com/cases/|govinfo\.gov/content/pkg/(?:uscourts|usreports)-)")),
+    (LAWSUIT, re.compile(r"(?:courtlistener\.com/docket/|pacer\.uscourts\.gov/)")),
+    (EARNINGS_REPORT, re.compile(r"(?:/earnings(?:[-_/]|\?|\b)|/quarterly[-_/]?(?:results|earnings)|/financials/quarterly-results)")),
+    (FINANCIAL_REPORT, re.compile(r"(?:/annual-reports?/|/financials/(?:annual|reports?))")),
+    (RESEARCH_PAPER, re.compile(r"(?:arxiv\.org/(?:abs|pdf)/|doi\.org/10\.)")),
+    (TECHNICAL_DOCUMENTATION, re.compile(r"(?:/docs?/(?:[^/]+/)?|readthedocs\.io/)")),
+)
+
+TITLE_KIND_RULES = (
+    (SEC_FILING, re.compile(r"\b(?:form\s+(?:10-[kq]|8-k(?:/a)?|20-f|40-f|def\s*14a|s-[134])|(?:10-[kq]|8-k(?:/a)?|20-f|40-f|def\s*14a)\s+(?:filing|annual report|quarterly report))\b")),
+    (EARNINGS_REPORT, re.compile(r"\b(?:q[1-4]|first|second|third|fourth)\s+(?:quarter\s+)?(?:\d{4}\s+)?(?:earnings|financial results)|earnings\s+(?:results|release|report)|quarterly\s+results|full[- ]year\s+results\b")),
+    (FINANCIAL_REPORT, re.compile(r"\b(?:annual|quarterly|financial)\s+report\b|\bform\s+(?:10-k|10-q|20-f|40-f)\b")),
+    (CONTRACT, re.compile(r"\b(?:master\s+(?:service|purchase)\s+agreement|(?:asset|purchase|employment|license|lease|credit|share)\s+agreement|definitive\s+agreement|contract\s+(?:award|agreement)|indenture)\b")),
+    (LEGISLATIVE_PROPOSAL, re.compile(r"\b(?:draft\s+(?:bill|legislation)|proposed\s+(?:bill|legislation|act)|legislative\s+proposal)\b")),
+    (LAWSUIT, re.compile(r"\b(?:class action|civil|antitrust)\s+(?:lawsuit|complaint)|\bcomplaint\s+(?:filed|against|for)\b|\b[a-z][\w.& -]+\s+v\.\s+[a-z]")),
+    (COURT_OPINION, re.compile(r"\b(?:opinion of the court|court opinion|memorandum opinion|per curiam)\b")),
+    (PRESS_RELEASE, re.compile(r"\b(?:press release|news release|media release)\b")),
+    (OFFICIAL_STATEMENT, re.compile(r"\b(?:official\s+)?(?:statement|remarks|speech)\s+(?:by|from)\b")),
+    (ENFORCEMENT_ACTION, re.compile(r"\b(?:enforcement action|administrative proceeding|litigation release|cease-and-desist order)\b")),
+    (GOVERNMENT_REPORT, re.compile(r"\b(?:gao|inspector general|government accountability office)\s+report\b")),
+    (WHITEPAPER, re.compile(r"\bwhite\s*paper\b")),
+    (RESEARCH_PAPER, re.compile(r"\b(?:research|working)\s+paper\b")),
+)
+
+BODY_KIND_RULES = (
+    (SEC_FILING, re.compile(r"\b(?:united states securities and exchange commission|form 10-[kq])\b")),
+    (CONTRACT, re.compile(r"\bthis (?:agreement|contract) is (?:made|entered into)\b")),
+    (FINANCIAL_REPORT, re.compile(r"\bconsolidated financial statements\b")),
+    (COURT_OPINION, re.compile(r"\b(?:opinion of the court|memorandum opinion|per curiam)\b")),
+    (WHITEPAPER, re.compile(r"\bwhite\s*paper\b")),
+)
 
 EXCLUDED_URL_PATTERNS = [
     r"\.(png|jpeg|jpg|gif|webp|mp4|avi|mkv|mp3|wav)$",
@@ -97,47 +172,69 @@ EXCLUDED_AUTHORS = [
     "[no-author]", "noreply", "hidden", "admin", "isbpostadmin", "unknown", "anonymous",
 ]
 
+def _text_value(value) -> str:
+    if isinstance(value, str):
+        return value.lower()
+    if isinstance(value, (list, tuple, set)):
+        return " ".join(_text_value(item) for item in value)
+    return ""
+
+
+def _matching_kind(rules, evidence: str) -> str | None:
+    return next((kind for kind, pattern in rules if pattern.search(evidence)), None)
+
+
+def _matching_govinfo_kind(evidence: str) -> str | None:
+    return next((kind for pattern, kind in GOVINFO_FEED_KIND if pattern.search(evidence)), None)
+
+
 def guess_content_type(bean: dict, feed_url: str = None) -> str | None:
+    """Classify an item from authoritative feed/URL signals before text hints."""
     if not bean:
         return None
 
-    if feed_url and feed_url in SEC_URL_KIND:
-        return SEC_URL_KIND[feed_url]
+    feeds = (feed_url, bean.get(RSS_FEED))
+    for feed in (_text_value(value) for value in feeds if value):
+        if kind := SEC_FEED_KIND.get(feed):
+            return kind
+        if kind := _matching_govinfo_kind(feed):
+            return kind
 
-    url = (bean.get(URL) or "").lower()
-    base_url = (bean.get(BASE_URL) or "").lower()
-    domain_name = (bean.get(SOURCE) or "").lower()
-    site_name = (bean.get(SITE_NAME) or "").lower()
-    tags = bean.get(TAGS)
+    url = _text_value(bean.get(URL))
+    base_url = _text_value(bean.get(BASE_URL))
+    if kind := _matching_kind(URL_KIND_RULES, f"{url} {base_url}"):
+        return kind
 
-    if domain_name:
-        if any(post_domain in domain_name for post_domain in POST_DOMAINS):
-            return POST
+    descriptor = " ".join(
+        _text_value(bean.get(field))
+        for field in (TITLE, SUMMARY, DESCRIPTION, TAGS)
+    )
+    if kind := _matching_kind(TITLE_KIND_RULES, descriptor):
+        return kind
 
-    if url or base_url:
-        if any((blog_url in url) or (blog_url in base_url) for blog_url in BLOG_URLS):
-            return BLOG
+    content = _text_value(bean.get(CONTENT))
+    if kind := _matching_kind(BODY_KIND_RULES, content):
+        return kind
 
-    if tags:
-        tags_str = (" ".join(tags)).lower()
-        if any(news_tag in tags_str for news_tag in NEWS_TAGS):
-            return NEWS
-        if any(blog_tag in tags_str for blog_tag in BLOG_TAGS):
-            return BLOG
-
-    if site_name:
-        if any(site in site_name for site in BLOG_SITENAMES):
-            return BLOG
-        if any(site in site_name for site in NEWS_SITENAMES):
-            return NEWS
-
-    if "/news/" in url:
+    domain_name = _text_value(bean.get(SOURCE))
+    site_name = _text_value(bean.get(SITE_NAME))
+    if any(post_domain in domain_name for post_domain in POST_DOMAINS):
+        return POST
+    if any((blog_url in url) or (blog_url in base_url) for blog_url in BLOG_URLS):
+        return BLOG
+    if any(podcast_tag in descriptor for podcast_tag in PODCAST_TAGS) or any(
+        podcast_name in site_name for podcast_name in PODCAST_SITENAMES
+    ):
+        return PODCAST
+    if any(news_tag in descriptor for news_tag in NEWS_TAGS):
         return NEWS
-
-    
-
+    if any(blog_tag in descriptor for blog_tag in BLOG_TAGS):
+        return BLOG
+    if any(site in site_name for site in BLOG_SITENAMES):
+        return BLOG
+    if any(site in site_name for site in NEWS_SITENAMES) or "/news/" in url:
+        return NEWS
     return None
-
 
 @dataclass(frozen=True)
 class ContentGate:
