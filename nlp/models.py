@@ -208,6 +208,9 @@ class Briefing(_NLPBaseModel):
         )
     )
 
+    def __bool__(self):
+        return bool(self.briefing)
+
 
 # ────────────────────────────────────────────────
 # Domain-specific models (inherit from base)
