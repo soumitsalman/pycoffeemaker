@@ -174,21 +174,38 @@ SELECT
 FROM trend_stats
 WHERE GREATEST(likes, comments, shares, related) > 0;
 
+
 CREATE OR REPLACE VIEW beans_sources_view AS
 SELECT
     b.*,
-    p.id as source_id, p.base_url, p.site_name, p.description, p.favicon, p.rss_feed
+    p.id AS source_id, p.base_url, p.site_name, p.description, p.favicon, p.rss_feed
 FROM beans b
 LEFT JOIN publishers p ON b.source = p.source;
 
-CREATE OR REPLACE VIEW trending_beans_view AS
+
+-- PRIMARY DIFF: between latest vs trending
+-- trending requires some chatter or related items. Hence INNER JOIN trend_aggregates
+-- latest does not require chatter or related items. Hence LEFT JOIN trend_aggregates
+DROP VIEW IF EXISTS trending_beans_view;
+CREATE VIEW IF NOT EXISTS trending_beans_view AS
 SELECT
     b.*,
     tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id
 FROM beans_sources_view b
 INNER JOIN trend_aggregates tr ON b.url = tr.url;
 
-CREATE OR REPLACE VIEW aggregated_beans_view AS
+
+DROP VIEW IF EXISTS latest_beans_view;
+CREATE VIEW IF NOT EXISTS latest_beans_view AS
+SELECT
+    b.*,
+    tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id
+FROM beans_sources_view b
+LEFT JOIN trend_aggregates tr ON b.url = tr.url;
+
+
+DROP VIEW IF EXISTS aggregated_beans_view;
+CREATE VIEW IF NOT EXISTS aggregated_beans_view AS
 WITH related_groups AS (
     SELECT url, ARRAY_AGG(related_url) AS related_urls
     FROM related_beans
