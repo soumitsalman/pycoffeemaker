@@ -9,9 +9,9 @@ from utils.env import load_coffeemaker_env
 
 load_coffeemaker_env()
 
-WORKERS = 4
+WORKERS = 16
 FETCH_SIZE = 16384
-BATCH_SIZE = 4096
+BATCH_SIZE = 1024
 
 
 def rectify_bean_source_ids(batch_size: int = BATCH_SIZE):
@@ -23,6 +23,7 @@ def rectify_bean_source_ids(batch_size: int = BATCH_SIZE):
     pool = ConnectionPool(
         os.getenv("BEANSACK_CONNECTION_STRING"),
         min_size=1, max_size=WORKERS, timeout=120, max_idle=120,
+        num_workers=WORKERS,
     )
 
     @retry(
@@ -37,7 +38,7 @@ def rectify_bean_source_ids(batch_size: int = BATCH_SIZE):
             return 0
         with pool.connection() as conn:
             result = conn.execute(
-                f"UPDATE beans AS b SET source_id = v.source_id::uuid, base_url = v.base_url FROM (VALUES {','.join(['(%s, %s, %s)'] * len(data))}) AS v(source_id, base_url, id) WHERE b.id = v.id::uuid AND (b.source_id IS NULL OR b.base_url IS NULL)",
+                f"UPDATE beans AS b SET source_id = v.source_id::uuid, base_url = v.base_url FROM (VALUES {','.join(['(%s, %s, %s)'] * len(data))}) AS v(source_id, base_url, id) WHERE b.id = v.id::uuid",
                 list(chain.from_iterable(data)),
             )
             conn.commit()

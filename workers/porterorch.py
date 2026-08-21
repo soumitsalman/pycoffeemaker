@@ -85,7 +85,7 @@ class BeansackPorter:
         target = target_state+":link"
         if related_beans := await self.cache.get(BEANS, states=CLUSTERED, exclude_states=target):
             log.info(event="porting:bean_links", to="beansack", num_items=len(related_beans))
-            count = await asyncio.to_thread(db.store_related, self.prep_related(related_beans))
+            count = await asyncio.to_thread(db.store_related, related_beans)
             log.info(event="ported:bean_links", to="beansack", num_items=count)
             await self.cache.set(BEANS, target, [{URL: b[URL]} for b in related_beans])
             return count

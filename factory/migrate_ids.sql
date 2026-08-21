@@ -55,7 +55,6 @@ WHERE source IS NOT NULL AND platform IS NULL;
 -- [DONE] PYTHON: update beans.source_id with existing publishers.id
 
 -- [DONE] SQL: update publishers table
--- save duplicate publisher ids
 SELECT id, count(*) AS n
 FROM publishers
 GROUP BY id

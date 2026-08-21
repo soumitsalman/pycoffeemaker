@@ -33,7 +33,7 @@ _TYPES = {
 _PRIMARY_KEYS = {
     BEANS: "id",
     PUBLISHERS: "id",
-    RELATED_BEANS: ["bean_id", "related_bean_id"],
+    "related_beans_v2": ["bean_id", "related_bean_id"],
 }
 
 ORDER_BY_LATEST = "created DESC"
@@ -156,17 +156,34 @@ class PGSack(Beansack):
             bean.content = clear_null_bytes(bean.content)
         return self._store(BEANS, beans)
     
-    def store_related(self, related_beans: list[dict]):
+    def store_related(self, relations: list[dict]):
+        """Store a list of related beans in the database.
+        
+        Args:
+            - `relations`: A list of dictionaries with the following keys:
+                - `url`: The url or the id of the bean to link from.
+                - `related`: A list of urls or ids of the beans to link to.
+            - `relationship`: The relationship to link the beans with.
+        
+        Returns: The number of relations linked.
+        """
+        if not relations: return 0
+
         current_time = now()
-        relationships = [
-            BeanRelationship(
-                bean_id=generate_uuid(related_bean["url"]), 
-                related_bean_id=generate_uuid(related_bean["related_url"]),
-                collected=current_time
-            ) 
-            for related_bean in related_beans
-        ]
-        return self._store("related_beans_v2", relationships)
+        relation_rows: list[BeanRelationship] = []
+        for item in relations:
+            from_id = generate_uuid(item.get(URL))
+            related_urls = item.get(RELATED)
+            if from_id and related_urls:
+                relation_rows.extend(
+                    BeanRelationship(
+                        bean_id=from_id, 
+                        related_bean_id=generate_uuid(related_url), 
+                        collected=current_time
+                    ) 
+                    for related_url in related_urls
+                )
+        return self._store("related_beans_v2", relation_rows)
     
     def store_publishers(self, publishers: list[Publisher]):
         """Store a list of Publishers in the database."""
