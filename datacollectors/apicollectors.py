@@ -36,8 +36,8 @@ _JSON_HEADERS = {
     'Accept-Language': 'en-US,en;q=0.9',
 }
 
-REDDIT = "Reddit"
-HACKERNEWS = "ycombinator"
+REDDIT = "reddit"
+HACKERNEWS = "hackernews"
 HACKERNEWS_TOP_STORIES = "https://hacker-news.firebaseio.com/v0/topstories.json"
 HACKERNEWS_NEW_STORIES = "https://hacker-news.firebaseio.com/v0/newstories.json"
 HACKERNEWS_ASK_STORIES = "https://hacker-news.firebaseio.com/v0/askstories.json"
@@ -208,14 +208,14 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
         SITE_LANGUAGE: feed.get('language'),
         TAGS: [tag.lower() for tag in (tags or []) if isinstance(tag, str) and tag.strip()],
         AUTHOR_EMAIL: author_email,
-        IMAGEURL: None,
+        IMAGE_URL: None,
         CREATED: created_time,
         COLLECTED: current_time,
     }
 
     image_url = _extract_main_image(entry)
     if image_url:
-        item[IMAGEURL] = full_url(site_url, image_url)
+        item[IMAGE_URL] = full_url(site_url, image_url)
 
     item[KIND] = guess_content_type(item, feed_url) or default_kind
 
@@ -270,7 +270,9 @@ def _build_reddit_rss_item(entry, subreddit_name, default_kind: str, entry_link:
     author = (entry.get('author', '') or '').lstrip('/u/')
 
     if external_url:
-        url = remove_query_params(external_url)
+        # url = remove_query_params(external_url)
+        # TODO: temporarily keeping original URL
+        url = external_url
         source = extract_source(url)
         kind = guess_content_type({
             URL: url, SOURCE: source, TITLE: entry.get("title"), CONTENT: selftext,
@@ -283,7 +285,7 @@ def _build_reddit_rss_item(entry, subreddit_name, default_kind: str, entry_link:
     return cleanup_item({
         URL: url, KIND: kind, TITLE: entry.get('title'), CONTENT: selftext,
         AUTHOR: author, SOURCE: source, BASE_URL: extract_base_url(url),
-        CREATED: created, COLLECTED: current_time,
+        CREATED: created, COLLECTED: current_time, PLATFORM: REDDIT,
     })
 
 
@@ -350,7 +352,7 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
         BASE_URL: base_url,
         CREATED: created_time,
         COLLECTED: current_time,
-        TAGS: [],
+        # TAGS: [],
         PLATFORM: REDDIT,
         CHATTER_URL: chatter_link,
         FORUM: subreddit,
@@ -368,16 +370,18 @@ def _build_hackernews_item(story: dict, default_kind: str):
     content = html_to_markdown(story['text']) if story.get('text') else None
 
     if story.get('url'):
-        url = remove_query_params(story['url'])
+        # TODO: temporarily keeping original URL
+        # url = remove_query_params(story['url'])
+        url = story['url']
         source = extract_source(url)
-        tags = []
+        # tags = []
         kind = guess_content_type({
             URL: url, SOURCE: source, TITLE: story.get('title'), CONTENT: content,
         }) or (SITE if "show hn" in story.get('title', "").lower() else default_kind)
     else:
         url = hackernews_story_permalink(story_id)
         source = HACKERNEWS
-        tags = []
+        # tags = []
         kind = POST
 
     base_url = extract_base_url(url)
@@ -392,7 +396,7 @@ def _build_hackernews_item(story: dict, default_kind: str):
         BASE_URL: base_url,
         CREATED: created_time,
         COLLECTED: current_time,
-        TAGS: tags,
+        # TAGS: tags,
         PLATFORM: HACKERNEWS,
         CHATTER_URL: hackernews_story_permalink(story_id),
         FORUM: str(story_id),

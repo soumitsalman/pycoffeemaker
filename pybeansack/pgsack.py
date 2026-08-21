@@ -149,27 +149,38 @@ class PGSack(Beansack):
         """Store a list of Beans in the database."""
         beans = [bean for bean in beans if bean.embedding and len(bean.embedding) == VECTOR_LEN]
         for bean in beans:
-            _ensure_bean_id(bean)
+            bean.id = generate_uuid(bean.url)
+            bean.source_id = generate_uuid(bean.base_url)
             bean.title = clear_null_bytes(bean.title)
             bean.summary = clear_null_bytes(bean.summary)
             bean.content = clear_null_bytes(bean.content)
-
         return self._store(BEANS, beans)
     
     def store_related(self, related_beans: list[dict]):
-        return self._store(RELATED_BEANS, related_beans)
+        current_time = now()
+        relationships = [
+            BeanRelationship(
+                bean_id=generate_uuid(related_bean["url"]), 
+                related_bean_id=generate_uuid(related_bean["related_url"]),
+                collected=current_time
+            ) 
+            for related_bean in related_beans
+        ]
+        return self._store("related_beans_v2", relationships)
     
     def store_publishers(self, publishers: list[Publisher]):
         """Store a list of Publishers in the database."""
         for publisher in publishers:
-            _ensure_publisher_id(publisher)
+            publisher.id = generate_uuid(publisher.base_url)
         return self._store(PUBLISHERS, publishers)
     
     @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
     def store_chatters(self, chatters: list[Chatter]):
         """Store a list of Chatters in the database."""
-        if not chatters:
-            return 0
+        if not chatters: return 0
+
+        for chatter in chatters:            
+            chatter.bean_id = generate_uuid(chatter.url)
 
         data = [chatter.model_dump() for chatter in chatters]
         columns = list(Chatter.model_fields.keys())
@@ -501,30 +512,6 @@ class PGSack(Beansack):
             columns=columns
         )
     
-    def distinct_categories(self, limit: int = 0, offset: int = 0) -> list[str]:
-        expr = "SELECT category FROM fixed_categories ORDER BY category "
-        limit_expr, limit_params = _limit(limit=limit, offset=offset)
-        expr += limit_expr
-        return self._query_scalars(expr, limit_params)
-    
-    def distinct_sentiments(self, limit: int = 0, offset: int = 0) -> list[str]:
-        expr = "SELECT sentiment FROM fixed_sentiments ORDER BY sentiment "
-        limit_expr, limit_params = _limit(limit=limit, offset=offset)
-        expr += limit_expr
-        return self._query_scalars(expr, limit_params)
-    
-    def distinct_entities(self, limit: int = 0, offset: int = 0) -> list[str]:
-        expr = "SELECT DISTINCT unnest(entities) as entity FROM beans WHERE entities IS NOT NULL ORDER BY entity "
-        limit_expr, limit_params = _limit(limit=limit, offset=offset)
-        expr += limit_expr
-        return self._query_scalars(expr, limit_params)
-    
-    def distinct_regions(self, limit: int = 0, offset: int = 0) -> list[str]:
-        expr = "SELECT DISTINCT unnest(regions) as region FROM beans WHERE regions IS NOT NULL ORDER BY region "
-        limit_expr, limit_params = _limit(limit=limit, offset=offset)
-        expr += limit_expr
-        return self._query_scalars(expr, limit_params)
-    
     def distinct_publishers(self, limit: int = 0, offset: int = 0) -> list[str]:
         expr = "SELECT source FROM publishers ORDER BY source "
         limit_expr, limit_params = _limit(limit=limit, offset=offset)
@@ -544,30 +531,6 @@ class PGSack(Beansack):
             if params: return conn.execute(sql, params=params, binary=True)
             return conn.execute(sql)
 
-    # def refresh_classifications(self):  
-    #     SQL_UPDATE_CLASSIFICATIONS = """
-    #     WITH pack AS (
-    #         SELECT 
-    #             b.url,
-    #             ARRAY(
-    #                 SELECT category FROM fixed_categories fc
-    #                 ORDER BY b.embedding <=> fc.embedding LIMIT 2
-    #             )  AS categories,
-    #             ARRAY(
-    #                 SELECT sentiment FROM fixed_sentiments fs
-    #                 ORDER BY b.embedding <=> fs.embedding LIMIT 2
-    #             )  AS sentiments
-    #         FROM beans b
-    #         WHERE b.embedding is NOT NULL AND b.categories IS NULL
-    #     )
-    #     UPDATE beans b
-    #     SET 
-    #         categories = pack.categories,
-    #         sentiments = pack.sentiments
-    #     FROM pack
-    #     WHERE b.url = pack.url;
-    #     """      
-    #     self.execute(SQL_UPDATE_CLASSIFICATIONS)
 
     # def _cluster_unmapped_beans(self, unmapped_urls):
     #     SQL_INSERT_CLUSTERS = """
@@ -614,7 +577,7 @@ class PGSack(Beansack):
         with ThreadPoolExecutor(max_workers=3) as exec:
             for tab in tables:
                 exec.submit(self.execute(f"DELETE FROM {tab} WHERE collected < CURRENT_TIMESTAMP - INTERVAL '{CLEANUP_WINDOW}';"))
-        self.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY trend_aggregates;")
+        self.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY trend_aggregates_v2;")
     
     def close(self):        
         self.pool.close()

@@ -31,14 +31,15 @@ CREATE TABLE IF NOT EXISTS beans (
     id UUID PRIMARY KEY,
     url VARCHAR NOT NULL,
     kind VARCHAR,
-    title VARCHAR,
+    source_id UUID,
+    base_url VARCHAR,    
     author VARCHAR,
-    source VARCHAR,
     image_url VARCHAR,
     created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     collected TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     -- TEXT HEAVY FIELDS
+    title VARCHAR,
     summary TEXT,
     content TEXT,
     restricted_content BOOLEAN,
@@ -60,7 +61,7 @@ CREATE TABLE IF NOT EXISTS beans (
 
 CREATE TABLE IF NOT EXISTS publishers (
     id UUID PRIMARY KEY,
-    source VARCHAR NOT NULL,
+    domain_name VARCHAR NOT NULL,
     base_url VARCHAR NOT NULL,
     site_name VARCHAR,
     description TEXT,
@@ -73,7 +74,8 @@ CREATE TABLE IF NOT EXISTS chatters (
     chatter_url VARCHAR NOT NULL,
     -- this is a foreign key to beans.url but not enforced due to insertion sequence
     url VARCHAR NOT NULL,
-    source VARCHAR,
+    bean_id UUID,
+    platform VARCHAR,
     forum VARCHAR,
     collected TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     likes INTEGER DEFAULT 0,
@@ -186,7 +188,6 @@ LEFT JOIN publishers p ON b.source = p.source;
 -- PRIMARY DIFF: between latest vs trending
 -- trending requires some chatter or related items. Hence INNER JOIN trend_aggregates
 -- latest does not require chatter or related items. Hence LEFT JOIN trend_aggregates
-DROP VIEW IF EXISTS trending_beans_view;
 CREATE VIEW IF NOT EXISTS trending_beans_view AS
 SELECT
     b.*,
@@ -195,7 +196,6 @@ FROM beans_sources_view b
 INNER JOIN trend_aggregates tr ON b.url = tr.url;
 
 
-DROP VIEW IF EXISTS latest_beans_view;
 CREATE VIEW IF NOT EXISTS latest_beans_view AS
 SELECT
     b.*,
@@ -204,7 +204,6 @@ FROM beans_sources_view b
 LEFT JOIN trend_aggregates tr ON b.url = tr.url;
 
 
-DROP VIEW IF EXISTS aggregated_beans_view;
 CREATE VIEW IF NOT EXISTS aggregated_beans_view AS
 WITH related_groups AS (
     SELECT url, ARRAY_AGG(related_url) AS related_urls

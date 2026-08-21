@@ -23,7 +23,7 @@ from utils.fields import (
     DESCRIPTION,
     FAVICON,
     FORUM,
-    IMAGEURL,
+    IMAGE_URL,
     LIKES,
     COMMENTS,
     KIND,
@@ -371,36 +371,34 @@ def with_www(url: str) -> str | None:
 
 extract_source = lambda url: (extract_domain(url) or extract_base_url(url)).strip().lower()
 count_words = lambda text: min(len(text.split()) if text else 0, (1 << 15) - 1)
+cleanup_url = lambda url: url.strip().lower() if url and url.strip() else None
 cleanup_text = lambda text: text.strip() if text and text.strip() else None
 cleanup_author = lambda author: cleanup_text(author) if author and author.lower() not in EXCLUDED_AUTHORS else None
 
-
 def cleanup_item(item: dict) -> dict:
-    if not item:
-        return item
-
-    for field in (
-        URL, KIND, SOURCE, PLATFORM, TITLE, SUMMARY, CONTENT, AUTHOR, IMAGEURL,
-        CHATTER_URL, BASE_URL, SITE_NAME, DESCRIPTION, FAVICON, RSS_FEED, LANGUAGE,
-        ARTICLE_LANGUAGE, SITE_LANGUAGE, AUTHOR_EMAIL, FORUM,
-    ):
-        if field in item:
-            item[field] = cleanup_text(item.get(field))
-
-    item[AUTHOR] = cleanup_author(item.get(AUTHOR))
-    item[COLLECTED] = item.get(COLLECTED) or now()
-    item[CREATED] = item.get(CREATED) if usable_created(item.get(CREATED)) else item[COLLECTED]
-    item[TAGS] = list(set(item.get(TAGS) or []))
-    item[TITLE_LENGTH] = count_words(item.get(TITLE))
-    item[SUMMARY_LENGTH] = count_words(item.get(SUMMARY))
-    item[CONTENT_LENGTH] = count_words(item.get(CONTENT))
+    if not item: return item
 
     if not item.get(BASE_URL) and item.get(URL):
         item[BASE_URL] = extract_base_url(item[URL])
-    item[BASE_URL] = cleanup_text(item.get(BASE_URL))
 
-    created = item.get(CREATED)
-    if created:
-        item[CREATED] = ensure_utc(created)
+    for text_field in (
+        KIND, SOURCE, PLATFORM, TITLE, SUMMARY, CONTENT, AUTHOR,
+        CHATTER_URL, BASE_URL, SITE_NAME, DESCRIPTION, LANGUAGE,
+        ARTICLE_LANGUAGE, SITE_LANGUAGE, AUTHOR_EMAIL, FORUM,
+    ):
+        if value := item.get(text_field):
+            item[text_field] = cleanup_text(item.get(text_field))
+
+    for url_field in (URL, BASE_URL, FAVICON, RSS_FEED, IMAGE_URL, SOURCE, CHATTER_URL):
+        if value := item.get(url_field):
+            item[url_field] = cleanup_url(value)
+
+    item[AUTHOR] = cleanup_author(item.get(AUTHOR))
+    item[COLLECTED] = item.get(COLLECTED) or now()
+    item[CREATED] = ensure_utc(item.get(CREATED) if usable_created(item.get(CREATED)) else item[COLLECTED])
+    item[TAGS] = item.get(TAGS)
+    item[TITLE_LENGTH] = count_words(item.get(TITLE))
+    item[SUMMARY_LENGTH] = count_words(item.get(SUMMARY))
+    item[CONTENT_LENGTH] = count_words(item.get(CONTENT))
 
     return item

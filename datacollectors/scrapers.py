@@ -25,14 +25,15 @@ _METADATA_SELECTORS = {
     'site_name': "meta[property='og:site_name'], meta[property='sitename'], meta[itemprop='name']",
     'description': "meta[name='description'], meta[itemprop='description'], meta[property='og:description']",
     'meta_title': "meta[property='og:title'], meta[name='og:title']",
-    'published_time': "meta[property='article:published_time'], meta[name='OriginalPublicationDate'], meta[itemprop='datePublished']",
-    'top_image': "meta[property='og:image'], meta[property='og:image:url']",
+    'created': "meta[property='article:published_time'], meta[name='OriginalPublicationDate'], meta[itemprop='datePublished']",
+    'image_url': "meta[property='og:image'], meta[property='og:image:url']",
     'kind': "meta[property='og:type']",
     'author': "meta[name='author'], meta[name='dc.creator']",    
     'favicon': "link[rel='shortcut icon'], link[rel='icon']",
     'rss_feed': "link[type='application/rss+xml']",
     'language': "meta[http-equiv='content-language'], meta[name='language'], html[lang]",
-    'keywords': "meta[name='keywords']"
+    'keywords': "meta[name='keywords']",
+    'url': "link[rel='canonical'], meta[property='og:url'], meta[itemprop='url']"
 }
 _METADATA_CSS = {key: [CSSSelector(sel) for sel in selector.split(", ")] for key, selector in _METADATA_SELECTORS.items()}
 _HTML_REQUEST_HEADERS = {
@@ -48,12 +49,14 @@ def _get_metadata(url: str, tree: lxml.html.HtmlElement):
             if tags := select(tree):
                 metadata[key] = tags[0].get('content') or tags[0].get('href') or tags[0].get('lang')
                 break
-
-    if published := metadata.pop('published_time', None):
-        metadata[CREATED] = parse_date(published)
-    if 'favicon' in metadata: metadata[FAVICON] = full_url(url, metadata['favicon'])
-    if 'rss_feed' in metadata: metadata[RSS_FEED] = full_url(url, metadata['rss_feed'])
-    return metadata
+    
+    if URL in metadata: metadata[URL] = full_url(url, metadata[URL])
+    if FAVICON in metadata: metadata[FAVICON] = full_url(url, metadata[FAVICON])
+    if RSS_FEED in metadata: metadata[RSS_FEED] = full_url(url, metadata[RSS_FEED])
+    if IMAGE_URL in metadata: metadata[IMAGE_URL] = full_url(url, metadata[IMAGE_URL])
+    if CREATED in metadata: metadata[CREATED] = parse_date(metadata[CREATED])
+    
+    return {k:v for k,v in metadata.items() if v}
 
 def _parse_metadata(url: str, html: str) -> dict:
     """Process worker: single lxml parse for metadata only."""
@@ -330,9 +333,10 @@ class AsyncWebScraper:
             return None
 
         bean.update({
+            URL: result.get(URL) or bean.get(URL),
             KIND: bean.get(KIND) or result.get(KIND),
-            TITLE: bean.get(TITLE) or result.get("meta_title") or result.get(TITLE),
-            SUMMARY: bean.get(SUMMARY) or result.get("description"),
+            TITLE: result.get("meta_title") or bean.get(TITLE) or result.get(TITLE),
+            SUMMARY: bean.get(SUMMARY) or result.get(DESCRIPTION),
             CONTENT: result.get(CONTENT),
             AUTHOR: result.get(AUTHOR) or bean.get(AUTHOR),
             ARTICLE_LANGUAGE: result.get(LANGUAGE),
@@ -341,11 +345,11 @@ class AsyncWebScraper:
             AUTHOR_EMAIL: None,
             CREATED: min(result.get(CREATED) or bean.get(CREATED) or now(), bean.get(COLLECTED)),
             RESTRICTED_CONTENT: True,
-            SITE_NAME: result.get('site_name'),
-            DESCRIPTION: result.get('description'),
-            FAVICON: full_url(extract_base_url(bean.get(URL)), result.get('favicon')) if result.get('favicon') else None,
-            RSS_FEED: full_url(extract_base_url(bean.get(URL)), result.get("rss_feed")) if result.get("rss_feed") else None,
-            IMAGEURL: full_url(bean.get(URL), result.get("top_image")) if result.get("top_image") else bean.get(IMAGEURL),
+            SITE_NAME: result.get(SITE_NAME),
+            DESCRIPTION: result.get(DESCRIPTION),
+            FAVICON: result.get(FAVICON),
+            RSS_FEED: result.get(RSS_FEED),
+            IMAGE_URL: result.get(IMAGE_URL),
         })
 
         created = result.get(CREATED) or bean.get(CREATED) or bean.get(COLLECTED)
@@ -365,6 +369,7 @@ class AsyncWebScraper:
 
         return self._prep_page_result({
             URL: url,
+            BASE_URL: extract_base_url(url),
             SOURCE: extract_source(url),
             COLLECTED: now()
         }, result)
@@ -654,7 +659,7 @@ class WebCrawler:
             bean[AUTHOR_EMAIL] = None
             bean[RESTRICTED_CONTENT] = True
             image_url = result.get("top_image")
-            if image_url: bean[IMAGEURL] = full_url(bean.get(URL), image_url)
+            if image_url: bean[IMAGE_URL] = full_url(bean.get(URL), image_url)
         return beans
 
     def _package_result(result) -> dict:   

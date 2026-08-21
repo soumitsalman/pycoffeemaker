@@ -25,7 +25,10 @@ class Chatter(BaseModel):
     """Social media engagement stats of an article/bean (specified by `url`)."""
     chatter_url: Optional[str] = Field(default=None, min_length=1, description="The URL of the social medium post/comment that contains the article URL.")
     url: str = Field(min_length=1, description="The URL of the article mentioned in the social medium post/comment.")
+    bean_id: Optional[UUID] = Field(default=None, description="The unique identifier of the article.")
+    # TODO: remove source later
     source: Optional[str] = Field(default=None, description="The publisher ID of the social medium from which the data was collected.")
+    platform: Optional[str] = Field(default=None, description="The social medium platform from which the data was collected.")
     forum: Optional[str] = Field(default=None, description="The social medium group/forum/community/page from which the data was collected.")
     collected: Optional[datetime] = Field(default=None, description="The date and time when the data was collected.")
     likes: int = Field(default=0, description="The cumulative total number of likes (lower bound).")
@@ -36,7 +39,8 @@ class Chatter(BaseModel):
         return (
             self.chatter_url,
             self.url,
-            self.source,
+            self.bean_id,
+            self.platform,
             self.forum,
             self.collected,
             self.likes,
@@ -66,6 +70,7 @@ class Chatter(BaseModel):
 class Publisher(BaseModel):
     """Metadata of the website, publication or social medium from which an article or chatter is sourced."""
     id: Optional[UUID] = Field(default=None, description="The unique identifier of the publisher.")
+    # TODO: rename this to domain_name later
     source: str = Field(min_length=1, description="The publisher ID/domain name of the publisher. This matches the source field in Bean.")
     base_url: str = Field(min_length=1, description="The base URL of the publisher.")
     site_name: Optional[str] = Field(default=None, description="The name of the site.")
@@ -97,7 +102,10 @@ class Bean(BaseModel):
     id: Optional[UUID] = Field(default=None, description="The unique identifier of the article.")
     url: str = Field(description="The URL of the article.")
     kind: Optional[str] = Field(default=None, description="The content type of the article, e.g., news, blog, oped, job, post.")
+    # TODO: remove source later
     source: Optional[str] = Field(default=None, description="The publisher ID of the article.")
+    source_id: Optional[UUID] = Field(default=None, description="The unique identifier of the publisher.")
+    base_url: Optional[str] = Field(default=None, description="The base URL of the publisher.")    
     title: Optional[str] = Field(default=None, description="The title of the article.")
     summary: Optional[str] = Field(default=None, description="A summary of the article.")
     content: Optional[str] = Field(default=None, description="The full content of the article if available.")
@@ -131,10 +139,27 @@ class Bean(BaseModel):
             'image_url': 'string',
             'embedding': 'object',
             'regions': 'object', 
-            'entities': 'object'  
+            'entities': 'object',  
+            'categories': 'object',
+            'sentiments': 'object',
         }
     )
 
+class BeanRelationship(BaseModel):
+    """Relationship between two beans."""
+    bean_id: UUID = Field(description="The unique identifier of the bean.")
+    related_bean_id: UUID = Field(description="The unique identifier of the related bean.")
+    collected: datetime = Field(default=None, description="The date and time when the relationship was collected.")
+
+    model_config = ConfigDict(
+        populate_by_name = True,
+        arbitrary_types_allowed = False,
+        exclude_none = True,
+        exclude_unset = True,
+        by_alias=True,
+        json_encoders={datetime: rfc3339},
+    )
+    
 class TrendingBean(Bean):
     """Bean with additional fields for tracking social media engagement and propagation across other publishers"""
     updated: Optional[datetime] = Field(default=None, description="The last updated date during chatter aggregation.")
@@ -143,9 +168,9 @@ class TrendingBean(Bean):
     shares: Optional[int] = Field(default=None, description="The number of shares.")
     subscribers: Optional[int] = Field(default=None, description="The number of subscribers.")
     related: Optional[int] = Field(default=None, description="The size of the cluster.")
-    related_urls: Optional[list[str]] = Field(default=None, description="Related bean URLs.")
-    cluster_id: Optional[str] = Field(default=None, description="Cluster representative URL.")
-    trend_score: Optional[int] = Field(default=None, description="The trend score of the bean.")
+    # related_urls: Optional[list[str]] = Field(default=None, description="Related bean URLs.")
+    cluster_id: Optional[UUID] = Field(default=None, description="Cluster representative URL.")
+    trend_score: Optional[float] = Field(default=None, description="The trend score of the bean.")
 
     model_config = ConfigDict(
         populate_by_name = True,
@@ -161,6 +186,8 @@ class AggregatedBean(TrendingBean, Publisher):
     # modifying publisher fields for rendering
     source: Optional[str] = Field(default=None, description="The domain name that matches the source field in Bean.")
     base_url: Optional[str] = Field(default=None, description="The base URL of the publisher.")
+    related_urls: Optional[list[str]] = Field(default=None, description="Related bean URLs.")
+    related_ids: Optional[list[UUID]] = Field(default=None, description="Related bean IDs.")
     # query support fields    
     distance: Optional[float|int] = Field(default=None, description="The distance score for queries.")
 
