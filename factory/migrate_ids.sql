@@ -44,11 +44,16 @@ ALTER TABLE chatters
 
 CREATE INDEX IF NOT EXISTS idx_chatters_bean_id ON chatters(bean_id);
 
+-- [VERIFIED] SQL: update chatters.platform with existing source
+UPDATE chatters
+SET platform = LOWER(source)
+WHERE source IS NOT NULL AND platform IS NULL;
+
 
 -- [DONE] PYTHON: update chatters.bean_id with existing beans.id
 
 
--- SQL: update views
+-- [DONE] SQL: update views
 -- trend_aggregate2_v2: like trend_aggregates but keyed by bean_id (not url)
 -- and chatter stats grouped by (bean_id, platform); uses related_beans_v2
 CREATE MATERIALIZED VIEW IF NOT EXISTS trend_aggregates_v2 AS
@@ -139,9 +144,9 @@ WHERE GREATEST(likes, comments, mentions, related) > 0;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_trend_agg2_v2_bean
     ON trend_aggregate2_v2 (bean_id);
 
--- PYTHON: update beans.source_id with existing publishers.id
+-- [DONE] PYTHON: update beans.source_id with existing publishers.id
 
--- SQL: update publishers table
+-- [DONE] SQL: update publishers table
 -- save duplicate publisher ids
 SELECT id, count(*) AS n
 FROM publishers
@@ -157,13 +162,11 @@ WHERE id IN (
   HAVING count(*) > 1
 );
 
+-- [DONE] SQL: replace publishers primary key: source -> id
+ALTER TABLE publishers DROP CONSTRAINT IF EXISTS publishers_pkey;
+ALTER TABLE publishers ADD CONSTRAINT publishers_pkey PRIMARY KEY (id);
+CREATE INDEX IF NOT EXISTS idx_publishers_base_url ON publishers(base_url);
 
--- SQL: update column names
-ALTER TABLE beans 
-    RENAME COLUMN source TO source_id;
-
-ALTER TABLE publishers
-    RENAME COLUMN source TO domain_name;
 
 -- [DANGER ZONE]
 -- SQL: remove old views
@@ -171,13 +174,20 @@ DROP VIEW IF EXISTS aggregated_beans_view;
 DROP VIEW IF EXISTS trending_beans_view;
 DROP VIEW IF EXISTS latest_beans_view;
 DROP VIEW IF EXISTS beans_sources_view;
+
 DROP MATERIALIZED VIEW IF EXISTS trend_aggregates;
-ALTER MATERIALIZED VIEW trend_aggregate2_v2 RENAME TO trend_aggregates;
+ALTER MATERIALIZED VIEW trend_aggregates_v2 RENAME TO trend_aggregates;
+
+-- SQL: remove old columns
+ALTER TABLE beans 
+    DROP COLUMN source;
+ALTER TABLE publishers
+    RENAME COLUMN source TO domain_name;
 
 CREATE OR REPLACE VIEW beans_sources_view AS
 SELECT
     b.*,
-    p.id AS source_id, p.base_url, p.site_name, p.description, p.favicon, p.rss_feed
+    p.domain_name, p.base_url, p.site_name, p.description, p.favicon, p.rss_feed
 FROM beans b
 LEFT JOIN publishers p ON b.source_id = p.id;
 
