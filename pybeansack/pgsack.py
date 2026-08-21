@@ -511,6 +511,31 @@ class PGSack(Beansack):
             offset=offset,
             columns=columns
         )
+
+    def distinct_categories(self, limit: int = 0, offset: int = 0) -> list[str]:
+        expr = "SELECT DISTINCT unnest(categories) as category FROM beans WHERE categories IS NOT NULL ORDER BY category "
+        limit_expr, limit_params = _limit(limit=limit, offset=offset)
+        expr += limit_expr
+        return self._query_scalars(expr, limit_params)
+    
+    def distinct_sentiments(self, limit: int = 0, offset: int = 0) -> list[str]:
+        expr = "SELECT DISTINCT unnest(sentiments) as sentiment FROM beans WHERE sentiments IS NOT NULL ORDER BY sentiment "
+        limit_expr, limit_params = _limit(limit=limit, offset=offset)
+        expr += limit_expr
+        return self._query_scalars(expr, limit_params)
+    
+    def distinct_entities(self, limit: int = 0, offset: int = 0) -> list[str]:
+        expr = "SELECT DISTINCT unnest(entities) as entity FROM beans WHERE entities IS NOT NULL ORDER BY entity "
+        limit_expr, limit_params = _limit(limit=limit, offset=offset)
+        expr += limit_expr
+        return self._query_scalars(expr, limit_params)
+    
+    def distinct_regions(self, limit: int = 0, offset: int = 0) -> list[str]:
+        expr = "SELECT DISTINCT unnest(regions) as region FROM beans WHERE regions IS NOT NULL ORDER BY region "
+        limit_expr, limit_params = _limit(limit=limit, offset=offset)
+        expr += limit_expr
+        return self._query_scalars(expr, limit_params)
+ 
     
     def distinct_publishers(self, limit: int = 0, offset: int = 0) -> list[str]:
         expr = "SELECT source FROM publishers ORDER BY source "
