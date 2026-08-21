@@ -31,9 +31,9 @@ _TYPES = {
 }
 
 _PRIMARY_KEYS = {
-    BEANS: URL,
-    PUBLISHERS: SOURCE,
-    RELATED_BEANS: [URL, "related_url"],
+    BEANS: "id",
+    PUBLISHERS: "id",
+    RELATED_BEANS: ["bean_id", "related_bean_id"],
 }
 
 ORDER_BY_LATEST = "created DESC"
@@ -577,7 +577,7 @@ class PGSack(Beansack):
         with ThreadPoolExecutor(max_workers=3) as exec:
             for tab in tables:
                 exec.submit(self.execute(f"DELETE FROM {tab} WHERE collected < CURRENT_TIMESTAMP - INTERVAL '{CLEANUP_WINDOW}';"))
-        self.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY trend_aggregates_v2;")
+        self.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY trend_aggregates;")
     
     def close(self):        
         self.pool.close()

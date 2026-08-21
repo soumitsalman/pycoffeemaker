@@ -52,11 +52,48 @@ WHERE source IS NOT NULL AND platform IS NULL;
 
 -- [DONE] PYTHON: update chatters.bean_id with existing beans.id
 
+-- [DONE] PYTHON: update beans.source_id with existing publishers.id
 
--- [DONE] SQL: update views
--- trend_aggregate2_v2: like trend_aggregates but keyed by bean_id (not url)
--- and chatter stats grouped by (bean_id, platform); uses related_beans_v2
-CREATE MATERIALIZED VIEW IF NOT EXISTS trend_aggregates_v2 AS
+-- [DONE] SQL: update publishers table
+-- save duplicate publisher ids
+SELECT id, count(*) AS n
+FROM publishers
+GROUP BY id
+HAVING count(*) > 1
+ORDER BY n DESC, id;
+
+DELETE FROM publishers
+WHERE id IN (
+  SELECT id
+  FROM publishers
+  GROUP BY id
+  HAVING count(*) > 1
+);
+
+-- [DONE] SQL: replace publishers primary key: source -> id
+ALTER TABLE publishers DROP CONSTRAINT IF EXISTS publishers_pkey;
+ALTER TABLE publishers ADD CONSTRAINT publishers_pkey PRIMARY KEY (id);
+CREATE INDEX IF NOT EXISTS idx_publishers_base_url ON publishers(base_url);
+
+
+-- [DANGER ZONE]
+-- SQL: remove old views
+DROP VIEW IF EXISTS aggregated_beans_view;
+DROP VIEW IF EXISTS trending_beans_view;
+DROP VIEW IF EXISTS latest_beans_view;
+DROP VIEW IF EXISTS beans_sources_view;
+DROP MATERIALIZED VIEW IF EXISTS trend_aggregates;
+DROP TABLE related_beans;
+ALTER TABLE related_beans_v2 RENAME TO related_beans;
+
+-- SQL: remove old columns
+ALTER TABLE beans 
+    DROP COLUMN source;
+ALTER TABLE publishers
+    RENAME COLUMN source TO domain_name;
+
+-- SQL: create new trend_aggregates table
+CREATE MATERIALIZED VIEW IF NOT EXISTS trend_aggregates AS
 WITH
     max_chatters AS (
         SELECT
@@ -141,49 +178,11 @@ FROM trend_stats
 WHERE GREATEST(likes, comments, mentions, related) > 0;
 
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_trend_agg2_v2_bean
-    ON trend_aggregate2_v2 (bean_id);
-
--- [DONE] PYTHON: update beans.source_id with existing publishers.id
-
--- [DONE] SQL: update publishers table
--- save duplicate publisher ids
-SELECT id, count(*) AS n
-FROM publishers
-GROUP BY id
-HAVING count(*) > 1
-ORDER BY n DESC, id;
-
-DELETE FROM publishers
-WHERE id IN (
-  SELECT id
-  FROM publishers
-  GROUP BY id
-  HAVING count(*) > 1
-);
-
--- [DONE] SQL: replace publishers primary key: source -> id
-ALTER TABLE publishers DROP CONSTRAINT IF EXISTS publishers_pkey;
-ALTER TABLE publishers ADD CONSTRAINT publishers_pkey PRIMARY KEY (id);
-CREATE INDEX IF NOT EXISTS idx_publishers_base_url ON publishers(base_url);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_trend_aggregates_bean_id
+    ON trend_aggregates (bean_id);
 
 
--- [DANGER ZONE]
--- SQL: remove old views
-DROP VIEW IF EXISTS aggregated_beans_view;
-DROP VIEW IF EXISTS trending_beans_view;
-DROP VIEW IF EXISTS latest_beans_view;
-DROP VIEW IF EXISTS beans_sources_view;
-
-DROP MATERIALIZED VIEW IF EXISTS trend_aggregates;
-ALTER MATERIALIZED VIEW trend_aggregates_v2 RENAME TO trend_aggregates;
-
--- SQL: remove old columns
-ALTER TABLE beans 
-    DROP COLUMN source;
-ALTER TABLE publishers
-    RENAME COLUMN source TO domain_name;
-
+-- SQL: create dependent views
 CREATE OR REPLACE VIEW beans_sources_view AS
 SELECT
     b.*,
