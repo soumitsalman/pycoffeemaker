@@ -26,8 +26,6 @@ class Chatter(BaseModel):
     chatter_url: Optional[str] = Field(default=None, min_length=1, description="The URL of the social medium post/comment that contains the article URL.")
     url: str = Field(min_length=1, description="The URL of the article mentioned in the social medium post/comment.")
     bean_id: Optional[UUID] = Field(default=None, description="The unique identifier of the article.")
-    # TODO: remove source later
-    source: Optional[str] = Field(default=None, description="The publisher ID of the social medium from which the data was collected.")
     platform: Optional[str] = Field(default=None, description="The social medium platform from which the data was collected.")
     forum: Optional[str] = Field(default=None, description="The social medium group/forum/community/page from which the data was collected.")
     collected: Optional[datetime] = Field(default=None, description="The date and time when the data was collected.")

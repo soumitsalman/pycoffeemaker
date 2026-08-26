@@ -291,7 +291,7 @@ def _build_reddit_rss_item(entry, subreddit_name, default_kind: str, entry_link:
 
 class _RedditPost:
     __slots__ = ('created_utc', 'permalink', 'is_self', 'url', 'title',
-                 'selftext', 'author', 'score', 'num_comments')
+                 'selftext', 'author', 'score', 'num_comments', 'subscribers')
 
     def __init__(self, d: dict):
         self.created_utc = d.get('created_utc')
@@ -302,6 +302,7 @@ class _RedditPost:
         self.selftext = d.get('selftext', '') or ''
         self.score = d.get('score', 0)
         self.num_comments = d.get('num_comments', 0)
+        self.subscribers = d.get('subscribers', 0)
         author = d.get('author') or d.get('author_fullname')
         self.author = type('A', (), {'name': author})()
 

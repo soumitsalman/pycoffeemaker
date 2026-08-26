@@ -139,7 +139,6 @@ class Collector:
         chatter = {
             CHATTER_URL: item.get(CHATTER_URL),
             URL: item.get(URL),
-            SOURCE: item.get(PLATFORM) or item.get(SOURCE),
             PLATFORM: item.get(PLATFORM) or item.get(SOURCE),
             FORUM: item.get(FORUM),
             COLLECTED: item.get(COLLECTED),

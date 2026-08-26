@@ -44,7 +44,7 @@ ALTER TABLE chatters
 
 CREATE INDEX IF NOT EXISTS idx_chatters_bean_id ON chatters(bean_id);
 
--- [VERIFIED] SQL: update chatters.platform with existing source
+-- [DONE] SQL: update chatters.platform with existing source
 UPDATE chatters
 SET platform = LOWER(source)
 WHERE source IS NOT NULL AND platform IS NULL;
@@ -76,78 +76,116 @@ CREATE INDEX IF NOT EXISTS idx_publishers_base_url ON publishers(base_url);
 
 
 -- [DANGER ZONE]
--- SQL: remove old views
+-- [VERIFIED] SQL: remove old views
 DROP VIEW IF EXISTS aggregated_beans_view;
 DROP VIEW IF EXISTS trending_beans_view;
 DROP VIEW IF EXISTS latest_beans_view;
-DROP VIEW IF EXISTS beans_sources_view;
-DROP MATERIALIZED VIEW IF EXISTS trend_aggregates;
-DROP TABLE related_beans;
-ALTER TABLE related_beans_v2 RENAME TO related_beans;
 
--- SQL: remove old columns
+-- [VERIFIED] SQL: fix beans.source column
+DROP VIEW IF EXISTS beans_sources_view;
 ALTER TABLE beans 
     DROP COLUMN source;
 ALTER TABLE publishers
     RENAME COLUMN source TO domain_name;
 
--- SQL: create new trend_aggregates table
+-- [VERIFIED] SQL: create dependent views bean source
+CREATE OR REPLACE VIEW beans_sources_view AS
+SELECT
+    b.*,
+    p.domain_name, p.site_name, p.description, p.favicon, p.rss_feed
+FROM beans b
+LEFT JOIN publishers p ON b.source_id = p.id;
+
+
+-- [VERIFIED] SQL: remove old views for trend info
+DROP MATERIALIZED VIEW IF EXISTS trend_aggregates;
+DROP TABLE IF EXISTS related_beans;
+ALTER TABLE related_beans_v2 RENAME TO related_beans;
+
+-- [VERIFIED] SQL: create new trend_aggregates table
 CREATE MATERIALIZED VIEW IF NOT EXISTS trend_aggregates AS
-WITH
-    max_chatters AS (
-        SELECT
-            chatter_url,
-            MAX(likes) AS likes,
-            MAX(comments) AS comments
+WITH RECURSIVE
+    -- per chatter_url, the peak-engagement row at the earliest time it hit that peak;
+    -- lexicographic ranking (comments, then likes) keeps the chatter even when
+    -- the likes and comments maxima occur on different rows
+    best_chatters AS (
+        SELECT DISTINCT ON (chatter_url)
+            chatter_url, bean_id, likes, comments, subscribers, collected
         FROM chatters
-        GROUP BY chatter_url
-    ),
-    first_seen_max_chatters AS (
-        SELECT
-            fs.chatter_url,
-            MIN(fs.collected) AS collected
-        FROM chatters fs
-        LEFT JOIN max_chatters mx ON fs.chatter_url = mx.chatter_url
-        WHERE fs.likes = mx.likes AND fs.comments = mx.comments
-        GROUP BY fs.chatter_url
+        ORDER BY chatter_url, comments DESC, likes DESC, collected ASC
     ),
     chatter_stats AS (
         SELECT
             bean_id,
-            DATE(MAX(collected)) AS updated,
+            DATE(MAX(collected)) AS first_collected,
             SUM(likes) AS likes,
             SUM(comments) AS comments,
             SUM(subscribers) AS subscribers,
             COUNT(chatter_url) AS mentions
-        FROM (
-            SELECT ch.* FROM chatters ch
-            LEFT JOIN first_seen_max_chatters fs ON fs.chatter_url = ch.chatter_url
-            WHERE fs.collected = ch.collected
-        )
+        FROM best_chatters
         GROUP BY bean_id
     ),
     related_stats AS (
-        SELECT bean_id, COUNT(*) AS related
-        FROM related_beans_v2
+        SELECT
+            bean_id,
+            COUNT(DISTINCT rel) AS related,
+            DATE(MIN(collected)) AS first_collected
+        FROM (
+            SELECT bean_id, related_bean_id AS rel, collected FROM related_beans
+            UNION ALL
+            SELECT related_bean_id, bean_id, collected FROM related_beans
+        ) edges
+        WHERE bean_id <> rel
         GROUP BY bean_id
     ),
-    related_freq AS (
-        SELECT related_bean_id AS cand, COUNT(*)::int AS cnt
-        FROM related_beans_v2
-        GROUP BY related_bean_id
-    ),
+    -- relations are logically bidirectional but stored unidirectionally;
+    -- include both directions (plus self) so every bean gets a cluster_id
     cluster_candidates AS (
-        SELECT bean_id, bean_id AS cand FROM related_beans_v2
-        UNION
-        SELECT bean_id, related_bean_id FROM related_beans_v2
+        SELECT bean_id, bean_id AS cand, collected FROM related_beans
+        UNION ALL
+        SELECT bean_id, related_bean_id, collected FROM related_beans
+        UNION ALL
+        SELECT related_bean_id, bean_id, collected FROM related_beans
+        UNION ALL
+        SELECT related_bean_id, related_bean_id, collected FROM related_beans
     ),
+    -- earliest appearance of each candidate anywhere in related_beans;
+    -- frozen once set (new rows always carry a later collected)
+    first_seen_related AS (
+        SELECT cand, MIN(collected) AS first_seen
+        FROM cluster_candidates
+        GROUP BY cand
+    ),
+    -- winner comes from the bean's earliest (immutable) relation batch,
+    -- preferring the earliest-seen candidate (the cluster seed), so the
+    -- pointer is stable across refreshes and late joiners inherit the seed
     cluster_ids AS (
         SELECT DISTINCT ON (cc.bean_id)
             cc.bean_id,
             cc.cand AS cluster_id
         FROM cluster_candidates cc
-        LEFT JOIN related_freq rf ON rf.cand = cc.cand
-        ORDER BY cc.bean_id, COALESCE(rf.cnt, 0) DESC, cc.cand
+        JOIN first_seen_related fs ON fs.cand = cc.cand
+        ORDER BY cc.bean_id, cc.collected ASC, fs.first_seen ASC, cc.cand ASC
+    ),
+    -- chase each bean's pointer to its root (union-find): pointers strictly
+    -- decrease by (first_seen, uuid) so chains are acyclic and end at a
+    -- self-pointing seed; frozen pointers make the root equally stable
+    cluster_walk AS (
+        SELECT bean_id, cluster_id, 1 AS depth
+        FROM cluster_ids
+        UNION ALL
+        SELECT w.bean_id, c.cluster_id, w.depth + 1
+        FROM cluster_walk w
+        JOIN cluster_ids c ON c.bean_id = w.cluster_id
+        WHERE c.cluster_id <> w.cluster_id
+          AND w.depth < 32    -- safety cap; chains are provably finite
+    ),
+    cluster_roots AS (
+        SELECT DISTINCT ON (bean_id)
+            bean_id,
+            cluster_id
+        FROM cluster_walk
+        ORDER BY bean_id, depth DESC    -- deepest hop = root
     ),
     active AS (
         SELECT bean_id FROM chatter_stats
@@ -156,66 +194,55 @@ WITH
     ),
     trend_stats AS (
         SELECT
-            a.bean_id,
-            COALESCE(cg.likes, 0) AS likes,
-            COALESCE(cg.comments, 0) AS comments,
-            COALESCE(cg.subscribers, 0) AS subscribers,
-            COALESCE(cg.mentions, 0) AS mentions,
-            COALESCE(rg.related, 0) AS related,
-            GREATEST(DATE(b.created), COALESCE(cg.updated, DATE(b.created))) AS updated,
-            ci.cluster_id
+            a.bean_id as id,
+            COALESCE(cs.likes, 0) AS likes,
+            COALESCE(cs.comments, 0) AS comments,
+            COALESCE(cs.subscribers, 0) AS subscribers,
+            COALESCE(cs.mentions, 0) AS mentions,
+            COALESCE(rs.related, 0) AS related,
+            GREATEST(rs.first_collected, cs.first_collected) AS observed,
+            cr.cluster_id
         FROM active a
-        INNER JOIN beans b ON b.id = a.bean_id
-        LEFT JOIN chatter_stats cg ON a.bean_id = cg.bean_id
-        LEFT JOIN related_stats rg ON a.bean_id = rg.bean_id
-        LEFT JOIN cluster_ids ci ON ci.bean_id = a.bean_id
+        LEFT JOIN chatter_stats cs ON a.bean_id = cs.bean_id
+        LEFT JOIN related_stats rs ON a.bean_id = rs.bean_id
+        LEFT JOIN cluster_roots cr ON a.bean_id = cr.bean_id
     )
 SELECT
     *,
-    ((100*related + 50*comments + 10*mentions + likes) / (CURRENT_DATE + 2 - updated))::float AS trend_score
+    ((100*related + 50*comments + 10*mentions + likes) / (CURRENT_DATE + 2 - observed))::float AS trend_score
 FROM trend_stats
 WHERE GREATEST(likes, comments, mentions, related) > 0;
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_trend_aggregates_id
+    ON trend_aggregates (id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_trend_aggregates_bean_id
-    ON trend_aggregates (bean_id);
 
-
--- SQL: create dependent views
-CREATE OR REPLACE VIEW beans_sources_view AS
+-- [VERIFIED] SQL: create other views
+CREATE OR REPLACE VIEW latest_beans_view AS
 SELECT
     b.*,
-    p.domain_name, p.base_url, p.site_name, p.description, p.favicon, p.rss_feed
-FROM beans b
-LEFT JOIN publishers p ON b.source_id = p.id;
-
-
-CREATE VIEW IF NOT EXISTS latest_beans_view AS
-SELECT
-    b.*,
-    tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id
+    tr.observed, tr.comments, tr.mentions, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id
 FROM beans_sources_view b
-LEFT JOIN trend_aggregates tr ON b.id = tr.bean_id;
+LEFT JOIN trend_aggregates tr ON b.id = tr.id;
 
-
-CREATE VIEW IF NOT EXISTS trending_beans_view AS
+CREATE OR REPLACE VIEW trending_beans_view AS
 SELECT
     b.*,
-    tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id
+    tr.observed, tr.comments, tr.mentions, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id
 FROM beans_sources_view b
-INNER JOIN trend_aggregates tr ON b.id = tr.bean_id;
+INNER JOIN trend_aggregates tr ON b.id = tr.id;
 
 
-CREATE VIEW IF NOT EXISTS aggregated_beans_view AS
-WITH related_groups AS (
-    SELECT bean_id, ARRAY_AGG(related_bean_id) AS related_bean_ids
-    FROM related_beans
-    GROUP BY bean_id
-)
-SELECT
-    b.*,
-    tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id,
-    rel.related_urls
-FROM beans_sources_view b
-LEFT JOIN trend_aggregates tr ON b.id = tr.bean_id
-LEFT JOIN related_groups rel ON b.id = rel.bean_id;
+-- CREATE OR REPLACE VIEW aggregated_beans_view AS
+-- WITH related_groups AS (
+--     SELECT bean_id, ARRAY_AGG(related_bean_id) AS related_bean_ids
+--     FROM related_beans
+--     GROUP BY bean_id
+-- )
+-- SELECT
+--     b.*,
+--     tr.observed, tr.comments, tr.mentions, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id,
+--     rel.related_urls
+-- FROM beans_sources_view b
+-- LEFT JOIN trend_aggregates tr ON b.id = tr.bean_id
+-- LEFT JOIN related_groups rel ON b.id = rel.bean_id;
