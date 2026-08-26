@@ -76,19 +76,19 @@ CREATE INDEX IF NOT EXISTS idx_publishers_base_url ON publishers(base_url);
 
 
 -- [DANGER ZONE]
--- [VERIFIED] SQL: remove old views
+-- [DONE] SQL: remove old views
 DROP VIEW IF EXISTS aggregated_beans_view;
 DROP VIEW IF EXISTS trending_beans_view;
 DROP VIEW IF EXISTS latest_beans_view;
 
--- [VERIFIED] SQL: fix beans.source column
+-- [DONE] SQL: fix beans.source column
 DROP VIEW IF EXISTS beans_sources_view;
 ALTER TABLE beans 
     DROP COLUMN source;
 ALTER TABLE publishers
     RENAME COLUMN source TO domain_name;
 
--- [VERIFIED] SQL: create dependent views bean source
+-- [DONE] SQL: create dependent views bean source
 CREATE OR REPLACE VIEW beans_sources_view AS
 SELECT
     b.*,
@@ -97,12 +97,12 @@ FROM beans b
 LEFT JOIN publishers p ON b.source_id = p.id;
 
 
--- [VERIFIED] SQL: remove old views for trend info
+-- [DONE] SQL: remove old views for trend info
 DROP MATERIALIZED VIEW IF EXISTS trend_aggregates;
 DROP TABLE IF EXISTS related_beans;
 ALTER TABLE related_beans_v2 RENAME TO related_beans;
 
--- [VERIFIED] SQL: create new trend_aggregates table
+-- [DONE] SQL: create new trend_aggregates table
 CREATE MATERIALIZED VIEW IF NOT EXISTS trend_aggregates AS
 WITH RECURSIVE
     -- per chatter_url, the peak-engagement row at the earliest time it hit that peak;
@@ -217,7 +217,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_trend_aggregates_id
     ON trend_aggregates (id);
 
 
--- [VERIFIED] SQL: create other views
+-- [DONE] SQL: create other views
 CREATE OR REPLACE VIEW latest_beans_view AS
 SELECT
     b.*,

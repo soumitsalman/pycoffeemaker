@@ -33,7 +33,7 @@ _TYPES = {
 _PRIMARY_KEYS = {
     BEANS: "id",
     PUBLISHERS: "id",
-    "related_beans_v2": ["bean_id", "related_bean_id"],
+    RELATED_BEANS: ["bean_id", "related_bean_id"],
 }
 
 ORDER_BY_LATEST = "created DESC"
@@ -183,7 +183,7 @@ class PGSack(Beansack):
                     ) 
                     for related_url in related_urls
                 )
-        return self._store("related_beans_v2", relation_rows)
+        return self._store(RELATED_BEANS, relation_rows)
     
     def store_publishers(self, publishers: list[Publisher]):
         """Store a list of Publishers in the database."""
