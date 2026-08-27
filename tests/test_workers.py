@@ -440,7 +440,7 @@ def test_cache():
             {
                 URL: fake.unique.url(),
                 CONTENT: fake.paragraph(3),
-                SOURCE: fake.domain_name(),
+                DOMAIN_NAME: fake.domain_name(),
             }
             for _ in range(10)
         ]
@@ -538,7 +538,7 @@ def test_orch_on_lancesack():
                 collected=ndays_ago(2),
                 conditions=["embedding IS NULL", "content_length >= 200"],
                 limit=32,
-                columns=[URL, CONTENT, SOURCE],
+                columns=[URL, CONTENT, DOMAIN_NAME],
             ):
                 vectors = embedder.embed_documents([bean.content for bean in beans])
                 updates = [
@@ -558,7 +558,7 @@ def test_orch_on_lancesack():
                 collected=ndays_ago(2),
                 conditions=["gist IS NULL", "content_length >= 200"],
                 limit=2,
-                columns=[URL, CONTENT, SOURCE],
+                columns=[URL, CONTENT, DOMAIN_NAME],
             ):
                 digests = digestor.run_batch([bean.content for bean in beans])
                 updates = [

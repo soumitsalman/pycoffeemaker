@@ -178,7 +178,7 @@ class Consolidator:
 
             except Exception as e:
                 log.error(event="failed consolidating",
-                    source=chunk[0]["data"][0][SOURCE],
+                    source=chunk[0]["data"][0][BASE_URL],
                     num_items=len(chunk),
                     exc_info=True,
                 )

@@ -94,7 +94,7 @@ FROM_ID = 'from_id'
 TO_ID = 'to_id'
 RELATIONSHIP = 'relationship'
 
-SIP_COLUMNS = [ID, CREATED, KIND, SOURCE, EMBEDDING, TAGS, DIGEST, URL, BASE_URL]
+SIP_COLUMNS = [ID, CREATED, KIND, DOMAIN_NAME, EMBEDDING, TAGS, DIGEST, URL, BASE_URL]
 SOURCE_COLUMNS = [ID, DOMAIN_NAME, BASE_URL, SITE_NAME, DESCRIPTION, FAVICON, RSS_FEED]
 RELATION_COLUMNS = [FROM_ID, TO_ID, RELATIONSHIP]
 
@@ -331,7 +331,7 @@ def _ensure_sip_id(sip: Sip):
 def _ensure_source_id(item: Source | Sip):
     if not item.id:
         if item.base_url: item.id = generate_uuid(item.base_url)
-        else: item.id = DEFAULT_SOURCE
+        else: item.id = CAFECITO_SOURCE_ID
 
 def _ensure_non_null_bytes(item: Sip):
     item.digest = Jsonb(clear_null_bytes(item.digest))

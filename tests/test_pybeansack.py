@@ -63,7 +63,7 @@ def generate_fake_publishers(sources: list[str] = None, update: bool = False) ->
 
     def _one(source: str = None) -> Publisher:
         return Publisher(
-            source=source or faker.domain_name(),
+            domain_name=source or faker.domain_name(),
             base_url=faker.url(),
             site_name=(prefix + faker.company()) if random.random() > 0.5 else None,
             description=(prefix + faker.sentence(nb_words=10)) if random.random() > 0.5 else None,
@@ -121,7 +121,7 @@ def _store_and_query(db):
     ic(db.count_rows(BEANS), db.count_rows(PUBLISHERS), db.count_rows(CHATTERS))
 
     ic(db.query_latest_beans(limit=5, columns=[URL, TITLE, KIND]))
-    ic(db.query_publishers(limit=5, columns=[SOURCE, SITE_NAME]))
+    ic(db.query_publishers(limit=5, columns=[DOMAIN_NAME, SITE_NAME]))
 
 
 def _updates(db):
@@ -134,7 +134,7 @@ def _updates(db):
     if not sources:
         return
     ic(db.update_publishers(generate_fake_publishers(sources, update=True)))
-    ic(db.query_publishers(sources=sources, columns=[SOURCE, SITE_NAME, DESCRIPTION]))
+    ic(db.query_publishers(sources=sources, columns=[DOMAIN_NAME, SITE_NAME, DESCRIPTION]))
 
 
 def _trend_queries(db):

@@ -199,7 +199,7 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
     item = {
         URL: entry_link,
         BASE_URL: base_url,
-        SOURCE: source,
+        DOMAIN_NAME: source,
         TITLE: entry.get('title'),
         SUMMARY: summary,
         CONTENT: content,
@@ -231,7 +231,7 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
         })
 
     item.update({
-        SOURCE: source,
+        DOMAIN_NAME: source,
         BASE_URL: base_url,
         COLLECTED: current_time,
         **_extract_feed_metadata(feed, feed_url),
@@ -275,7 +275,7 @@ def _build_reddit_rss_item(entry, subreddit_name, default_kind: str, entry_link:
         url = external_url
         source = extract_source(url)
         kind = guess_content_type({
-            URL: url, SOURCE: source, TITLE: entry.get("title"), CONTENT: selftext,
+            URL: url, DOMAIN_NAME: source, TITLE: entry.get("title"), CONTENT: selftext,
         }) or default_kind
     else:
         url = entry_link
@@ -284,7 +284,7 @@ def _build_reddit_rss_item(entry, subreddit_name, default_kind: str, entry_link:
 
     return cleanup_item({
         URL: url, KIND: kind, TITLE: entry.get('title'), CONTENT: selftext,
-        AUTHOR: author, SOURCE: source, BASE_URL: extract_base_url(url),
+        AUTHOR: author, DOMAIN_NAME: source, BASE_URL: extract_base_url(url),
         CREATED: created, COLLECTED: current_time, PLATFORM: REDDIT,
     })
 
@@ -328,7 +328,7 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
             kind = guess_content_type({
                 URL: url,
                 BASE_URL: extract_base_url(url),
-                SOURCE: source,
+                DOMAIN_NAME: source,
                 TITLE: post.title,
                 CONTENT: post.selftext,
                 AUTHOR: post.author.name if post.author else None,
@@ -349,7 +349,7 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
         TITLE: post.title,
         CONTENT: post.selftext,
         AUTHOR: post.author.name if post.author else None,
-        SOURCE: source,
+        DOMAIN_NAME: source,
         BASE_URL: base_url,
         CREATED: created_time,
         COLLECTED: current_time,
@@ -377,7 +377,7 @@ def _build_hackernews_item(story: dict, default_kind: str):
         source = extract_source(url)
         # tags = []
         kind = guess_content_type({
-            URL: url, SOURCE: source, TITLE: story.get('title'), CONTENT: content,
+            URL: url, DOMAIN_NAME: source, TITLE: story.get('title'), CONTENT: content,
         }) or (SITE if "show hn" in story.get('title', "").lower() else default_kind)
     else:
         url = hackernews_story_permalink(story_id)
@@ -393,7 +393,7 @@ def _build_hackernews_item(story: dict, default_kind: str):
         TITLE: story.get('title'),
         CONTENT: content,
         AUTHOR: story.get('by'),
-        SOURCE: source,
+        DOMAIN_NAME: source,
         BASE_URL: base_url,
         CREATED: created_time,
         COLLECTED: current_time,

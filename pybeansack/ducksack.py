@@ -33,7 +33,7 @@ _TYPES = {
 
 _PRIMARY_KEYS: dict[str, str | list[str]] = {
     BEANS: URL,
-    PUBLISHERS: SOURCE,
+    PUBLISHERS: DOMAIN_NAME,
     RELATED_BEANS: [URL, "related_url"],
 }
 
@@ -358,8 +358,8 @@ class DuckSack(Beansack):
         if df is None or df.empty:
             return 0
         fields = df.columns.to_list()
-        if SOURCE in fields:
-            fields.remove(SOURCE)
+        if DOMAIN_NAME in fields:
+            fields.remove(DOMAIN_NAME)
         if not fields:
             return 0
 

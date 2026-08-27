@@ -99,7 +99,7 @@ class Embedder:
             if len(beans) == 1:
                 log.warning(
                     event="skipped embedding after cuda oom",
-                    source=beans[0].get(SOURCE),
+                    source=beans[0].get(BASE_URL),
                     url=beans[0].get(URL),
                 )
                 return []
@@ -126,14 +126,14 @@ class Embedder:
                     updates = self.embed_beans(chunk)
                     if not updates:
                         continue
-                    log.info(event="embedded", source=chunk[0][SOURCE], num_items=len(updates))
+                    log.info(event="embedded", source=chunk[0][BASE_URL], num_items=len(updates))
                     updates = self.classify_beans(updates)
-                    log.info(event="classified", source=chunk[0][SOURCE], num_items=len(updates))
+                    log.info(event="classified", source=chunk[0][BASE_URL], num_items=len(updates))
                     total += encache_beans(self.cache, EMBEDDED, updates)
                     
                 except Exception:
                     log.error(event="failed embedding and classifying",
-                        source=chunk[0][SOURCE],
+                        source=chunk[0][BASE_URL],
                         num_items=len(chunk),
                         exc_info=True,
                     )
@@ -179,12 +179,12 @@ class Extractor:
             for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=EXTRACTED, batch_size=self.batch_size, log=log):
                 try:
                     updates = self.extract_beans(chunk)
-                    log.info(event="extracted", source=chunk[0][SOURCE], num_items=len(updates))
+                    log.info(event="extracted", source=chunk[0][BASE_URL], num_items=len(updates))
                     total += encache_beans(self.cache, EXTRACTED, updates)
                 
                 except Exception as e:                    
                     log.error(event="failed extracting",
-                        source=chunk[0][SOURCE],
+                        source=chunk[0][BASE_URL],
                         num_items=len(chunk),
                         exc_info=True,
                     )
@@ -284,12 +284,12 @@ class Digestor:
             for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=DIGESTED, batch_size=self.batch_size, log=log):
                 try:
                     updates =self.digest_beans(chunk)
-                    log.info(event="digested", source=chunk[0][SOURCE], num_items=len(updates))
+                    log.info(event="digested", source=chunk[0][BASE_URL], num_items=len(updates))
                     total += encache_beans(self.cache, DIGESTED, updates)
 
                 except Exception as e:
                     log.error(event="failed digesting",
-                        source=chunk[0][SOURCE],
+                        source=chunk[0][BASE_URL],
                         num_items=len(chunk),
                         exc_info=True,
                     )
@@ -327,7 +327,7 @@ class Clusterer:
         for chunk in decache_beans(self.cache, states=EMBEDDED, exclude_states=CLUSTERED, batch_size=self.batch_size, log=log):
             # no need for try-except since this does not have a OOM issue
             updates = self.cluster_beans(chunk)
-            log.info(event="clustered", source=chunk[0].get(SOURCE, chunk[0][URL]), num_items=len(updates))
+            log.info(event="clustered", source=chunk[0].get(BASE_URL, chunk[0][URL]), num_items=len(updates))
             total += encache_beans(self.cache, CLUSTERED, updates)            
             
         log.info(event="clusterer completed", total_clustered=total)

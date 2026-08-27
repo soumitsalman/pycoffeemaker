@@ -26,7 +26,7 @@ from utils.fields import (
     RSS_FEED,
     SITE_LANGUAGE,
     SITE_NAME,
-    SOURCE,
+    DOMAIN_NAME,
     SUMMARY,
     TAGS,
     TITLE,
@@ -81,7 +81,7 @@ def validate_bean_item(item: dict) -> bool:
         item.get(TITLE)
         and item.get(COLLECTED)
         and item.get(CREATED)
-        and item.get(SOURCE)
+        and item.get(BASE_URL)
         and item.get(KIND)
     )
 
@@ -97,7 +97,7 @@ def validate_chatter_item(item: dict) -> bool:
 def validate_source_item(item: dict) -> bool:
     if not item:
         return False
-    return bool(item.get(SOURCE) and item.get(BASE_URL))
+    return bool(item.get(DOMAIN_NAME) and item.get(BASE_URL))
 
 def parse_sources(sources: str) -> dict:
     if os.path.exists(sources):
@@ -139,7 +139,7 @@ class Collector:
         chatter = {
             CHATTER_URL: item.get(CHATTER_URL),
             URL: item.get(URL),
-            PLATFORM: item.get(PLATFORM) or item.get(SOURCE),
+            PLATFORM: item.get(PLATFORM) or item.get(DOMAIN_NAME),
             FORUM: item.get(FORUM),
             COLLECTED: item.get(COLLECTED),
             LIKES: item.get(LIKES),
@@ -149,7 +149,7 @@ class Collector:
         [chatter.pop(key, None) for key in list(chatter) if not chatter[key]]
 
         publisher = {
-            SOURCE: item.get(SOURCE),
+            DOMAIN_NAME: item.get(DOMAIN_NAME),
             BASE_URL: item.get(BASE_URL),
             SITE_NAME: item.get(SITE_NAME),
             DESCRIPTION: item.get(DESCRIPTION),
@@ -206,7 +206,7 @@ class Collector:
     async def _cache_beans(self, beans: list[dict]):
         if not beans: return
 
-        source_marker, item_count = beans[0][SOURCE], len(beans)
+        source_marker, item_count = beans[0][DOMAIN_NAME], len(beans)
         cached_count = await self.cache.set(BEANS, COLLECTED, beans)
         beans[:] = []
 
@@ -219,7 +219,7 @@ class Collector:
     async def _cache_publishers(self, publishers: list[dict]):
         if not publishers: return
 
-        source_marker, item_count = publishers[0][SOURCE], len(publishers)
+        source_marker, item_count = publishers[0][DOMAIN_NAME], len(publishers)
         cached_count = await self.cache.set(PUBLISHERS, COLLECTED, publishers)        
         publishers[:] = []
 
@@ -232,7 +232,7 @@ class Collector:
     async def _cache_chatters(self, chatters: list[dict]):
         if not chatters: return
 
-        source_marker, item_count = chatters[0].get(FORUM, chatters[0][SOURCE]), len(chatters)
+        source_marker, item_count = chatters[0].get(FORUM, chatters[0][PLATFORM]), len(chatters)
         pkg = [{"id": str(uuid.uuid4()), "chatters": chatters}]
         cached_count = await self.cache.set(CHATTERS, COLLECTED, pkg)
         chatters[:] = []
@@ -250,7 +250,7 @@ class Collector:
         beans[:] = filtered_list(await self.webscraper.scrape_beans(beans), is_bean_storable)
         if not beans: return
 
-        log.info(event="scraped", source=beans[0][SOURCE], beans=len(beans))
+        log.info(event="scraped", source=beans[0][DOMAIN_NAME], beans=len(beans))
         await self._cache_beans(beans)
 
     async def _scrape_publishers(self, publishers: list[dict]):        
@@ -262,7 +262,7 @@ class Collector:
         publishers[:] = filtered_list(await self.webscraper.scrape_publishers(publishers), is_publisher_storable)
         if not publishers: return
 
-        log.info(event="scraped", source=publishers[0][SOURCE], publishers=len(publishers))
+        log.info(event="scraped", source=publishers[0][DOMAIN_NAME], publishers=len(publishers))
         await self._cache_publishers(publishers)
 
     async def _queue_scrape(self, kind: str, items: list[dict]):

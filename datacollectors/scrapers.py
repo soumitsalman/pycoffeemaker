@@ -302,7 +302,7 @@ class AsyncWebScraper:
 
         meta = {
             BASE_URL: base_url,
-            SOURCE: extract_domain(url)
+            DOMAIN_NAME: extract_domain(url)
         } 
         
         try:                  
@@ -370,7 +370,7 @@ class AsyncWebScraper:
         return self._prep_page_result({
             URL: url,
             BASE_URL: extract_base_url(url),
-            SOURCE: extract_source(url),
+            DOMAIN_NAME: extract_source(url),
             COLLECTED: now()
         }, result)
 
@@ -380,7 +380,7 @@ class AsyncWebScraper:
         return [
             self._prep_page_result({
                 URL: url,
-                SOURCE: extract_source(url),
+                DOMAIN_NAME: extract_source(url),
                 COLLECTED: now()
             }, result) for url, result in zip(urls, results)
         ]

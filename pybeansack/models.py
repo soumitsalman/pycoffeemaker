@@ -19,7 +19,7 @@ OPED = "opinion"
 SYSTEM = "__SYSTEM__"
 
 DIGEST_COLUMNS = [URL, CREATED, GIST]
-CONTENT_COLUMNS = [URL, CREATED, SOURCE, TITLE, CONTENT]
+CONTENT_COLUMNS = [URL, CREATED, DOMAIN_NAME, TITLE, CONTENT]
 
 class Chatter(BaseModel):
     """Social media engagement stats of an article/bean (specified by `url`)."""
@@ -69,7 +69,7 @@ class Publisher(BaseModel):
     """Metadata of the website, publication or social medium from which an article or chatter is sourced."""
     id: Optional[UUID] = Field(default=None, description="The unique identifier of the publisher.")
     # TODO: rename this to domain_name later
-    source: str = Field(min_length=1, description="The publisher ID/domain name of the publisher. This matches the source field in Bean.")
+    domain_name: str = Field(min_length=1, description="The publisher ID/domain name of the publisher. This matches the source field in Bean.")
     base_url: str = Field(min_length=1, description="The base URL of the publisher.")
     site_name: Optional[str] = Field(default=None, description="The name of the site.")
     description: Optional[str] = Field(default=None, description="A description/details of the publisher.")
@@ -100,8 +100,6 @@ class Bean(BaseModel):
     id: Optional[UUID] = Field(default=None, description="The unique identifier of the article.")
     url: str = Field(description="The URL of the article.")
     kind: Optional[str] = Field(default=None, description="The content type of the article, e.g., news, blog, oped, job, post.")
-    # TODO: remove source later
-    source: Optional[str] = Field(default=None, description="The publisher ID of the article.")
     source_id: Optional[UUID] = Field(default=None, description="The unique identifier of the publisher.")
     base_url: Optional[str] = Field(default=None, description="The base URL of the publisher.")    
     title: Optional[str] = Field(default=None, description="The title of the article.")

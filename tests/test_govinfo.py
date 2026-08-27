@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from datacollectors import AsyncWebScraper, GovInfoRSSCollector
-from utils.fields import BASE_URL, RSS_FEED, SOURCE, TAGS, TITLE, URL
+from utils.fields import BASE_URL, RSS_FEED, DOMAIN_NAME, TAGS, TITLE, URL
 
 
 PACKAGE_ID = "PKG-123"
@@ -191,7 +191,7 @@ def test_govinfo_items_use_the_package_content_url():
     assert len(items) == 1
     assert items[0][URL] == HTML_URL
     assert items[0][TITLE] == "Example package"
-    assert items[0][SOURCE] == "govinfo"
+    assert items[0][DOMAIN_NAME] == "govinfo"
     assert items[0][BASE_URL] == "www.govinfo.gov"
     assert items[0][RSS_FEED] == feed_url
     assert items[0][TAGS] == ["bills and statutes"]

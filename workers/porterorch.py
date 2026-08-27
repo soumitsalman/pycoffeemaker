@@ -10,11 +10,11 @@ from processingcache import AsyncStateCacheBase
 from pybeansack import Beansack, Bean, Chatter, Publisher, BEANS, CHATTERS, PUBLISHERS
 from pybeansack.models import (
     BASE_URL, CATEGORIES, CONTENT, CONTENT_LENGTH, CREATED, EMBEDDING, ENTITIES,
-    KIND, REGIONS, RELATED, RESTRICTED_CONTENT, SENTIMENTS, SOURCE, SUMMARY,
+    KIND, REGIONS, RELATED, RESTRICTED_CONTENT, SENTIMENTS, DOMAIN_NAME, SUMMARY,
     SUMMARY_LENGTH, TAGS, TITLE, TITLE_LENGTH, URL,
 )
 from pycupboard.pgcupboard import Cupboard
-from pycupboard.models import Sip, Source, DEFAULT_SOURCE
+from pycupboard.models import Sip, Source, CAFECITO_SOURCE_ID
 from utils import generate_uuid
 from utils.dates import usable_created
 from .states import *
@@ -32,7 +32,7 @@ class BeansackPorter:
         self.cache = cache
     
     @classmethod
-    def prep_beans(cls, beans: list[dict]):
+    def _prep_beans(cls, beans: list[dict]):
         """Merges beans, replaces content with cdn url"""
         for bean in beans:
             if entity_pack := bean.pop(ENTITIES, None):                
@@ -56,16 +56,23 @@ class BeansackPorter:
             exclude_states=target_state,
         ):  
             log.info(event="porting:beans", to="beansack", num_items=len(beans))  
-            count = await asyncio.to_thread(db.store_beans, self.prep_beans(beans))
+            count = await asyncio.to_thread(db.store_beans, self._prep_beans(beans))
             log.info(event="ported:beans", to="beansack", num_items=count)                
             await self.cache.set(BEANS, target_state, [{URL: b[URL]} for b in beans])
             return count
         return 0
 
+    @classmethod
+    def _prep_publishers(cls, publishers: list[dict]):
+        for pub in publishers:
+            if not pub.get(DOMAIN_NAME):
+                pub[DOMAIN_NAME] = pub.pop("source")
+        return [Publisher(**pub) for pub in publishers]
+
     async def hydrate_publishers(self, db: Beansack, target_state: str):
         if publishers := await self.cache.get(PUBLISHERS, states=COLLECTED, exclude_states=target_state):
             log.info(event="porting:publishers", to="beansack", num_items=len(publishers))
-            count = await asyncio.to_thread(db.store_publishers, [Publisher(**pub) for pub in publishers])
+            count = await asyncio.to_thread(db.store_publishers, self._prep_publishers(publishers))
             log.info(event="ported:publishers", to="beansack", num_items=count)
             await self.cache.set(PUBLISHERS, target_state, [{BASE_URL: p[BASE_URL]} for p in publishers])
             return count
@@ -141,9 +148,6 @@ class CupboardPorter:
             if not usable_created(bean.get(CREATED)):
                 bean[CREATED] = bean.get(COLLECTED)
 
-            # remove source. this will be calculated from base_url
-            bean.pop(SOURCE)
-
             # create tags
             entity_tags = []       
             if entity_pack := bean.get(ENTITIES):
@@ -191,7 +195,10 @@ class CupboardPorter:
 
     @classmethod
     def _prep_sources(cls, sources: list[dict]):
-        return [Source(**src, domain_name=src.get(SOURCE)) for src in sources]
+        for src in sources:
+            if not src.get(DOMAIN_NAME):
+                src[DOMAIN_NAME] = src.pop("source")        
+        return [Source(**src) for src in sources]
 
     async def hydrate_sources(self, db: Cupboard, target_state: str):
         count = 0
@@ -221,7 +228,7 @@ class CupboardPorter:
             # this is just for convenient storage and linking ops
             url = CUPBOARD_SIGNAL_URL_PREFIX+comp[ID]
             comp.update({
-                SOURCE: DEFAULT_SOURCE,
+                "source": CAFECITO_SOURCE_ID,
                 KIND: CUPBOARD_SIGNAL_KIND,
                 ID: generate_uuid(url),
                 URL: url,                

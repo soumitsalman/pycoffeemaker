@@ -16,13 +16,13 @@ from utils.fields import (
     KIND,
     RSS_FEED,
     SITE_NAME,
-    SOURCE,
+    DOMAIN_NAME,
     TAGS,
     URL,
 )
 from utils.ids import generate_uuid
 
-DEFAULT_SOURCE = generate_uuid("https://cafecito.tech")
+CAFECITO_SOURCE_ID = generate_uuid("https://cafecito.tech")
 
 class Sip(BaseModel):
     id: Optional[UUID] = Field(default=None)

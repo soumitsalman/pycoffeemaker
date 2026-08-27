@@ -5,7 +5,7 @@ from typing import Any
 from grafeo import GrafeoDB
 from pybeansack.models import (
     BASE_URL, CATEGORIES, CONTENT, CONTENT_LENGTH, CREATED, EMBEDDING, RELATED,
-    RESTRICTED_CONTENT, SENTIMENTS, SOURCE, SUMMARY, SUMMARY_LENGTH, TAGS, TITLE,
+    RESTRICTED_CONTENT, SENTIMENTS, DOMAIN_NAME, SUMMARY, SUMMARY_LENGTH, TAGS, TITLE,
     TITLE_LENGTH, URL, VECTOR_LEN,
 )
 import pandas as pd
@@ -29,7 +29,7 @@ class Cupboard:
     def create_db(cls, db_path: str):
         db = GrafeoDB(db_path)
         db.create_property_index(URL)
-        db.create_property_index(SOURCE)
+        db.create_property_index(DOMAIN_NAME)
         db.create_property_index(CREATED)
         db.create_property_index(CATEGORIES)
         db.create_property_index(BASE_URL)

@@ -33,7 +33,7 @@ from utils.fields import (
     RSS_FEED,
     SITE_LANGUAGE,
     SITE_NAME,
-    SOURCE,
+    DOMAIN_NAME,
     SUMMARY,
     TAGS,
     TITLE,
@@ -216,7 +216,7 @@ def guess_content_type(bean: dict, feed_url: str = None) -> str | None:
     if kind := _matching_kind(BODY_KIND_RULES, content):
         return kind
 
-    domain_name = _text_value(bean.get(SOURCE))
+    domain_name = _text_value(bean.get(DOMAIN_NAME))
     site_name = _text_value(bean.get(SITE_NAME))
     if any(post_domain in domain_name for post_domain in POST_DOMAINS):
         return POST
@@ -382,14 +382,14 @@ def cleanup_item(item: dict) -> dict:
         item[BASE_URL] = extract_base_url(item[URL])
 
     for text_field in (
-        KIND, SOURCE, PLATFORM, TITLE, SUMMARY, CONTENT, AUTHOR,
+        KIND, DOMAIN_NAME, PLATFORM, TITLE, SUMMARY, CONTENT, AUTHOR,
         CHATTER_URL, BASE_URL, SITE_NAME, DESCRIPTION, LANGUAGE,
         ARTICLE_LANGUAGE, SITE_LANGUAGE, AUTHOR_EMAIL, FORUM,
     ):
         if value := item.get(text_field):
             item[text_field] = cleanup_text(item.get(text_field))
 
-    for url_field in (URL, BASE_URL, FAVICON, RSS_FEED, IMAGE_URL, SOURCE, CHATTER_URL):
+    for url_field in (URL, BASE_URL, FAVICON, RSS_FEED, IMAGE_URL, DOMAIN_NAME, CHATTER_URL):
         if value := item.get(url_field):
             item[url_field] = cleanup_url(value)
 

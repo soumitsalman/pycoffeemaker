@@ -17,7 +17,7 @@ VECTOR_TYPE = Vector(VECTOR_LEN, nullable=True)
 
 _PRIMARY_KEYS = {
     BEANS: URL,
-    PUBLISHERS: SOURCE
+    PUBLISHERS: DOMAIN_NAME
 }
 
 class _Bean(Bean, LanceModel):
@@ -107,7 +107,7 @@ class LanceSack(Beansack):
         if not publishers: return 0
 
         # to_store = prepare_publishers_for_store(publishers)  
-        result = self.db[PUBLISHERS].merge_insert(SOURCE) \
+        result = self.db[PUBLISHERS].merge_insert(DOMAIN_NAME) \
             .when_not_matched_insert_all() \
             .execute([_Publisher(**publisher.model_dump(exclude_none=True)) for publisher in publishers])
         return result.num_inserted_rows
@@ -182,7 +182,7 @@ class LanceSack(Beansack):
         fields = non_null_fields(updates)
 
         get_field_values = lambda field: [update.get(field) for update in updates]
-        result = self.db[PUBLISHERS].merge_insert(SOURCE) \
+        result = self.db[PUBLISHERS].merge_insert(DOMAIN_NAME) \
             .when_matched_update_all() \
             .execute(
                 pa.table(
@@ -309,7 +309,7 @@ class LanceSack(Beansack):
         )
         publishers = self.db[PUBLISHERS].search().where(_where(sources=[bean.source for bean in beans])).to_pydantic(_Publisher)
         clusters = self.db[RELATED_BEANS].search().where(_where(urls=[bean.url for bean in beans])).to_pydantic(_RelatedBean)
-        get_publisher = lambda source: next((pub.model_dump(exclude_none=True, exclude=[SOURCE]) for pub in publishers if pub.source == source), {})
+        get_publisher = lambda source: next((pub.model_dump(exclude_none=True, exclude=[DOMAIN_NAME]) for pub in publishers if pub.domain_name == source), {})
         get_cluster = lambda url: next(({RELATED: cluster.related, CLUSTER_SIZE: len(cluster.related)} for cluster in clusters if cluster.url == url), {})
         beans = [AggregatedBean(**bean.model_dump(exclude_none=True), **get_publisher(bean.source), **get_cluster(bean.url)) for bean in beans]
         # TODO: add cluster_id -- related with the highest cluster_size
@@ -383,7 +383,7 @@ def create_db(storage_path: str):
     beans.create_scalar_index(CATEGORIES, index_type="LABEL_LIST")
     beans.create_scalar_index(REGIONS, index_type="LABEL_LIST")
     beans.create_scalar_index(ENTITIES, index_type="LABEL_LIST")
-    publishers.create_scalar_index(SOURCE, index_type="BTREE")
+    publishers.create_scalar_index(DOMAIN_NAME, index_type="BTREE")
     chatters.create_scalar_index(URL, index_type="BTREE")
     related_beans.create_scalar_index(URL, index_type="BTREE")
 

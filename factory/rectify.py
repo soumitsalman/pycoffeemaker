@@ -167,7 +167,7 @@ def hydrate_processing_cache(cache_dir, batch_size):
             ],
             limit=batch_size,
             offset=offset,
-            columns=[BASE_URL, SOURCE],
+            columns=[BASE_URL, DOMAIN_NAME],
         ):
             publisher_states = [
                 pub.model_dump(exclude_none=True, exclude_unset=True) for pub in pubs
