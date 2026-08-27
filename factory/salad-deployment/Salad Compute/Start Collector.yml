@@ -1,0 +1,15 @@
+info:
+  name: Start Collector
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-collector-g2/start
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

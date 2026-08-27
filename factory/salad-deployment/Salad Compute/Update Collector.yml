@@ -1,0 +1,35 @@
+info:
+  name: Update Collector
+  type: http
+  seq: 5
+
+http:
+  method: PATCH
+  url: https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-collector-g2
+  headers:
+    - name: Content-Type
+      value: application/merge-patch+json
+  body:
+    type: text
+    data: |-
+      {
+        "name": "coffeemaker-collector-g2",
+        "container": {
+          "command": [],
+          "environment_variables": {
+            "PROCESSING_CACHE": {{PROCESSING_CACHE}},
+            "MODE": "COLLECTOR",
+            "BATCH_SIZE": "64",
+            "COLLECTOR_TIMEOUT": "180",
+            "REDDIT_SESSION_COOKIE": {{REDDIT_SESSION_COOKIE}}
+          },
+          "image": "docker.io/soumitsr/coffeemaker:io-latest"
+        }
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

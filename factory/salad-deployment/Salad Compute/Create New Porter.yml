@@ -1,0 +1,55 @@
+info:
+  name: Create New Porter
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers
+  body:
+    type: json
+    data: |-
+      {
+        "name": "coffeemaker-porter-g2",
+        "autostart_policy": false,
+        "container": {
+          "command": [],
+          "environment_variables": {
+            "PROCESSING_CACHE": {{PROCESSING_CACHE}},
+            "MODE": "PORTER",
+            "BATCH_SIZE": "512",
+            "PG_WORKERS": "8",
+            "PROCESSING_WINDOW": "7",
+            "BEANSACK_CONNECTION_STRING": {{BEANSACK_CONNECTION_STRING}},
+            "CUPBOARD_CONNECTION_STRING": {{CUPBOARD_CONNECTION_STRING}}
+          },
+          "image": "docker.io/soumitsr/coffeemaker:io-latest",
+          "image_caching": true,
+          "logging": null,
+          "priority": "batch",
+          "registry_authentication": null,
+          "resources": {
+            "cpu": 1,
+            "gpu_classes": [],
+            "memory": 3072,
+            "shm_size": 64
+          }
+        },
+        "queue_connection": null,
+        "queue_autoscaler": null,
+        "liveness_probe": null,
+        "networking": null,
+        "readiness_probe": null,
+        "replicas": 1,
+        "restart_policy": "never",
+        "startup_probe": null,
+        "scaling_actions": [],
+        "scheduled_scaling_enabled": true
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

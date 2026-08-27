@@ -1,0 +1,37 @@
+info:
+  name: Update Porter
+  type: http
+  seq: 6
+
+http:
+  method: PATCH
+  url: https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-collector-g2
+  headers:
+    - name: Content-Type
+      value: application/merge-patch+json
+  body:
+    type: text
+    data: |-
+      {
+        "name": "coffeemaker-porter-g2",
+        "container": {
+          "command": [],
+          "environment_variables": {
+            "PROCESSING_CACHE": {{PROCESSING_CACHE}},
+            "MODE": "PORTER",
+            "BATCH_SIZE": "512",
+            "PG_WORKERS": "8",
+            "PROCESSING_WINDOW": "7",
+            "BEANSACK_CONNECTION_STRING": {{BEANSACK_CONNECTION_STRING}},
+            "CUPBOARD_CONNECTION_STRING": {{CUPBOARD_CONNECTION_STRING}}
+          },
+          "image": "docker.io/soumitsr/coffeemaker:io-latest"
+        }
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
