@@ -144,6 +144,7 @@ class CupboardPorter:
     def _prep_events(cls, beans: list[dict[str, Any]]):
         beans = [bean for bean in beans if bean.get(DIGEST)]
         for bean in beans:
+            bean.pop("source", None) # temporary fix until the pipeline is dehydrated
             bean[KIND] = CUPBOARD_EVENT_KIND
             if not usable_created(bean.get(CREATED)):
                 bean[CREATED] = bean.get(COLLECTED)
