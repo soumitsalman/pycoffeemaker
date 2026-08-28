@@ -241,11 +241,16 @@ shutdown() {
     local status=$PIPELINE_STATUS
     [[ $status -eq 0 && $trap_status -ne 0 ]] && status=$trap_status
     echo "=== [FINISHED PIPELINE] status=$status ==="
-    if [[ -n "${SHUTDOWN_URL:-}" ]]; then
-        curl -fsS -X POST "$SHUTDOWN_URL" || true
-    else
-        echo "SHUTDOWN_URL not set; skipping shutdown" >&2
+
+    [[ -n "${COMPLETION_WEBHOOK_URL:-}" ]] || return
+
+    local -a curl_args=(-fsS -X POST)
+    if [[ -n "${COMPLETION_WEBHOOK_API_KEY:-}" ]]; then
+        local api_key_id="${COMPLETION_WEBHOOK_API_KEY%%:*}"
+        local api_key_value="${COMPLETION_WEBHOOK_API_KEY#*:}"
+        curl_args+=(-H "${api_key_id}: ${api_key_value}")
     fi
+    curl "${curl_args[@]}" "$COMPLETION_WEBHOOK_URL" || true
 }
 trap shutdown EXIT
 
