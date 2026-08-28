@@ -76,7 +76,11 @@ jobs:
                 "COMPLETION_WEBHOOK_URL": "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-collector-g2/stop",
                 "COMPLETION_WEBHOOK_API_KEY": "Salad-Api-Key:${{ secrets.SALAD_API_KEY }}"              
               },
-              "image": "${IMAGE}"
+              "image": "${IMAGE}",
+              "resources": {
+                "cpu": 1,
+                "memory": 4096,
+              }
             },
             "replicas": 1
           }
@@ -101,7 +105,11 @@ jobs:
                 "COMPLETION_WEBHOOK_URL": "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-porter-g2/stop",
                 "COMPLETION_WEBHOOK_API_KEY": "Salad-Api-Key:${{ secrets.SALAD_API_KEY }}"
               },
-              "image": "${IMAGE}"              
+              "image": "${IMAGE}",
+              "resources": {
+                "cpu": 1,
+                "memory": 4096,
+              }      
             },
             "replicas": 1
           }

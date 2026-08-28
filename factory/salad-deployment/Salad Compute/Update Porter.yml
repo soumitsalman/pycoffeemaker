@@ -5,7 +5,7 @@ info:
 
 http:
   method: PATCH
-  url: https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-collector-g2
+  url: https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-porter-g2
   headers:
     - name: Content-Type
       value: application/merge-patch+json
@@ -13,20 +13,21 @@ http:
     type: text
     data: |-
       {
-        "name": "coffeemaker-porter-g2",
         "container": {
-          "command": [],
-          "environment_variables": {
-            "PROCESSING_CACHE": {{PROCESSING_CACHE}},
-            "MODE": "PORTER",
-            "BATCH_SIZE": "512",
-            "PG_WORKERS": "8",
-            "PROCESSING_WINDOW": "7",
-            "BEANSACK_CONNECTION_STRING": {{BEANSACK_CONNECTION_STRING}},
-            "CUPBOARD_CONNECTION_STRING": {{CUPBOARD_CONNECTION_STRING}}
-          },
-          "image": "docker.io/soumitsr/coffeemaker:io-latest"
-        }
+              "command": ["--porter", "512"],
+              "environment_variables": {                
+                "PG_WORKERS": "8",
+                "PROCESSING_WINDOW": "7",
+                "COMPLETION_WEBHOOK_URL": "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-porter-g2/stop",
+                "COMPLETION_WEBHOOK_API_KEY": "Salad-Api-Key:{{apiKey}}"
+              },
+              "image": "{{IMAGE}}",
+              "resources": {
+                "cpu": 1,
+                "memory": 4096,
+              }      
+            },
+            "replicas": 1
       }
   auth: inherit
 

@@ -13,18 +13,20 @@ http:
     type: text
     data: |-
       {
-        "name": "coffeemaker-collector-g2",
         "container": {
-          "command": [],
-          "environment_variables": {
-            "PROCESSING_CACHE": {{PROCESSING_CACHE}},
-            "MODE": "COLLECTOR",
-            "BATCH_SIZE": "64",
+          "command": ["--collector", "64"],
+          "environment_variables": {                
             "COLLECTOR_TIMEOUT": "180",
-            "REDDIT_SESSION_COOKIE": {{REDDIT_SESSION_COOKIE}}
+            "COMPLETION_WEBHOOK_URL": "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-collector-g2/stop",
+            "COMPLETION_WEBHOOK_API_KEY": "Salad-Api-Key:{{apiKey}}"              
           },
-          "image": "docker.io/soumitsr/coffeemaker:io-latest"
-        }
+          "image": "{{IMAGE}}",
+          "resources": {
+            "cpu": 1,
+            "memory": 4096,
+          }
+        },
+        "replicas": 1
       }
   auth: inherit
 
