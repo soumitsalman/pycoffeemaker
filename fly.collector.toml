@@ -11,8 +11,6 @@ primary_region = 'iad'
   ignorefile = '.dockerignore'
 
 [env]
-  BATCH_SIZE = '64'
-  MODE = 'COLLECTOR'
   COLLECTOR_TIMEOUT = '150'
   PG_WORKERS = '4'
   PROCESSING_WINDOW = '2'
@@ -21,5 +19,8 @@ primary_region = 'iad'
   policy = 'never'
 
 [[vm]]
-  size = 'shared-cpu-4x'
+  size = 'performance-1x'
   memory = '3072mb'
+
+[processes]
+  app = "--collector 64"
