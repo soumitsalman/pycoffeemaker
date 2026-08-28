@@ -17,5 +17,7 @@ RUN mkdir -p .cache
 ENV DEBIAN_FRONTEND=noninteractive \
     COLLECTOR_SOURCES=/worker/factory/feeds.yaml 
 
-# Use ENTRYPOINT to make the container more flexible with arguments
-ENTRYPOINT python run.py --mode $MODE --batch_size $BATCH_SIZE
+RUN chmod +x run_pipeline.sh
+
+# Exec form so `docker run ... --collector 64 --porter 512` is forwarded
+ENTRYPOINT ["/worker/run_pipeline.sh"]

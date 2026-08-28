@@ -1,0 +1,106 @@
+name: Publish Docker IO image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/salad-deploy.yml"
+      - "datacollectors/**"
+      - "factory/feeds.yaml"
+      - "nlp/**"
+      - "pybeansack/**"
+      - "pycupboard/**"
+      - "utils/**"
+      - "workers/**"
+      - "DockerfileIO"
+      - ".dockerignore"
+      - "requirements-io.txt"
+      - "run.py"
+      - "run_pipelines.sh"
+  workflow_dispatch:
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: soumitsr/coffeemaker
+
+jobs:
+  build-and-push:
+    name: Build and push IO image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set image tag date
+        id: meta
+        run: echo "date=$(date -u +%y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: DockerfileIO
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:io-${{ steps.meta.outputs.date }}
+            ${{ env.IMAGE_NAME }}:io
+          cache-from: type=gha,scope=io
+          cache-to: type=gha,mode=max,scope=io
+
+      - name: Update Salad collector
+        env:
+          SALAD_API_KEY: ${{ secrets.SALAD_API_KEY }}
+          IMAGE: docker.io/${{ env.IMAGE_NAME }}:io-${{ steps.meta.outputs.date }}
+        run: |
+          curl -fsS -X PATCH \
+            "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-collector-g2" \
+            -H "Content-Type: application/merge-patch+json" \
+            -H "Salad-Api-Key: ${{ secrets.SALAD_API_KEY }}" \
+            -d @- <<EOF
+          {
+            "container": {
+              "command": ["--collector", "64"],
+              "environment_variables": {                
+                "COLLECTOR_TIMEOUT": "180",
+                "COMPLETION_WEBHOOK_URL": "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-collector-g2/stop",
+                "COMPLETION_WEBHOOK_API_KEY": "Salad-Api-Key:${{ secrets.SALAD_API_KEY }}"              
+              },
+              "image": "${IMAGE}"
+            }
+          }
+          EOF
+
+      - name: Update Salad porter
+        env:
+          SALAD_API_KEY: ${{ secrets.SALAD_API_KEY }}
+          IMAGE: docker.io/${{ env.IMAGE_NAME }}:io-${{ steps.meta.outputs.date }}
+        run: |
+          curl -fsS -X PATCH \
+            "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-porter-g2" \
+            -H "Content-Type: application/merge-patch+json" \
+            -H "Salad-Api-Key: ${{ secrets.SALAD_API_KEY }}" \
+            --data-binary @- <<EOF
+          {
+            "container": {
+              "command": ["--porter", "512"],
+              "environment_variables": {                
+                "PG_WORKERS": "8",
+                "PROCESSING_WINDOW": "7",
+                "COMPLETION_WEBHOOK_URL": "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-porter-g2/stop",
+                "COMPLETION_WEBHOOK_API_KEY": "Salad-Api-Key:${{ secrets.SALAD_API_KEY }}"
+              },
+              "image": "${IMAGE}"
+            }
+          }
+          EOF

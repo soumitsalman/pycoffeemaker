@@ -7,7 +7,11 @@ else
     WORKING_DIR="$(pwd -P)"
 fi
 
-PYTHON="$WORKING_DIR/.venv/bin/python"
+if [[ -x "$WORKING_DIR/.venv/bin/python" ]]; then
+    PYTHON="$WORKING_DIR/.venv/bin/python"
+else
+    PYTHON="$(command -v python3 || command -v python)"
+fi
 RUN="$WORKING_DIR/run.py"
 
 set -a
