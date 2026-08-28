@@ -11,8 +11,6 @@ primary_region = 'iad'
   ignorefile = '.dockerignore'
 
 [env]
-  BATCH_SIZE = '512'
-  MODE = 'PORTER'
   PG_WORKERS = '8'
   PROCESSING_WINDOW = '7'
 
@@ -21,4 +19,7 @@ primary_region = 'iad'
 
 [[vm]]
   size = 'shared-cpu-2x'
-  memory = '4096mb'
+  memory = '3072mb'
+
+[processes]
+  app = "--porter 512"
