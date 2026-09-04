@@ -43,9 +43,10 @@ def normalize_tags(items: str|list[str]):
     return list(map(_snake, normalize_names(items)))
 
 def normalize_context_tag(tag: str):
-    tag = _snake(tag)
-    if len(tag) <= _TAG_MAX_LEN and tag not in _UNDETERMINED:
-        return tag
+    if tag := normalize_text(tag):
+        tag = _snake(tag)
+        if len(tag) <= _TAG_MAX_LEN:
+            return tag
 
 def normalize_cross_domain_impacts(impacts: list[str]):
     if not impacts: return impacts

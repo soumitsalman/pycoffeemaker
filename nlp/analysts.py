@@ -67,10 +67,10 @@ class TextAnalystBase(ABC):
             clear_gpu_cache()
         return False
 
-    def create_prompt(self, msg: str):
+    def create_prompt(self, user_msg: str, system_msg: Optional[str] = None):
         prompt = []        
-        input_text = msg[:self.max_prompt_len<<2] # this is a heuristic
-        if self.instruction: prompt.append({"role": "system", "content": f"SYSTEM_DATE:\n{now_str()}\n"+self.instruction})
+        input_text = user_msg[:self.max_prompt_len<<2] # this is a heuristic
+        if system_msg or self.instruction: prompt.append({"role": "system", "content": system_msg or self.instruction})
         prompt.append({
             "role": "user", 
             "content": self.input_template.format(
@@ -243,6 +243,11 @@ VLLM_MAX_NUM_BATCHED_TOKENS = int(os.getenv("VLLM_MAX_NUM_BATCHED_TOKENS", 0))
 VLLM_MAX_NUM_SEQS = int(os.getenv("VLLM_MAX_NUM_SEQS", 0))
 VLLM_GPU_MEMORY_UTILIZATION = float(os.getenv("VLLM_GPU_MEMORY_UTILIZATION", 0.92))
 VLLM_ATTENTION_BACKEND=os.getenv("VLLM_ATTENTION_BACKEND")
+_VLLM_STRUCTURED_OUTPUT_SYSTEM_INST="""
+TASK=Convert the user input into a structured JSON output
+OUTPUT=json_only|schema_strict
+NEVER_EMIT=prose|code_fences|newline|angle_brackets|delimited_list
+"""
 
 class VLLMTextAnalyst(TextAnalystBase):
     def __enter__(self):
@@ -262,7 +267,11 @@ class VLLMTextAnalyst(TextAnalystBase):
                 # enable_chunked_prefill=True,                        
                 # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,
             )
-            self.sampling_params = SamplingParams(
+            self.sampling_params_intermediate = SamplingParams(
+                **self.sampling_params,
+                max_tokens=self.max_new_tokens,                
+            )
+            self.sampling_params_structured = SamplingParams(
                 **self.sampling_params,
                 max_tokens=self.max_new_tokens,
                 structured_outputs=StructuredOutputsParams(
@@ -281,14 +290,21 @@ class VLLMTextAnalyst(TextAnalystBase):
         return super().__exit__(exc_type, exc_val, exc_tb)
 
     def run_batch(self, input_messages: list[str]) -> list[BaseModel]:
-        responses = self._llm.chat(
+        inter_responses = self._llm.chat(
             [self.create_prompt(msg) for msg in input_messages], 
-            sampling_params=self.sampling_params,             
+            sampling_params=self.sampling_params_intermediate,             
             chat_template_kwargs={"enable_thinking": self.enable_thinking},
             tokenization_kwargs={"truncate_prompt_tokens": self.max_prompt_len},
             use_tqdm=False, 
         )
-        return [self.parse_output(resp.outputs[0].text) if resp.outputs else None for resp in responses]
+        structured_responses = self._llm.chat(
+            [self.create_prompt(text_res.outputs[0].text, _VLLM_STRUCTURED_OUTPUT_SYSTEM_INST) for text_res in inter_responses], 
+            sampling_params=self.sampling_params_structured,
+            chat_template_kwargs={"enable_thinking": self.enable_thinking},
+            tokenization_kwargs={"truncate_prompt_tokens": self.max_prompt_len},
+            use_tqdm=False, 
+        )
+        return [self.parse_output(resp.outputs[0].text) if resp.outputs else None for resp in structured_responses]
 
 
 class RemoteTextAnalyst(TextAnalystBase):
