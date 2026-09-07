@@ -70,7 +70,7 @@ class TextAnalystBase(ABC):
     def create_prompt(self, msg: str):
         prompt = []        
         input_text = msg[:self.max_prompt_len<<2] # this is a heuristic
-        if self.instruction: prompt.append({"role": "system", "content": f"SYSTEM_DATE:\n{now_str()}\n"+self.instruction})
+        if self.instruction: prompt.append({"role": "system", "content": self.instruction})
         prompt.append({
             "role": "user", 
             "content": self.input_template.format(

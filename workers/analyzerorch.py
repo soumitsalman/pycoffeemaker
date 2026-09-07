@@ -20,7 +20,7 @@ from nlp import (
     is_cuda_oom,
 )
 from utils.fields import *
-from utils import VECTOR_LEN, date_str
+from utils import VECTOR_LEN, date_str, now_str
 from datacollectors import POST
 from .cacheops import *
 from .states import *
@@ -249,10 +249,10 @@ class Digestor:
             model_path=model_path,
             context_len=context_len,
             instruction=DIGEST_SYS,
-            input_template=DIGEST_INST,
+            input_template=f"SYSTEM_DATE={now_str()}\n"+DIGEST_INST,
             output_model=Digest,                       
             enable_thinking=False,
-            max_new_tokens=2048,
+            max_new_tokens=3072,
             **model_kwargs
         )
         self.batch_size = batch_size

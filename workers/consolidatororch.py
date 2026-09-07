@@ -10,7 +10,7 @@ from nlp import (
 )
 from itertools import chain, batched
 from utils.fields import *
-from utils import VECTOR_LEN, get_logger, now, log_runtime
+from utils import VECTOR_LEN, get_logger, now, log_runtime, now_str
 from datacollectors import POST
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
@@ -93,7 +93,16 @@ class Consolidator:
         if top_p := os.getenv("CONSOLIDATOR_TOP_P"): model_kwargs["top_p"] = float(top_p)
         if repetition_penalty := os.getenv("CONSOLIDATOR_REPETITION_PENALTY"): model_kwargs["repetition_penalty"] = float(repetition_penalty)
         if top_k := os.getenv("CONSOLIDATOR_TOP_K"): model_kwargs["top_k"] = int(top_k)
-        self.consolidator = create_text_analyst(model_path=model_path, context_len=context_len, instruction=BRIEFING_SYS, input_template=BRIEFING_INST, output_model=Briefing, enable_thinking=True, max_new_tokens=3072, **model_kwargs)
+        self.consolidator = create_text_analyst(
+            model_path=model_path, 
+            context_len=context_len, 
+            instruction=BRIEFING_SYS, 
+            input_template=f"SYSTEM_DATE={now_str()}\n"+BRIEFING_INST, 
+            output_model=Briefing, 
+            enable_thinking=True, 
+            max_new_tokens=3072, 
+            **model_kwargs
+        )
         self.batch_size = batch_size
 
     def _get_beans(self, **kwargs) -> list[dict]:

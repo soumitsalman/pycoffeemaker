@@ -12,7 +12,7 @@ _UNDETERMINED = {"n/a", "na", "none", "unmentioned", "not mentioned", "unspecifi
 _IMPACT_LEVELS = {"low", "medium", "high", "critical", "transformative"}
 
 
-_snake = lambda s: re.sub(r'_+', '_', textcase.snake(s)).strip('_')
+_snake = lambda s: re.sub(r'_+', '_', textcase.snake(s)).strip('_') if s else s
 
 def normalize_text(text: str):
     if not text: return
@@ -43,9 +43,9 @@ def normalize_tags(items: str|list[str]):
     return list(map(_snake, normalize_names(items)))
 
 def normalize_context_tag(tag: str):
-    tag = _snake(tag)
-    if len(tag) <= _TAG_MAX_LEN and tag not in _UNDETERMINED:
-        return tag
+    if tag := _snake(normalize_text(tag)):
+        if len(tag) <= _TAG_MAX_LEN:
+            return tag
 
 def normalize_cross_domain_impacts(impacts: list[str]):
     if not impacts: return impacts
