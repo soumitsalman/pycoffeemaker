@@ -154,6 +154,7 @@ class PGSack(Beansack):
             bean.title = clear_null_bytes(bean.title)
             bean.summary = clear_null_bytes(bean.summary)
             bean.content = clear_null_bytes(bean.content)
+            if bean.language: bean.language = bean.language.lower()
         return self._store(BEANS, beans)
     
     def store_related(self, relations: list[dict]):
