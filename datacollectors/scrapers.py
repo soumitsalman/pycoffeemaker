@@ -83,6 +83,17 @@ def _parse_jsonld_body(url: str, html: str) -> dict | None:
         }
     return {}
 
+def _jsonld_text(value) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    if isinstance(value, dict):
+        return _jsonld_text(
+            value.get("@value") or value.get("articleBody") or value.get("text") or value.get("description")
+        )
+    if isinstance(value, (list, tuple)) and value:
+        return _jsonld_text(value[0])
+    return None
+
 def _extract_jsonld_content(html: str) -> dict | None:
     """Extract article content from JSON-LD schema.org data (fallback for JS-rendered pages)."""
     
@@ -98,10 +109,11 @@ def _extract_jsonld_content(html: str) -> dict | None:
             if item.get('@type') not in ('NewsArticle', 'Article'):
                 continue
             result = {}
-            if item.get('headline'):
-                result[TITLE] = item['headline']
-            if item.get('description'):
-                result[CONTENT] = item['description']
+            if headline := _jsonld_text(item.get('headline')):
+                result[TITLE] = headline
+            raw_content = _jsonld_text(item.get('articleBody')) or _jsonld_text(item.get('description'))
+            if raw_content:
+                result[CONTENT] = html_to_markdown(raw_content)
             try:
                 author = item.get('author')
                 if isinstance(author, dict) and author.get('name'):
@@ -152,10 +164,13 @@ def _title_from_url(url: str) -> str | None:
     except Exception:
         return None
 
-_HTML_MARKERS = ("<!doctype", "<html", "<body", "<article", "<main")
+_HTML_MARKERS = ("<!doctype", "<html", "<body", "<article", "<main", "<section", "<div", "<p")
 
 def _is_parseable_html(html: str | None) -> bool:
-    if html: return any(marker in html for marker in _HTML_MARKERS)
+    if not html:
+        return False
+    lowered = html.lower()
+    return any(marker in lowered for marker in _HTML_MARKERS)
 
 class AsyncWebScraper:
     session: aiohttp.ClientSession = None
@@ -332,8 +347,14 @@ class AsyncWebScraper:
         if not result:
             return None
 
+        meta_url = result.get(URL)
+        if (urlparse(meta_url or "").path or "").rstrip("/") == "/error":
+            return None
+
+        retrieval_url = bean.get(URL)
+        chosen_url = resolve_content_url(retrieval_url, meta_url=meta_url)
         bean.update({
-            URL: result.get(URL) or bean.get(URL),
+            URL: chosen_url,
             KIND: bean.get(KIND) or result.get(KIND),
             TITLE: result.get("meta_title") or bean.get(TITLE) or result.get(TITLE),
             SUMMARY: bean.get(SUMMARY) or result.get(DESCRIPTION),

@@ -5,8 +5,8 @@ import tldextract
 from aiohttp import ClientResponse
 from dataclasses import dataclass
 from dateutil.parser import parse as date_parser
-from html_to_markdown import convert
-from urllib.parse import urljoin, urlparse, urlunparse
+from html_to_markdown import ConversionOptions, convert
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from utils.dates import ensure_utc, now, usable_created
 from utils.fields import (
     ARTICLE_LANGUAGE,
@@ -338,14 +338,87 @@ def strip_html_tags(html):
     return " ".join(text.split())
 
 
+_HTML_TO_MD_OPTIONS = ConversionOptions(extract_metadata=False)
+_HTML_TO_MD_PASSES = 4
+_CDATA_RE = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.DOTALL | re.IGNORECASE)
+_FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`[^`]+`")
+_HTML_TAG_RE = re.compile(
+    r"</?\s*(?:p|div|span|br|hr|ul|ol|li|h[1-6]|table|thead|tbody|tfoot|tr|td|th|"
+    r"a|img|em|strong|b|i|u|s|font|center|blockquote|pre|code|section|article|"
+    r"header|footer|nav|main|figure|figcaption|iframe|script|style|html|body|"
+    r"head|meta|link|form|input|button|label|textarea|select|option|svg|video|"
+    r"audio|source|picture|object|embed|aside|noscript|dl|dt|dd|small|sup|sub|"
+    r"mark|del|ins|cite|q|abbr|time|address|details|summary|fieldset|legend|"
+    r"optgroup|canvas|map|area|col|colgroup|caption|nobr|tt|kbd|samp|var)\b"
+    r"(?:\s[^>]*)?/?>",
+    re.IGNORECASE,
+)
+_MARKDOWN_BODY_FIELDS = (SUMMARY, CONTENT, DESCRIPTION)
+
+
+def _unwrap_cdata(text: str) -> str:
+    while True:
+        unwrapped = _CDATA_RE.sub(r"\1", text)
+        if unwrapped == text:
+            return text
+        text = unwrapped
+
+
+def _text_outside_code(text: str) -> str:
+    stripped = _FENCED_CODE_RE.sub("", text)
+    return _INLINE_CODE_RE.sub("", stripped)
+
+
+def _needs_html_conversion(text: str | None) -> bool:
+    if not text:
+        return False
+    if _CDATA_RE.search(text):
+        return True
+    return bool(_HTML_TAG_RE.search(_text_outside_code(text)))
+
+
+def _strip_html_tags_outside_code(text: str) -> str:
+    parts = re.split(r"(```.*?```)", text, flags=re.DOTALL)
+    cleaned = []
+    for i, part in enumerate(parts):
+        if i % 2:
+            cleaned.append(part)
+            continue
+        subparts = re.split(r"(`[^`]+`)", part)
+        cleaned.extend(
+            sp if j % 2 else _HTML_TAG_RE.sub("", sp)
+            for j, sp in enumerate(subparts)
+        )
+    return "".join(cleaned).strip()
+
+
+def _converted_markdown(html: str) -> str:
+    result = convert(html, _HTML_TO_MD_OPTIONS)
+    md = getattr(result, "content", None)
+    if md is None and isinstance(result, dict):
+        md = result.get("content")
+    elif md is None and isinstance(result, str):
+        md = result
+    return (md or "").strip()
+
+
 def html_to_markdown(html: str | None) -> str | None:
-    if not html:
+    if html is None or not str(html).strip():
         return None
-    try:        
-        md = convert(html).content.strip()
-        return md or None
+    text = _unwrap_cdata(str(html))
+    md = None
+    try:
+        for _ in range(_HTML_TO_MD_PASSES):
+            md = _converted_markdown(text)
+            if not md:
+                return None
+            if not _needs_html_conversion(md):
+                return md
+            text = _unwrap_cdata(md)
     except Exception:
         return strip_html_tags(html)
+    return _strip_html_tags_outside_code(md) or None
 
 
 def full_url(base_url: str, target_url: str) -> str:
@@ -357,6 +430,79 @@ def remove_query_params(url: str) -> str:
         return urlunparse(urlparse(url)._replace(query="", fragment=""))
     except Exception:
         return url
+
+
+_TRACKING_QUERY_KEYS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
+    "fbclid", "gclid", "gclsrc", "dclid", "msclkid", "twclid", "igshid",
+    "mc_cid", "mc_eid", "_hsenc", "_hsmi", "mkt_tok",
+    "at_medium", "at_campaign", "at_source",
+    "source",
+}
+
+
+def _is_tracking_param(key: str) -> bool:
+    k = (key or "").lower()
+    return k.startswith("utm_") or k in _TRACKING_QUERY_KEYS
+
+
+def _host_key(netloc: str) -> str:
+    n = (netloc or "").lower()
+    return n[4:] if n.startswith("www.") else n
+
+
+def _path_segments(path: str) -> list[str]:
+    return [p for p in (path or "").split("/") if p]
+
+
+def strip_tracking_params(url: str) -> str:
+    if not url:
+        return url
+    try:
+        parts = urlparse(url)
+        kept = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if not _is_tracking_param(k)]
+        return urlunparse(parts._replace(query=urlencode(kept, doseq=True), fragment=""))
+    except Exception:
+        return url
+
+
+def is_compatible_content_url(retrieval: str, candidate: str) -> bool:
+    """True when candidate is the same article: same host, same or deeper path."""
+    if not retrieval or not candidate:
+        return False
+    try:
+        r, c = urlparse(retrieval), urlparse(candidate)
+    except Exception:
+        return False
+    if _host_key(r.netloc) != _host_key(c.netloc):
+        return False
+    rpath = (r.path or "/").rstrip("/") or "/"
+    cpath = (c.path or "/").rstrip("/") or "/"
+    rsegs, csegs = _path_segments(rpath), _path_segments(cpath)
+    if len(csegs) < len(rsegs):
+        return False
+    if rpath == cpath:
+        return True
+    if rpath != "/" and cpath.startswith(rpath + "/"):
+        return True
+    return len(csegs) == len(rsegs) and csegs[:-1] == rsegs[:-1]
+
+
+def _merge_material_query(retrieval: str, canonical: str) -> str:
+    r, c = urlparse(retrieval), urlparse(canonical)
+    r_mat = {k: v for k, v in parse_qsl(r.query, keep_blank_values=True) if not _is_tracking_param(k)}
+    c_mat = {k: v for k, v in parse_qsl(c.query, keep_blank_values=True) if not _is_tracking_param(k)}
+    merged = {**r_mat, **c_mat}
+    query = urlencode(list(merged.items()), doseq=True)
+    return urlunparse(c._replace(query=query, fragment=""))
+
+
+def resolve_content_url(retrieval: str, meta_url: str | None = None, final_url: str | None = None) -> str:
+    """Prefer canonical/final URL only when it is the same article; keep material query params."""
+    for candidate in (meta_url, final_url):
+        if candidate and is_compatible_content_url(retrieval, candidate):
+            return _merge_material_query(retrieval, candidate)
+    return strip_tracking_params(retrieval) if retrieval else retrieval
 
 
 def with_www(url: str) -> str | None:
@@ -386,8 +532,14 @@ def cleanup_item(item: dict) -> dict:
         CHATTER_URL, BASE_URL, SITE_NAME, DESCRIPTION, LANGUAGE,
         ARTICLE_LANGUAGE, SITE_LANGUAGE, AUTHOR_EMAIL, FORUM,
     ):
-        if value := item.get(text_field):
-            item[text_field] = cleanup_text(item.get(text_field))
+        if not (value := item.get(text_field)):
+            continue
+        if text_field in _MARKDOWN_BODY_FIELDS and _needs_html_conversion(value):
+            item[text_field] = html_to_markdown(value)
+        elif text_field == TITLE and _HTML_TAG_RE.search(value):
+            item[text_field] = strip_html_tags(value)
+        else:
+            item[text_field] = cleanup_text(value)
 
     for url_field in (URL, BASE_URL, FAVICON, RSS_FEED, IMAGE_URL, DOMAIN_NAME, CHATTER_URL):
         if value := item.get(url_field):

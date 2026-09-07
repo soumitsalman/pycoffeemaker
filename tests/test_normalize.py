@@ -1,9 +1,10 @@
 import pytest
 
 from datacollectors.apicollectors import _build_hackernews_item, _build_reddit_json_item
-from datacollectors.scrapers import AsyncWebScraper
+from datacollectors.normalize import cleanup_item, guess_content_type, html_to_markdown
+from datacollectors.scrapers import AsyncWebScraper, _extract_jsonld_content
 from utils.dates import now
-from datacollectors.normalize import guess_content_type, html_to_markdown
+from utils.fields import CONTENT, SUMMARY, TITLE
 
 _NO_H1 = "<p>Hello <strong>world</strong>. <a href='https://x.com'>link</a></p>"
 _WITH_H1 = "<h1>Article Title</h1><p>First paragraph.</p><ul><li>one</li></ul>"
@@ -44,6 +45,58 @@ def test_html_to_markdown_malformed_fallback():
     result = html_to_markdown("<p>unclosed")
     assert result
     assert "unclosed" in result
+
+
+@pytest.mark.parametrize("html,expected_in", [
+    ("&lt;p&gt;Hello &lt;strong&gt;world&lt;/strong&gt;&lt;/p&gt;", "Hello **world**"),
+    ("&amp;lt;p&amp;gt;Hello&amp;lt;/p&amp;gt;", "Hello"),
+    ("<![CDATA[<p>Hello <em>there</em></p>]]>", "Hello *there*"),
+    ("Intro text &lt;p&gt;Body para&lt;/p&gt; more", "Body para"),
+])
+def test_html_to_markdown_decodes_escaped_and_cdata(html, expected_in):
+    result = html_to_markdown(html)
+    assert result
+    assert expected_in in result
+    assert "<p>" not in result.lower()
+    assert "</p>" not in result.lower()
+    assert "<![CDATA[" not in result
+
+
+def test_html_to_markdown_keeps_tags_inside_code_fences():
+    result = html_to_markdown("<pre><code>&lt;div&gt;code&lt;/div&gt;</code></pre>")
+    assert result
+    assert "```" in result
+    assert "<div>" in result
+
+
+def test_cleanup_item_converts_leftover_html_in_body_fields():
+    item = cleanup_item({
+        TITLE: "<b>Breaking</b> news",
+        SUMMARY: "<p>Short <em>blurb</em>.</p>",
+        CONTENT: "<div><p>Hello <strong>world</strong>.</p></div>",
+        "url": "https://example.com/a",
+    })
+    assert "<" not in item[TITLE]
+    assert "Breaking" in item[TITLE]
+    assert "<p>" not in item[SUMMARY]
+    assert "*blurb*" in item[SUMMARY] or "blurb" in item[SUMMARY]
+    assert "<p>" not in item[CONTENT]
+    assert "**world**" in item[CONTENT]
+
+
+def test_jsonld_html_body_is_converted_to_markdown():
+    html = (
+        '<script type="application/ld+json">'
+        '{"@graph": [{"@type": "NewsArticle", "headline": "H",'
+        ' "articleBody": "<p>Hello <strong>world</strong></p>",'
+        ' "description": "<p>ignored summary</p>"}]}'
+        "</script>"
+    )
+    result = _extract_jsonld_content(html)
+    assert result
+    assert "<p>" not in result[CONTENT]
+    assert "Hello" in result[CONTENT]
+    assert "**world**" in result[CONTENT]
 
 
 @pytest.mark.parametrize(("bean", "feed_url", "expected"), [
@@ -131,3 +184,41 @@ def test_outbound_reddit_url_uses_guess_content_type():
     }, "procurement", "news")
 
     assert item["kind"] == "procurement_notice"
+
+
+def test_strip_tracking_keeps_page_and_drops_share_params():
+    from datacollectors.normalize import strip_tracking_params
+    assert strip_tracking_params("https://x.com/a?utm_source=reddit&page=2") == "https://x.com/a?page=2"
+    assert strip_tracking_params("https://x.com/a?source=linkedin") == "https://x.com/a"
+    assert strip_tracking_params("https://x.com/a?utm_source=reddit") == "https://x.com/a"
+
+
+def test_error_canonical_is_rejected_and_page_query_is_kept():
+    from datacollectors.normalize import is_compatible_content_url, resolve_content_url
+    retrieval = "https://www.govinfo.gov/content/pkg/uscourts-x/html/x.htm"
+    assert not is_compatible_content_url(retrieval, "https://www.govinfo.gov/error")
+    assert resolve_content_url(retrieval, meta_url="https://www.govinfo.gov/error", final_url="https://www.govinfo.gov/error") == retrieval
+    chosen = resolve_content_url(
+        "https://www.bbc.co.uk/news/foo?at_medium=rss&page=1",
+        meta_url="https://www.bbc.co.uk/news/foo",
+    )
+    assert chosen == "https://www.bbc.co.uk/news/foo?page=1"
+
+
+def test_prep_rejects_incompatible_redirect():
+    collected = now()
+    bean = {
+        "kind": "news",
+        "url": "https://www.govinfo.gov/content/pkg/uscourts-x/html/x.htm",
+        "title": "Opinion",
+        "collected": collected,
+        "created": collected,
+        "base_url": "govinfo.gov",
+        "domain_name": "govinfo",
+    }
+    result = {
+        "url": "https://www.govinfo.gov/error",
+        "content": "error page " + ("word " * 400),
+    }
+    assert AsyncWebScraper._prep_page_result(None, bean, result) is None
+    assert bean["url"] == "https://www.govinfo.gov/content/pkg/uscourts-x/html/x.htm"
