@@ -13,7 +13,7 @@ Workers share a **state cache**: durable storage for in-flight documents. Each o
 | `chatters` | `id` |
 | `composites` | `id` |
 
-- **States** — Named pipeline steps (`workers/utils.py`): `collected`, `embedded`, `classified`, `clustered`, `extracted`, `digested`, `consolidated`, `beansacked`, `cupboarded`, etc.
+- **States** — Named pipeline steps (`workers/states.py`): `collected`, `embedded`, `clustered`, `extracted`, `digested`, `consolidated`, `beansacked`, `cupboarded`, plus porter link states (`beansacked:link`, `cupboarded:link`). `classified` is defined but unused.
 - **Per-object history** — Each object can have one entry per state it has reached. Payloads are usually **partial** (only fields that worker added). The full view for downstream work is built by reading multiple states together.
 - **Idempotency** — Re-`set()`ting the same `(object, state)` is ignored. Workers select work with “has state A, does not have state B” (or several required states).
 
@@ -44,55 +44,59 @@ Prune old payload data; state markers remain so work is not redone.
 
 ## Bean state flow
 
-All analyzer steps after collect read `collected` (or `embedded` for classifier) and write a new state row; branches are independent until a porter or consolidator merges multiple states.
+Analyzer steps after collect read `collected` (embedder/extractor/digestor) or `embedded` (clusterer) and write a new state row. Branches are independent until a porter or consolidator merges multiple states.
 
 ```
                          collected
               ┌────────────┼────────────┐
               ▼            ▼            ▼
           embedded     extracted     digested
-              │
-         ┌────┴────┐
-         ▼         ▼
-    classified  clustered
-              │
-              │  consolidator: merge collected + embedded + classified
-              │               + clustered + digested → consolidated
-              │               (composites → collected on composites table)
-              ▼
-        consolidated
+              │                         │
+              ▼                         │
+          clustered                     │
+              │                         │
+              └──────────┬──────────────┘
+                         │
+                         ▼
+                   consolidated
+              (composites → collected
+               on composites table)
+```
+
+Embedder also writes topic/sentiment labels onto the `embedded` row (CPU kNN over `factory/categories.parquet` and `factory/sentiments.parquet`). There is no separate `classified` cache row.
 
 Porter merge requirements (each needs every listed state row for that bean):
 
-  BeansackPorter — main beans:  collected + embedded + classified + extracted  → beansacked
-                   related:     clustered  → beansacked:link
+```
+BeansackPorter — main beans:  collected + embedded + extracted  → beansacked
+                 related:     clustered  → beansacked:link
+                 publishers / chatters: collected → beansacked
 
-  CupboardPorter — events:      collected + embedded + classified + digested  → cupboarded
-                   signals:     composites.collected  → cupboarded
-                   related:     clustered  → cupboarded:link
+CupboardPorter — events:      collected + embedded + extracted + digested  → cupboarded
+                 signals:     composites.collected  → cupboarded
+                 related:     clustered  → cupboarded:link
+                 sources:     publishers.collected → cupboarded
 ```
 
-`extracted` is required for Beansack but not for Cupboard events. `digested` is required for Cupboard events and consolidator, but not for Beansack main beans. `clustered` is only required for related-link porters and consolidator, not for the main bean/event hydrate paths.
+`extracted` is required for Beansack beans and Cupboard events. `digested` is required for Cupboard events and consolidator, not for Beansack main beans. `clustered` is required for related-link porters and consolidator, not for the main bean/event hydrate paths.
 
 ## Who uses it
 
 | Worker | Cache class | `get` | `set` / other |
 |--------|-------------|-------|----------------|
 | **Collector** | `AsyncStateCache` | — | `beans` / `publishers` / `chatters` → `collected`; `deduplicate` before scrape |
-| **Embedder** | `StateCache` | `beans`: `collected` ∖ `embedded` | `embedded` (+ `embedding`) |
-| **Extractor** | `StateCache` | `beans`: `collected` ∖ `extracted` | `extracted` (+ `entities`) |
-| **Digestor** | `StateCache` | `beans`: `collected` ∖ `digested` | `digested` (+ `digest`) |
-| **Classifier** | `StateCache` | `beans`: `embedded` ∖ `classified` / ∖ `clustered` | `classified`, `clustered` |
-| **Consolidator** | `StateCache` | `beans`: multi-state; related by `ids` | `composites` → `collected`; `beans` → `consolidated` |
-| **Beansack porter** | `AsyncStateCache` | `beans`: `[collected, embedded, classified, extracted]` ∖ `beansacked`; publishers, chatters, clustered links | `beansacked`, `beansacked:link`, … |
-| **Cupboard porter** | `AsyncStateCache` | `beans`: `[collected, embedded, classified, digested]` ∖ `cupboarded`; composites, publishers, clustered | `cupboarded`, `cupboarded:link`, … |
-
-**Classifier** also uses `ClassificationCache` (`CLASSIFICATION_CACHE`) for topic/sentiment vectors and clustering — separate from the processing state cache.
+| **Embedder** | `StateCache` | `beans`: `collected` ∖ `embedded` | `embedded` (`embedding`, categories, sentiments) |
+| **Extractor** | `StateCache` | `beans`: `collected` ∖ `extracted` | `extracted` (`entities`) |
+| **Digestor** | `StateCache` | `beans`: `collected` ∖ `digested` | `digested` (`digest`) |
+| **Clusterer** | `StateCache` + `ClassificationCache` | `beans`: `embedded` ∖ `clustered` | `clustered` (`related`); vectors stored in `CLASSIFICATION_CACHE` |
+| **Consolidator** | `StateCache` | `beans`: `[collected, embedded, clustered, extracted, digested]` ∖ `consolidated`; related by `ids` | `composites` → `collected`; `beans` → `consolidated` |
+| **Beansack porter** | `AsyncStateCache` | `beans`: `[collected, embedded, extracted]` ∖ `beansacked`; publishers, chatters, clustered links | `beansacked`, `beansacked:link` |
+| **Cupboard porter** | `AsyncStateCache` | `beans`: `[collected, embedded, extracted, digested]` ∖ `cupboarded`; composites, publishers, clustered | `cupboarded`, `cupboarded:link` |
 
 Wiring in `run.py`: `PROCESSING_CACHE` + `cache_settings` (id keys per object type). Collector and porter use async cache; analyzers use sync cache.
 
 ## Related docs
 
-- `workers/utils.py` — state and field constants
+- `workers/states.py` — table names and state constants
 - `AGENTS.md` / `README.md` — modes and env vars
-- `workers/workercache/pgcache.py` — default backend implementation
+- `processingcache/pgcache.py` — default backend implementation

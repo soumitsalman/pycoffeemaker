@@ -107,7 +107,7 @@ with EntityExtractor(
 |-----------------|---------|----------|
 | (none) | `TransformerEmbeddings` / `TransformerTextAnalyst` | HuggingFace Hub or local path |
 | `onnx://` | `ORTEmbeddings` | ONNX Runtime (embeddings only) |
-| `openvino://` | `OVEmbeddings` | OpenVINO (embeddings only) |
+| `openvino://` | `OVEmbeddings` | Dead: raises; `optimum-intel` removed — use `infinity://` |
 | `llamacpp://` | `LlamaCppEmbeddings` | llama.cpp GGUF (embeddings only) |
 | `vllm://` | `VLLMEmbedder` / `VLLMTextAnalyst` | vLLM batched inference |
 | `infinity://` | `InfinityEmbeddings` | `infinity_emb` in-process embeddings |
@@ -121,9 +121,8 @@ Examples:
 # HuggingFace (default)
 create_embedder("sentence-transformers/all-MiniLM-L6-v2", context_len=512)
 
-# ONNX / OpenVINO / llama.cpp / vLLM / Infinity
+# ONNX / llama.cpp / vLLM / Infinity
 create_embedder("onnx://./model.onnx", context_len=512)
-create_embedder("openvino://./model_ir.xml", context_len=512)
 create_embedder("llamacpp://./model.gguf", context_len=512)
 create_embedder("vllm://BAAI/bge-small-en-v1.5", context_len=512)
 create_embedder("infinity://BAAI/bge-small-en-v1.5", context_len=512)
@@ -184,7 +183,7 @@ Workers wire this package into the pipeline:
 
 ## Implementation notes
 
-- Embedder backends: `embedders.py` (`RemoteEmbeddings`, `LlamaCppEmbeddings`, `TransformerEmbeddings`, `OVEmbeddings`, `ORTEmbeddings`, `VLLMEmbedder`, `InfinityEmbeddings`)
+- Embedder backends: `embedders.py` (`RemoteEmbeddings`, `LlamaCppEmbeddings`, `TransformerEmbeddings`, `ORTEmbeddings`, `VLLMEmbedder`, `InfinityEmbeddings`; `OVEmbeddings` remains as a dead `openvino://` stub)
 - Text-analyst backends: `analysts.py` (`TransformerTextAnalyst`, `VLLMTextAnalyst`, `RemoteTextAnalyst`)
 - NER: `extractors.py` (`EntityExtractor`)
 - Schemas: `models.py` (`Entities`, `Digest`, `Briefing`, `AINewsDigest`, `FinancialMarketsNewsSummary`, …)

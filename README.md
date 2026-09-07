@@ -8,21 +8,25 @@ Can be deployed as standalone worker nodes or imported by other services (e.g. E
 
 ```
 pycoffeemaker/
-├── run.py                 # Entry point: --mode selects worker
-├── run_pipeline.sh        # Multi-stage scheduler (GPU/CPU/IO ordering)
-├── machine_ops.py         # Start/stop GPU cloud instances (TensorDock, Azure)
+├── run.py                 # Entry: --mode selects worker; loads .env
+├── run_pipeline.sh        # Multi-stage scheduler + checked-in model defaults
 ├── requirements.txt       # Full deps (GPU/LLM workloads)
 ├── requirements-io.txt    # IO-only deps (collector, porter)
-├── DockerfileGPU          # CUDA image (digestor, vLLM, etc.)
-├── DockerfileIO           # Slim IO image
-├── docker-compose.yaml    # Local stack: pgcache, mongo, postgres, workers, azurite, crawl4ai
+├── requirements-dev.txt   # Test/dev extras
+├── DockerfileGPU          # CUDA image; ENTRYPOINT python run.py
+├── DockerfileIO           # Slim Python 3.13; ENTRYPOINT run_pipeline.sh
+├── docker-compose.yaml    # Legacy local stack (mongo / INDEXER / COMPOSER)
+├── fly.collector.toml     # Fly.io collector job (DockerfileIO)
+├── fly.porter.toml        # Fly.io porter job (DockerfileIO)
 ├── factory/
 │   ├── feeds.yaml         # RSS/API/social source lists for COLLECTOR
-│   ├── pipeline-defaults.env  # Checked-in model paths and analyzer defaults
-│   ├── classifications.yaml  # Topic/sentiment labels
-│   ├── setup.py / migrate.py / rectify.py  # DB setup & maintenance
-│   ├── install-thundercompute-s6-tasks.sh  # s6 boot task installer (ThunderCompute)
-│   └── thundercompute-s6-tasks.sh          # Boot entry: run_pipeline.sh at VM start
+│   ├── classifications.yaml
+│   ├── categories.parquet / sentiments.parquet  # Embedder label indexes
+│   ├── setup.py / migrate.py / rectify*.py      # DB setup & maintenance
+│   ├── install-thundercompute-s6-tasks.sh       # s6 oneshot installer (no args)
+│   ├── thundercompute-s6-tasks.sh               # Boot: hardcoded GPU stages
+│   ├── salad-deployment/                        # Salad Compute recipes
+│   └── deprecated/                              # Old GPU ops / prod setup
 ├── workers/               # Orchestrators (operators)
 │   ├── collectororch.py   # COLLECTOR
 │   ├── analyzerorch.py    # EMBEDDER, CLUSTERING, EXTRACTOR, DIGESTOR
@@ -30,17 +34,18 @@ pycoffeemaker/
 │   ├── porterorch.py      # PORTER → Beansack + Cupboard
 │   ├── states.py          # Cache table names + pipeline state constants
 │   └── cacheops.py        # Shared bean encache/decache helpers
-├── processingcache/       # Fault-tolerant state store (pg, sqlite, firebird, surreal)
+├── processingcache/       # Fault-tolerant state store (pg default)
 │   ├── base.py            # StateCacheBase / AsyncStateCacheBase
 │   ├── pgcache.py         # Default PostgreSQL state cache (PROCESSING_CACHE)
 │   ├── clscache.py        # Classification vector store (CLASSIFICATION_CACHE)
-│   ├── extensions/        # Alternate backends (sqlite, firebird, surreal, pg+cls)
+│   ├── extensions/        # sqlite, surreal, pg+cls
 │   └── STATEMACHINE.md    # Schema and read/write patterns
 ├── utils/                 # Shared logging, dates, ids, fields, env loading
 ├── datacollectors/        # RSS, APIs, async web scrapers (see datacollectors/README.md)
 ├── nlp/                   # Embeddings, digests, NER (see nlp/README.md)
 ├── pybeansack/            # Bean/Chatter/Publisher models + DB backends (see pybeansack/README.md)
-├── pycupboard/            # Sip/Source models for Cortado (Cupboard)
+├── pycupboard/            # Sip/Source models; PG Cupboard for PORTER
+├── design/                # Design notes
 ├── tests/                 # Integration tests & sample source YAMLs
 └── .env                   # Local secrets and connection strings (not committed)
 ```
@@ -50,7 +55,7 @@ pycoffeemaker/
 | Stage | Mode | What it does |
 |-------|------|----------------|
 | Collect | `COLLECTOR` | Ingest RSS, APIs, Reddit, scraped pages; normalize title, content, metadata, chatter stats |
-| Embed | `EMBEDDER` | Vector embeddings; lightweight topic/sentiment labels (CPU) |
+| Embed | `EMBEDDER` | Vector embeddings (GPU) plus topic/sentiment labels (CPU kNN); both written as `embedded` |
 | Cluster | `CLUSTERING` | Related-article clustering (`CLASSIFICATION_CACHE`) |
 | Extract | `EXTRACTOR` | Named entities (people, companies, regions, tickers) via GLiNER |
 | Digest | `DIGESTOR` | Structured digests (gist, highlights) via LLM |
@@ -77,10 +82,12 @@ Each flag enables a stage and sets its `--batch_size`. Omit flags for stages you
 | `COLLECTOR` | `collected` | title, content, source, dates, tags |
 | `EMBEDDER` | `embedded` | `embedding`, categories, sentiments |
 | `CLUSTERING` | `clustered` | `related` links (porter link tables) |
-| `EXTRACTOR` | `extracted` | `entities` (Beansack main beans) |
-| `DIGESTOR` | `digested` | digest-derived regions/entities (Cupboard events) |
-| `CONSOLIDATOR` | `consolidated` | composite briefings → Cupboard signals |
+| `EXTRACTOR` | `extracted` | `entities` (Beansack beans and Cupboard events) |
+| `DIGESTOR` | `digested` | digest fields (Cupboard events) |
+| `CONSOLIDATOR` | `consolidated` on beans; composites → `collected` | composite briefings → Cupboard signals |
 | `PORTER` | `beansacked` / `cupboarded` | rows in Beansack / Cupboard |
+
+`CLASSIFIED` exists in `workers/states.py` but no worker writes or reads that state. Topic/sentiment labels are stored on `embedded`.
 
 State merge rules: `processingcache/STATEMACHINE.md`.
 
@@ -111,7 +118,11 @@ Suggested cadence: collector ~2×/day; embedder/clustering/extractor/digestor ~3
 
 ### Configuration
 
-`factory/pipeline-defaults.env` holds checked-in defaults for deployment convenience (model paths, context lengths, analyzer tuning). Python entrypoints load it first via `utils/env.load_coffeemaker_env`, then `.env` at repo root with override. Without a local `.env`, workers use those defaults as-is. Put secrets and host-specific overrides (`PROCESSING_CACHE`, `BEANSACK_CONNECTION_STRING`, API keys, alternate `EMBEDDER_PATH`, etc.) in `.env` only. `run_pipeline.sh` sources `.env` for shell-level vars (e.g. `SHUTDOWN_URL`).
+Checked-in model defaults live at the top of `run_pipeline.sh` (paths, context lengths, sampling). The script then sources `.env` so secrets and host overrides win.
+
+`run.py` loads **only** `.env` via `dotenv` (`load_dotenv(..., override=True)`). It does not apply `run_pipeline.sh` defaults — set `EMBEDDER_PATH` and the other model vars in `.env` (or the environment) before `python run.py`. Factory scripts call `utils.env.load_coffeemaker_env`, which also only loads `.env`.
+
+Put `PROCESSING_CACHE`, `BEANSACK_CONNECTION_STRING`, API keys, and host-specific model paths in `.env`. `run_pipeline.sh` uses `.env` for shell-level vars such as `COMPLETION_WEBHOOK_URL`.
 
 ## Project Cafecito naming
 
@@ -132,7 +143,7 @@ Suggested cadence: collector ~2×/day; embedder/clustering/extractor/digestor ~3
 
 - **Collector** (`collectororch.py`): reads `COLLECTOR_SOURCES` (default `factory/feeds.yaml`), uses `datacollectors` for RSS/API/scrape; writes `collected` state.
 - **Embedder / Clustering / Extractor / Digestor** (`analyzerorch.py`): read from cache by state, call `nlp`, write next state (`embedded`, `clustered`, `extracted`, `digested`).
-- **Consolidator** (`consolidatororch.py`): composite briefings from related beans → `consolidated`.
+- **Consolidator** (`consolidatororch.py`): composite briefings from related beans → `composites.collected` and beans `consolidated`.
 - **Porter** (`porterorch.py`): `BeansackPorter` + `CupboardPorter` hydrate downstream DBs from cache.
 - **States / cache helpers**: `states.py` (table + state constants), `cacheops.py` (shared encache/decache).
 
@@ -142,17 +153,17 @@ Suggested cadence: collector ~2×/day; embedder/clustering/extractor/digestor ~3
 
 ### `processingcache/`
 
-Fault-tolerant state machine used by all orchestrators. Default backend: `pgcache.StateCache` / `pgcache.AsyncStateCache` via `PROCESSING_CACHE`. `clscache.ClassificationCache` backs `CLUSTERING` (`CLASSIFICATION_CACHE`). Alternate backends live under `extensions/` (sqlite, firebird, surreal). State flow: `processingcache/STATEMACHINE.md`.
+Fault-tolerant state machine used by all orchestrators. Default backend: `pgcache.StateCache` / `pgcache.AsyncStateCache` via `PROCESSING_CACHE`. `clscache.ClassificationCache` backs `CLUSTERING` (`CLASSIFICATION_CACHE`). Alternate backends live under `extensions/` (sqlite, surreal, pg+cls). State flow: `processingcache/STATEMACHINE.md`.
 
 Tracks per-object processing states (`beans`, `publishers`, `chatters`, `composites`).
 
 ### `utils/`
 
-Shared helpers used across workers and entrypoints: logging, dates/ids, field constants, env loading (`utils.env.load_coffeemaker_env`).
+Shared helpers used across workers and entrypoints: logging, dates/ids, field constants, env loading (`utils.env.load_coffeemaker_env` → `.env` only).
 
 ### [`nlp/`](nlp/README.md)
 
-Embeddings (`create_embedder`), structured extraction (`create_text_analyst` / `Digest`, `Briefing`), NER (`EntityExtractor` / `Entities`). Supports local HF, vLLM, ONNX, OpenVINO, remote OpenAI-compatible APIs. Details: [nlp/README.md](nlp/README.md).
+Embeddings (`create_embedder`), structured extraction (`create_text_analyst` / `Digest`, `Briefing`), NER (`EntityExtractor` / `Entities`). Backends: local HF, vLLM, ONNX, llama.cpp, Infinity, remote OpenAI-compatible APIs. The `openvino://` prefix still routes to `OVEmbeddings`, but that backend raises (`optimum-intel` removed). Details: [nlp/README.md](nlp/README.md).
 
 ### [`pybeansack/`](pybeansack/README.md)
 
@@ -160,28 +171,28 @@ Pydantic models (`Bean`, `Chatter`, `Publisher`) and storage: `create_client("pg
 
 ### `pycupboard/`
 
-`Sip`, `Source` models; PostgreSQL cupboard via `Cupboard` connection string.
+`Sip`, `Source` models; production porter uses `pycupboard.pgcupboard.Cupboard`.
 
 ### `factory/`
 
-Operational config: feed lists, `pipeline-defaults.env`, classification taxonomies, migrations—not runtime library code.
+Operational config and ops scripts: feed lists, parquet label indexes, migrations, ThunderCompute boot, Salad recipes. Not runtime library code. Old TensorDock/Azure helpers live under `factory/deprecated/`.
 
 ## How to use
 
 ### Prerequisites
 
-- Python 3.10+ (Docker images use 3.10 or 3.13)
-- `factory/pipeline-defaults.env` for checked-in pipeline defaults; `.env` at repo root for secrets and local overrides
-- Model paths for analyzer modes (`EMBEDDER_PATH`, `EXTRACTOR_PATH`, `DIGESTOR_PATH`, `CONSOLIDATOR_PATH`)
-- `PROCESSING_CACHE` — state DB connection (default: PostgreSQL via `processingcache/pgcache.py`; see `extensions/` for sqlite, firebird, surreal)
+- Python 3.10+ locally (`DockerfileIO` is 3.13; `DockerfileGPU` is the PyTorch CUDA 12.8 runtime)
+- `.env` at repo root for secrets and connection strings
+- Model paths for analyzer modes (`EMBEDDER_PATH`, `EXTRACTOR_PATH`, `DIGESTOR_PATH`, `CONSOLIDATOR_PATH`) — set in `.env`, or rely on `run_pipeline.sh` defaults when using that script
+- `PROCESSING_CACHE` — state DB connection (default: PostgreSQL via `processingcache/pgcache.py`; see `extensions/` for sqlite, surreal, pg+cls)
 - For `PORTER`: `BEANSACK_CONNECTION_STRING`, `CUPBOARD_CONNECTION_STRING`
 
 ### Install (local)
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r pybeansack/requirements.txt
-pip install -r requirements.txt   # or requirements-io.txt for collector-only
+pip install -r requirements.txt   # or requirements-io.txt for collector/porter
+# optional: pip install -r requirements-dev.txt
 ```
 
 ### Run a worker
@@ -209,7 +220,7 @@ python run.py --mode PORTER --batch_size 32
 
 ### Key Environment Variables
 
-Python entrypoints load `factory/pipeline-defaults.env` first, then `.env`; duplicate values in `.env` win. See **Configuration** under Pipeline scheduling. `run_pipeline.sh` sources `.env` for shell-level settings like `SHUTDOWN_URL`; deployment task scripts can export host-specific GPU settings before calling it.
+`run.py` and factory scripts load `.env` only. `run_pipeline.sh` applies its built-in defaults, then sources `.env`.
 
 | Variable | Used by |
 |----------|---------|
@@ -219,57 +230,67 @@ Python entrypoints load `factory/pipeline-defaults.env` first, then `.env`; dupl
 | `COLLECTOR_SOURCES` | Path to feeds YAML (default: `factory/feeds.yaml`) |
 | `EMBEDDER_PATH`, `EMBEDDER_CONTEXT_LEN` | EMBEDDER |
 | `EXTRACTOR_PATH`, `EXTRACTOR_CONTEXT_LEN` | EXTRACTOR |
-| `DIGESTOR_PATH`, `DIGESTOR_CONTEXT_LEN` | DIGESTOR |
+| `DIGESTOR_PATH`, `DIGESTOR_CONTEXT_LEN`, `DIGESTOR_BASE_URL`, `DIGESTOR_API_KEY` | DIGESTOR (remote LLM optional) |
 | `CONSOLIDATOR_PATH`, `CONSOLIDATOR_BASE_URL`, `CONSOLIDATOR_API_KEY` | CONSOLIDATOR (remote LLM optional) |
 | `CLASSIFICATION_CACHE` | Vector store for `CLUSTERING` (`processingcache/clscache.py`, zvec) |
 | `BEANSACK_CONNECTION_STRING` | PORTER |
 | `CUPBOARD_CONNECTION_STRING` | PORTER |
 | `LOG_DIR` | Optional hourly logfmt log file; otherwise logfmt to stderr |
 | `WORDS_THRESHOLD_FOR_STORING` | Min words before full scrape (collector) |
+| `COMPLETION_WEBHOOK_URL` | `run_pipeline.sh` POST on exit (optional `COMPLETION_WEBHOOK_API_KEY`) |
 
-#### Optional Environment Variables
-For Digestor with LiquidAI/LFM2.5-1.2B-Instruct
+`run_pipeline.sh` defaults (override in `.env`):
+
 ```
-DIGESTOR_TEMPERATURE=0.15
+EMBEDDER_PATH=codefuse-ai/F2LLM-v2-80M
+EMBEDDER_CONTEXT_LEN=8192
+EXTRACTOR_PATH=knowledgator/modern-gliner-bi-base-v1.0
+EXTRACTOR_CONTEXT_LEN=2048
+DIGESTOR_PATH=vllm://LiquidAI/LFM2.5-2.6B
+DIGESTOR_CONTEXT_LEN=9216
+DIGESTOR_TEMPERATURE=0.1
 DIGESTOR_TOP_K=50
-DIGESTOR_REPETITION_PENALTY=1.05
-```
-
-For Digestor with nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
-```
-DIGESTOR_TEMPERATURE=0.4
-DIGESTOR_TOP_P=0.95
-DIGESTOR_REPETITION_PENALTY=1.15
-```
-
-For Consolidator with nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
-```
-CONSOLIDATOR_TEMPERATURE=0.8
+DIGESTOR_REPETITION_PENALTY=1.1
+CONSOLIDATOR_PATH=vllm://nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+CONSOLIDATOR_CONTEXT_LEN=16384
+CONSOLIDATOR_TEMPERATURE=0.7
 CONSOLIDATOR_TOP_P=0.95
-CONSOLIDATOR_TOP_K=50
-CONSOLIDATOR_REPETITION_PENALTY=1.15
+CONSOLIDATOR_REPETITION_PENALTY=1.25
 ```
+
+Digestor also reads `DIGESTOR_TOP_P` and `DIGESTOR_PRESENCE_PENALTY` when set. Consolidator also reads `CONSOLIDATOR_TOP_K`.
 
 ### Processing states (beans)
 
-`collected` → `embedded` → `classified` / `clustered` → `extracted` / `digested` → `consolidated` → `beansacked` / `cupboarded`
+```
+collected
+   ├─ embedded  (embedding + categories + sentiments)
+   │     └─ clustered  (related urls)
+   ├─ extracted
+   └─ digested
+        └─ consolidated  (beans) + composites.collected
+             └─ beansacked / cupboarded
+```
+
+Analyzer branches after `collected` are independent until porter or consolidator merge them.
 
 ## How to deploy
 
 ### Docker images
 
-| File | Use |
-|------|-----|
-| `DockerfileGPU` | CUDA 12.8; digestor / GPU LLM |
-| `DockerfileIO` | Slim Python 3.13; IO-bound modes only |
+| File | Use | Entrypoint |
+|------|-----|------------|
+| `DockerfileGPU` | CUDA 12.8; analyzer / GPU LLM | `python run.py` (`MODE`, `BATCH_SIZE`) |
+| `DockerfileIO` | Slim Python 3.13; IO-bound stages | `run_pipeline.sh` (stage flags) |
 
 Build example:
 
 ```bash
 docker build -f DockerfileGPU -t coffeemaker:gpu .
+docker build -f DockerfileIO -t coffeemaker:io .
 ```
 
-Run example:
+GPU run (single mode):
 
 ```bash
 docker run --gpus all --env-file .env \
@@ -277,29 +298,29 @@ docker run --gpus all --env-file .env \
   coffeemaker:gpu
 ```
 
-`DockerfileIO` entrypoint: `python run.py --mode $MODE`.
+IO run (pipeline flags forwarded to `run_pipeline.sh`):
+
+```bash
+docker run --env-file .env coffeemaker:io --collector 64 --porter 512
+```
+
+`DockerfileGPU` still ships leftover `INDEXER`/`COMPOSER` `ENV` lines; pass current vars via `--env-file .env`.
 
 ### Docker Compose (local dev)
 
 ```bash
 docker compose up pgcache localmongo localpostgres   # infra only
-# Worker services reference image soumitsr/coffeemaker:* and dockertest.env
 ```
 
-Services include: `pgcache` (pgvector), `localmongo`, `localpostgres`, `localcollector`, `localdigestor`, `localcrawler` (crawl4ai), `azurite`. Compose env uses legacy mode names in places (`INDEXER`, `COMPOSER`); current `run.py` modes are listed above.
+This compose file is a **legacy** stack: Mongo-backed worker images (`MODE=INDEXER`, `--mode COMPOSER`), `localcrawler` (crawl4ai), Azurite, n8n. It is not the current `PROCESSING_CACHE` + `run.py` modes. Prefer `pgcache` (pgvector) plus a local `.env` and `run.py` / `run_pipeline.sh`.
 
-### Cloud GPU ops
+### Fly.io (collector / porter)
 
-`machine_ops.py` starts/stops TensorDock or Azure instances:
-
-```bash
-python machine_ops.py --provider tensordock --action stop
-# Requires TD_INSTANCE_ID, TD_API_KEY or AZ_AUTH_URL, GPU_PROVIDER
-```
+IO jobs: `fly.collector.toml` (`--collector 64`) and `fly.porter.toml` (`--porter 512`). Deploy with `flyctl deploy --config ./fly.collector.toml` (and the porter config). CI: `.github/workflows/fly-deploy.yml`.
 
 ### ThunderCompute boot pipeline
 
-On [ThunderCompute](https://www.thundercompute.com/) GPU VMs, register a one-shot s6 service so `run_pipeline.sh` starts automatically after each boot (e.g. after stop/start or reprovision).
+On [ThunderCompute](https://www.thundercompute.com/) GPU VMs, register a one-shot s6 service so `factory/thundercompute-s6-tasks.sh` starts `run_pipeline.sh` after boot.
 
 **One-time setup** (from the repo checkout, typically `/home/ubuntu/pycoffeemaker`):
 
@@ -308,57 +329,41 @@ cd /home/ubuntu/pycoffeemaker
 sudo ./factory/install-thundercompute-s6-tasks.sh
 ```
 
-Default preset is **`all`**: embedder, clustering, digestor, and consolidator with batch sizes defined at the top of `factory/install-thundercompute-s6-tasks.sh` (edit there before reinstall to tune deploy defaults).
+The installer takes **no arguments**. Stages and batch sizes are hardcoded in `factory/thundercompute-s6-tasks.sh`:
 
-**Preset modes:**
+| Stage | Batch |
+|-------|-------|
+| embedder | 80 |
+| extractor | 40 |
+| clustering | 256 |
+| digestor | 192 |
+| consolidator | 128 |
 
-| Mode | Stages run at boot |
-|------|--------------------|
-| `embedder` | embedder |
-| `digestor` | clustering + digestor |
-| `embedder_digestor` | embedder + clustering + digestor |
-| `consolidator` | consolidator |
-| `all` (default) | embedder + clustering + digestor + consolidator |
-
-```bash
-sudo ./factory/install-thundercompute-s6-tasks.sh digestor
-sudo ./factory/install-thundercompute-s6-tasks.sh embedder_digestor
-```
-
-**Custom stage flags** (replace preset entirely; validated like `run_pipeline.sh`):
-
-```bash
-sudo ./factory/install-thundercompute-s6-tasks.sh --embedder 256 --clustering 256 --digestor 128
-```
-
-Allowed flags: `--collector`, `--embedder`, `--extractor`, `--clustering`, `--digestor`, `--consolidator`, `--porter` each followed by a positive integer.
+Collector is commented out in that script. Change stages by editing `thundercompute-s6-tasks.sh`, then reinstall.
 
 **What gets installed:**
 
-- `/etc/thundercompute/pipeline.args` — resolved flags written at install time (inspected with `cat /etc/thundercompute/pipeline.args`)
 - s6 oneshot `thundercompute-tasks` (depends on `sshd`, runs `factory/thundercompute-s6-tasks.sh` at boot)
-- Pipeline log: `/home/ubuntu/pycoffeemaker/.logs/pipeline.log`
-
-**Reinstall** after changing preset, batch defaults in the install script, or custom flags — no need to edit `thundercompute-s6-tasks.sh` for deploy tuning:
-
-```bash
-sudo ./factory/install-thundercompute-s6-tasks.sh all
-```
+- Pipeline log: `/home/ubuntu/.logs/pipeline-YYYY-MM-DD-HH-MM-SS.log`
+- Boot exports `PROCESSING_WINDOW=3`
 
 **Manual run** (without reboot):
 
 ```bash
-./factory/thundercompute-s6-tasks.sh digestor
-./factory/thundercompute-s6-tasks.sh --consolidator 128
+./factory/thundercompute-s6-tasks.sh
+# or
+./run_pipeline.sh --embedder 80 --extractor 40 --clustering 256 --digestor 192 --consolidator 128
 ```
 
-Ensure `.env` is configured (`PROCESSING_CACHE`, model paths, etc.) before boot; the boot script exports ThunderCompute GPU settings (`VLLM_*`, `PROCESSING_WINDOW`) before calling `run_pipeline.sh`.
+Ensure `.env` is configured (`PROCESSING_CACHE`, secrets) before boot. Model defaults come from `run_pipeline.sh` unless overridden in `.env`.
+
+Deprecated TensorDock/Azure helpers: `factory/deprecated/machine_ops.py`.
 
 ### Production notes
 
-- Run **one mode per container/process**; scale collectors and analyzers independently.
-- GPU nodes: `DockerfileGPU` + `DIGESTOR` / `CONSOLIDATOR` with remote API (`base_url`/`api_key`) if no local GPU.
-- IO nodes: `DockerfileIO` + `COLLECTOR` / `PORTER`.
+- Run **one mode per container/process** (`run.py --mode`); or one `run_pipeline.sh` invocation per GPU host.
+- GPU nodes: `DockerfileGPU` + `DIGESTOR` / `CONSOLIDATOR`, or remote API (`DIGESTOR_BASE_URL` / `CONSOLIDATOR_BASE_URL` + API keys).
+- IO nodes: `DockerfileIO` + `--collector` / `--porter` (Fly jobs use this).
 - Keep `PROCESSING_CACHE` (state DB) and downstream DBs reachable from every worker tier.
 
 ## Package documentation

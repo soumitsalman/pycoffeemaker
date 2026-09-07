@@ -6,16 +6,20 @@ Backend processing engine for **Project Cafecito**: collect web content, enrich 
 
 ```
 pycoffeemaker/
-├── run.py                 # Entry: --mode, --batch_size; loads .env
-├── run_pipeline.sh        # Multi-stage scheduler (GPU/CPU/IO ordering)
-├── factory/               # feeds.yaml, classifications.yaml, migrations, setup/restore scripts
+├── run.py                 # Entry: --mode, --batch_size; loads .env only
+├── run_pipeline.sh        # Multi-stage scheduler + checked-in model defaults
+├── DockerfileGPU          # CUDA; ENTRYPOINT python run.py
+├── DockerfileIO           # Slim IO; ENTRYPOINT run_pipeline.sh
+├── fly.collector.toml / fly.porter.toml
+├── factory/               # feeds, parquet labels, migrations, ThunderCompute, Salad
 ├── workers/               # Stage orchestrators
 ├── processingcache/       # Shared processing state machine + cache backends
 ├── datacollectors/        # RSS/API/scrapers (APICollectorAsync, AsyncWebScraper)
 ├── nlp/                   # Embeddings, digests, NER (vendored package; see nlp/README.md)
 ├── pybeansack/            # Bean/Chatter/Publisher models + DB backends (vendored package)
-├── pycupboard/            # Sip/Source + Cupboard (Cortado)
+├── pycupboard/            # Sip/Source + PG Cupboard (Cortado)
 ├── utils/                 # Env/config/log/date/field helpers used across workers
+├── design/                # Design notes
 ├── graphify-out/          # Generated code graph artifacts and reports
 └── tests/                 # Integration tests
 ```
@@ -29,7 +33,7 @@ One **mode** per process. Orchestrators are unaware of each other; coordination 
 | Mode | Module | Role | Load |
 |------|--------|------|------|
 | `COLLECTOR` | `collectororch.py` | Ingest RSS, APIs, Reddit, scraped pages; normalize fields; scrape publishers | IO |
-| `EMBEDDER` | `analyzerorch.py` | Vector embeddings; lightweight topic/sentiment labels (CPU) | GPU + light CPU |
+| `EMBEDDER` | `analyzerorch.py` | Vector embeddings + topic/sentiment labels → `embedded` | GPU + CPU kNN |
 | `CLUSTERING` | `analyzerorch.py` | Related-article clustering (`CLASSIFICATION_CACHE`) | CPU-heavy |
 | `EXTRACTOR` | `analyzerorch.py` | NER (people, orgs, regions, tickers) via GLiNER | GPU |
 | `DIGESTOR` | `analyzerorch.py` | Structured digests (gist, highlights) via LLM | GPU |
@@ -69,20 +73,22 @@ porter (bg) ──────────────────────�
 
 - **Embedder** must finish before clustering, extractor, or digestor (clustering reads embeddings).
 - **Clustering** starts immediately after embedder and may still be running while extractor/digestor run.
-- **Consolidator** runs after extractor and digestor (if enabled) and waits for clustering when `--clustering` is set (needs `embedded`, `digested`, `clustered`, related links).
+- **Consolidator** runs after extractor and digestor (if enabled) and waits for clustering when `--clustering` is set (needs `embedded`, `extracted`, `digested`, `clustered`, related links).
 - **Porter** can start while collector is still running; hydrates Beansack/Cupboard from finished cache states.
 
 Suggested cadence: collector ~2×/day; embedder/clustering/extractor/digestor ~3×/day; consolidator with digestor; porter on demand.
 
-**Configuration** — `factory/pipeline-defaults.env` holds checked-in defaults for deployment convenience (model paths, context lengths, analyzer tuning). Python entrypoints load it first via `utils/env.load_coffeemaker_env`, then `.env` at repo root with override. Without a local `.env`, workers use those defaults as-is. Put secrets and host-specific overrides (`PROCESSING_CACHE`, `BEANSACK_CONNECTION_STRING`, API keys, alternate `EMBEDDER_PATH`, etc.) in `.env` only. `run_pipeline.sh` sources `.env` for shell-level vars (e.g. `SHUTDOWN_URL`).
+**Configuration** — model defaults live in `run_pipeline.sh` (then `.env` overrides). `run.py` loads `.env` only via `dotenv`; it does not read pipeline-script defaults. `utils.env.load_coffeemaker_env` (factory scripts) also loads `.env` only. Put secrets (`PROCESSING_CACHE`, `BEANSACK_CONNECTION_STRING`, API keys) in `.env`. Pipeline completion webhook: `COMPLETION_WEBHOOK_URL`.
 
 ### State machine (`processingcache/`)
 
-Fault-tolerant warehouse: per-type tables (`beans`, `publishers`, `chatters`, `composites`) with `state`, `ts`, `data`, optional `id`. Workers prefer bulk insert/delete over update. Default backend: PostgreSQL (`pgcache.py`) via `PROCESSING_CACHE`; alternates in `extensions/` (sqlite/Turso, firebird, surreal, pg+cls).
+Fault-tolerant warehouse: per-type tables (`beans`, `publishers`, `chatters`, `composites`) with `state`, `ts`, `data`, optional `id`. Workers prefer bulk insert/delete over update. Default backend: PostgreSQL (`pgcache.py`) via `PROCESSING_CACHE`; alternates in `extensions/` (sqlite, surreal, pg+cls).
 
 Schema and read/write patterns: `processingcache/STATEMACHINE.md`. State constants: `workers/states.py`.
 
-Bean pipeline (simplified): `collected` → `embedded` → `classified` / `clustered` → `extracted` / `digested` → `consolidated` → `beansacked` / `cupboarded`.
+Bean pipeline: `collected` → `embedded` (includes categories/sentiments) → parallel `clustered` / `extracted` / `digested` → `consolidated` → `beansacked` / `cupboarded`.
+
+`CLASSIFIED` is an unused leftover constant; no worker writes that state.
 
 Idempotency: workers query include/exclude states; finished work is skipped.
 
@@ -106,8 +112,8 @@ Storage: `pybeansack.create_client("pg"\|"lance"\|"duck"\|"dl", ...)`. Cupboard:
 ## Other components
 
 - **`datacollectors/`** — shared field constants (`URL`, `CONTENT`, `SOURCE`, …); `apicollectors.py`, `scrapers.py`
-- **`nlp/`** — `create_embedder`, `create_micro_agent`, `Digest`, `EntityExtractor`; local HF, vLLM, ONNX, remote APIs
-- **`factory/`** — `feeds.yaml` (`COLLECTOR_SOURCES`), `classifications.yaml`, parquet label assets, DB setup/migrations
+- **`nlp/`** — `create_embedder`, `create_text_analyst`, `Digest`, `Briefing`, `EntityExtractor`; local HF, vLLM, ONNX, llama.cpp, Infinity, remote APIs (`openvino://` prefix is a dead backend)
+- **`factory/`** — `feeds.yaml` (`COLLECTOR_SOURCES`), parquet label assets, DB setup/migrations, ThunderCompute s6 boot, Salad recipes; `deprecated/` for old GPU/cloud ops
 - **`processingcache/`** — cache/state-machine interfaces plus PostgreSQL and extension backends
 - **`utils/`** — shared env/config/date/log/field helpers used by entrypoints and workers
 
