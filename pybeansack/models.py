@@ -110,6 +110,7 @@ class Bean(BaseModel):
     author: Optional[str] = Field(default=None, description="The author of the article (if available).")
     created: Optional[datetime] = Field(default=None, description="The publish date of the article.")
     collected: Optional[datetime] = Field(default=None, description="The date when the article was collected into the system.")
+    language: Optional[str] = Field(default=None, description="The language of the article.")
 
     # llm fields
     embedding: Optional[list[float]] = Field(default=None, description="The vector embedding for the article content.")

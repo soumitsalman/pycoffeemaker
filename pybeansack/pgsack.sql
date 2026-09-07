@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS beans (
     image_url VARCHAR,
     created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     collected TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    language VARCHAR,
 
     -- TEXT HEAVY FIELDS
     title VARCHAR,
@@ -224,6 +225,7 @@ CREATE INDEX IF NOT EXISTS idx_beans_url ON beans(url);
 CREATE INDEX IF NOT EXISTS idx_beans_kind ON beans(kind);
 CREATE INDEX IF NOT EXISTS idx_beans_created ON beans(created DESC);
 CREATE INDEX IF NOT EXISTS idx_beans_source ON beans(source);
+CREATE INDEX IF NOT EXISTS idx_beans_lang ON beans(language);
 CREATE INDEX IF NOT EXISTS idx_beans_categories ON beans USING gin(categories);
 CREATE INDEX IF NOT EXISTS idx_beans_entities ON beans USING gin(entities);
 CREATE INDEX IF NOT EXISTS idx_beans_regions ON beans USING gin(regions);
