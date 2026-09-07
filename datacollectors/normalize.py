@@ -521,6 +521,18 @@ cleanup_url = lambda url: url.strip().lower() if url and url.strip() else None
 cleanup_text = lambda text: text.strip() if text and text.strip() else None
 cleanup_author = lambda author: cleanup_text(author) if author and author.lower() not in EXCLUDED_AUTHORS else None
 
+_LANGUAGE_QUOTE_RE = re.compile(r"[\"'`“”‘’]")
+_LANGUAGE_KEBAB_RE = re.compile(r"[^a-z0-9]+")
+
+
+def cleanup_language(value: str | None) -> str | None:
+    if not value:
+        return None
+    text = _LANGUAGE_QUOTE_RE.sub("", str(value).strip().lower())
+    text = text.split(",", 1)[0].strip()
+    text = _LANGUAGE_KEBAB_RE.sub("-", text).strip("-")
+    return text or None
+
 def cleanup_item(item: dict) -> dict:
     if not item: return item
 
@@ -534,7 +546,9 @@ def cleanup_item(item: dict) -> dict:
     ):
         if not (value := item.get(text_field)):
             continue
-        if text_field in _MARKDOWN_BODY_FIELDS and _needs_html_conversion(value):
+        if text_field in (LANGUAGE, ARTICLE_LANGUAGE):
+            item[text_field] = cleanup_language(value)
+        elif text_field in _MARKDOWN_BODY_FIELDS and _needs_html_conversion(value):
             item[text_field] = html_to_markdown(value)
         elif text_field == TITLE and _HTML_TAG_RE.search(value):
             item[text_field] = strip_html_tags(value)

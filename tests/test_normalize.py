@@ -1,10 +1,10 @@
 import pytest
 
 from datacollectors.apicollectors import _build_hackernews_item, _build_reddit_json_item
-from datacollectors.normalize import cleanup_item, guess_content_type, html_to_markdown
+from datacollectors.normalize import cleanup_item, cleanup_language, guess_content_type, html_to_markdown
 from datacollectors.scrapers import AsyncWebScraper, _extract_jsonld_content
 from utils.dates import now
-from utils.fields import CONTENT, SUMMARY, TITLE
+from utils.fields import ARTICLE_LANGUAGE, CONTENT, LANGUAGE, SUMMARY, TITLE
 
 _NO_H1 = "<p>Hello <strong>world</strong>. <a href='https://x.com'>link</a></p>"
 _WITH_H1 = "<h1>Article Title</h1><p>First paragraph.</p><ul><li>one</li></ul>"
@@ -82,6 +82,22 @@ def test_cleanup_item_converts_leftover_html_in_body_fields():
     assert "*blurb*" in item[SUMMARY] or "blurb" in item[SUMMARY]
     assert "<p>" not in item[CONTENT]
     assert "**world**" in item[CONTENT]
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ('"en-US"', "en-us"),
+    ("'en_GB'", "en-gb"),
+    ("en, US", "en"),
+    ("  EN  ", "en"),
+    ("zh-Hans", "zh-hans"),
+    ("pt BR", "pt-br"),
+    ('"English, British"', "english"),
+])
+def test_cleanup_item_normalizes_language_fields(raw, expected):
+    assert cleanup_language(raw) == expected
+    item = cleanup_item({LANGUAGE: raw, ARTICLE_LANGUAGE: raw, "url": "https://example.com/a"})
+    assert item[LANGUAGE] == expected
+    assert item[ARTICLE_LANGUAGE] == expected
 
 
 def test_jsonld_html_body_is_converted_to_markdown():
