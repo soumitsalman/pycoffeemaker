@@ -177,32 +177,30 @@ SELECT
 FROM trend_stats
 WHERE GREATEST(likes, comments, shares, related) > 0;
 
+-- PRIMARY DIFF: between latest vs trending
+-- trending requires some chatter or related items. Hence INNER JOIN trend_aggregates
+-- latest does not require chatter or related items. Hence LEFT JOIN trend_aggregates
 
 CREATE OR REPLACE VIEW beans_sources_view AS
 SELECT
     b.*,
-    p.id AS source_id, p.base_url, p.site_name, p.description, p.favicon, p.rss_feed
+    p.domain_name, p.site_name, p.description, p.favicon, p.rss_feed
 FROM beans b
-LEFT JOIN publishers p ON b.source = p.source;
+LEFT JOIN publishers p ON b.source_id = p.id;
 
-
--- PRIMARY DIFF: between latest vs trending
--- trending requires some chatter or related items. Hence INNER JOIN trend_aggregates
--- latest does not require chatter or related items. Hence LEFT JOIN trend_aggregates
-CREATE VIEW IF NOT EXISTS trending_beans_view AS
+CREATE OR REPLACE VIEW latest_beans_view AS
 SELECT
     b.*,
-    tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id
+    tr.likes, tr.comments, tr.subscribers, tr.mentions, tr.related, tr.observed, tr.cluster_id, tr.trend_score
 FROM beans_sources_view b
-INNER JOIN trend_aggregates tr ON b.url = tr.url;
+LEFT JOIN trend_aggregates tr ON b.id = tr.id;
 
-
-CREATE VIEW IF NOT EXISTS latest_beans_view AS
+CREATE OR REPLACE VIEW trending_beans_view AS
 SELECT
     b.*,
-    tr.updated, tr.comments, tr.shares, tr.likes, tr.subscribers, tr.related, tr.trend_score, tr.cluster_id
+    tr.likes, tr.comments, tr.subscribers, tr.mentions, tr.related, tr.observed, tr.cluster_id, tr.trend_score
 FROM beans_sources_view b
-LEFT JOIN trend_aggregates tr ON b.url = tr.url;
+INNER JOIN trend_aggregates tr ON b.id = tr.id;
 
 
 CREATE VIEW IF NOT EXISTS aggregated_beans_view AS

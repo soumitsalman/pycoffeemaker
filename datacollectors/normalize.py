@@ -525,9 +525,13 @@ _LANGUAGE_QUOTE_RE = re.compile(r"[\"'`“”‘’]")
 _LANGUAGE_KEBAB_RE = re.compile(r"[^a-z0-9]+")
 
 
-def cleanup_language(value: str | None) -> str | None:
+def cleanup_language(value: str | None, content: str | None = None) -> str | None:
     if not value:
-        return None
+        if not content or not content.strip():
+            return None
+        from ftlangdetect import detect
+
+        value = detect(text=content, low_memory=True)["lang"]
     text = _LANGUAGE_QUOTE_RE.sub("", str(value).strip().lower())
     text = text.split(",", 1)[0].strip()
     text = _LANGUAGE_KEBAB_RE.sub("-", text).strip("-")
@@ -554,6 +558,11 @@ def cleanup_item(item: dict) -> dict:
             item[text_field] = strip_html_tags(value)
         else:
             item[text_field] = cleanup_text(value)
+
+    if not any(item.get(key) for key in (LANGUAGE, ARTICLE_LANGUAGE, SITE_LANGUAGE)):
+        content = item.get(CONTENT) or item.get(SUMMARY) or item.get(TITLE)
+        if language := cleanup_language(None, content):
+            item[LANGUAGE] = language
 
     for url_field in (URL, BASE_URL, FAVICON, RSS_FEED, IMAGE_URL, DOMAIN_NAME, CHATTER_URL):
         if value := item.get(url_field):

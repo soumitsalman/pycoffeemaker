@@ -2,6 +2,7 @@ pyyaml
 tenacity
 requests
 feedparser
+fasttext-langdetect
 tldextract
 praw
 asyncpraw
