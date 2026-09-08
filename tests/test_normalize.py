@@ -1,7 +1,7 @@
 import pytest
 
 from datacollectors.apicollectors import _build_hackernews_item, _build_reddit_json_item
-from datacollectors.normalize import cleanup_item, cleanup_language, guess_content_type, html_to_markdown
+from datacollectors.normalize import cleanup_item, cleanup_language, cleanup_title, guess_content_type, html_to_markdown
 from datacollectors.scrapers import AsyncWebScraper, _extract_jsonld_content
 from utils.dates import now
 from utils.fields import ARTICLE_LANGUAGE, CONTENT, LANGUAGE, SUMMARY, TITLE
@@ -82,6 +82,28 @@ def test_cleanup_item_converts_leftover_html_in_body_fields():
     assert "*blurb*" in item[SUMMARY] or "blurb" in item[SUMMARY]
     assert "<p>" not in item[CONTENT]
     assert "**world**" in item[CONTENT]
+
+
+@pytest.mark.parametrize(("title", "site_name", "expected"), [
+    ("CNN | Blah blah", "CNN", "Blah blah"),
+    ("Blah blah | the WIRE", "The Wire", "Blah blah"),
+    ("CNN: Blah blah", "cnn.com", "Blah blah"),
+    ("Blah blah - CNN", "CNN", "Blah blah"),
+    ("CNN — Blah blah", "CNN", "Blah blah"),
+    ("Blah blah / CNN.com", "CNN", "Blah blah"),
+    ("[CNN] Blah blah", "CNN", "Blah blah"),
+    ("Blah blah (The Wire)", "The Wire", "Blah blah"),
+    ("CNN | Blah blah | CNN", "CNN", "Blah blah"),
+    ("CNN reports on Blah blah", "CNN", "CNN reports on Blah blah"),
+    ("Blah blah | Not CNN", "CNN", "Blah blah | Not CNN"),
+])
+def test_cleanup_title_removes_delimited_site_name(title, site_name, expected):
+    assert cleanup_title(title, site_name) == expected
+
+
+def test_cleanup_item_uses_site_name_to_clean_title():
+    item = cleanup_item({TITLE: "CNN | Blah blah", "site_name": "CNN", "url": "https://cnn.com/a"})
+    assert item[TITLE] == "Blah blah"
 
 
 @pytest.mark.parametrize("raw,expected", [

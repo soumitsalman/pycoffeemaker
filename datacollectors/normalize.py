@@ -525,6 +525,83 @@ _LANGUAGE_QUOTE_RE = re.compile(r"[\"'`“”‘’]")
 _LANGUAGE_KEBAB_RE = re.compile(r"[^a-z0-9]+")
 
 
+_TITLE_SITE_SEPARATOR_RE = re.compile(r"\s*(?:\||:|/|»|[–—]|(?<=\s)-(?=\s))\s*")
+_TITLE_SITE_DOMAIN_SUFFIX_RE = re.compile(
+    r"\.(?:com|org|net|io|ai|co|tv|fm|news|us|uk|ca|au|in)(?:\.[a-z]{2})?$",
+    re.IGNORECASE,
+)
+_TITLE_SITE_WRAPPERS = (("[", "]"), ("(", ")"), ("{", "}"), ("\"", "\""), ("“", "”"))
+
+
+def _title_site_key(value: str | None) -> str:
+    text = str(value or "").strip().casefold()
+    text = re.sub(r"^[a-z]+://", "", text)
+    text = text.split("/", 1)[0]
+    text = re.sub(r"^www\.", "", text)
+    text = _TITLE_SITE_DOMAIN_SUFFIX_RE.sub("", text)
+    return re.sub(r"[\W_]+", " ", text, flags=re.UNICODE).strip()
+
+
+def _is_title_site_label(value: str, site_key: str) -> bool:
+    candidate = str(value or "").strip().strip("[](){}<>\"\x27“”‘’")
+    return bool(candidate) and _title_site_key(candidate) == site_key
+
+
+def _strip_delimited_title_site(text: str, site_key: str) -> str:
+    while True:
+        separator = _TITLE_SITE_SEPARATOR_RE.search(text)
+        if not separator or not _is_title_site_label(text[:separator.start()], site_key):
+            break
+        text = text[separator.end():].lstrip()
+
+    while True:
+        separators = list(_TITLE_SITE_SEPARATOR_RE.finditer(text))
+        if not separators:
+            break
+        separator = separators[-1]
+        if not _is_title_site_label(text[separator.end():], site_key):
+            break
+        text = text[:separator.start()].rstrip()
+    return text
+
+
+def _strip_wrapped_title_site(text: str, site_key: str) -> str:
+    leading = text.lstrip()
+    for opener, closer in _TITLE_SITE_WRAPPERS:
+        if not leading.startswith(opener):
+            continue
+        end = leading.find(closer, len(opener))
+        if end < 0 or not _is_title_site_label(leading[len(opener):end], site_key):
+            continue
+        text = leading[end + len(closer):].lstrip()
+        return re.sub(r"^(?:\||:|/|»|[–—]|-)\s*", "", text)
+
+    trailing = text.rstrip()
+    for opener, closer in _TITLE_SITE_WRAPPERS:
+        if not trailing.endswith(closer):
+            continue
+        start = trailing.rfind(opener, 0, len(trailing) - len(closer))
+        if start < 0 or not _is_title_site_label(trailing[start + len(opener):-len(closer)], site_key):
+            continue
+        return trailing[:start].rstrip()
+    return text
+
+
+def cleanup_title(title: str | None, site_name: str | None = None) -> str | None:
+    """Trim a publisher label from a delimited title prefix or suffix."""
+    text = cleanup_text(title)
+    site_key = _title_site_key(site_name)
+    if not text or not site_key:
+        return text
+
+    for _ in range(2):
+        cleaned = _strip_wrapped_title_site(_strip_delimited_title_site(text, site_key), site_key)
+        if cleaned == text:
+            break
+        text = cleaned
+    return cleanup_text(text)
+
+
 def cleanup_language(value: str | None, content: str | None = None) -> str | None:
     if not value:
         if not content or not content.strip():
@@ -558,6 +635,9 @@ def cleanup_item(item: dict) -> dict:
             item[text_field] = strip_html_tags(value)
         else:
             item[text_field] = cleanup_text(value)
+
+    if TITLE in item:
+        item[TITLE] = cleanup_title(item.get(TITLE), item.get(SITE_NAME))
 
     if not any(item.get(key) for key in (LANGUAGE, ARTICLE_LANGUAGE, SITE_LANGUAGE)):
         content = item.get(CONTENT) or item.get(SUMMARY) or item.get(TITLE)
