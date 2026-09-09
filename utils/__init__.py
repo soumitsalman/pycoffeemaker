@@ -1,4 +1,4 @@
-"""Project-wide utilities (logging, dates, ids, fields)."""
+"""Project-wide utilities (logging, dates, ids, fields, kinds)."""
 
 from .config import CLEANUP_WINDOW, CLUSTER_EPS, VECTOR_LEN
 from .dates import *
@@ -13,6 +13,35 @@ from .logs import (
 )
 
 from .fields import non_null_fields, clear_null_bytes
+from .kinds import (
+    POST,
+    BLOG,
+    NEWS,
+    SITE,
+    PODCAST,
+    CONTRACT,
+    PROCUREMENT_NOTICE,
+    FINANCIAL_REPORT,
+    EARNINGS_REPORT,
+    SEC_FILING,
+    PRESS_RELEASE,
+    OFFICIAL_STATEMENT,
+    ENFORCEMENT_ACTION,
+    LEGISLATIVE_BILL,
+    LEGISLATIVE_PROPOSAL,
+    ENACTED_LAW,
+    REGULATION,
+    RULEMAKING_NOTICE,
+    COURT_OPINION,
+    LAWSUIT,
+    GOVERNMENT_REPORT,
+    BUDGET_DOCUMENT,
+    LEGISLATIVE_RECORD,
+    HEARING,
+    RESEARCH_PAPER,
+    WHITEPAPER,
+    TECHNICAL_DOCUMENTATION,
+)
 
 __all__ = [
     "CLEANUP_WINDOW",
@@ -33,4 +62,31 @@ __all__ = [
     "now",
     "now_str",
     "date_str",
+    "POST",
+    "BLOG",
+    "NEWS",
+    "SITE",
+    "PODCAST",
+    "CONTRACT",
+    "PROCUREMENT_NOTICE",
+    "FINANCIAL_REPORT",
+    "EARNINGS_REPORT",
+    "SEC_FILING",
+    "PRESS_RELEASE",
+    "OFFICIAL_STATEMENT",
+    "ENFORCEMENT_ACTION",
+    "LEGISLATIVE_BILL",
+    "LEGISLATIVE_PROPOSAL",
+    "ENACTED_LAW",
+    "REGULATION",
+    "RULEMAKING_NOTICE",
+    "COURT_OPINION",
+    "LAWSUIT",
+    "GOVERNMENT_REPORT",
+    "BUDGET_DOCUMENT",
+    "LEGISLATIVE_RECORD",
+    "HEARING",
+    "RESEARCH_PAPER",
+    "WHITEPAPER",
+    "TECHNICAL_DOCUMENTATION",
 ]

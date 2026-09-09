@@ -15,7 +15,7 @@ from .apicollectors import (
 )
 from .scrapers import WebCrawler, AsyncWebScraper
 from .settings import MAX_HTML_SIZE, MAX_PDF_SIZE, TIMEOUT
-from .normalize import (
+from utils.kinds import (
     POST,
     BLOG,
     NEWS,
@@ -43,6 +43,8 @@ from .normalize import (
     RESEARCH_PAPER,
     WHITEPAPER,
     TECHNICAL_DOCUMENTATION,
+)
+from .normalize import (
     ContentGate,
     is_excluded_content,
     excluded_url,

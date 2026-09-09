@@ -21,7 +21,7 @@ from nlp import (
 )
 from utils.fields import *
 from utils import VECTOR_LEN, date_str, now_str
-from datacollectors import POST
+from utils.kinds import POST
 from .cacheops import *
 from .states import *
 from icecream import ic

@@ -3,7 +3,8 @@ import os
 import random
 import uuid
 import yaml
-from datacollectors import RSSFeedCollector, GovInfoRSSCollector, RedditCollector, HackerNewsCollector, SECFilingCollector, AsyncWebScraper, POST
+from datacollectors import RSSFeedCollector, GovInfoRSSCollector, RedditCollector, HackerNewsCollector, SECFilingCollector, AsyncWebScraper
+from utils.kinds import POST
 from utils.fields import (
     ARTICLE_LANGUAGE,
     AUTHOR,
@@ -33,7 +34,6 @@ from utils.fields import (
     URL,
 )
 from utils import now_str, get_logger, log_runtime_async
-from persistqueue import AsyncQueue
 from processingcache import AsyncStateCacheBase
 from .states import *
 from icecream import ic

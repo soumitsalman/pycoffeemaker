@@ -1,40 +1,118 @@
-# this is designed to leverage underlying gpu if there is any
-FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
+# syntax=docker/dockerfile:1.7
+# Analyzer / GPU LLM image. vLLM from the base image; ST + GLiNER from requirements-gpu.txt.
+# ENTRYPOINT forwards `docker run ... --embedder 64 --clustering 128` to run_pipeline.sh.
+FROM vllm/vllm-openai:latest
 
+USER root
 WORKDIR /worker
 
-COPY coffeemaker/pybeansack/requirements.txt pybeansack-requirements.txt
-COPY requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r pybeansack-requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# s5cmd: latest GitHub Linux-64bit release (needed for --clustering clscache)
+RUN python3 - <<'PY'
+import io, json, os, tarfile, urllib.request
+
+api = "https://api.github.com/repos/peak/s5cmd/releases/latest"
+with urllib.request.urlopen(api) as r:
+    rel = json.load(r)
+url = next(
+    a["browser_download_url"]
+    for a in rel["assets"]
+    if a["name"].endswith("_Linux-64bit.tar.gz")
+)
+dest = "/usr/local/bin"
+os.makedirs(dest, exist_ok=True)
+with urllib.request.urlopen(url) as r:
+    tar = tarfile.open(fileobj=io.BytesIO(r.read()), mode="r:gz")
+    member = next(m for m in tar.getmembers() if os.path.basename(m.name) == "s5cmd")
+    member.name = "s5cmd"
+    try:
+        tar.extract(member, dest, filter="fully_trusted")
+    except TypeError:
+        tar.extract(member, dest)
+os.chmod(os.path.join(dest, "s5cmd"), 0o755)
+PY
+
+COPY requirements-gpu.txt /tmp/requirements-gpu.txt
+# Do not pip-constraint torch==*+cu130: that wheel is not on PyPI, so ST/GLiNER
+# fail with ResolutionImpossible. Keep the image CUDA stack via only-if-needed.
+RUN python3 - <<'PY'
+import json, os, subprocess, sys, time
+from pathlib import Path
+
+log_path = "/tmp/debug-397e55.log"
+def dlog(hypothesis_id, location, message, data):
+    rec = {
+        "sessionId": "397e55",
+        "runId": "post-fix",
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    print(json.dumps(rec), flush=True)
+    Path(log_path).open("a").write(json.dumps(rec) + "\n")
+
+def pkg_line(name):
+    freeze = subprocess.check_output([sys.executable, "-m", "pip", "freeze"], text=True)
+    for line in freeze.splitlines():
+        if line.split("==")[0].split("@")[0].lower() == name:
+            return line
+    return None
+
+before_torch = pkg_line("torch")
+dlog("A", "DockerfileGPU:pip", "torch before addon install", {"torch": before_torch})
+cmd = [
+    sys.executable, "-m", "pip", "install", "--no-cache-dir",
+    "--upgrade-strategy", "only-if-needed",
+    "-r", "/tmp/requirements-gpu.txt",
+]
+proc = subprocess.run(cmd)
+dlog(
+    "E",
+    "DockerfileGPU:pip",
+    "pip install without cu130 constraint",
+    {
+        "returncode": proc.returncode,
+        "torch_after": pkg_line("torch"),
+        "sentence_transformers": pkg_line("sentence-transformers"),
+        "gliner": pkg_line("gliner"),
+    },
+)
+if proc.returncode != 0:
+    sys.exit(proc.returncode)
+os.remove("/tmp/requirements-gpu.txt")
+PY
+
+# Optional: docker build --build-arg HF_TOKEN=$HF_TOKEN (needed for gated Nemotron).
+# ARG is visible as HF_TOKEN in later RUN steps; huggingface_hub reads it.
+ARG HF_TOKEN=
+ENV HF_HOME=/worker/.models \
+    HF_HUB_CACHE=/worker/.models \
+    HUGGINGFACE_HUB_CACHE=/worker/.models \
+    TRANSFORMERS_CACHE=/worker/.models \
+    SENTENCE_TRANSFORMERS_HOME=/worker/.models \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    TOKENIZERS_PARALLELISM=false \
+    VLLM_ENABLE_V1_MULTIPROCESSING=0 \
+    S5CMD_BIN=/usr/local/bin/s5cmd \
+    COLLECTOR_SOURCES=/worker/factory/feeds.yaml
+
+RUN python3 - <<'PY'
+import os
+from huggingface_hub import snapshot_download
+
+token = os.environ.get("HF_TOKEN") or None
+for repo in (
+    "codefuse-ai/F2LLM-v2-80M",
+    "knowledgator/modern-gliner-bi-base-v1.0",
+    "LiquidAI/LFM2.5-2.6B",
+    "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+):
+    snapshot_download(repo_id=repo, token=token)
+PY
 
 COPY . .
+RUN chmod +x /worker/run_pipeline.sh && mkdir -p /worker/.cache
 
-# Set environment variables
-ENV NVIDIA_VISIBLE_DEVICES=all \
-    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-    PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:24,expandable_segments:True \
-    # LLM model stuff
-    HF_HOME=/worker/.models \
-    HF_HUB_CACHE=/worker/.models \
-    HF_ASSETS_CACHE=/worker/.models \
-    SENTENCE_TRANSFORMERS_HOME=/worker/.models \
-    # Collector stuff
-    WORDS_THRESHOLD_FOR_SCRAPING=150 \
-    COLLECTOR_SOURCES=/worker/factory/feeds.yaml \
-    # Indexer stuff
-    WORDS_THRESHOLD_FOR_INDEXING=150 \
-    EMBEDDER_PATH=avsolatorio/GIST-small-Embedding-v0 \
-    EMBEDDER_CONTEXT_LEN=512 \
-    MAX_RELATED_EPS=0.45 \
-    # Digestor stuff
-    WORDS_THRESHOLD_FOR_DIGESTING=150 \    
-    DIGESTOR_PATH=soumitsr/led-base-article-digestor \
-    DIGESTOR_CONTEXT_LEN=4096 \
-    # Composer stuff
-    MIN_CLUSTER_SIZE=16 \
-    MAX_CLUSTER_SIZE=128 \
-    COMPOSER_TOPICS=/worker/factory/composer-topics.json
-
-# Set the entrypoint
-ENTRYPOINT ["python", "run.py"] 
+ENTRYPOINT ["/bin/bash", "/worker/run_pipeline.sh"]

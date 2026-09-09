@@ -8,7 +8,7 @@ Backend processing engine for **Project Cafecito**: collect web content, enrich 
 pycoffeemaker/
 ├── run.py                 # Entry: --mode, --batch_size; loads .env only
 ├── run_pipeline.sh        # Multi-stage scheduler + checked-in model defaults
-├── DockerfileGPU          # CUDA; ENTRYPOINT python run.py
+├── DockerfileGPU          # vLLM CUDA; ENTRYPOINT run_pipeline.sh
 ├── DockerfileIO           # Slim IO; ENTRYPOINT run_pipeline.sh
 ├── fly.collector.toml / fly.porter.toml
 ├── factory/               # feeds, parquet labels, migrations, ThunderCompute, Salad
