@@ -11,7 +11,6 @@ from nlp import (
 from itertools import chain, batched
 from utils.fields import *
 from utils import VECTOR_LEN, get_logger, now, log_runtime, now_str
-from datacollectors import POST
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 from datetime import datetime

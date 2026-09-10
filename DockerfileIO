@@ -1,5 +1,5 @@
-# This docker is for mostly io bound tasks such as collector and composer
-# It is not built to run cpu/gpu intensive tasks like indexer and digestor unless they are remote/openai api
+# Slim IO image for collector, porter, and remote OpenAI-compatible NLP.
+# Not for local GPU models (use DockerfileGPU).
 
 
 # Final stage

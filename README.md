@@ -10,10 +10,11 @@ Can be deployed as standalone worker nodes or imported by other services (e.g. E
 pycoffeemaker/
 ├── run.py                 # Entry: --mode selects worker; loads .env
 ├── run_pipeline.sh        # Multi-stage scheduler + checked-in model defaults
-├── requirements.txt       # Full deps (GPU/LLM workloads)
-├── requirements-io.txt    # IO-only deps (collector, porter)
+├── requirements.txt       # Full deps (local GPU/LLM; includes vllm)
+├── requirements-gpu.txt   # DockerfileGPU add-on deps (no vllm; base image supplies it)
+├── requirements-io.txt    # DockerfileIO: collector, porter, remote OpenAI NLP
 ├── requirements-dev.txt   # Test/dev extras
-├── DockerfileGPU          # CUDA image; ENTRYPOINT python run.py
+├── DockerfileGPU          # vllm/vllm-openai:latest; ENTRYPOINT run_pipeline.sh
 ├── DockerfileIO           # Slim Python 3.13; ENTRYPOINT run_pipeline.sh
 ├── docker-compose.yaml    # Legacy local stack (mongo / INDEXER / COMPOSER)
 ├── fly.collector.toml     # Fly.io collector job (DockerfileIO)
@@ -181,7 +182,7 @@ Operational config and ops scripts: feed lists, parquet label indexes, migration
 
 ### Prerequisites
 
-- Python 3.10+ locally (`DockerfileIO` is 3.13; `DockerfileGPU` is the PyTorch CUDA 12.8 runtime)
+- Python 3.10+ locally (`DockerfileIO` is 3.13; `DockerfileGPU` is `vllm/vllm-openai:latest`)
 - `.env` at repo root for secrets and connection strings
 - Model paths for analyzer modes (`EMBEDDER_PATH`, `EXTRACTOR_PATH`, `DIGESTOR_PATH`, `CONSOLIDATOR_PATH`) — set in `.env`, or rely on `run_pipeline.sh` defaults when using that script
 - `PROCESSING_CACHE` — state DB connection (default: PostgreSQL via `processingcache/pgcache.py`; see `extensions/` for sqlite, surreal, pg+cls)
@@ -191,7 +192,8 @@ Operational config and ops scripts: feed lists, parquet label indexes, migration
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt   # or requirements-io.txt for collector/porter
+pip install -r requirements.txt   # or requirements-io.txt for collector/porter/remote NLP
+# DockerfileGPU uses requirements-gpu.txt on top of the vLLM base image
 # optional: pip install -r requirements-dev.txt
 ```
 
@@ -280,31 +282,31 @@ Analyzer branches after `collected` are independent until porter or consolidator
 
 | File | Use | Entrypoint |
 |------|-----|------------|
-| `DockerfileGPU` | CUDA 12.8; analyzer / GPU LLM | `python run.py` (`MODE`, `BATCH_SIZE`) |
+| `DockerfileGPU` | `vllm/vllm-openai:latest`; analyzer / GPU LLM (`requirements-gpu.txt`) | `run_pipeline.sh` (stage flags) |
 | `DockerfileIO` | Slim Python 3.13; IO-bound stages | `run_pipeline.sh` (stage flags) |
 
-Build example:
+Build example (Nemotron is typically gated; pass a Hub token):
 
 ```bash
-docker build -f DockerfileGPU -t coffeemaker:gpu .
+docker build -f DockerfileGPU --build-arg HF_TOKEN="$HF_TOKEN" -t coffeemaker:gpu .
 docker build -f DockerfileIO -t coffeemaker:io .
 ```
 
-GPU run (single mode):
+GPU run (pipeline flags forwarded to `run_pipeline.sh`; Hub weights are baked into `HF_HOME`):
 
 ```bash
-docker run --gpus all --env-file .env \
-  -e MODE=DIGESTOR -e BATCH_SIZE=4 \
-  coffeemaker:gpu
+docker run --gpus all --ipc=host --shm-size=8g --env-file .env \
+  coffeemaker:gpu --embedder 64 --clustering 128 --extractor 32
+
+docker run --gpus all --ipc=host --shm-size=8g --env-file .env \
+  coffeemaker:gpu --digestor 160 --consolidator 128
 ```
 
-IO run (pipeline flags forwarded to `run_pipeline.sh`):
+IO run:
 
 ```bash
 docker run --env-file .env coffeemaker:io --collector 64 --porter 512
 ```
-
-`DockerfileGPU` still ships leftover `INDEXER`/`COMPOSER` `ENV` lines; pass current vars via `--env-file .env`.
 
 ### Docker Compose (local dev)
 
@@ -362,7 +364,7 @@ Deprecated TensorDock/Azure helpers: `factory/deprecated/machine_ops.py`.
 ### Production notes
 
 - Run **one mode per container/process** (`run.py --mode`); or one `run_pipeline.sh` invocation per GPU host.
-- GPU nodes: `DockerfileGPU` + `DIGESTOR` / `CONSOLIDATOR`, or remote API (`DIGESTOR_BASE_URL` / `CONSOLIDATOR_BASE_URL` + API keys).
+- GPU nodes: `DockerfileGPU` + `run_pipeline.sh` stage flags (`--embedder`, `--clustering`, `--extractor`, `--digestor`, `--consolidator`).
 - IO nodes: `DockerfileIO` + `--collector` / `--porter` (Fly jobs use this).
 - Keep `PROCESSING_CACHE` (state DB) and downstream DBs reachable from every worker tier.
 

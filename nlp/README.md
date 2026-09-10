@@ -33,7 +33,7 @@ From the repo root (so `nlp` is on `PYTHONPATH`):
 
 ```bash
 pip install -r requirements.txt
-# IO-only hosts can use requirements-io.txt instead
+# IO-only hosts (collector, porter, OpenAI-compatible HTTP NLP) can use requirements-io.txt
 ```
 
 ## Quickstart

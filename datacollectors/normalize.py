@@ -41,34 +41,35 @@ from utils.fields import (
 )
 
 from .settings import MAX_HTML_SIZE, MAX_PDF_SIZE
-
-POST = "post"
-BLOG = "blog"
-NEWS = "news"
-SITE = "site"
-PODCAST = "podcast"
-CONTRACT = "contract"
-PROCUREMENT_NOTICE = "procurement_notice"
-FINANCIAL_REPORT = "financial_report"
-EARNINGS_REPORT = "earnings_report"
-SEC_FILING = "sec_filing"
-PRESS_RELEASE = "press_release"
-OFFICIAL_STATEMENT = "official_statement"
-ENFORCEMENT_ACTION = "enforcement_action"
-LEGISLATIVE_BILL = "legislative_bill"
-LEGISLATIVE_PROPOSAL = "legislative_proposal"
-ENACTED_LAW = "enacted_law"
-REGULATION = "regulation"
-RULEMAKING_NOTICE = "rulemaking_notice"
-COURT_OPINION = "court_opinion"
-LAWSUIT = "lawsuit"
-GOVERNMENT_REPORT = "government_report"
-BUDGET_DOCUMENT = "budget_document"
-LEGISLATIVE_RECORD = "legislative_record"
-HEARING = "hearing"
-RESEARCH_PAPER = "research_paper"
-WHITEPAPER = "whitepaper"
-TECHNICAL_DOCUMENTATION = "technical_documentation"
+from utils.kinds import (
+    POST,
+    BLOG,
+    NEWS,
+    SITE,
+    PODCAST,
+    CONTRACT,
+    PROCUREMENT_NOTICE,
+    FINANCIAL_REPORT,
+    EARNINGS_REPORT,
+    SEC_FILING,
+    PRESS_RELEASE,
+    OFFICIAL_STATEMENT,
+    ENFORCEMENT_ACTION,
+    LEGISLATIVE_BILL,
+    LEGISLATIVE_PROPOSAL,
+    ENACTED_LAW,
+    REGULATION,
+    RULEMAKING_NOTICE,
+    COURT_OPINION,
+    LAWSUIT,
+    GOVERNMENT_REPORT,
+    BUDGET_DOCUMENT,
+    LEGISLATIVE_RECORD,
+    HEARING,
+    RESEARCH_PAPER,
+    WHITEPAPER,
+    TECHNICAL_DOCUMENTATION,
+)
 
 POST_DOMAINS = {"reddit", "redd", "linkedin", "x", "twitter", "facebook", "ycombinator"}
 BLOG_URLS = {

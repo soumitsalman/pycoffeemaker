@@ -8,12 +8,10 @@ from datetime import datetime
 
 from utils import CLUSTER_EPS, VECTOR_LEN, ndays_ago, ndays_ago_str, now
 from utils.fields import *
+from utils.kinds import POST, NEWS, BLOG
 
 # CHANNEL = "social media group/forum"
-POST = "post"
 JOB = "job"
-NEWS = "news"
-BLOG = "blog"
 OPED = "opinion"
 
 SYSTEM = "__SYSTEM__"
