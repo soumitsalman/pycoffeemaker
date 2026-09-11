@@ -163,6 +163,16 @@ def test_guess_content_type_uses_authoritative_url_feed_and_text_signals(bean, f
     assert guess_content_type(bean, feed_url) == expected
 
 
+@pytest.mark.parametrize(("bean", "default_kind", "expected"), [
+    ({"title": "Acme product announcement"}, "blog", "blog"),
+    ({"title": "Acme product press release"}, "blog", "press_release"),
+    ({"content": "This press release announces a product."}, "blog", "press_release"),
+    ({"title": "Acme product announcement"}, "press_release", "press_release"),
+])
+def test_guess_content_type_uses_feed_default_after_specific_signals(bean, default_kind, expected):
+    assert guess_content_type(bean, default_kind=default_kind) == expected
+
+
 def test_guess_content_type_detects_research_papers():
     bean = {"url": "https://arxiv.org/abs/2501.00001"}
     assert guess_content_type(bean) == "research_paper"
@@ -260,3 +270,24 @@ def test_prep_rejects_incompatible_redirect():
     }
     assert AsyncWebScraper._prep_page_result(None, bean, result) is None
     assert bean["url"] == "https://www.govinfo.gov/content/pkg/uscourts-x/html/x.htm"
+
+
+@pytest.mark.parametrize('field', ['title', 'tags', 'summary', 'description', 'content'])
+@pytest.mark.parametrize('phrase', ['press release', 'news release', 'media release'])
+@pytest.mark.parametrize('default_kind', ['news', 'blog', 'press_release'])
+def test_release_evidence_precedes_rss_default(field, phrase, default_kind):
+    bean = {'url': 'https://example.com/blog/update', field: [phrase] if field == 'tags' else phrase}
+    assert guess_content_type(bean, default_kind=default_kind) == 'press_release'
+
+
+@pytest.mark.parametrize(('bean', 'feed', 'expected'), [
+    ({'title': 'Press release'}, 'https://www.sec.gov/news/statements.rss', 'official_statement'),
+    ({'title': 'Press release'}, 'https://www.govinfo.gov/rss/bills.xml', 'legislative_bill'),
+    ({'url': 'https://www.sec.gov/Archives/edgar/data/1/report', 'title': 'Press release'}, None, 'sec_filing'),
+    ({'domain_name': 'reddit', 'title': 'Press release'}, None, 'press_release'),
+    ({'domain_name': 'reddit'}, None, 'post'),
+    ({'title': 'Podcast episode'}, None, 'podcast'),
+    ({'site_name': 'Daily News', 'tags': ['announcement']}, None, 'blog'),
+])
+def test_rss_precedence(bean, feed, expected):
+    assert guess_content_type(bean, feed_url=feed, default_kind='blog') == expected

@@ -217,7 +217,7 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
     if image_url:
         item[IMAGE_URL] = full_url(site_url, image_url)
 
-    item[KIND] = guess_content_type(item, feed_url) or default_kind
+    item[KIND] = guess_content_type(item, feed_url=feed_url, default_kind=default_kind) or default_kind
 
     comments_url = entry.get('wfw_commentrss')
     comments_count = parse_int(entry.get('slash_comments') or entry.get('comments') or 0)
@@ -435,7 +435,7 @@ class RSSFeedCollector(APICollectorBase):
     def __init__(self, batch_size: int):
         super().__init__(batch_size)
 
-    async def collect(self, url: str) -> list[dict]:
+    async def collect(self, url: str, default_kind: str = NEWS) -> list[dict]:
         if excluded_url(url):
             return None
         feed = await _fetch_feed(self.session, url)
@@ -443,7 +443,7 @@ class RSSFeedCollector(APICollectorBase):
             return None
         source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].get('link'))
         if url in self._STATEMENT_URLS: items = self._extract_sec_statements_rss_entries(feed, url, source_url)
-        else: items = self._extract_default_rss_entries(feed, url, source_url, NEWS)
+        else: items = self._extract_default_rss_entries(feed, url, source_url, default_kind)
 
         return _return_collected(extract_source(source_url), items)
 

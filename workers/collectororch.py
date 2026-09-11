@@ -4,7 +4,7 @@ import random
 import uuid
 import yaml
 from datacollectors import RSSFeedCollector, GovInfoRSSCollector, RedditCollector, HackerNewsCollector, SECFilingCollector, AsyncWebScraper
-from utils.kinds import POST
+from utils.kinds import BLOG, NEWS, POST, PRESS_RELEASE
 from utils.fields import (
     ARTICLE_LANGUAGE,
     AUTHOR,
@@ -99,16 +99,31 @@ def validate_source_item(item: dict) -> bool:
         return False
     return bool(item.get(DOMAIN_NAME) and item.get(BASE_URL))
 
+
+_RSS_SOURCE_KINDS = {"rss": NEWS, "rss_blogs": BLOG, "rss_press_releases": PRESS_RELEASE}
+
+
 def parse_sources(sources: str) -> dict:
     if os.path.exists(sources):
         with open(sources, 'r') as file:
             data = yaml.safe_load(file)
     else: data = yaml.safe_load(sources)
-    return data['sources']
+    source_groups = data['sources']
+
+    parsed = {}
+    rss = []
+    for group, items in source_groups.items():
+        if group in _RSS_SOURCE_KINDS:
+            kind = _RSS_SOURCE_KINDS[group]
+            rss.extend((url, kind) for url in items or [])
+        else:
+            parsed[group] = items
+    if rss:
+        parsed["rss"] = rss
+    return parsed
 
 log = get_logger("collectorworker")
 
-_SCRAPER_QUEUE = ".cache/scraper-queue"
 _SCRAPER_CHUNK_SIZE = 32
 
 class Collector:
@@ -275,12 +290,15 @@ class Collector:
         # shuffling the sources to introduce randomness in failures
         funcs = []
         for source_type, source_paths in parse_sources(sources).items():
-            log.info(event="collecting", source=source_type, num_items=len(source_paths))            
-            funcs.extend((source_type, source) for source in source_paths)
+            log.info(event="collecting", source=source_type, num_items=len(source_paths))
+            if source_type == "rss":
+                funcs.extend((source_type, *source) for source in source_paths)
+            else:
+                funcs.extend((source_type, source) for source in source_paths)
         random.shuffle(funcs)
         return funcs
 
-    async def _collect(self, source_type, source):
+    async def _collect(self, source_type, source, default_kind: str = None):
         to_triage = None
         try:
             if source_type == "ychackernews":
@@ -288,7 +306,7 @@ class Collector:
             elif source_type == "reddit":
                 to_triage = await self.reddit_collector.collect(source, mode="json")
             elif source_type == "rss":
-                to_triage = await self.rss_collector.collect(source)
+                to_triage = await self.rss_collector.collect(source, default_kind=default_kind)
             elif source_type == "govinfo":
                 to_triage = await self.govinfo_collector.collect(source)
             elif source_type == "sec_edgar":

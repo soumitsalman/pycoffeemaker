@@ -75,14 +75,16 @@ POST_DOMAINS = {"reddit", "redd", "linkedin", "x", "twitter", "facebook", "ycomb
 BLOG_URLS = {
     "medium.com", "substack.", "wordpress.", "blogspot.", "newsletter.", "developers.",
     "blogs.", "blog.", ".so/", ".dev/", ".io/", ".to/", ".rs/", ".tech/", ".ai/", ".blog/",
-    "/blog/", "/reviews/",
+    "/blog/", "/reviews/", "beehiiv.com", "ghost.io", "mataroa.blog", "writeas.com", "micro.blog",
+    "developer.", "engineering.", "cloudblog.", "devblog.", "techblog.",
 }
 BLOG_SITENAMES = {"blog", "magazine", "newsletter", "weekly"}
-NEWS_SITENAMES = {"daily", "wire", "times", "today", "news", "the "}
-NEWS_TAGS = {"news", "headline", "press release", "announcement"}
+NEWS_SITENAMES = {"daily", "wire", "times", "today", "news", "press", "journal", "bulletin", "report", "chronicle", "gazette"}
+NEWS_TAGS = {"news", "headline", "press release", "announcement", "breaking news"}
 BLOG_TAGS = {"blog", "newsletter", "analysis", "opinion", "review"}
 PODCAST_SITENAMES = {"podcast", "show", "episode"}
 PODCAST_TAGS = {"podcast", "episode", "show"}
+EDITORIAL_DEFAULT_KINDS = {BLOG, NEWS, PRESS_RELEASE}
 SEC_FEED_KIND = {
     "https://www.sec.gov/news/pressreleases.rss": PRESS_RELEASE,
     "https://www.sec.gov/news/statements.rss": OFFICIAL_STATEMENT,
@@ -120,6 +122,7 @@ URL_KIND_RULES = (
     (LAWSUIT, re.compile(r"(?:courtlistener\.com/docket/|pacer\.uscourts\.gov/)")),
     (EARNINGS_REPORT, re.compile(r"(?:/earnings(?:[-_/]|\?|\b)|/quarterly[-_/]?(?:results|earnings)|/financials/quarterly-results)")),
     (FINANCIAL_REPORT, re.compile(r"(?:/annual-reports?/|/financials/(?:annual|reports?))")),
+    (PRESS_RELEASE, re.compile(r"(?:/(?:press|news|media)[-_]?releases?(?:[/?#]|$)|/newsroom(?:[/?#]|$))")),
     (RESEARCH_PAPER, re.compile(r"(?:arxiv\.org/(?:abs|pdf)/|doi\.org/10\.)")),
     (TECHNICAL_DOCUMENTATION, re.compile(r"(?:/docs?/(?:[^/]+/)?|readthedocs\.io/)")),
 )
@@ -144,6 +147,7 @@ BODY_KIND_RULES = (
     (SEC_FILING, re.compile(r"\b(?:united states securities and exchange commission|form 10-[kq])\b")),
     (CONTRACT, re.compile(r"\bthis (?:agreement|contract) is (?:made|entered into)\b")),
     (FINANCIAL_REPORT, re.compile(r"\bconsolidated financial statements\b")),
+    (PRESS_RELEASE, re.compile(r"\b(?:press|news|media) release\b")),
     (COURT_OPINION, re.compile(r"\b(?:opinion of the court|memorandum opinion|per curiam)\b")),
     (WHITEPAPER, re.compile(r"\bwhite\s*paper\b")),
 )
@@ -189,8 +193,8 @@ def _matching_govinfo_kind(evidence: str) -> str | None:
     return next((kind for pattern, kind in GOVINFO_FEED_KIND if pattern.search(evidence)), None)
 
 
-def guess_content_type(bean: dict, feed_url: str = None) -> str | None:
-    """Classify an item from authoritative feed/URL signals before text hints."""
+def guess_content_type(bean: dict, feed_url: str = None, default_kind: str = None) -> str | None:
+    """Classify an item from specific feed, URL, and text signals before its feed default."""
     if not bean:
         return None
 
@@ -219,14 +223,22 @@ def guess_content_type(bean: dict, feed_url: str = None) -> str | None:
 
     domain_name = _text_value(bean.get(DOMAIN_NAME))
     site_name = _text_value(bean.get(SITE_NAME))
-    if any(post_domain in domain_name for post_domain in POST_DOMAINS):
+    # RSS defaults require a social domain label, not a substring such as x in example.
+    is_post = (
+        bool(POST_DOMAINS.intersection(domain_name.split(".")))
+        if default_kind in EDITORIAL_DEFAULT_KINDS
+        else any(post_domain in domain_name for post_domain in POST_DOMAINS)
+    )
+    if is_post:
         return POST
-    if any((blog_url in url) or (blog_url in base_url) for blog_url in BLOG_URLS):
-        return BLOG
     if any(podcast_tag in descriptor for podcast_tag in PODCAST_TAGS) or any(
         podcast_name in site_name for podcast_name in PODCAST_SITENAMES
     ):
         return PODCAST
+    if default_kind in EDITORIAL_DEFAULT_KINDS:
+        return default_kind
+    if any((blog_url in url) or (blog_url in base_url) for blog_url in BLOG_URLS):
+        return BLOG
     if any(news_tag in descriptor for news_tag in NEWS_TAGS):
         return NEWS
     if any(blog_tag in descriptor for blog_tag in BLOG_TAGS):
