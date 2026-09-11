@@ -33,6 +33,49 @@ MAX_DOCUMENT_LEN = int(os.getenv("MAX_DOCUMENT_LEN", 4096)) # 16KB
 
 CLASSIFICATION_LIMIT = int(os.getenv("CLASSIFICATION_LIMIT", 2))
 CLASSIFICATION_EPS = float(os.getenv("CLASSIFICATION_EPS", 0.4))
+
+# Ideology is assigned only when a bean's categories include one of these
+# (political or political-adjacent labels from factory/classifications.yaml).
+IDEOLOGY_ELIGIBLE_CATEGORIES = frozenset(normalize_tags([
+    "AI Ethics and Governance",
+    "Privacy Engineering and Data Protection",
+    "Drones and Uncrewed Systems",
+    "Banking and Finance",
+    "Aviation and Air Transport",
+    "Employment and Workplace",
+    "Housing and Real Estate",
+    "Construction and Infrastructure",
+    "Pharmaceuticals and Drug Development",
+    "Public Health and Epidemiology",
+    "Reproductive and Sexual Health",
+    "Climate and Environmental Management",
+    "Water Resources and Management",
+    "Media and Journalism",
+    "Digital Communities and Online Platforms",
+    "Government and Politics",
+    "Public Policy and Administration",
+    "Elections and Voting",
+    "Legal System and Justice",
+    "Law Enforcement and Public Safety",
+    "Human Rights and Civil Liberties",
+    "Diversity, Equity, and Inclusion",
+    "Gender Studies and Identity",
+    "LGBTQ+ Issues",
+    "Migration and Immigration",
+    "Military and Defense",
+    "Homeland Security and Safety",
+    "Weaponry and Military Technology",
+    "Geopolitics and International Relations",
+    "Accessibility and Disability",
+    "Cannabis and Cannabinoids",
+    "Gambling and Betting",
+    "Alcohol and Beverages",
+    "Transportation and Mobility",
+    "Energy, Solar, and Renewable Systems",
+    "Philosophy, Religion, and Spirituality",
+    "Anthropology and Cultural Studies",
+]))
+
 class Embedder:
     cache: StateCacheBase
     embedder: EmbedderBase
@@ -85,18 +128,25 @@ class Embedder:
 
     def classify_beans(self, beans: list[dict]):
         embeddings = [bean[EMBEDDING] for bean in beans]
-        for key, index in self.classifications.items():
+        keys = [key for key in self.classifications if key != "ideology"]
+        if "ideology" in self.classifications:
+            keys.append("ideology")
+        for key in keys:
             labels = self._label_batch_search(
-                index,
+                self.classifications[key],
                 embeddings,
                 1 if key == "ideology" else CLASSIFICATION_LIMIT,
             )
             # NOTE: updating in place for future extension when I put the classifications in the queue for digestion
-            [
-                b.update({key: normalize_tags(lbl)[0] if key == "ideology" else normalize_tags(lbl)})
-                for b, lbl in zip(beans, labels) 
-                if lbl
-            ]   
+            for b, lbl in zip(beans, labels):
+                if not lbl:
+                    continue
+                tags = normalize_tags(lbl)
+                if key == "ideology":
+                    if tags and IDEOLOGY_ELIGIBLE_CATEGORIES.intersection(b.get(CATEGORIES) or []):
+                        b[key] = tags[0]
+                else:
+                    b[key] = tags
         return beans
 
     def embed_beans(self, beans: list[dict]):
