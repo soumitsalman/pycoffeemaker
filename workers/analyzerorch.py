@@ -21,7 +21,7 @@ from nlp import (
 )
 from utils.fields import *
 from utils import VECTOR_LEN, date_str, now_str
-from utils.kinds import POST
+from utils.kinds import BLOG, NEWS, POST
 from .cacheops import *
 from .states import *
 from icecream import ic
@@ -32,6 +32,7 @@ BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
 MAX_DOCUMENT_LEN = int(os.getenv("MAX_DOCUMENT_LEN", 4096)) # 16KB
 
 CLASSIFICATION_LIMIT = int(os.getenv("CLASSIFICATION_LIMIT", 2))
+CLASSIFICATION_EPS = float(os.getenv("CLASSIFICATION_EPS", 0.4))
 class Embedder:
     cache: StateCacheBase
     embedder: EmbedderBase
@@ -68,20 +69,31 @@ class Embedder:
         if not embeddings:
             return []
         labels = index_pack["labels"]
-        _, indices = index_pack["index"].kneighbors(
+        distances, indices = index_pack["index"].kneighbors(
             np.asarray(embeddings, dtype=np.float32),
             n_neighbors=min(top_n, len(labels)),
             return_distance=True,
         )
-        return [[labels[i] for i in row] for row in indices]
+        return [
+            [
+                labels[i]
+                for position, (i, distance) in enumerate(zip(index_row, distance_row))
+                if position == 0 or distance <= CLASSIFICATION_EPS
+            ]
+            for index_row, distance_row in zip(indices, distances)
+        ]
 
     def classify_beans(self, beans: list[dict]):
         embeddings = [bean[EMBEDDING] for bean in beans]
         for key, index in self.classifications.items():
-            labels = self._label_batch_search(index, embeddings, CLASSIFICATION_LIMIT)
+            labels = self._label_batch_search(
+                index,
+                embeddings,
+                1 if key == "ideology" else CLASSIFICATION_LIMIT,
+            )
             # NOTE: updating in place for future extension when I put the classifications in the queue for digestion
             [
-                b.update({key: normalize_tags(lbl)}) 
+                b.update({key: normalize_tags(lbl)[0] if key == "ideology" else normalize_tags(lbl)})
                 for b, lbl in zip(beans, labels) 
                 if lbl
             ]   
@@ -129,6 +141,10 @@ class Embedder:
                     log.info(event="embedded", source=chunk[0][BASE_URL], num_items=len(updates))
                     updates = self.classify_beans(updates)
                     log.info(event="classified", source=chunk[0][BASE_URL], num_items=len(updates))
+                    kinds_by_url = {bean[URL]: bean.get(KIND) for bean in chunk}
+                    for update in updates:
+                        if kinds_by_url.get(update[URL]) not in (NEWS, BLOG, POST):
+                            update.pop("ideology", None)
                     total += encache_beans(self.cache, EMBEDDED, updates)
                     
                 except Exception:

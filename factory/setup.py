@@ -38,13 +38,22 @@ def create_classification_embeddings():
         )
         ic(sentiments.sample(n=3))
 
-    return categories, sentiments
+        ideologies = pd.DataFrame(
+            {
+                ID: [lean[ID] for lean in classifications["ideologies"]],
+                EMBEDDING: embedder([f"Instruct: Given a question, retrieve passages that can help answer the question.\nQuery: Content with {lean['description']}" for lean in classifications["ideologies"]])
+            }
+        )
+        ic(ideologies.sample(n=3))
+
+    return categories, sentiments, ideologies
 
 def create_classification_files():
     dir_name = os.path.dirname(__file__)
-    categories, sentiments = create_classification_embeddings()
+    categories, sentiments, ideologies = create_classification_embeddings()
     categories.to_parquet(f"{dir_name}/categories.parquet", engine='pyarrow')
     sentiments.to_parquet(f"{dir_name}/sentiments.parquet", engine='pyarrow')
+    ideologies.to_parquet(f"{dir_name}/ideologies.parquet", engine='pyarrow')
 
 def create_processing_cache(db_path: str):
     """Seed cache with classification embeddings"""

@@ -89,6 +89,7 @@ if __name__ == "__main__":
             batch_size=batch_size,
             categories=f"{CURR_DIR}/factory/categories.parquet",
             sentiments=f"{CURR_DIR}/factory/sentiments.parquet",
+            ideology=f"{CURR_DIR}/factory/ideologies.parquet",
         ).run()
 
     elif mode == "CLUSTERING":
