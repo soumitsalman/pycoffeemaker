@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS beans (
     embedding vector(320), -- vector length is not easily mutable once set, so hardcoding it for now
     categories VARCHAR[],
     sentiments VARCHAR[],
+    ideology VARCHAR,
 
     -- COMPRESSED EXTRACTION FIELDS
     regions VARCHAR[],

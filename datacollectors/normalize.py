@@ -74,9 +74,11 @@ from utils.kinds import (
 POST_DOMAINS = {"reddit", "redd", "linkedin", "x", "twitter", "facebook", "ycombinator"}
 BLOG_URLS = {
     "medium.com", "substack.", "wordpress.", "blogspot.", "newsletter.", "developers.",
-    "blogs.", "blog.", ".so/", ".dev/", ".io/", ".to/", ".rs/", ".tech/", ".ai/", ".blog/",
-    "/blog/", "/reviews/", "beehiiv.com", "ghost.io", "mataroa.blog", "writeas.com", "micro.blog",
-    "developer.", "engineering.", "cloudblog.", "devblog.", "techblog.",
+    "blogs.", "blog.", ".blog/", "/blog/",
+    "git.", "github.", "gitlab.", ".so/", ".dev/", ".io/", ".to/", ".rs/",
+    ".tech/", ".ai/",  "/reviews/", "beehiiv.com", "ghost.io", "substack.",
+    "writeas.com", "micro.blog", "developer.", "engineering.", "cloudblog.",
+    "devblog.", "techblog.",
 }
 BLOG_SITENAMES = {"blog", "magazine", "newsletter", "weekly"}
 NEWS_SITENAMES = {"daily", "wire", "times", "today", "news", "press", "journal", "bulletin", "report", "chronicle", "gazette"}
@@ -194,7 +196,7 @@ def _matching_govinfo_kind(evidence: str) -> str | None:
 
 
 def guess_content_type(bean: dict, feed_url: str = None, default_kind: str = None) -> str | None:
-    """Classify an item from specific feed, URL, and text signals before its feed default."""
+    """Classify an item; first matching stage wins, then the feed default."""
     if not bean:
         return None
 
@@ -210,19 +212,12 @@ def guess_content_type(bean: dict, feed_url: str = None, default_kind: str = Non
     if kind := _matching_kind(URL_KIND_RULES, f"{url} {base_url}"):
         return kind
 
+    domain_name = _text_value(bean.get(DOMAIN_NAME))
+    site_name = _text_value(bean.get(SITE_NAME))
     descriptor = " ".join(
         _text_value(bean.get(field))
         for field in (TITLE, SUMMARY, DESCRIPTION, TAGS)
     )
-    if kind := _matching_kind(TITLE_KIND_RULES, descriptor):
-        return kind
-
-    content = _text_value(bean.get(CONTENT))
-    if kind := _matching_kind(BODY_KIND_RULES, content):
-        return kind
-
-    domain_name = _text_value(bean.get(DOMAIN_NAME))
-    site_name = _text_value(bean.get(SITE_NAME))
     # RSS defaults require a social domain label, not a substring such as x in example.
     is_post = (
         bool(POST_DOMAINS.intersection(domain_name.split(".")))
@@ -235,18 +230,25 @@ def guess_content_type(bean: dict, feed_url: str = None, default_kind: str = Non
         podcast_name in site_name for podcast_name in PODCAST_SITENAMES
     ):
         return PODCAST
-    if default_kind in EDITORIAL_DEFAULT_KINDS:
-        return default_kind
     if any((blog_url in url) or (blog_url in base_url) for blog_url in BLOG_URLS):
-        return BLOG
-    if any(news_tag in descriptor for news_tag in NEWS_TAGS):
-        return NEWS
-    if any(blog_tag in descriptor for blog_tag in BLOG_TAGS):
         return BLOG
     if any(site in site_name for site in BLOG_SITENAMES):
         return BLOG
+    if any(blog_tag in descriptor for blog_tag in BLOG_TAGS):
+        return BLOG
     if any(site in site_name for site in NEWS_SITENAMES) or "/news/" in url:
         return NEWS
+    if any(news_tag in descriptor for news_tag in NEWS_TAGS):
+        return NEWS
+    
+    if kind := _matching_kind(TITLE_KIND_RULES, descriptor):
+        return kind
+
+    content = _text_value(bean.get(CONTENT))
+    if kind := _matching_kind(BODY_KIND_RULES, content):
+        return kind
+    if default_kind in EDITORIAL_DEFAULT_KINDS:
+        return default_kind
     return None
 
 @dataclass(frozen=True)

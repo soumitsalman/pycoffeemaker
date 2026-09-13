@@ -116,6 +116,7 @@ class Bean(BaseModel):
     regions: Optional[list[str]] = Field(default=None, description="Geographic regions mentioned in the article content.")
     categories: Optional[list[str]] = Field(default=None, description="Categories/topics of the article content.")
     sentiments: Optional[list[str]] = Field(default=None, description="Sentiments expressed in the article content.")
+    ideology: Optional[str] = Field(default=None, description="Ideology expressed in the article content. Example: left, right, center, undetermined")
   
     model_config = ConfigDict(
         populate_by_name = True,
@@ -137,6 +138,7 @@ class Bean(BaseModel):
             'entities': 'object',  
             'categories': 'object',
             'sentiments': 'object',
+            'ideology': 'string'
         }
     )
 

@@ -17,6 +17,7 @@ from pycupboard.pgcupboard import Cupboard
 from pycupboard.models import Sip, Source, CAFECITO_SOURCE_ID
 from utils import generate_uuid
 from utils.dates import usable_created
+from utils.kinds import BLOG, NEWS, PODCAST, POST, RESEARCH_PAPER, TECHNICAL_DOCUMENTATION, WHITEPAPER
 from .states import *
 from nlp import merge_lists, normalize_tags
 from icecream import ic
@@ -134,6 +135,9 @@ CUPBOARD_EVENT_KIND = "event"
 CUPBOARD_SIGNAL_KIND = "signal"
 CUPBOARD_SIGNAL_URL_PREFIX = "https://api.cafecito.tech/espresso/signals/"
 MAX_TAGS = 50
+_KEEP_DIGEST_EVENT_TYPE = {
+    POST, BLOG, NEWS, PODCAST, RESEARCH_PAPER, WHITEPAPER, TECHNICAL_DOCUMENTATION,
+}
 class CupboardPorter:
     cache: AsyncStateCacheBase
 
@@ -144,11 +148,13 @@ class CupboardPorter:
     def _prep_events(cls, beans: list[dict[str, Any]]):
         beans = [bean for bean in beans if bean.get(DIGEST)]
         for bean in beans:
-            bean.pop("source", None) # temporary fix until the pipeline is dehydrated
-            bean[KIND] = CUPBOARD_EVENT_KIND
             if not usable_created(bean.get(CREATED)):
                 bean[CREATED] = bean.get(COLLECTED)
-
+            if (kind := bean.get(KIND)) not in _KEEP_DIGEST_EVENT_TYPE:
+                bean[DIGEST][EVENT_TYPE] = kind
+            # bean.pop("source", None) # temporary fix until the pipeline is dehydrated
+            bean[KIND] = CUPBOARD_EVENT_KIND
+            
             # create tags
             entity_tags = []       
             if entity_pack := bean.get(ENTITIES):
@@ -179,6 +185,7 @@ class CupboardPorter:
                 bean[DIGEST][SUMMARY] = briefing
             if event_items := (bean[DIGEST].pop("events", None)):
                 bean[DIGEST]["key_points"] = event_items
+
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):

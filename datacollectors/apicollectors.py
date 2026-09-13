@@ -451,7 +451,7 @@ class RSSFeedCollector(APICollectorBase):
     def _extract_sec_statements_rss_entries(feed, feed_url: str, site_url: str) -> list[dict]:
         items = []
         for entry, entry_link in _extract_rss_entries(feed, feed_url, site_url):
-            item = _build_rss_item(feed, feed_url, site_url, entry, BLOG, entry_link=entry_link)
+            item = _build_rss_item(feed, feed_url, site_url, entry, OFFICIAL_STATEMENT, entry_link=entry_link)
             item[AUTHOR] = strip_html_tags(entry.get('description', ''))
             items.append(cleanup_item(item))
         return items
