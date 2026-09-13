@@ -208,6 +208,40 @@ def test_outbound_hacker_news_uses_its_inline_body_for_kind():
     assert item["kind"] == "contract"
 
 
+def test_hacker_news_job_type_is_job():
+    outbound = _build_hackernews_item({
+        "id": 1,
+        "time": 0,
+        "type": "job",
+        "url": "https://github.com/acme/careers",
+        "title": "Acme is hiring a Python engineer",
+    }, "blog")
+    self_post = _build_hackernews_item({
+        "id": 2,
+        "time": 0,
+        "type": "job",
+        "title": "Acme is hiring a Python engineer",
+        "text": "<p>Remote, full-time.</p>",
+    }, "blog")
+
+    assert outbound["kind"] == self_post["kind"] == "job"
+    assert guess_content_type({"type": "job", "title": "Show HN: ignored"}) == "job"
+
+
+def test_hacker_news_show_hn_title_is_site():
+    item = _build_hackernews_item({
+        "id": 1,
+        "time": 0,
+        "type": "story",
+        "url": "https://github.com/acme/notes",
+        "title": "Show HN: Acme notes",
+    }, "blog")
+
+    assert item["kind"] == "site"
+    assert guess_content_type({"title": "Show HN: Acme notes", "url": "https://github.com/acme/notes"}) == "site"
+    assert guess_content_type({"title": "Ask HN: Who is hiring?"}) is None
+
+
 def test_hacker_news_and_reddit_without_outbound_urls_are_posts():
     hacker_news = _build_hackernews_item({"id": 1, "time": 0, "title": "Ask HN"}, "blog")
     reddit = _build_reddit_json_item({

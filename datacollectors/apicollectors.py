@@ -42,7 +42,8 @@ HACKERNEWS_TOP_STORIES = "https://hacker-news.firebaseio.com/v0/topstories.json"
 HACKERNEWS_NEW_STORIES = "https://hacker-news.firebaseio.com/v0/newstories.json"
 HACKERNEWS_ASK_STORIES = "https://hacker-news.firebaseio.com/v0/askstories.json"
 HACKERNEWS_SHOW_STORIES = "https://hacker-news.firebaseio.com/v0/showstories.json"
-HACKERNEWS_STORIES_URLS = [HACKERNEWS_TOP_STORIES, HACKERNEWS_NEW_STORIES, HACKERNEWS_ASK_STORIES, HACKERNEWS_SHOW_STORIES]
+HACKERNEWS_JOB_STORIES = "https://hacker-news.firebaseio.com/v0/jobstories.json"
+HACKERNEWS_STORIES_URLS = [HACKERNEWS_TOP_STORIES, HACKERNEWS_NEW_STORIES, HACKERNEWS_ASK_STORIES, HACKERNEWS_SHOW_STORIES, HACKERNEWS_JOB_STORIES]
 
 def from_timestamp(timestamp):
     if not timestamp:
@@ -369,21 +370,22 @@ def _build_hackernews_item(story: dict, default_kind: str):
     created_time = from_timestamp(story['time'])
     story_id = story['id']
     content = html_to_markdown(story['text']) if story.get('text') else None
+    title = story.get('title')
 
     if story.get('url'):
         # TODO: temporarily keeping original URL
         # url = remove_query_params(story['url'])
         url = story['url']
         source = extract_source(url)
-        # tags = []
-        kind = guess_content_type({
-            URL: url, DOMAIN_NAME: source, TITLE: story.get('title'), CONTENT: content,
-        }) or (SITE if "show hn" in story.get('title', "").lower() else default_kind)
+        fallback_kind = default_kind
     else:
         url = hackernews_story_permalink(story_id)
         source = HACKERNEWS
-        # tags = []
-        kind = POST
+        fallback_kind = POST
+
+    kind = guess_content_type({
+        URL: url, DOMAIN_NAME: source, TITLE: title, CONTENT: content, TYPE: story.get(TYPE),
+    }, default_kind=fallback_kind) or fallback_kind
 
     base_url = extract_base_url(url)
 

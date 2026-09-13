@@ -14352,3 +14352,4 @@ sources:
   - https://hacker-news.firebaseio.com/v0/newstories.json
   - https://hacker-news.firebaseio.com/v0/askstories.json
   - https://hacker-news.firebaseio.com/v0/showstories.json
+  - https://hacker-news.firebaseio.com/v0/jobstories.json

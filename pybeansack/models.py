@@ -8,16 +8,9 @@ from datetime import datetime
 
 from utils import CLUSTER_EPS, VECTOR_LEN, ndays_ago, ndays_ago_str, now
 from utils.fields import *
-from utils.kinds import POST, NEWS, BLOG
-
-# CHANNEL = "social media group/forum"
-JOB = "job"
-OPED = "opinion"
+from utils.kinds import POST, NEWS, BLOG, JOB
 
 SYSTEM = "__SYSTEM__"
-
-DIGEST_COLUMNS = [URL, CREATED, GIST]
-CONTENT_COLUMNS = [URL, CREATED, DOMAIN_NAME, TITLE, CONTENT]
 
 class Chatter(BaseModel):
     """Social media engagement stats of an article/bean (specified by `url`)."""
@@ -66,7 +59,6 @@ class Chatter(BaseModel):
 class Publisher(BaseModel):
     """Metadata of the website, publication or social medium from which an article or chatter is sourced."""
     id: Optional[UUID] = Field(default=None, description="The unique identifier of the publisher.")
-    # TODO: rename this to domain_name later
     domain_name: str = Field(min_length=1, description="The publisher ID/domain name of the publisher. This matches the source field in Bean.")
     base_url: str = Field(min_length=1, description="The base URL of the publisher.")
     site_name: Optional[str] = Field(default=None, description="The name of the site.")

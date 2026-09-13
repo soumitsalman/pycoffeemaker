@@ -47,6 +47,7 @@ EVENT_TYPE = "event_type"
 
 # Collector-only fields (same JSON keys, not always stored in Beansack)
 PLATFORM = "platform"
+TYPE = "type"
 LANGUAGE = "language"
 ARTICLE_LANGUAGE = "article_language"
 SITE_LANGUAGE = "site_language"

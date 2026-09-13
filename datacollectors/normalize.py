@@ -29,6 +29,7 @@ from utils.fields import (
     KIND,
     LANGUAGE,
     PLATFORM,
+    TYPE,
     RESTRICTED_CONTENT,
     RSS_FEED,
     SITE_LANGUAGE,
@@ -46,6 +47,7 @@ from utils.kinds import (
     BLOG,
     NEWS,
     SITE,
+    JOB,
     PODCAST,
     CONTRACT,
     PROCUREMENT_NOTICE,
@@ -199,6 +201,11 @@ def guess_content_type(bean: dict, feed_url: str = None, default_kind: str = Non
     """Classify an item; first matching stage wins, then the feed default."""
     if not bean:
         return None
+
+    if _text_value(bean.get(TYPE)) == JOB:
+        return JOB
+    if _text_value(bean.get(TITLE)).startswith("show hn"):
+        return SITE
 
     feeds = (feed_url, bean.get(RSS_FEED))
     for feed in (_text_value(value) for value in feeds if value):

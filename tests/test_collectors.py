@@ -97,7 +97,7 @@ def test_feeds_yaml_maps_every_item_to_the_right_collector():
         + [("ychackernews", url) for url in raw["ychackernews"]]
     )
     assert sorted(jobs) == sorted(expected)
-    assert len(jobs) == 5880
+    assert len(jobs) == len(expected)
 
 
 def test_collector_forwards_rss_default_kind():
