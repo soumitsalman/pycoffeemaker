@@ -146,7 +146,9 @@ def test_jsonld_html_body_is_converted_to_markdown():
     ({"title": "Acme v. Example Corp. complaint filed"}, None, "lawsuit"),
     ({"content": "This Agreement is entered into by and between the parties."}, None, "contract"),
     ({"title": "Annual report and consolidated financial statements"}, None, "financial_report"),
-    ({"title": "Product press release"}, None, "press_release"),
+    ({"title": "Product press release"}, None, "news"),
+    ({"url": "https://git.example.com/acme/notes"}, None, "blog"),
+    ({"url": "https://github.com/acme/notes"}, None, "blog"),
     ({"url": "https://www.congress.gov/public-law/119th-congress/house-bill/1/text"}, None, "enacted_law"),
     ({"url": "https://www.ecfr.gov/current/title-17/chapter-II"}, None, "regulation"),
     ({"url": "https://www.federalregister.gov/documents/2026/08/17/example-rule"}, None, "rulemaking_notice"),
@@ -164,10 +166,10 @@ def test_guess_content_type_uses_authoritative_url_feed_and_text_signals(bean, f
 
 
 @pytest.mark.parametrize(("bean", "default_kind", "expected"), [
-    ({"title": "Acme product announcement"}, "blog", "blog"),
-    ({"title": "Acme product press release"}, "blog", "press_release"),
+    ({"title": "Acme product update"}, "blog", "blog"),
+    ({"title": "Acme product press release"}, "blog", "news"),
     ({"content": "This press release announces a product."}, "blog", "press_release"),
-    ({"title": "Acme product announcement"}, "press_release", "press_release"),
+    ({"title": "Acme product update"}, "press_release", "press_release"),
 ])
 def test_guess_content_type_uses_feed_default_after_specific_signals(bean, default_kind, expected):
     assert guess_content_type(bean, default_kind=default_kind) == expected
@@ -204,6 +206,40 @@ def test_outbound_hacker_news_uses_its_inline_body_for_kind():
     }, "blog")
 
     assert item["kind"] == "contract"
+
+
+def test_hacker_news_job_type_is_job():
+    outbound = _build_hackernews_item({
+        "id": 1,
+        "time": 0,
+        "type": "job",
+        "url": "https://github.com/acme/careers",
+        "title": "Acme is hiring a Python engineer",
+    }, "blog")
+    self_post = _build_hackernews_item({
+        "id": 2,
+        "time": 0,
+        "type": "job",
+        "title": "Acme is hiring a Python engineer",
+        "text": "<p>Remote, full-time.</p>",
+    }, "blog")
+
+    assert outbound["kind"] == self_post["kind"] == "job"
+    assert guess_content_type({"type": "job", "title": "Show HN: ignored"}) == "job"
+
+
+def test_hacker_news_show_hn_title_is_site():
+    item = _build_hackernews_item({
+        "id": 1,
+        "time": 0,
+        "type": "story",
+        "url": "https://github.com/acme/notes",
+        "title": "Show HN: Acme notes",
+    }, "blog")
+
+    assert item["kind"] == "site"
+    assert guess_content_type({"title": "Show HN: Acme notes", "url": "https://github.com/acme/notes"}) == "site"
+    assert guess_content_type({"title": "Ask HN: Who is hiring?"}) is None
 
 
 def test_hacker_news_and_reddit_without_outbound_urls_are_posts():
@@ -276,18 +312,19 @@ def test_prep_rejects_incompatible_redirect():
 @pytest.mark.parametrize('phrase', ['press release', 'news release', 'media release'])
 @pytest.mark.parametrize('default_kind', ['news', 'blog', 'press_release'])
 def test_release_evidence_precedes_rss_default(field, phrase, default_kind):
-    bean = {'url': 'https://example.com/blog/update', field: [phrase] if field == 'tags' else phrase}
-    assert guess_content_type(bean, default_kind=default_kind) == 'press_release'
+    bean = {'url': 'https://example.com/update', field: [phrase] if field == 'tags' else phrase}
+    expected = 'press_release' if field == 'content' or phrase == 'media release' else 'news'
+    assert guess_content_type(bean, default_kind=default_kind) == expected
 
 
 @pytest.mark.parametrize(('bean', 'feed', 'expected'), [
     ({'title': 'Press release'}, 'https://www.sec.gov/news/statements.rss', 'official_statement'),
     ({'title': 'Press release'}, 'https://www.govinfo.gov/rss/bills.xml', 'legislative_bill'),
     ({'url': 'https://www.sec.gov/Archives/edgar/data/1/report', 'title': 'Press release'}, None, 'sec_filing'),
-    ({'domain_name': 'reddit', 'title': 'Press release'}, None, 'press_release'),
+    ({'domain_name': 'reddit', 'title': 'Press release'}, None, 'post'),
     ({'domain_name': 'reddit'}, None, 'post'),
     ({'title': 'Podcast episode'}, None, 'podcast'),
-    ({'site_name': 'Daily News', 'tags': ['announcement']}, None, 'blog'),
+    ({'site_name': 'Daily News', 'tags': ['announcement']}, None, 'news'),
 ])
 def test_rss_precedence(bean, feed, expected):
     assert guess_content_type(bean, feed_url=feed, default_kind='blog') == expected

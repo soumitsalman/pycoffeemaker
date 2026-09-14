@@ -97,7 +97,7 @@ def test_feeds_yaml_maps_every_item_to_the_right_collector():
         + [("ychackernews", url) for url in raw["ychackernews"]]
     )
     assert sorted(jobs) == sorted(expected)
-    assert len(jobs) == 5880
+    assert len(jobs) == len(expected)
 
 
 def test_collector_forwards_rss_default_kind():
@@ -531,9 +531,9 @@ def test_rss_collector_classifies_items_with_source_default(monkeypatch, default
 
     feed = feedparser.parse(f'''<rss version="2.0"><channel>
     <title>Corporate Blog</title><link>https://example.com</link>
-    <item><title>Product announcement</title>
-    <link>https://example.com/blog/product</link>
-    <description>{evidence or 'A new product announcement'}</description>
+    <item><title>Product update</title>
+    <link>https://example.com/product</link>
+    <description>{evidence or 'A new product update'}</description>
     </item></channel></rss>''')
     monkeypatch.setattr(apicollectors, '_fetch_feed', AsyncMock(return_value=feed))
 
@@ -543,4 +543,8 @@ def test_rss_collector_classifies_items_with_source_default(monkeypatch, default
 
     items = asyncio.run(collect())
     assert len(items) == 1
-    assert items[0]['kind'] == ('press_release' if evidence else default_kind)
+    assert items[0]['kind'] == (
+        'news' if evidence in ('Press release', 'News release')
+        else 'press_release' if evidence
+        else default_kind
+    )

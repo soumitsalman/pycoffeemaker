@@ -18,7 +18,7 @@ from utils.dates import ndays_ago
 logging.basicConfig(level=logging.INFO)
 faker = Faker()
 
-TREND_COLUMNS = [URL, TITLE, CATEGORIES, LIKES, COMMENTS, RELATED, TRENDSCORE]
+TREND_COLUMNS = [URL, TITLE, CATEGORIES, LIKES, COMMENTS, RELATED, TREND_SCORE]
 
 ALL_BACKENDS = [
     pytest.param("pg_db", marks=pytest.mark.pg),
@@ -139,7 +139,7 @@ def _updates(db):
 
 def _trend_queries(db):
     ic(db.optimize())
-    ic(db.query_trending_beans(limit=5, columns=[URL, TRENDSCORE, LIKES, RELATED]))
+    ic(db.query_trending_beans(limit=5, columns=[URL, TREND_SCORE, LIKES, RELATED]))
     ic(
         db.query_aggregated_beans(
             created=ndays_ago(360),

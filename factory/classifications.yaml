@@ -67,6 +67,10 @@ categories:
   description: Virtual reality, augmented reality, mixed reality, headsets, immersive worlds, and spatial computing, VR, AR, XR, augmented environments, immersive interfaces, 3D worlds, spatial interaction
 - id: Interactive Entertainment and Streaming
   description: Streaming platforms, live entertainment, interactive media, creators, digital audiences, and entertainment technology, digital entertainment, live streaming, on-demand video, creator platforms, interactive broadcasts, audience engagement
+- id: Sports and Athletics
+  description: Professional and amateur sports, teams, athletes, leagues, games, scores, standings, playoffs, championships, and sports news, baseball, football, basketball, soccer, hockey, tennis, golf, cricket, Olympics, college athletics, match reports, box scores, MLB, NFL, NBA, NHL, FIFA
+- id: Television and Streaming
+  description: Television shows, series, episodes, networks, streaming originals, actors, season premieres, and TV criticism, broadcast television, cable TV, streaming series, sitcoms, dramas, reality television, TV ratings
 - id: Business and Management
   description: Corporate strategy, business operations, management decisions, leadership, organizational performance, and company news, enterprise strategy, operations management, corporate governance, organizational planning, executives, business performance
 - id: Entrepreneurship and Startups
