@@ -39,7 +39,7 @@ from .states import *
 from icecream import ic
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count()))
-WORDS_THRESHOLD_FOR_STORING = int(os.getenv("WORDS_THRESHOLD_FOR_STORING", 160))  # min words needed to not download the body
+WORDS_THRESHOLD_FOR_STORING = int(os.getenv("WORDS_THRESHOLD_FOR_STORING", 200))  # min words needed to not download the body
 
 IGNORE_WORD_GAMES = ['hurdle hints', 'nyt strands hints', 'wordle today', 'crossword today', 'crossword hints', 'nyt connections hints', 'spelling bee hints', 'wordle answers']
 BEAN_EXCLUDED_FIELDS = {
@@ -59,7 +59,7 @@ BEAN_EXCLUDED_FIELDS = {
 is_bean_storable = lambda bean: (
     bean
     and bean.get("content_length", 0) >= WORDS_THRESHOLD_FOR_STORING
-    and not any(tag in bean.get(TITLE, '').lower() for tag in IGNORE_WORD_GAMES)
+    and not any(tag in (bean.get(TITLE) or "").lower() for tag in IGNORE_WORD_GAMES)
 )
 is_bean_scrapable = lambda bean: (
     bean
