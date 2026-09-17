@@ -152,7 +152,7 @@ class CupboardPorter:
                 bean[CREATED] = bean.get(COLLECTED)
             if (kind := bean.get(KIND)) not in _KEEP_DIGEST_EVENT_TYPE:
                 bean[DIGEST][EVENT_TYPE] = kind
-            # bean.pop("source", None) # temporary fix until the pipeline is dehydrated
+            bean.pop("source", None) # temporary fix until the pipeline is dehydrated
             bean[KIND] = CUPBOARD_EVENT_KIND
             
             # create tags

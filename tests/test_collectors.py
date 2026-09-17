@@ -41,6 +41,7 @@ def save_models(items: list[Bean | Chatter], file_name: str = None):
 
 def test_parse_sources_assigns_kind_from_rss_groups():
     from workers.collectororch import parse_sources
+    from datacollectors.normalize import KindPolicy
 
     sources = parse_sources("""
 sources:
@@ -53,9 +54,9 @@ sources:
 """)
 
     assert sources["rss"] == [
-        ("https://example.com/news/rss", "news"),
-        ("https://example.com/blog/feed.xml", "blog"),
-        ("https://example.com/press/rss", "press_release"),
+        ("https://example.com/news/rss", KindPolicy(mode="unknown")),
+        ("https://example.com/blog/feed.xml", KindPolicy(mode="non_news", kind_hint="blog")),
+        ("https://example.com/press/rss", KindPolicy(mode="non_news", kind_hint="press_release")),
     ]
 
 
@@ -64,23 +65,28 @@ def test_rss_config_has_an_explicit_editorial_kind_for_every_feed():
 
     rss = parse_sources("factory/feeds.yaml")["rss"]
 
-    assert len(rss) == 5324
-    assert {kind for _, kind in rss} == {"news", "blog", "press_release"}
-    assert all(url and kind in {"news", "blog", "press_release"} for url, kind in rss)
+    assert {policy.mode for _, policy in rss} <= {"unknown", "reporting", "mixed", "non_news"}
+    assert all(url and policy.mode for url, policy in rss)
 
 
 def test_feeds_yaml_maps_every_item_to_the_right_collector():
     from pathlib import Path
     import yaml
     from workers.collectororch import Collector, parse_sources
+    from datacollectors.normalize import KindPolicy
 
     raw = yaml.safe_load(Path("factory/feeds.yaml").read_text())["sources"]
     parsed = parse_sources("factory/feeds.yaml")
+    unknown = KindPolicy(mode="unknown")
+    blog = KindPolicy(mode="non_news", kind_hint="blog")
+    press = KindPolicy(mode="non_news", kind_hint="press_release")
+    reporting = KindPolicy(mode="reporting")
 
     assert parsed["rss"] == (
-        [(url, "news") for url in raw["rss"]]
-        + [(url, "blog") for url in raw["rss_blogs"]]
-        + [(url, "press_release") for url in raw["rss_press_releases"]]
+        [(url, unknown) for url in raw["rss"]]
+        + [(url, blog) for url in raw["rss_blogs"]]
+        + [(url, press) for url in raw["rss_press_releases"]]
+        + [(url, reporting) for url in raw.get("rss_news") or []]
     )
     for key in ("govinfo", "sec_edgar", "reddit", "ychackernews"):
         assert parsed[key] == raw[key]
@@ -88,9 +94,10 @@ def test_feeds_yaml_maps_every_item_to_the_right_collector():
 
     jobs = object.__new__(Collector)._get_collector_funcs("factory/feeds.yaml")
     expected = (
-        [("rss", url, "news") for url in raw["rss"]]
-        + [("rss", url, "blog") for url in raw["rss_blogs"]]
-        + [("rss", url, "press_release") for url in raw["rss_press_releases"]]
+        [("rss", url, unknown) for url in raw["rss"]]
+        + [("rss", url, reporting) for url in raw.get("rss_news") or []]
+        + [("rss", url, blog) for url in raw["rss_blogs"]]
+        + [("rss", url, press) for url in raw["rss_press_releases"]]
         + [("govinfo", url) for url in raw["govinfo"]]
         + [("sec_edgar", url) for url in raw["sec_edgar"]]
         + [("reddit", name) for name in raw["reddit"]]
@@ -102,15 +109,17 @@ def test_feeds_yaml_maps_every_item_to_the_right_collector():
 
 def test_collector_forwards_rss_default_kind():
     from workers.collectororch import Collector
+    from datacollectors.normalize import KindPolicy
 
     collector = object.__new__(Collector)
     collector.rss_collector = SimpleNamespace(collect=AsyncMock(return_value=[]))
     collector._triage = AsyncMock()
+    policy = KindPolicy(mode="non_news", kind_hint="blog")
 
-    asyncio.run(collector._collect("rss", "https://example.com/feed.xml", "blog"))
+    asyncio.run(collector._collect("rss", "https://example.com/feed.xml", policy))
 
     collector.rss_collector.collect.assert_awaited_once_with(
-        "https://example.com/feed.xml", default_kind="blog"
+        "https://example.com/feed.xml", policy=policy
     )
 
 
@@ -484,6 +493,7 @@ def test_async_web_scraper_site():
 
 def test_flat_rss_groups_schedule_defaults_without_changing_other_collectors():
     from workers.collectororch import Collector, parse_sources
+    from datacollectors.normalize import KindPolicy
 
     config = '''
 sources:
@@ -503,9 +513,9 @@ sources:
     assert parsed['govinfo'] == ['https://www.govinfo.gov/rss/bills.xml']
     collector = object.__new__(Collector)
     assert set(collector._get_collector_funcs(config)) == {
-        ('rss', 'https://example.com/feed', 'news'),
-        ('rss', 'https://example.com/blog/feed', 'blog'),
-        ('rss', 'https://example.com/press/feed', 'press_release'),
+        ('rss', 'https://example.com/feed', KindPolicy(mode='unknown')),
+        ('rss', 'https://example.com/blog/feed', KindPolicy(mode='non_news', kind_hint='blog')),
+        ('rss', 'https://example.com/press/feed', KindPolicy(mode='non_news', kind_hint='press_release')),
         ('reddit', 'example'),
         ('govinfo', 'https://www.govinfo.gov/rss/bills.xml'),
     }
@@ -516,7 +526,7 @@ def test_feed_config_uses_flat_url_lists():
     import yaml
 
     groups = yaml.safe_load(Path('factory/feeds.yaml').read_text())['sources']
-    for key in ('rss', 'rss_blogs', 'rss_press_releases'):
+    for key in ('rss', 'rss_blogs', 'rss_press_releases', 'rss_news'):
         assert isinstance(groups[key], list)
         assert all(isinstance(url, str) for url in groups[key])
     assert 'https://martinfowler.com/feed.atom' in groups['rss_blogs']
@@ -543,8 +553,31 @@ def test_rss_collector_classifies_items_with_source_default(monkeypatch, default
 
     items = asyncio.run(collect())
     assert len(items) == 1
-    assert items[0]['kind'] == (
-        'news' if evidence in ('Press release', 'News release')
-        else 'press_release' if evidence
-        else default_kind
-    )
+    # News defaults are ignored. A prose mention of a release is not item_release.
+    # Valid non-news defaults apply only at fallback.
+    assert items[0]['kind'] == ('blog' if default_kind == 'news' else default_kind)
+
+
+
+def test_rss_collector_reporting_policy_trusts_declared_publisher_host(monkeypatch):
+    import feedparser
+    from datacollectors import apicollectors
+    from datacollectors.normalize import KindPolicy
+
+    feed = feedparser.parse('''<rss version="2.0"><channel>
+    <title>Publisher reporting</title><link>https://www.publisher.example/news</link>
+    <item><title>City council votes</title>
+    <link>https://www.publisher.example/news/council-vote</link>
+    </item></channel></rss>''')
+    monkeypatch.setattr(apicollectors, "_fetch_feed", AsyncMock(return_value=feed))
+
+    async def collect():
+        collector = apicollectors.RSSFeedCollector(5)
+        return await collector.collect(
+            "https://feeds.publisher.example/rss.xml",
+            policy=KindPolicy(mode="reporting"),
+        )
+
+    items = asyncio.run(collect())
+    assert len(items) == 1
+    assert items[0]["kind"] == "news"

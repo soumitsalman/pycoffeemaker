@@ -111,7 +111,7 @@ Storage: `pybeansack.create_client("pg"\|"lance"\|"duck"\|"dl", ...)`. Cupboard:
 
 ## Other components
 
-- **`datacollectors/`** — shared field constants (`URL`, `CONTENT`, `SOURCE`, …); `apicollectors.py`, `scrapers.py`
+- **`datacollectors/`** — shared field constants (`URL`, `CONTENT`, `SOURCE`, …); `apicollectors.py`, `scrapers.py`. Collector field mapping and persistence: [`datacollectors/DATAFIELDS.md`](datacollectors/DATAFIELDS.md). Bean kind/content-type algorithm: [`datacollectors/CONTENT_KIND_CLASSIFICATION.md`](datacollectors/CONTENT_KIND_CLASSIFICATION.md).
 - **`nlp/`** — `create_embedder`, `create_text_analyst`, `Digest`, `Briefing`, `EntityExtractor`; local HF, vLLM, ONNX, llama.cpp, Infinity, remote APIs (`openvino://` prefix is a dead backend)
 - **`factory/`** — `feeds.yaml` (`COLLECTOR_SOURCES`), parquet label assets, DB setup/migrations, ThunderCompute s6 boot, Salad recipes; `deprecated/` for old GPU/cloud ops
 - **`processingcache/`** — cache/state-machine interfaces plus PostgreSQL and extension backends
