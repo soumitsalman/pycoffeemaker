@@ -300,10 +300,10 @@ class Collector:
         if not beans: return
 
         source_marker, item_count = beans[0][DOMAIN_NAME], len(beans)
-        rule_counts = Counter(
-            getattr(bean.get(KIND_DECISION_KEY), "rule_id", None) or "missing"
-            for bean in beans
-        )
+        # rule_counts = Counter(
+        #     getattr(bean.get(KIND_DECISION_KEY), "rule_id", None) or "missing"
+        #     for bean in beans
+        # )
         payload = [
             {key: value for key, value in bean.items() if key not in _RESERVED_KIND_KEYS}
             for bean in beans
@@ -312,10 +312,10 @@ class Collector:
         beans[:] = []
 
         if cached_count is not None:
-            log.info(event="cached", source=source_marker, beans=cached_count, attempted=item_count, rules=dict(rule_counts))
+            log.info(event="cached", source=source_marker, beans=cached_count, attempted=item_count)
             self.beans_collected += cached_count
         else:
-            log.info(event="caching", source=source_marker, beans=item_count, rules=dict(rule_counts))
+            log.info(event="caching", source=source_marker, beans=item_count)
         
     async def _cache_publishers(self, publishers: list[dict]):
         if not publishers: return
