@@ -33,7 +33,7 @@ Import from `datacollectors` or `datacollectors.utils`.
 - Government/legal: `legislative_bill`, `legislative_proposal`, `enacted_law`, `regulation`, `rulemaking_notice`, `court_opinion`, `lawsuit`, `government_report`, `budget_document`, `legislative_record`, `hearing`.
 - Knowledge: `research_paper`, `whitepaper`, `technical_documentation`.
 
-`guess_content_type()` resolves in this order: exact source-feed mapping, authoritative URL, title/summary/tags, body markers, then editorial/social fallbacks. RSS/HN/Reddit items are classified before their generic default is used; scraping may replace only generic kinds with stronger evidence.
+`guess_content_type()` is the sole kind authority. It evaluates native provenance, primary-document URL/feed/identity, explicit non-news formats, then reviewed source policy. Unreviewed items fall back to `blog` with `fallback_unresolved`; `default_kind='news'` is not authority. RSS groups supply `KindPolicy` (`rss` unknown, `rss_news` reporting, `rss_blogs`/`rss_press_releases` non-news). A policy accepts only an exact configured feed host, its declared publisher host, or an explicit `hosts` allow-list. Scraping reclassifies with the original context plus JSON-LD types/sections. Transient `_kind_context` and `_kind_decision` never enter the cache.
 
 **Derived fields** (added by `cleanup_item`): `title_length`, `summary_length`, `content_length`; `base_url` inferred from `url` if missing.
 

@@ -141,37 +141,31 @@ def test_jsonld_html_body_is_converted_to_markdown():
     ({"url": "https://www.sec.gov/Archives/edgar/data/123/filing.htm"}, None, "sec_filing"),
     ({"url": "https://www.govinfo.gov/content/pkg/BILLS-119hr1/html/BILLS-119hr1.htm"}, "https://www.govinfo.gov/rss/bills.xml", "legislative_bill"),
     ({"url": "https://www.govinfo.gov/content/pkg/USCOURTS-ca2-24-1/html/opinion.htm"}, "https://www.govinfo.gov/rss/uscourts-ca2.xml", "court_opinion"),
-    ({"title": "Acme Reports Second Quarter 2026 Earnings Results"}, None, "earnings_report"),
-    ({"title": "Draft legislation for clean energy"}, None, "legislative_proposal"),
-    ({"title": "Acme v. Example Corp. complaint filed"}, None, "lawsuit"),
-    ({"content": "This Agreement is entered into by and between the parties."}, None, "contract"),
-    ({"title": "Annual report and consolidated financial statements"}, None, "financial_report"),
-    ({"title": "Product press release"}, None, "news"),
-    ({"url": "https://git.example.com/acme/notes"}, None, "blog"),
-    ({"url": "https://github.com/acme/notes"}, None, "blog"),
     ({"url": "https://www.congress.gov/public-law/119th-congress/house-bill/1/text"}, None, "enacted_law"),
     ({"url": "https://www.ecfr.gov/current/title-17/chapter-II"}, None, "regulation"),
     ({"url": "https://www.federalregister.gov/documents/2026/08/17/example-rule"}, None, "rulemaking_notice"),
     ({"url": "https://www.supremecourt.gov/opinions/25pdf/24-1_abc1.pdf"}, None, "court_opinion"),
     ({"url": "https://sam.gov/opp/abc123/view"}, None, "procurement_notice"),
     ({"url": "https://www.usaspending.gov/award/CONT_AWD_123"}, None, "contract"),
-    ({"url": "https://investor.example.com/financials/quarterly-results"}, None, "earnings_report"),
-    ({"title": "Acme files Form 10-K annual report"}, None, "sec_filing"),
-    ({"title": "Acme announces full-year results"}, None, "earnings_report"),
-    ({"title": "Acme signs definitive agreement to acquire Example"}, None, "contract"),
-    ({"title": "What a 10-K tells shareholders"}, None, None),
+    ({"url": "https://github.com/acme/notes"}, None, "site"),
+    ({"title": "What a 10-K tells shareholders"}, None, "blog"),
+    ({"title": "Acme Reports Second Quarter 2026 Earnings Results"}, None, "blog"),
+    ({"title": "Draft legislation for clean energy"}, None, "blog"),
+    ({"title": "Acme v. Example Corp. complaint filed"}, None, "blog"),
 ])
 def test_guess_content_type_uses_authoritative_url_feed_and_text_signals(bean, feed_url, expected):
+    # Title-only lawsuit/earnings/legislation mentions are reporting-about-it, not documents.
     assert guess_content_type(bean, feed_url) == expected
 
 
 @pytest.mark.parametrize(("bean", "default_kind", "expected"), [
     ({"title": "Acme product update"}, "blog", "blog"),
-    ({"title": "Acme product press release"}, "blog", "news"),
-    ({"content": "This press release announces a product."}, "blog", "press_release"),
+    ({"title": "Acme product press release"}, "blog", "blog"),
+    ({"content": "This press release announces a product."}, "blog", "blog"),
     ({"title": "Acme product update"}, "press_release", "press_release"),
 ])
 def test_guess_content_type_uses_feed_default_after_specific_signals(bean, default_kind, expected):
+    # Prose "press release" is not item_release; news defaults are ignored; non-news defaults remain fallbacks.
     assert guess_content_type(bean, default_kind=default_kind) == expected
 
 
@@ -186,7 +180,7 @@ def test_scraped_content_reclassifies_a_generic_kind():
         "kind": "news",
         "url": "https://example.com/contracts/acme",
         "source": "example",
-        "title": "Acme agreement",
+        "title": "Acme purchase agreement",
         "collected": collected,
     }
     result = {"content": "This Agreement is entered into by and between the parties."}
@@ -201,7 +195,7 @@ def test_outbound_hacker_news_uses_its_inline_body_for_kind():
         "id": 1,
         "time": 0,
         "url": "https://example.com/contracts/acme",
-        "title": "Acme agreement",
+        "title": "Acme purchase agreement",
         "text": "<p>This Agreement is entered into by and between the parties.</p>",
     }, "blog")
 
@@ -225,7 +219,12 @@ def test_hacker_news_job_type_is_job():
     }, "blog")
 
     assert outbound["kind"] == self_post["kind"] == "job"
-    assert guess_content_type({"type": "job", "title": "Show HN: ignored"}) == "job"
+    from datacollectors.normalize import KindContext
+    assert guess_content_type(
+        {"type": "job", "title": "Show HN: ignored"},
+        context=KindContext(origin="hackernews", native_type="job"),
+    ) == "job"
+    assert guess_content_type({"type": "job", "title": "Show HN: ignored"}) == "blog"
 
 
 def test_hacker_news_show_hn_title_is_site():
@@ -239,7 +238,7 @@ def test_hacker_news_show_hn_title_is_site():
 
     assert item["kind"] == "site"
     assert guess_content_type({"title": "Show HN: Acme notes", "url": "https://github.com/acme/notes"}) == "site"
-    assert guess_content_type({"title": "Ask HN: Who is hiring?"}) is None
+    assert guess_content_type({"title": "Ask HN: Who is hiring?"}) == "blog"
 
 
 def test_hacker_news_and_reddit_without_outbound_urls_are_posts():
@@ -308,23 +307,21 @@ def test_prep_rejects_incompatible_redirect():
     assert bean["url"] == "https://www.govinfo.gov/content/pkg/uscourts-x/html/x.htm"
 
 
-@pytest.mark.parametrize('field', ['title', 'tags', 'summary', 'description', 'content'])
-@pytest.mark.parametrize('phrase', ['press release', 'news release', 'media release'])
-@pytest.mark.parametrize('default_kind', ['news', 'blog', 'press_release'])
-def test_release_evidence_precedes_rss_default(field, phrase, default_kind):
-    bean = {'url': 'https://example.com/update', field: [phrase] if field == 'tags' else phrase}
-    expected = 'press_release' if field == 'content' or phrase == 'media release' else 'news'
-    assert guess_content_type(bean, default_kind=default_kind) == expected
+def test_release_evidence_is_not_a_prose_substring():
+    # Replaces the old news/press-release descriptor tests: a mention is not item_release.
+    bean = {"url": "https://example.com/update", "title": "Company issued a press release"}
+    assert guess_content_type(bean, default_kind="news") == "blog"
+    labeled = {"url": "https://example.com/update", "title": "Press release: Acme ships", "tags": ["press release"]}
+    assert guess_content_type(labeled) == "press_release"
 
 
 @pytest.mark.parametrize(('bean', 'feed', 'expected'), [
-    ({'title': 'Press release'}, 'https://www.sec.gov/news/statements.rss', 'official_statement'),
-    ({'title': 'Press release'}, 'https://www.govinfo.gov/rss/bills.xml', 'legislative_bill'),
+    ({'url': 'https://www.sec.gov/news/statement/x.htm', 'title': 'Press release'}, 'https://www.sec.gov/news/statements.rss', 'official_statement'),
+    ({'url': 'https://www.govinfo.gov/content/pkg/BILLS-1/html/x.htm', 'title': 'Press release'}, 'https://www.govinfo.gov/rss/bills.xml', 'legislative_bill'),
     ({'url': 'https://www.sec.gov/Archives/edgar/data/1/report', 'title': 'Press release'}, None, 'sec_filing'),
-    ({'domain_name': 'reddit', 'title': 'Press release'}, None, 'post'),
-    ({'domain_name': 'reddit'}, None, 'post'),
-    ({'title': 'Podcast episode'}, None, 'podcast'),
-    ({'site_name': 'Daily News', 'tags': ['announcement']}, None, 'news'),
+    ({'domain_name': 'reddit', 'title': 'Press release'}, None, 'blog'),
+    ({'title': 'Podcast episode'}, None, 'blog'),
+    ({'site_name': 'Daily News', 'tags': ['announcement']}, None, 'blog'),
 ])
 def test_rss_precedence(bean, feed, expected):
     assert guess_content_type(bean, feed_url=feed, default_kind='blog') == expected

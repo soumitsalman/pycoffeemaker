@@ -3,8 +3,20 @@ import os
 import random
 import uuid
 import yaml
+from collections import Counter
 from datacollectors import RSSFeedCollector, GovInfoRSSCollector, RedditCollector, HackerNewsCollector, SECFilingCollector, AsyncWebScraper
-from utils.kinds import BLOG, NEWS, POST, PRESS_RELEASE
+from datacollectors.normalize import (
+    CANONICAL_KINDS,
+    KIND_CONTEXT_KEY,
+    KIND_DECISION_KEY,
+    KindPolicy,
+    NON_NEWS_KINDS,
+    feed_identity,
+    normalize_feed_key,
+    normalize_policy_host,
+    validate_news_path,
+)
+from utils.kinds import BLOG, POST, PRESS_RELEASE
 from utils.fields import (
     ARTICLE_LANGUAGE,
     AUTHOR,
@@ -100,24 +112,90 @@ def validate_source_item(item: dict) -> bool:
     return bool(item.get(DOMAIN_NAME) and item.get(BASE_URL))
 
 
-_RSS_SOURCE_KINDS = {"rss": NEWS, "rss_blogs": BLOG, "rss_press_releases": PRESS_RELEASE}
+_RSS_GROUP_POLICIES = {
+    "rss": KindPolicy(mode="unknown"),
+    "rss_news": KindPolicy(mode="reporting"),
+    "rss_blogs": KindPolicy(mode="non_news", kind_hint=BLOG),
+    "rss_press_releases": KindPolicy(mode="non_news", kind_hint=PRESS_RELEASE),
+}
+_POLICY_FIELDS = frozenset({"mode", "kind_hint", "hosts", "news_paths"})
+_POLICY_MODES = frozenset({"unknown", "reporting", "mixed", "non_news"})
+_RESERVED_KIND_KEYS = frozenset({KIND_CONTEXT_KEY, KIND_DECISION_KEY})
+
+
+def _policy_from_entry(feed_url: str, group: str, entry: dict | None) -> KindPolicy:
+    base = _RSS_GROUP_POLICIES[group]
+    if not entry:
+        return base
+    if not isinstance(entry, dict):
+        raise ValueError(f"{feed_url}: content_kind_sources entry must be a mapping")
+    unknown = set(entry) - _POLICY_FIELDS
+    if unknown:
+        raise ValueError(f"{feed_url}: unknown fields {sorted(unknown)}")
+    mode = entry.get("mode", base.mode)
+    kind_hint = entry["kind_hint"] if "kind_hint" in entry else base.kind_hint
+    try:
+        hosts = tuple(normalize_policy_host(host) for host in (entry.get("hosts") or ()))
+        news_paths = tuple(validate_news_path(path) for path in (entry.get("news_paths") or ()))
+    except ValueError as exc:
+        raise ValueError(f"{feed_url}: {exc}") from exc
+    if mode not in _POLICY_MODES:
+        raise ValueError(f"{feed_url}: invalid mode {mode!r}")
+    if group != "rss" and (mode != base.mode or (kind_hint or None) != (base.kind_hint or None)):
+        raise ValueError(f"{feed_url}: mode/kind_hint must agree with group {group}")
+    if mode in {"reporting", "mixed"} and kind_hint:
+        raise ValueError(f"{feed_url}: {mode} rejects kind_hint")
+    if mode == "non_news":
+        if kind_hint not in NON_NEWS_KINDS:
+            raise ValueError(f"{feed_url}: non_news requires a canonical non-news kind_hint")
+    elif kind_hint and kind_hint not in CANONICAL_KINDS:
+        raise ValueError(f"{feed_url}: invalid kind_hint {kind_hint!r}")
+    if news_paths and mode != "mixed":
+        raise ValueError(f"{feed_url}: only mixed permits nonempty news_paths")
+    return KindPolicy(mode=mode, kind_hint=kind_hint, hosts=hosts, news_paths=news_paths)
 
 
 def parse_sources(sources: str) -> dict:
     if os.path.exists(sources):
         with open(sources, 'r') as file:
             data = yaml.safe_load(file)
-    else: data = yaml.safe_load(sources)
+    else:
+        data = yaml.safe_load(sources)
     source_groups = data['sources']
+    overlays = data.get("content_kind_sources") or {}
+    if overlays and not isinstance(overlays, dict):
+        raise ValueError("content_kind_sources must be a mapping of feed URL to policy")
 
     parsed = {}
-    rss = []
+    rss_jobs = []
+    scheduled = {}
     for group, items in source_groups.items():
-        if group in _RSS_SOURCE_KINDS:
-            kind = _RSS_SOURCE_KINDS[group]
-            rss.extend((url, kind) for url in items or [])
+        if group in _RSS_GROUP_POLICIES:
+            for url in items or []:
+                ident = feed_identity(url)
+                prior = scheduled.get(ident)
+                if prior and prior != group:
+                    raise ValueError(f"{url}: same feed appears in groups {prior} and {group}")
+                scheduled[ident] = group
+                rss_jobs.append((url, group))
         else:
             parsed[group] = items
+
+    overlay_by_ident = {}
+    for key, entry in overlays.items():
+        try:
+            ident = feed_identity(normalize_feed_key(key))
+        except ValueError as exc:
+            raise ValueError(f"{key}: {exc}") from exc
+        if ident not in scheduled:
+            raise ValueError(f"{key}: content_kind_sources key is not a configured RSS feed")
+        if ident in overlay_by_ident:
+            raise ValueError(f"{key}: duplicate content_kind_sources key")
+        overlay_by_ident[ident] = entry
+
+    rss = []
+    for url, group in rss_jobs:
+        rss.append((url, _policy_from_entry(url, group, overlay_by_ident.get(feed_identity(url)))))
     if rss:
         parsed["rss"] = rss
     return parsed
@@ -175,12 +253,12 @@ class Collector:
         }
         [publisher.pop(key, None) for key in list(publisher) if not publisher[key]]
         
-        bean = item        
+        bean = item
         if language := (item.get(ARTICLE_LANGUAGE) or item.get(LANGUAGE)):
             bean[LANGUAGE] = language
         if is_bean_scrapable(bean):
-            bean.pop(CONTENT, None)      
-        [bean.pop(key, None) for key in list(bean) if (key in BEAN_EXCLUDED_FIELDS) or (not bean[key])]
+            bean.pop(CONTENT, None)
+        [bean.pop(key, None) for key in list(bean) if key not in _RESERVED_KIND_KEYS and ((key in BEAN_EXCLUDED_FIELDS) or (not bean[key]))]
 
         return (
             bean if validate_bean_item(bean) else None,
@@ -222,13 +300,21 @@ class Collector:
         if not beans: return
 
         source_marker, item_count = beans[0][DOMAIN_NAME], len(beans)
-        cached_count = await self.cache.set(BEANS, COLLECTED, beans)
+        # rule_counts = Counter(
+        #     getattr(bean.get(KIND_DECISION_KEY), "rule_id", None) or "missing"
+        #     for bean in beans
+        # )
+        payload = [
+            {key: value for key, value in bean.items() if key not in _RESERVED_KIND_KEYS}
+            for bean in beans
+        ]
+        cached_count = await self.cache.set(BEANS, COLLECTED, payload)
         beans[:] = []
 
-        if cached_count is not None: 
-            log.info(event="cached", source=source_marker, beans=cached_count)
+        if cached_count is not None:
+            log.info(event="cached", source=source_marker, beans=cached_count, attempted=item_count)
             self.beans_collected += cached_count
-        else: 
+        else:
             log.info(event="caching", source=source_marker, beans=item_count)
         
     async def _cache_publishers(self, publishers: list[dict]):
@@ -259,8 +345,19 @@ class Collector:
     async def _scrape_beans(self, beans: list[dict]):
         if not beans: return
 
+        context_by_url = {
+            bean.get(URL): (bean.get(KIND_CONTEXT_KEY), bean.get(KIND_DECISION_KEY))
+            for bean in beans
+            if bean.get(KIND_CONTEXT_KEY) is not None
+        }
         beans[:] = await self.cache.deduplicate(BEANS, COLLECTED, beans)
         if not beans: return
+        for bean in beans:
+            if KIND_CONTEXT_KEY not in bean and bean.get(URL) in context_by_url:
+                context, decision = context_by_url[bean.get(URL)]
+                bean[KIND_CONTEXT_KEY] = context
+                if decision is not None:
+                    bean[KIND_DECISION_KEY] = decision
 
         beans[:] = filtered_list(await self.webscraper.scrape_beans(beans), is_bean_storable)
         if not beans: return
@@ -298,7 +395,7 @@ class Collector:
         random.shuffle(funcs)
         return funcs
 
-    async def _collect(self, source_type, source, default_kind: str = None):
+    async def _collect(self, source_type, source, policy=None):
         to_triage = None
         try:
             if source_type == "ychackernews":
@@ -306,7 +403,7 @@ class Collector:
             elif source_type == "reddit":
                 to_triage = await self.reddit_collector.collect(source, mode="json")
             elif source_type == "rss":
-                to_triage = await self.rss_collector.collect(source, default_kind=default_kind)
+                to_triage = await self.rss_collector.collect(source, policy=policy)
             elif source_type == "govinfo":
                 to_triage = await self.govinfo_collector.collect(source)
             elif source_type == "sec_edgar":

@@ -185,7 +185,33 @@ def _extract_main_image(entry: feedparser.FeedParserDict) -> str:
         return entry.image.get('href')
 
 
-def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedParserDict, default_kind: str, entry_link: str | None = None):
+def _rss_kind_context(feed, feed_url, policy=None, tags=None, *, origin="rss", native_type=None, is_self_post=False):
+    feed_meta = getattr(feed, "feed", None) or {}
+    return KindContext(
+        origin=origin,
+        feed_url=feed_url,
+        publisher_url=feed_meta.get("link"),
+        feed_title=feed_meta.get("title"),
+        feed_description=feed_meta.get("description") or feed_meta.get("subtitle"),
+        policy=policy or KindPolicy(),
+        native_type=native_type,
+        is_self_post=is_self_post,
+        rss_tags=tuple(tag for tag in (tags or ()) if isinstance(tag, str) and tag.strip()),
+    )
+
+
+def _build_rss_item(
+    feed,
+    feed_url: str,
+    site_url: str,
+    entry: feedparser.FeedParserDict,
+    default_kind: str,
+    entry_link: str | None = None,
+    *,
+    policy=None,
+    origin: str = "rss",
+    classify: bool = True,
+):
     current_time = now()
     created_time = created_from_parsed(entry.get("published_parsed") or entry.get("updated_parsed"))
     summary, content = _extract_body(entry)
@@ -218,8 +244,6 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
     if image_url:
         item[IMAGE_URL] = full_url(site_url, image_url)
 
-    item[KIND] = guess_content_type(item, feed_url=feed_url, default_kind=default_kind) or default_kind
-
     comments_url = entry.get('wfw_commentrss')
     comments_count = parse_int(entry.get('slash_comments') or entry.get('comments') or 0)
     if comments_url or comments_count > 0:
@@ -238,7 +262,14 @@ def _build_rss_item(feed, feed_url: str, site_url: str, entry: feedparser.FeedPa
         **_extract_feed_metadata(feed, feed_url),
     })
 
-    return cleanup_item(item)
+    item = cleanup_item(item)
+    if classify:
+        apply_kind_decision(
+            item,
+            context=_rss_kind_context(feed, feed_url, policy, item.get(TAGS), origin=origin),
+            default_kind=default_kind,
+        )
+    return item
 
 def _parse_reddit_rss_entry(entry) -> tuple[str | None, str | None, str | None]:
     raw = entry.content[0]['value'] if isinstance(entry.content, list) else entry.get('content', '')
@@ -275,19 +306,23 @@ def _build_reddit_rss_item(entry, subreddit_name, default_kind: str, entry_link:
         # TODO: temporarily keeping original URL
         url = external_url
         source = extract_source(url)
-        kind = guess_content_type({
-            URL: url, DOMAIN_NAME: source, TITLE: entry.get("title"), CONTENT: selftext,
-        }) or default_kind
+        is_self_post = False
     else:
         url = entry_link
         source = subreddit
-        kind = POST
+        is_self_post = True
 
-    return cleanup_item({
-        URL: url, KIND: kind, TITLE: entry.get('title'), CONTENT: selftext,
+    item = cleanup_item({
+        URL: url, TITLE: entry.get('title'), CONTENT: selftext,
         AUTHOR: author, DOMAIN_NAME: source, BASE_URL: extract_base_url(url),
         CREATED: created, COLLECTED: current_time, PLATFORM: REDDIT,
     })
+    apply_kind_decision(
+        item,
+        context=KindContext(origin="reddit", is_self_post=is_self_post),
+        default_kind=default_kind,
+    )
+    return item
 
 
 class _RedditPost:
@@ -321,32 +356,21 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
     if post.is_self:
         url = chatter_link
         source = subreddit
-        kind = POST
+        is_self_post = True
     else:
         source = extract_source(post.url)
         if source:
             url = remove_query_params(post.url)
-            kind = guess_content_type({
-                URL: url,
-                BASE_URL: extract_base_url(url),
-                DOMAIN_NAME: source,
-                TITLE: post.title,
-                CONTENT: post.selftext,
-                AUTHOR: post.author.name if post.author else None,
-                CREATED: created_time,
-                COLLECTED: current_time,
-                TAGS: [],
-            }) or default_kind
+            is_self_post = False
         else:
             url = reddit_submission_permalink(post.url)
-            kind = POST
             source = subreddit
+            is_self_post = True
 
     base_url = extract_base_url(url)
 
     item = {
         URL: url,
-        KIND: kind,
         TITLE: post.title,
         CONTENT: post.selftext,
         AUTHOR: post.author.name if post.author else None,
@@ -362,7 +386,13 @@ def _build_reddit_item(post, subreddit_name, default_kind: str):
         COMMENTS: post.num_comments,
     }
 
-    return cleanup_item(item)
+    item = cleanup_item(item)
+    apply_kind_decision(
+        item,
+        context=KindContext(origin="reddit", is_self_post=is_self_post),
+        default_kind=default_kind,
+    )
+    return item
 
 
 def _build_hackernews_item(story: dict, default_kind: str):
@@ -377,21 +407,16 @@ def _build_hackernews_item(story: dict, default_kind: str):
         # url = remove_query_params(story['url'])
         url = story['url']
         source = extract_source(url)
-        fallback_kind = default_kind
+        is_self_post = False
     else:
         url = hackernews_story_permalink(story_id)
         source = HACKERNEWS
-        fallback_kind = POST
-
-    kind = guess_content_type({
-        URL: url, DOMAIN_NAME: source, TITLE: title, CONTENT: content, TYPE: story.get(TYPE),
-    }, default_kind=fallback_kind) or fallback_kind
+        is_self_post = True
 
     base_url = extract_base_url(url)
 
     item = {
         URL: url,
-        KIND: kind,
         TITLE: story.get('title'),
         CONTENT: content,
         AUTHOR: story.get('by'),
@@ -407,7 +432,17 @@ def _build_hackernews_item(story: dict, default_kind: str):
         COMMENTS: len(story.get('kids', [])),
     }
 
-    return cleanup_item(item)
+    item = cleanup_item(item)
+    apply_kind_decision(
+        item,
+        context=KindContext(
+            origin="hackernews",
+            native_type=story.get(TYPE),
+            is_self_post=is_self_post,
+        ),
+        default_kind=default_kind,
+    )
+    return item
 
 
 class APICollectorBase:
@@ -437,32 +472,41 @@ class RSSFeedCollector(APICollectorBase):
     def __init__(self, batch_size: int):
         super().__init__(batch_size)
 
-    async def collect(self, url: str, default_kind: str = NEWS) -> list[dict]:
+    async def collect(self, url: str, default_kind: str = NEWS, *, policy: KindPolicy | None = None) -> list[dict]:
         if excluded_url(url):
             return None
         feed = await _fetch_feed(self.session, url)
         if not feed:
             return None
         source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].get('link'))
-        if url in self._STATEMENT_URLS: items = self._extract_sec_statements_rss_entries(feed, url, source_url)
-        else: items = self._extract_default_rss_entries(feed, url, source_url, default_kind)
+        legacy_default = default_kind if policy is None else None
+        if url in self._STATEMENT_URLS:
+            items = self._extract_sec_statements_rss_entries(
+                feed, url, source_url, policy=policy, default_kind=OFFICIAL_STATEMENT if policy is None else legacy_default
+            )
+        else:
+            items = self._extract_default_rss_entries(feed, url, source_url, legacy_default, policy=policy)
 
         return _return_collected(extract_source(source_url), items)
 
     @staticmethod
-    def _extract_sec_statements_rss_entries(feed, feed_url: str, site_url: str) -> list[dict]:
+    def _extract_sec_statements_rss_entries(feed, feed_url: str, site_url: str, *, policy=None, default_kind: str = OFFICIAL_STATEMENT) -> list[dict]:
         items = []
         for entry, entry_link in _extract_rss_entries(feed, feed_url, site_url):
-            item = _build_rss_item(feed, feed_url, site_url, entry, OFFICIAL_STATEMENT, entry_link=entry_link)
+            item = _build_rss_item(
+                feed, feed_url, site_url, entry, default_kind, entry_link=entry_link, policy=policy
+            )
             item[AUTHOR] = strip_html_tags(entry.get('description', ''))
             items.append(cleanup_item(item))
         return items
 
     @staticmethod
-    def _extract_default_rss_entries(feed, feed_url: str, site_url: str, default_kind: str) -> list[dict]:
+    def _extract_default_rss_entries(feed, feed_url: str, site_url: str, default_kind: str, policy=None) -> list[dict]:
         items = []
         for entry, entry_link in _extract_rss_entries(feed, feed_url, site_url):
-            items.append(_build_rss_item(feed, feed_url, site_url, entry, default_kind, entry_link=entry_link))
+            items.append(_build_rss_item(
+                feed, feed_url, site_url, entry, default_kind, entry_link=entry_link, policy=policy
+            ))
         return items
 
 
@@ -546,7 +590,9 @@ class GovInfoRSSCollector(APICollectorBase):
             if not content_url:
                 log.debug(event="govinfo_content_unavailable", feed=feed_url, package_id=package_id)
                 continue
-            items.append(_build_rss_item(feed, feed_url, site_url, entry, NEWS, entry_link=content_url))
+            items.append(_build_rss_item(
+                feed, feed_url, site_url, entry, None, entry_link=content_url, origin="govinfo"
+            ))
         return items
 
     @classmethod
@@ -557,7 +603,9 @@ class GovInfoRSSCollector(APICollectorBase):
             if not content_url:
                 log.debug(event="govinfo_content_unavailable", feed=feed_url, package_id=entry.get("guid") or entry.get("id"))
                 continue
-            items.append(_build_rss_item(feed, feed_url, site_url, entry, NEWS, entry_link=content_url))
+            items.append(_build_rss_item(
+                feed, feed_url, site_url, entry, None, entry_link=content_url, origin="govinfo"
+            ))
         return items
 
     async def collect(self, url: str) -> list[dict]:
@@ -694,9 +742,8 @@ class SECFilingCollector(APICollectorBase):
         if not entry_link:
             return None
 
-        item = _build_rss_item(feed, feed_url, site_url, entry, SEC_FILING)
+        item = _build_rss_item(feed, feed_url, site_url, entry, None, classify=False)
         item[CONTENT] = content
-        item[KIND] = SEC_FILING
 
         tags = ['sec', 'edgar']
         if filing_type:
@@ -705,7 +752,12 @@ class SECFilingCollector(APICollectorBase):
             tags.append(accession_number)
         item[TAGS] = tags
 
-        return cleanup_item(item)
+        item = cleanup_item(item)
+        apply_kind_decision(
+            item,
+            context=KindContext(origin="sec_edgar", feed_url=feed_url, rss_tags=tuple(tags)),
+        )
+        return item
 
     async def collect(self, url: str) -> list[dict]:
         if excluded_url(url):

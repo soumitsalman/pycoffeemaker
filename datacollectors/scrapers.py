@@ -1,8 +1,10 @@
 import os
+import re
 import json
 import asyncio
 import aiohttp
 import json
+from dataclasses import replace
 from readability import Document
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
@@ -17,6 +19,20 @@ from .normalize import *
 from icecream import ic
 
 log = get_logger(__name__)
+
+_ARTICLE_SCHEMA_TYPES = frozenset({
+    "NewsArticle", "Article", "BlogPosting", "ScholarlyArticle", "TechArticle",
+    "Report", "AnalysisNewsArticle", "BackgroundNewsArticle", "OpinionNewsArticle",
+    "ReviewNewsArticle", "PodcastEpisode", "SocialMediaPosting",
+})
+_JSONLD_SCRIPT_RE = re.compile(
+    r"<script\b([^>]*)>(.*?)</script>",
+    re.DOTALL | re.IGNORECASE,
+)
+_JSONLD_TYPE_RE = re.compile(
+    r"""type\s*=\s*['"]application/ld\+json['"]""",
+    re.IGNORECASE,
+)
 
 PARSE_CONCURRENCY = int(os.getenv("PARSE_CONCURRENCY", min(4, os.cpu_count())))  # max DOM trees in memory at once
 PDF_CONCURRENCY = int(os.getenv("PDF_CONCURRENCY", 4))  # PDF conversion is CPU/native-heavy; keep it isolated from HTML parsing
@@ -83,6 +99,111 @@ def _parse_jsonld_body(url: str, html: str) -> dict | None:
         }
     return {}
 
+def _jsonld_scripts(html: str) -> list[str]:
+    scripts = []
+    for match in _JSONLD_SCRIPT_RE.finditer(html or ""):
+        attrs, body = match.group(1), match.group(2)
+        if _JSONLD_TYPE_RE.search(attrs or ""):
+            scripts.append(body)
+    return scripts
+
+
+def _schema_type_names(value) -> tuple[str, ...]:
+    if isinstance(value, str) and value.strip():
+        values = [value]
+    elif isinstance(value, (list, tuple)):
+        values = [item for item in value if isinstance(item, str) and item.strip()]
+    else:
+        return ()
+    names = []
+    for raw in values:
+        text = raw.strip()
+        if "/" in text:
+            text = text.rsplit("/", 1)[-1]
+        if text:
+            names.append(text)
+    return tuple(names)
+
+
+def _coerce_jsonld_url(value) -> str | None:
+    if isinstance(value, str) and value.strip().startswith("http"):
+        return value.strip()
+    if isinstance(value, dict):
+        return _coerce_jsonld_url(value.get("url") or value.get("@id"))
+    return None
+
+
+def _node_article_url(node: dict) -> str | None:
+    return _coerce_jsonld_url(node.get("url")) or _coerce_jsonld_url(node.get("mainEntityOfPage"))
+
+
+def _url_corresponds(article_url: str | None, node_url: str | None) -> bool:
+    if not article_url or not node_url:
+        return False
+    try:
+        left, right = urlparse(article_url), urlparse(node_url)
+    except Exception:
+        return False
+    if (left.hostname or "").casefold() != (right.hostname or "").casefold():
+        return False
+    left_path = (left.path or "").rstrip("/")
+    right_path = (right.path or "").rstrip("/")
+    if left_path.casefold() != right_path.casefold():
+        return False
+    return (left.query or "") == (right.query or "")
+
+
+def _article_sections(node: dict) -> tuple[str, ...]:
+    value = node.get("articleSection")
+    if isinstance(value, str) and value.strip():
+        return (value.strip(),)
+    if isinstance(value, (list, tuple)):
+        return tuple(item.strip() for item in value if isinstance(item, str) and item.strip())
+    return ()
+
+
+def _walk_jsonld_nodes(data) -> list[dict]:
+    nodes = []
+    if isinstance(data, dict):
+        if "@graph" in data and isinstance(data["@graph"], list):
+            for item in data["@graph"]:
+                nodes.extend(_walk_jsonld_nodes(item))
+        else:
+            nodes.append(data)
+    elif isinstance(data, list):
+        for item in data:
+            nodes.extend(_walk_jsonld_nodes(item))
+    return nodes
+
+
+def _extract_jsonld_kind_evidence(html: str, article_url: str | None = None) -> dict:
+    article_nodes = []
+    for script in _jsonld_scripts(html):
+        try:
+            data = json.loads(script)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+        for node in _walk_jsonld_nodes(data):
+            if not isinstance(node, dict):
+                continue
+            types = _schema_type_names(node.get("@type"))
+            if not types or not any(name in _ARTICLE_SCHEMA_TYPES for name in types):
+                continue
+            article_nodes.append(node)
+    selected = None
+    matched = [node for node in article_nodes if _url_corresponds(article_url, _node_article_url(node))]
+    if len(matched) == 1:
+        selected = matched[0]
+    elif not matched and len(article_nodes) == 1 and not _node_article_url(article_nodes[0]):
+        selected = article_nodes[0]
+    if selected is None:
+        return {"schema_types": (), "article_sections": ()}
+    return {
+        "schema_types": _schema_type_names(selected.get("@type")),
+        "article_sections": _article_sections(selected),
+    }
+
+
 def _jsonld_text(value) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
@@ -96,17 +217,16 @@ def _jsonld_text(value) -> str | None:
 
 def _extract_jsonld_content(html: str) -> dict | None:
     """Extract article content from JSON-LD schema.org data (fallback for JS-rendered pages)."""
-    
-    scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.DOTALL)
-    for s in scripts:
+    for s in _jsonld_scripts(html):
         try:
             data = json.loads(s)
-        except (json.JSONDecodeError, ValueError):
+        except (json.JSONDecodeError, TypeError, ValueError):
             continue
-        if not isinstance(data, dict) or '@graph' not in data:
-            continue
-        for item in data['@graph']:
-            if item.get('@type') not in ('NewsArticle', 'Article'):
+        for item in _walk_jsonld_nodes(data):
+            if not isinstance(item, dict):
+                continue
+            types = _schema_type_names(item.get("@type"))
+            if not any(name in {"NewsArticle", "Article"} for name in types):
                 continue
             result = {}
             if headline := _jsonld_text(item.get('headline')):
@@ -141,7 +261,8 @@ def _parse_page(url: str, html: str) -> dict:
             return None
     
     metadata = _parse_metadata(url, html)
-    return body | metadata
+    evidence = _extract_jsonld_kind_evidence(html, url)
+    return body | metadata | evidence
 
 def _extract_pdf_text(path: str) -> str | None:
     import anydoc
@@ -353,33 +474,41 @@ class AsyncWebScraper:
 
         retrieval_url = bean.get(URL)
         chosen_url = resolve_content_url(retrieval_url, meta_url=meta_url)
+        context = bean.get(KIND_CONTEXT_KEY) or KindContext()
+        original_feed = bean.get(RSS_FEED) or context.feed_url
+        original_tags = bean.get(TAGS) or []
+        if isinstance(original_tags, str):
+            original_tags = [original_tags]
+        page_keywords = result.get("keywords")
+        page_tags = []
+        if page_keywords:
+            page_tags = [tag.strip() for tag in str(page_keywords).split(",") if tag.strip()]
+        merged_tags = list(dict.fromkeys([*original_tags, *page_tags])) or original_tags or None
+
         bean.update({
             URL: chosen_url,
-            KIND: bean.get(KIND) or result.get(KIND),
             TITLE: result.get("meta_title") or bean.get(TITLE) or result.get(TITLE),
             SUMMARY: bean.get(SUMMARY) or result.get(DESCRIPTION),
-            CONTENT: result.get(CONTENT),
+            CONTENT: result.get(CONTENT) or bean.get(CONTENT),
             AUTHOR: result.get(AUTHOR) or bean.get(AUTHOR),
-            ARTICLE_LANGUAGE: result.get(LANGUAGE),
-            SITE_LANGUAGE: result.get(LANGUAGE),
-            TAGS: [tag.strip() for tag in result.get('keywords', '').split(',')] if result.get('keywords') else None,
-            AUTHOR_EMAIL: None,
+            ARTICLE_LANGUAGE: result.get(LANGUAGE) or bean.get(ARTICLE_LANGUAGE),
+            SITE_LANGUAGE: bean.get(SITE_LANGUAGE) or result.get(LANGUAGE),
+            TAGS: merged_tags,
             CREATED: min(result.get(CREATED) or bean.get(CREATED) or now(), bean.get(COLLECTED)),
             RESTRICTED_CONTENT: True,
-            SITE_NAME: result.get(SITE_NAME),
-            DESCRIPTION: result.get(DESCRIPTION),
-            FAVICON: result.get(FAVICON),
-            RSS_FEED: result.get(RSS_FEED),
-            IMAGE_URL: result.get(IMAGE_URL),
+            SITE_NAME: bean.get(SITE_NAME) or result.get(SITE_NAME),
+            FAVICON: result.get(FAVICON) or bean.get(FAVICON),
+            RSS_FEED: original_feed,
+            IMAGE_URL: result.get(IMAGE_URL) or bean.get(IMAGE_URL),
         })
 
         created = result.get(CREATED) or bean.get(CREATED) or bean.get(COLLECTED)
         bean[CREATED] = min(created, bean.get(COLLECTED)) if created and bean.get(COLLECTED) else created
 
-        detected_kind = guess_content_type(bean)
-        if detected_kind and (not bean.get(KIND) or bean[KIND] in {NEWS, BLOG, SITE}):
-            bean[KIND] = detected_kind
-
+        schema_types = tuple(result.get("schema_types") or ()) or context.schema_types
+        article_sections = tuple(result.get("article_sections") or ()) or context.article_sections
+        context = replace(context, schema_types=schema_types, article_sections=article_sections)
+        apply_kind_decision(bean, context=context)
         return cleanup_item(bean)
 
     async def scrape_page(self, url: str):

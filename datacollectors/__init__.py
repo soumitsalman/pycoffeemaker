@@ -47,6 +47,9 @@ from utils.kinds import (
 )
 from .normalize import (
     ContentGate,
+    KindContext,
+    KindDecision,
+    KindPolicy,
     is_excluded_content,
     excluded_url,
     cleanup_item,
@@ -94,6 +97,9 @@ __all__ = [
     "WHITEPAPER",
     "TECHNICAL_DOCUMENTATION",
     "ContentGate",
+    "KindContext",
+    "KindDecision",
+    "KindPolicy",
     "is_excluded_content",
     "excluded_url",
     "cleanup_item",
