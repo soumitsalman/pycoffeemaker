@@ -100,8 +100,25 @@ class TextAnalystBase(ABC):
         except:
             log.warning("failed parsing: %s", response, exc_info=True)
 
+    def _output_models_for(
+        self,
+        input_messages: list[str],
+        output_model: list[Type[BaseModel]] | None,
+    ) -> list[Type[BaseModel]]:
+        if not output_model:
+            return [self.output_model] * len(input_messages)
+        if len(output_model) != len(input_messages):
+            raise ValueError(
+                f"output_model length {len(output_model)} != batch size {len(input_messages)}"
+            )
+        return output_model
+
     @abstractmethod
-    def run_batch(self, input_messages: list[str], output_model: Type[BaseModel] | None = None) -> list[BaseModel]:
+    def run_batch(
+        self,
+        input_messages: list[str],
+        output_model: list[Type[BaseModel]] | None = None,
+    ) -> list[BaseModel]:
         raise NotImplementedError()
 
 
@@ -228,7 +245,13 @@ class TransformerTextAnalyst(TextAnalystBase):
             self._tokenizer = None
         return super().__exit__(exc_type, exc_val, exc_tb)
 
-    def _sampling_params_for(self, output_model: Type[BaseModel]):
+    def _prefix_fn_for(self, output_model: Type[BaseModel]):
+        cache = getattr(self, "_prefix_fn_cache", None)
+        if cache is None:
+            cache = self._prefix_fn_cache = {}
+        if output_model in cache:
+            return cache[output_model]
+
         from lmformatenforcer import JsonSchemaParser
         from importlib import import_module
         from transformers.tokenization_utils_base import PreTrainedTokenizerBase
@@ -238,11 +261,23 @@ class TransformerTextAnalyst(TextAnalystBase):
         if not hasattr(tokenization_utils, "PreTrainedTokenizerBase"):
             tokenization_utils.PreTrainedTokenizerBase = PreTrainedTokenizerBase
 
-        sampling_params = self.sampling_params.copy()
-        parser = JsonSchemaParser(output_model.model_json_schema())
-        sampling_params["prefix_allowed_tokens_fn"] = (
-            build_transformers_prefix_allowed_tokens_fn(self._tokenizer.tokenizer, parser)
+        fn = build_transformers_prefix_allowed_tokens_fn(
+            self._tokenizer.tokenizer,
+            JsonSchemaParser(output_model.model_json_schema()),
         )
+        cache[output_model] = fn
+        return fn
+
+    def _sampling_params_for(self, output_models: list[Type[BaseModel]]):
+        fns = [self._prefix_fn_for(model) for model in output_models]
+        sampling_params = self.sampling_params.copy()
+        first = output_models[0]
+        if all(model is first for model in output_models):
+            sampling_params["prefix_allowed_tokens_fn"] = fns[0]
+        else:
+            sampling_params["prefix_allowed_tokens_fn"] = (
+                lambda batch_id, input_ids: fns[batch_id](batch_id, input_ids)
+            )
         return sampling_params
 
     def _run_batch(self, prompts, sampling_params):
@@ -252,14 +287,23 @@ class TransformerTextAnalyst(TextAnalystBase):
             generated_texts = self._tokenizer.batch_decode(output_tokens, input_tokens)
         return generated_texts
 
-    def run_batch(self, input_messages: list[str], output_model: Type[BaseModel] | None = None) -> list[BaseModel | None]:
+    def run_batch(
+        self,
+        input_messages: list[str],
+        output_model: list[Type[BaseModel]] | None = None,
+    ) -> list[BaseModel | None]:
+        if not input_messages:
+            return []
         if not self._llm: self.__enter__()
-        output_model = output_model or self.output_model
+        output_models = self._output_models_for(input_messages, output_model)
         generated_texts = self._run_batch(
-            [self.create_prompt(msg, output_model) for msg in input_messages],
-            self._sampling_params_for(output_model),
+            [self.create_prompt(msg, model) for msg, model in zip(input_messages, output_models)],
+            self._sampling_params_for(output_models),
         )
-        return [self.parse_output(text, output_model) for text in generated_texts]
+        return [
+            self.parse_output(text, model)
+            for text, model in zip(generated_texts, output_models)
+        ]
 
 
 VLLM_MAX_NUM_BATCHED_TOKENS = int(os.getenv("VLLM_MAX_NUM_BATCHED_TOKENS", 0))
@@ -296,26 +340,50 @@ class VLLMTextAnalyst(TextAnalystBase):
                 log.warning("Failed to shutdown vLLM engine cleanly", exc_info=True)
         return super().__exit__(exc_type, exc_val, exc_tb)
 
-    def _sampling_params_for(self, output_model: Type[BaseModel]):
+    def _sampling_params_for_model(self, output_model: Type[BaseModel]):
+        cache = getattr(self, "_sampling_params_cache", None)
+        if cache is None:
+            cache = self._sampling_params_cache = {}
+        if output_model in cache:
+            return cache[output_model]
+
         from vllm import SamplingParams
         from vllm.sampling_params import StructuredOutputsParams
 
-        return SamplingParams(
+        params = SamplingParams(
             **self._initial_sampling_params,
             max_tokens=self.max_new_tokens,
             structured_outputs=StructuredOutputsParams(json=output_model.model_json_schema()),
         )
+        cache[output_model] = params
+        return params
 
-    def run_batch(self, input_messages: list[str], output_model: Type[BaseModel] | None = None) -> list[BaseModel | None]:
-        output_model = output_model or self.output_model
+    def _sampling_params_for(self, output_models: list[Type[BaseModel]]):
+        params = [self._sampling_params_for_model(model) for model in output_models]
+        first = output_models[0]
+        if all(model is first for model in output_models):
+            return params[0]
+        return params
+
+    def run_batch(
+        self,
+        input_messages: list[str],
+        output_model: list[Type[BaseModel]] | None = None,
+    ) -> list[BaseModel | None]:
+        if not input_messages:
+            return []
+        output_models = self._output_models_for(input_messages, output_model)
         responses = self._llm.chat(
-            [self.create_prompt(msg, output_model) for msg in input_messages],
-            sampling_params=self._sampling_params_for(output_model),
+            [self.create_prompt(msg, model) for msg, model in zip(input_messages, output_models)],
+            sampling_params=self._sampling_params_for(output_models),
             chat_template_kwargs={"enable_thinking": self.enable_thinking},
             tokenization_kwargs={"truncate_prompt_tokens": self.max_prompt_len},
             use_tqdm=False,
         )
-        return [self.parse_output(resp.outputs[0].text, output_model) if resp.outputs else None for resp in responses]
+        return [
+            self.parse_output(resp.outputs[0].text, model) if resp.outputs else None
+            for resp, model in zip(responses, output_models)
+        ]
 
 
 class RemoteTextAnalyst(TextAnalystBase):
@@ -373,11 +441,17 @@ class RemoteTextAnalyst(TextAnalystBase):
         )
         return response.choices[0].message.parsed
 
-    def run_batch(self, input_messages: list[str], output_model: Type[BaseModel] | None = None) -> list[BaseModel]:
+    def run_batch(
+        self,
+        input_messages: list[str],
+        output_model: list[Type[BaseModel]] | None = None,
+    ) -> list[BaseModel]:
+        if not input_messages:
+            return []
         if not self._llm: self.__enter__()
-        output_model = output_model or self.output_model
+        output_models = self._output_models_for(input_messages, output_model)
         with ThreadPoolExecutor(max_workers=len(input_messages)) as exec:
-            results = list(exec.map(lambda msg: self._run_single(msg, output_model), input_messages))
+            results = list(exec.map(self._run_single, input_messages, output_models))
         return results
 
 

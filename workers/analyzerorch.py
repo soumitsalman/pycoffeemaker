@@ -46,7 +46,7 @@ from nlp.models import (
     TechnicalDocumentationExtraction,
 )
 from utils.fields import *
-from utils import VECTOR_LEN, date_str, now_str
+from utils import VECTOR_LEN, now_str
 from utils.kinds import *
 from .cacheops import *
 from .states import *
@@ -83,6 +83,7 @@ DIGEST_MODEL_BY_KIND = {
     WHITEPAPER: WhitepaperExtraction,
     TECHNICAL_DOCUMENTATION: TechnicalDocumentationExtraction,
 }
+_SKIP_KINDS = frozenset({POST})
 
 CLASSIFICATION_LIMIT = int(os.getenv("CLASSIFICATION_LIMIT", 2))
 CLASSIFICATION_EPS = float(os.getenv("CLASSIFICATION_EPS", 0.4))
@@ -240,6 +241,9 @@ class Embedder:
         total = 0
         with self.embedder:
             for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=EMBEDDED, batch_size=self.batch_size, log=log):
+                chunk = [bean for bean in chunk if bean.get(KIND) not in _SKIP_KINDS]
+                if not chunk: continue
+
                 try:
                     updates = self.embed_beans(chunk)
                     if not updates:
@@ -299,6 +303,9 @@ class Extractor:
         total = 0
         with self.extractor:
             for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=EXTRACTED, batch_size=self.batch_size, log=log):
+                chunk = [bean for bean in chunk if bean.get(KIND) not in _SKIP_KINDS]
+                if not chunk: continue
+
                 try:
                     updates = self.extract_beans(chunk)
                     log.info(event="extracted", source=chunk[0][BASE_URL], num_items=len(updates))
@@ -381,32 +388,23 @@ class Digestor:
 
     @classmethod
     def _article_to_str(cls, article: dict) -> str:
-        text = ""
-        if (article.get(KIND) == POST) and article.get(AUTHOR):
-            text += f"author:{article[AUTHOR]}\ndate:{date_str(article[CREATED])}\n"
-        return text + article[CONTENT][:MAX_DOCUMENT_LEN<<2]
+        return article[CONTENT][:MAX_DOCUMENT_LEN<<2]
+
+    @classmethod
+    def _output_model_for(cls, bean: dict):
+        return DIGEST_MODEL_BY_KIND.get(bean.get(KIND), Digest)
 
     def digest_beans(self, beans: list[dict]):
-        updates = []
-        beans_by_model = {}
-        for bean in beans:
-            output_model = DIGEST_MODEL_BY_KIND.get(bean.get(KIND), Digest)
-            beans_by_model.setdefault(output_model, []).append(bean)
-
-        for output_model, model_beans in beans_by_model.items():
-            digests = self.digestor.run_batch(
-                [self._article_to_str(bean) for bean in model_beans],
-                output_model=output_model,
-            )
-            updates.extend(
-                {
-                    URL: bean[URL],
-                    DIGEST: digest.model_dump(),
-                }
-                for bean, digest in zip(model_beans, digests)
-                if digest and digest.model_dump()
-            )
-        return updates
+        if not beans: return []
+        digests = self.digestor.run_batch(
+            [self._article_to_str(bean) for bean in beans],
+            output_model=[self._output_model_for(bean) for bean in beans],
+        )
+        return [
+            {URL: bean[URL], DIGEST: payload}
+            for bean, digest in zip(beans, digests)
+            if digest and (payload := digest.model_dump())
+        ]
 
     @log_runtime(logger=log)
     def run(self):
@@ -414,8 +412,10 @@ class Digestor:
 
         with self.digestor:
             for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=DIGESTED, batch_size=self.batch_size, log=log):
+                chunk = [bean for bean in chunk if bean.get(KIND) not in _SKIP_KINDS]
+                if not chunk: continue
                 try:
-                    updates =self.digest_beans(chunk)
+                    updates = self.digest_beans(chunk)
                     log.info(event="digested", source=chunk[0][BASE_URL], num_items=len(updates))
                     total += encache_beans(self.cache, DIGESTED, updates)
 
