@@ -34,7 +34,7 @@ class TextAnalystBase(ABC):
     def __init__(
         self,
         model_name: str,
-        context_len: int,        
+        context_len: int,
         instruction: str,
         input_template: str,
         output_model: Type[BaseModel],
@@ -52,6 +52,7 @@ class TextAnalystBase(ABC):
         self.max_new_tokens = max_new_tokens
         self.max_prompt_len = context_len - max_new_tokens - TOKEN_MARGIN
         self.sampling_params = sampling_params
+        self._initial_sampling_params = sampling_params.copy()
         self._llm = None
 
     @abstractmethod
@@ -67,26 +68,28 @@ class TextAnalystBase(ABC):
             clear_gpu_cache()
         return False
 
-    def create_prompt(self, msg: str):
-        prompt = []        
+    def create_prompt(self, msg: str, output_model: Type[BaseModel] | None = None):
+        output_model = output_model or self.output_model
+        prompt = []
         input_text = msg[:self.max_prompt_len<<2] # this is a heuristic
         if self.instruction: prompt.append({"role": "system", "content": self.instruction})
         prompt.append({
-            "role": "user", 
+            "role": "user",
             "content": self.input_template.format(
-                    description=self.output_model.model_text_schema(), 
+                    description=output_model.model_text_schema(),
                     input_text=input_text
-                ) 
-                if self.input_template 
+                )
+                if self.input_template
                 else input_text
         })
         return prompt
 
-    def parse_output(self, response: str):
+    def parse_output(self, response: str, output_model: Type[BaseModel] | None = None):
+        output_model = output_model or self.output_model
         response = _strip_fences(response)
         try:
             if self.response_mode == "json":
-                return self.output_model.model_validate_json(response)
+                return output_model.model_validate_json(response)
             if self.response_mode == "compressed":
                 return parse_compressed(response)
             if self.response_mode == "markdown":
@@ -98,7 +101,7 @@ class TextAnalystBase(ABC):
             log.warning("failed parsing: %s", response, exc_info=True)
 
     @abstractmethod
-    def run_batch(self, input_messages: list[str]) -> list[BaseModel]:
+    def run_batch(self, input_messages: list[str], output_model: Type[BaseModel] | None = None) -> list[BaseModel]:
         raise NotImplementedError()
 
 
@@ -119,7 +122,7 @@ class LocalTokenizer:
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, max_length=context_len, use_fast=True, trust_remote_code=True, padding_side="left")
         self.context_len = context_len
-        self.device = device        
+        self.device = device
         if not self.tokenizer.pad_token:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.end_think_token_id = self.tokenizer.convert_tokens_to_ids("</think>")
@@ -174,7 +177,7 @@ class LocalTokenizer:
 # "no_repeat_ngram_size": 3,
 class TransformerTextAnalyst(TextAnalystBase):
     _tokenizer = None
-                
+
     def __enter__(self):
         if not self._llm:
             from transformers import AutoModelForCausalLM
@@ -209,11 +212,11 @@ class TransformerTextAnalyst(TextAnalystBase):
                     tokenization_utils.PreTrainedTokenizerBase = PreTrainedTokenizerBase
 
                 from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
-                
+
                 parser = JsonSchemaParser(self.output_model.model_json_schema())
                 self.sampling_params["prefix_allowed_tokens_fn"] = (
                     build_transformers_prefix_allowed_tokens_fn(
-                        self._tokenizer.tokenizer, 
+                        self._tokenizer.tokenizer,
                         parser
                     )
                 )
@@ -225,18 +228,38 @@ class TransformerTextAnalyst(TextAnalystBase):
             self._tokenizer = None
         return super().__exit__(exc_type, exc_val, exc_tb)
 
-    def _run_batch(self, prompts, **kwargs):
+    def _sampling_params_for(self, output_model: Type[BaseModel]):
+        from lmformatenforcer import JsonSchemaParser
+        from importlib import import_module
+        from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+        from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
+
+        tokenization_utils = import_module("transformers.tokenization_utils")
+        if not hasattr(tokenization_utils, "PreTrainedTokenizerBase"):
+            tokenization_utils.PreTrainedTokenizerBase = PreTrainedTokenizerBase
+
+        sampling_params = self.sampling_params.copy()
+        parser = JsonSchemaParser(output_model.model_json_schema())
+        sampling_params["prefix_allowed_tokens_fn"] = (
+            build_transformers_prefix_allowed_tokens_fn(self._tokenizer.tokenizer, parser)
+        )
+        return sampling_params
+
+    def _run_batch(self, prompts, sampling_params):
         with torch.inference_mode(), torch.amp.autocast(self.device, self.dtype):
             input_tokens = self._tokenizer.tokenize_prompts(prompts)
-            output_tokens = self._llm.generate(**input_tokens, **self.sampling_params)
+            output_tokens = self._llm.generate(**input_tokens, **sampling_params)
             generated_texts = self._tokenizer.batch_decode(output_tokens, input_tokens)
         return generated_texts
 
-    def run_batch(self, input_messages: list[str]) -> list[Digest | None]:
+    def run_batch(self, input_messages: list[str], output_model: Type[BaseModel] | None = None) -> list[BaseModel | None]:
         if not self._llm: self.__enter__()
-
-        generated_texts = self._run_batch([self.create_prompt(msg) for msg in input_messages])
-        return [self.parse_output(text) for text in generated_texts]
+        output_model = output_model or self.output_model
+        generated_texts = self._run_batch(
+            [self.create_prompt(msg, output_model) for msg in input_messages],
+            self._sampling_params_for(output_model),
+        )
+        return [self.parse_output(text, output_model) for text in generated_texts]
 
 
 VLLM_MAX_NUM_BATCHED_TOKENS = int(os.getenv("VLLM_MAX_NUM_BATCHED_TOKENS", 0))
@@ -249,7 +272,7 @@ class VLLMTextAnalyst(TextAnalystBase):
         if not self._llm:
             from vllm import LLM, SamplingParams
             from vllm.sampling_params import StructuredOutputsParams
-            
+
             self._llm = LLM(
                 model=self.model_name,
                 max_model_len=self.context_len,
@@ -259,15 +282,8 @@ class VLLMTextAnalyst(TextAnalystBase):
                 # max_num_batched_tokens=VLLM_MAX_NUM_BATCHED_TOKENS if VLLM_MAX_NUM_BATCHED_TOKENS > 0 else None,
                 gpu_memory_utilization=VLLM_GPU_MEMORY_UTILIZATION,
                 # enable_prefix_caching=True,
-                # enable_chunked_prefill=True,                        
+                # enable_chunked_prefill=True,
                 # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,
-            )
-            self.sampling_params = SamplingParams(
-                **self.sampling_params,
-                max_tokens=self.max_new_tokens,
-                structured_outputs=StructuredOutputsParams(
-                    json=self.output_model.model_json_schema()
-                ),
             )
         return self
 
@@ -280,15 +296,26 @@ class VLLMTextAnalyst(TextAnalystBase):
                 log.warning("Failed to shutdown vLLM engine cleanly", exc_info=True)
         return super().__exit__(exc_type, exc_val, exc_tb)
 
-    def run_batch(self, input_messages: list[str]) -> list[BaseModel]:
+    def _sampling_params_for(self, output_model: Type[BaseModel]):
+        from vllm import SamplingParams
+        from vllm.sampling_params import StructuredOutputsParams
+
+        return SamplingParams(
+            **self._initial_sampling_params,
+            max_tokens=self.max_new_tokens,
+            structured_outputs=StructuredOutputsParams(json=output_model.model_json_schema()),
+        )
+
+    def run_batch(self, input_messages: list[str], output_model: Type[BaseModel] | None = None) -> list[BaseModel | None]:
+        output_model = output_model or self.output_model
         responses = self._llm.chat(
-            [self.create_prompt(msg) for msg in input_messages], 
-            sampling_params=self.sampling_params,             
+            [self.create_prompt(msg, output_model) for msg in input_messages],
+            sampling_params=self._sampling_params_for(output_model),
             chat_template_kwargs={"enable_thinking": self.enable_thinking},
             tokenization_kwargs={"truncate_prompt_tokens": self.max_prompt_len},
-            use_tqdm=False, 
+            use_tqdm=False,
         )
-        return [self.parse_output(resp.outputs[0].text) if resp.outputs else None for resp in responses]
+        return [self.parse_output(resp.outputs[0].text, output_model) if resp.outputs else None for resp in responses]
 
 
 class RemoteTextAnalyst(TextAnalystBase):
@@ -322,7 +349,7 @@ class RemoteTextAnalyst(TextAnalystBase):
         self.sampling_params["max_completion_tokens"] = self.max_new_tokens
         if self.enable_thinking:
             self.sampling_params["extra_body"] = {"reasoning_budget": self.context_len, "chat_template_kwargs": {"enable_thinking": self.enable_thinking}}
-        
+
 
     def __enter__(self):
         if not self._llm:
@@ -337,35 +364,36 @@ class RemoteTextAnalyst(TextAnalystBase):
         return False
 
     @retry(stop=stop_after_attempt(REMOTE_RETRY_COUNT), wait=wait_random(*REMOTE_RETRY_JITTER), reraise=True)
-    def _run_single(self, msg: str) -> BaseModel:
+    def _run_single(self, msg: str, output_model: Type[BaseModel]) -> BaseModel:
         response = self._llm.chat.completions.parse(
             model=self.model_name,
-            messages=self.create_prompt(msg),
-            response_format=self.output_model,
+            messages=self.create_prompt(msg, output_model),
+            response_format=output_model,
             **self.sampling_params
         )
         return response.choices[0].message.parsed
-        
-    def run_batch(self, input_messages: list[str]) -> list[BaseModel]:
+
+    def run_batch(self, input_messages: list[str], output_model: Type[BaseModel] | None = None) -> list[BaseModel]:
         if not self._llm: self.__enter__()
+        output_model = output_model or self.output_model
         with ThreadPoolExecutor(max_workers=len(input_messages)) as exec:
-            results = list(exec.map(self._run_single, input_messages))
+            results = list(exec.map(lambda msg: self._run_single(msg, output_model), input_messages))
         return results
 
 
 def create_text_analyst(
-    model_path: str, 
-    context_len: int, 
-    instruction: str = None, 
-    input_template: str = None, 
-    output_model: Type[BaseModel] = Digest, 
-    enable_thinking: bool = False, 
-    max_new_tokens: int = 2048, 
+    model_path: str,
+    context_len: int,
+    instruction: str = None,
+    input_template: str = None,
+    output_model: Type[BaseModel] = Digest,
+    enable_thinking: bool = False,
+    max_new_tokens: int = 2048,
     **kwargs,
 ) -> TextAnalystBase:
     if model_path.startswith(VLLM_PREFIX):
         # remove these two if they exist
-        kwargs.pop('base_url', None) 
+        kwargs.pop('base_url', None)
         kwargs.pop('api_key', None)
         return VLLMTextAnalyst(
             model_path.removeprefix(VLLM_PREFIX),
@@ -391,14 +419,14 @@ def create_text_analyst(
             **kwargs,
         )
     else:
-        kwargs.pop('base_url', None) 
+        kwargs.pop('base_url', None)
         kwargs.pop('api_key', None)
         return TransformerTextAnalyst(
-            model_path, 
-            context_len=context_len, 
+            model_path,
+            context_len=context_len,
             instruction=instruction,
             input_template=input_template,
-            output_model=output_model, 
+            output_model=output_model,
             enable_thinking=enable_thinking,
             max_new_tokens=max_new_tokens,
             **kwargs

@@ -19,9 +19,35 @@ from nlp import (
     normalize_tags,
     is_cuda_oom,
 )
+from nlp.models import (
+    SiteExtraction,
+    JobExtraction,
+    ContractExtraction,
+    ProcurementNoticeExtraction,
+    FinancialReportExtraction,
+    EarningsReportExtraction,
+    SECFilingExtraction,
+    PressReleaseExtraction,
+    OfficialStatementExtraction,
+    EnforcementActionExtraction,
+    LegislativeBillExtraction,
+    LegislativeProposalExtraction,
+    EnactedLawExtraction,
+    RegulationExtraction,
+    RulemakingNoticeExtraction,
+    CourtOpinionExtraction,
+    LawsuitExtraction,
+    GovernmentReportExtraction,
+    BudgetDocumentExtraction,
+    LegislativeRecordExtraction,
+    HearingExtraction,
+    ResearchPaperExtraction,
+    WhitepaperExtraction,
+    TechnicalDocumentationExtraction,
+)
 from utils.fields import *
 from utils import VECTOR_LEN, date_str, now_str
-from utils.kinds import BLOG, NEWS, POST
+from utils.kinds import *
 from .cacheops import *
 from .states import *
 from icecream import ic
@@ -31,49 +57,79 @@ log = get_logger("analyzerworker")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
 MAX_DOCUMENT_LEN = int(os.getenv("MAX_DOCUMENT_LEN", 4096)) # 16KB
 
+DIGEST_MODEL_BY_KIND = {
+    SITE: SiteExtraction,
+    JOB: JobExtraction,
+    CONTRACT: ContractExtraction,
+    PROCUREMENT_NOTICE: ProcurementNoticeExtraction,
+    FINANCIAL_REPORT: FinancialReportExtraction,
+    EARNINGS_REPORT: EarningsReportExtraction,
+    SEC_FILING: SECFilingExtraction,
+    PRESS_RELEASE: PressReleaseExtraction,
+    OFFICIAL_STATEMENT: OfficialStatementExtraction,
+    ENFORCEMENT_ACTION: EnforcementActionExtraction,
+    LEGISLATIVE_BILL: LegislativeBillExtraction,
+    LEGISLATIVE_PROPOSAL: LegislativeProposalExtraction,
+    ENACTED_LAW: EnactedLawExtraction,
+    REGULATION: RegulationExtraction,
+    RULEMAKING_NOTICE: RulemakingNoticeExtraction,
+    COURT_OPINION: CourtOpinionExtraction,
+    LAWSUIT: LawsuitExtraction,
+    GOVERNMENT_REPORT: GovernmentReportExtraction,
+    BUDGET_DOCUMENT: BudgetDocumentExtraction,
+    LEGISLATIVE_RECORD: LegislativeRecordExtraction,
+    HEARING: HearingExtraction,
+    RESEARCH_PAPER: ResearchPaperExtraction,
+    WHITEPAPER: WhitepaperExtraction,
+    TECHNICAL_DOCUMENTATION: TechnicalDocumentationExtraction,
+}
+
 CLASSIFICATION_LIMIT = int(os.getenv("CLASSIFICATION_LIMIT", 2))
 CLASSIFICATION_EPS = float(os.getenv("CLASSIFICATION_EPS", 0.4))
 
 # Ideology is assigned only when a bean's categories include one of these
 # (political or political-adjacent labels from factory/classifications.yaml).
 IDEOLOGY_ELIGIBLE_CATEGORIES = frozenset(normalize_tags([
-    "AI Ethics and Governance",
-    "Privacy Engineering and Data Protection",
-    "Drones and Uncrewed Systems",
-    "Banking and Finance",
-    "Aviation and Air Transport",
-    "Employment and Workplace",
+    "AI Safety and Regulation",
+    "Data Centers and Digital Infrastructure",
+    "Climate Policy and Emissions",
+    "Clean Energy and Power Grid",
+    "Oil Gas and Fossil Fuels",
+    "Labor Jobs and Unions",
     "Housing and Real Estate",
-    "Construction and Infrastructure",
-    "Pharmaceuticals and Drug Development",
-    "Public Health and Epidemiology",
-    "Reproductive and Sexual Health",
-    "Climate and Environmental Management",
-    "Water Resources and Management",
-    "Media and Journalism",
-    "Digital Communities and Online Platforms",
-    "Government and Politics",
-    "Public Policy and Administration",
-    "Elections and Voting",
-    "Legal System and Justice",
-    "Law Enforcement and Public Safety",
-    "Human Rights and Civil Liberties",
-    "Diversity, Equity, and Inclusion",
-    "Gender Studies and Identity",
-    "LGBTQ+ Issues",
-    "Migration and Immigration",
+    "Interest Rates and Inflation",
+    "National Politics",
+    "Elections and Campaigns",
+    "Diplomacy and Geopolitics",
+    "War and Armed Conflict",
+    "Immigration and Borders",
+    "Courts and Lawsuits",
+    "Crime and Policing",
+    "Human Rights",
     "Military and Defense",
-    "Homeland Security and Safety",
-    "Weaponry and Military Technology",
-    "Geopolitics and International Relations",
-    "Accessibility and Disability",
-    "Cannabis and Cannabinoids",
+    "Local Government",
+    "Trade Tariffs and Sanctions",
+    "Gender and LGBTQ Rights",
+    "Press Freedom and Journalism",
+    "Hospitals and Healthcare",
+    "Public Health",
+    "Cannabis Industry",
+    "Education and Schools",
+    "Religion and Faith",
+    "Privacy and Surveillance",
+    "Disability and Accessibility",
+    "Humanitarian Aid",
+    "Terrorism and Extremism",
+    "Nuclear Energy",
+    "Banking and Payments",
+    "Construction and Infrastructure",
+    "Public Transit and Roads",
     "Gambling and Betting",
     "Alcohol and Beverages",
-    "Transportation and Mobility",
-    "Energy, Solar, and Renewable Systems",
-    "Philosophy, Religion, and Spirituality",
-    "Anthropology and Cultural Studies",
+    "Pharmaceuticals and Drugs",
+    "Carbon Removal and Capture",
+    "Agriculture and Food Production",
+    "Extreme Weather and Disasters",
 ]))
 
 class Embedder:
@@ -331,15 +387,25 @@ class Digestor:
         return text + article[CONTENT][:MAX_DOCUMENT_LEN<<2]
 
     def digest_beans(self, beans: list[dict]):
-        digests = self.digestor.run_batch(list(map(self._article_to_str, beans)))
-        updates = [
-            {
-                URL: b[URL],
-                DIGEST: dig
-            }
-            for b, d in zip(beans, digests)
-            if d and (dig := d.model_dump())
-        ]
+        updates = []
+        beans_by_model = {}
+        for bean in beans:
+            output_model = DIGEST_MODEL_BY_KIND.get(bean.get(KIND), Digest)
+            beans_by_model.setdefault(output_model, []).append(bean)
+
+        for output_model, model_beans in beans_by_model.items():
+            digests = self.digestor.run_batch(
+                [self._article_to_str(bean) for bean in model_beans],
+                output_model=output_model,
+            )
+            updates.extend(
+                {
+                    URL: bean[URL],
+                    DIGEST: digest.model_dump(),
+                }
+                for bean, digest in zip(model_beans, digests)
+                if digest and digest.model_dump()
+            )
         return updates
 
     @log_runtime(logger=log)
