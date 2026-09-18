@@ -240,10 +240,13 @@ class Embedder:
     def run(self): 
         total = 0
         with self.embedder:
-            for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=EMBEDDED, batch_size=self.batch_size, log=log):
-                chunk = [bean for bean in chunk if bean.get(KIND) not in _SKIP_KINDS]
-                if not chunk: continue
-
+            for chunk in decache_beans(
+                self.cache, 
+                states=COLLECTED, exclude_states=EMBEDDED, 
+                batch_size=self.batch_size, 
+                log=log, 
+                filter_bean=lambda b: b.get(KIND) not in _SKIP_KINDS
+            ):
                 try:
                     updates = self.embed_beans(chunk)
                     if not updates:
@@ -302,10 +305,13 @@ class Extractor:
     def run(self):
         total = 0
         with self.extractor:
-            for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=EXTRACTED, batch_size=self.batch_size, log=log):
-                chunk = [bean for bean in chunk if bean.get(KIND) not in _SKIP_KINDS]
-                if not chunk: continue
-
+            for chunk in decache_beans(
+                self.cache, 
+                states=COLLECTED, exclude_states=EMBEDDED, 
+                batch_size=self.batch_size, 
+                log=log, 
+                filter_bean=lambda b: b.get(KIND) not in _SKIP_KINDS
+            ):
                 try:
                     updates = self.extract_beans(chunk)
                     log.info(event="extracted", source=chunk[0][BASE_URL], num_items=len(updates))
@@ -411,9 +417,13 @@ class Digestor:
         total = 0
 
         with self.digestor:
-            for chunk in decache_beans(self.cache, states=COLLECTED, exclude_states=DIGESTED, batch_size=self.batch_size, log=log):
-                chunk = [bean for bean in chunk if bean.get(KIND) not in _SKIP_KINDS]
-                if not chunk: continue
+            for chunk in decache_beans(
+                self.cache, 
+                states=COLLECTED, exclude_states=EMBEDDED, 
+                batch_size=self.batch_size, 
+                log=log, 
+                filter_bean=lambda b: b.get(KIND) not in _SKIP_KINDS
+            ):
                 try:
                     updates = self.digest_beans(chunk)
                     log.info(event="digested", source=chunk[0][BASE_URL], num_items=len(updates))

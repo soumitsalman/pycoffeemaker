@@ -12,8 +12,9 @@ def encache_beans(cache: StateCacheBase, state: str, beans: list[dict]):
     count = cache.set(BEANS, state, _clean_updates(beans))
     return count if count is not None else len(beans)
 
-def decache_beans(cache: StateCacheBase, states: list[str], exclude_states: list[str], batch_size: int, *, log) -> list[dict]:
+def decache_beans(cache: StateCacheBase, states: list[str], exclude_states: list[str], batch_size: int, *, log, filter_bean = lambda x: True) -> list[dict]:
     beans = cache.get(BEANS, states=states, exclude_states=exclude_states)
+    if filter_bean: beans = list(filter(filter_bean, beans))
     if log: log.info(event=f"starting {log.name}", target_state=exclude_states, num_items=len(beans))
     for chunk in batched(beans, batch_size):
         yield chunk
