@@ -18,8 +18,8 @@ primary_region = 'iad'
   policy = 'never'
 
 [[vm]]
-  size = 'shared-cpu-2x'
-  memory = '3072mb'
+  size = 'performance-1x'
+  memory = '6144mb'
 
 [processes]
   app = "--porter 512"
