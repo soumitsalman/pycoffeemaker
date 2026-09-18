@@ -17,7 +17,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 
 PG_TIMEOUT = int(os.getenv('PG_TIMEOUT', 300))
 PG_WORKERS = int(os.getenv('PG_WORKERS', 4))
-BATCH_SIZE = 512
+BATCH_SIZE = int(os.getenv('BATCH_SIZE', 512))
 RETRY_COUNT = 3
 RETRY_DELAY = 15
 _store_executor = ThreadPoolExecutor(max_workers=PG_WORKERS, thread_name_prefix="pgstore")

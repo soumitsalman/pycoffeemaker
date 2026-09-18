@@ -13,13 +13,14 @@ primary_region = 'iad'
 [env]
   PG_WORKERS = '8'
   PROCESSING_WINDOW = '7'
+  BATCH_SIZE = '64'
 
 [[restart]]
   policy = 'never'
 
 [[vm]]
-  size = 'performance-1x'
+  size = 'shared-cpu-4x'
   memory = '6144mb'
 
 [processes]
-  app = "--porter 512"
+  app = "--porter 64"
