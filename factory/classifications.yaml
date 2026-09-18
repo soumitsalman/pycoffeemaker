@@ -1,294 +1,476 @@
+# 64 broad subject categories for content embeddings.
+# Classify by the central subject, irrespective of news/blog/paper/report format.
+# Descriptions are positive semantic anchors, not classifier instructions.
+# Prefer a subject-specific category when a company, politician, country, or tool
+# is incidental. Mixed-subject documents can legitimately match multiple topics.
+# Editorial boundaries (comments are not embedded):
+# - Sports includes all physical competitive disciplines; esports goes to gaming.
+# - Investment returns/prices -> markets; firm operations/funding -> business;
+#   household money decisions -> personal finance; formal reporting -> accounting.
+# - Political procedure/elections -> government; sector policy -> its subject;
+#   diplomatic negotiation -> international relations; combat/forces -> defense.
+# - Judicial proceedings -> law; incidents/investigations -> crime;
+#   digital attacks/data misuse -> cybersecurity; systemic discrimination -> rights.
+# - Medical interventions -> medicine; population/services -> public health;
+#   biological mechanisms -> biology; everyday exercise/diet -> wellbeing.
+# - Climate mechanisms/mitigation/carbon removal -> climate; ecosystem protection,
+#   pollution and water quality -> environment; electricity/fuels -> energy.
+# - Hazards and emergency impacts -> disasters; physical Earth research -> Earth.
+# - AI methods/models -> AI; robots/physical autonomy -> robotics;
+#   other machinery/production processes -> engineering.
+# - Components/chip fabrication -> hardware; finished personal devices -> electronics;
+#   software/code -> software; data storage/pipelines -> data engineering.
+# - Vehicles/passenger operations -> transportation; goods movement -> logistics;
+#   visitor itineraries/accommodation -> travel; construction/design -> infrastructure.
+# - Property ownership/rents -> real estate; domestic upkeep -> home.
+# - Creative work -> its art form; private lives/fame -> celebrities;
+#   media practices/platform culture -> media; campaign/sales strategy -> marketing.
+# - Subject-specific product advice -> its subject; general retail practices,
+#   broad shopping events and consumer remedies -> retail/consumer affairs.
+# setup.py currently reads factory/classifications.yaml, not this candidate file.
+# Sentiments and ideologies below are preserved from that file for compatibility.
 categories:
-- id: Artificial Intelligence and Machine Learning
-  description: Artificial intelligence systems, machine learning algorithms, neural networks, model training, prediction, and intelligent automation, AI, machine intelligence, supervised learning, unsupervised learning, deep learning, predictive modeling
-- id: AI Ethics and Governance
-  description: Responsible AI, algorithmic bias, AI safety, regulation, transparency, accountability, and governance policy, responsible innovation, fairness, explainability, model risk, algorithmic impact assessment
-- id: Natural Language Processing
-  description: Language models, text analysis, speech and language understanding, translation, chatbots, and computational linguistics, NLP, text mining, information extraction, semantic analysis, speech recognition, machine translation
-- id: Computer Vision and Pattern Recognition
-  description: Image and video analysis, visual recognition, object detection, facial recognition, and pattern classification, image recognition, video understanding, image classification, visual features, scene analysis, optical character recognition
-- id: Generative AI and Foundation Models
-  description: Generative AI, large language models, foundation models, multimodal AI, and AI-generated text, images, audio, or video, GenAI, LLMs, diffusion models, prompt engineering, multimodal generation
-- id: MLOps and Model Engineering
-  description: Machine learning deployment, model monitoring, evaluation, training pipelines, feature stores, and ML infrastructure, ML deployment, model serving, model registry, experiment tracking, feature engineering, inference pipelines
-- id: Cybersecurity and Threat Intelligence
-  description: Cyber attacks, malware, ransomware, vulnerabilities, threat actors, threat intelligence, and defensive security operations, information security, cyber defense, security operations, indicators of compromise, exploit campaigns, adversary tracking
-- id: Privacy Engineering and Data Protection
-  description: Personal-data privacy, data protection, consent, anonymization, encryption, privacy compliance, and data governance, privacy by design, personally identifiable information, PII, data minimization, consent management, regulatory compliance
-- id: Network Security and Firewalls
-  description: Network defense, firewalls, intrusion detection, secure network architecture, VPNs, and traffic security, perimeter defense, intrusion prevention, network segmentation, zero trust networking, packet filtering, secure connectivity
-- id: Identity and Access Management
-  description: Digital identity, authentication, authorization, passwords, single sign-on, access control, and identity security, IAM, user provisioning, role-based access control, RBAC, multifactor authentication, privileged access management
-- id: Digital Forensics and Incident Response
-  description: Security incident investigation, breach response, evidence collection, threat hunting, log analysis, and cyber forensics, DFIR, security operations center, SOC, malware analysis, chain of custody, post-incident remediation
-- id: Software Engineering and Programming
-  description: Software development, coding, application architecture, testing, debugging, APIs, and engineering practices, application development, source code, software architecture, unit testing, version control, code review
-- id: Web Development and Internet Technologies
-  description: Websites, web applications, browsers, internet protocols, frontend and backend development, and web platforms, web apps, HTTP, HTML, CSS, JavaScript, REST APIs, browser technologies
-- id: Mobile App Development
-  description: iOS and Android apps, mobile software, app stores, mobile UX, and smartphone application development, mobile applications, iOS development, Android development, native apps, cross-platform apps, mobile interfaces
-- id: Cloud Computing and Distributed Systems
-  description: Cloud platforms, distributed applications, containers, serverless computing, scalability, and data-center infrastructure, cloud infrastructure, distributed computing, microservices, Kubernetes, serverless applications, elastic scaling
+- id: Artificial Intelligence
+  description: 'Artificial intelligence and machine learning: models that learn from data to predict,
+    classify, reason, or generate content. Covers neural networks, language models, computer vision, speech
+    recognition, generative media, AI agents, training, inference, evaluation, and model deployment. Includes
+    research on model capabilities, AI products and applications, algorithmic fairness, alignment, safety,
+    and governance specifically concerned with artificial intelligence.'
+- id: Software Development and Applications
+  description: 'Computer software, programming, and applications: designing, building, testing, maintaining,
+    and using programs. Covers programming languages, compilers, algorithms for software systems, APIs,
+    web and mobile development, operating systems, developer tools, open-source projects, debugging, testing,
+    accessibility, and user interfaces. Includes application releases, software tutorials, architecture
+    decisions, code examples, and practical workflows in desktop, mobile, and enterprise applications.'
 - id: Databases and Data Engineering
-  description: Databases, SQL, data warehouses, ETL, data pipelines, analytics engineering, and large-scale data processing, data platforms, relational databases, NoSQL, data lakes, ELT, data orchestration, stream processing
-- id: DevOps and Site Reliability
-  description: DevOps, CI/CD, infrastructure automation, observability, reliability engineering, incident management, and production operations, continuous delivery, deployment automation, infrastructure as code, SRE, uptime, capacity planning, production observability
-- id: Programming Languages and Compilers
-  description: Programming language design, compilers, interpreters, runtimes, type systems, and code optimization, language semantics, syntax, compiler toolchains, garbage collection, static analysis, optimization passes
-- id: Computer Hardware and Architecture
-  description: Computer components, processors, memory, storage, hardware design, system architecture, and computing performance, computer systems, motherboards, memory architecture, storage devices, buses, peripherals, benchmark performance
-- id: Semiconductor Design and Fabrication
-  description: Chip design, semiconductor manufacturing, foundries, lithography, integrated circuits, and chip supply chains, semiconductor process technology, wafer fabrication, advanced nodes, chip packaging, photolithography, yield
-- id: Microprocessors and Chipsets
-  description: CPUs, GPUs, chipsets, processor launches, instruction sets, silicon performance, and computing chips, central processing units, graphics processors, SoCs, CPU architecture, chipset platforms, processor benchmarks
-- id: High Performance Computing
-  description: Supercomputers, parallel computing, clusters, accelerators, scientific computing, and high-performance workloads, HPC, supercomputing, distributed parallelism, MPI, GPU acceleration, scientific workloads, exascale computing
-- id: Consumer Electronics and Gadgets
-  description: Consumer devices, smartphones, laptops, televisions, gadgets, product launches, and personal technology, personal electronics, smart devices, home electronics, device reviews, hardware launches, consumer technology products
-- id: Wearable Technology
-  description: Smartwatches, fitness trackers, wearable sensors, augmented wearables, and health-monitoring devices, wearables, smart rings, fitness monitors, biometric sensors, health trackers, wearable computing
-- id: Internet of Things and Smart Devices
-  description: Connected devices, smart homes, IoT sensors, device ecosystems, industrial IoT, and machine-to-machine communication, IoT, connected products, smart appliances, edge devices, sensor networks, home automation, device telemetry
-- id: Embedded Systems and Firmware
-  description: Embedded computing, firmware, microcontrollers, real-time systems, device software, and hardware control code, embedded software, microcontroller firmware, RTOS, device drivers, low-level programming, hardware interfaces
-- id: Robotics and Autonomous Systems
-  description: Robots, autonomous machines, robot perception, navigation, manipulation, and self-operating systems, robotics, autonomous navigation, robot control, machine perception, human-robot interaction, autonomous agents
-- id: Industrial Automation and Control Systems
-  description: Factory automation, PLCs, SCADA, industrial control, manufacturing systems, and process automation, industrial IoT, programmable logic controllers, PLC programming, supervisory control, process control, smart factories
-- id: Mechatronics and Motion Systems
-  description: Mechanical-electronic systems, motors, actuators, motion control, robotics hardware, and precision machinery, servo systems, electromechanical design, robotics mechanisms, kinematics, actuation, precision motion, motion planning
-- id: Drones and Uncrewed Systems
-  description: Drones, UAVs, uncrewed aircraft, remote piloting, drone regulation, and autonomous aerial systems, UAS, unmanned aerial vehicles, drone operations, flight autonomy, remote sensing, aerial robotics
-- id: Video Games and Game Development
-  description: Video games, game studios, game design, game engines, game releases, and game-development technology, gaming, game programming, gameplay systems, level design, interactive graphics, game publishing
-- id: Esports and Competitive Gaming
-  description: Esports tournaments, professional gamers, competitive gaming leagues, streaming competitions, and gaming teams, professional gaming, esports leagues, tournaments, championships, players, teams, game broadcasts, competitive titles
-- id: Virtual Reality and Mixed Reality
-  description: Virtual reality, augmented reality, mixed reality, headsets, immersive worlds, and spatial computing, VR, AR, XR, augmented environments, immersive interfaces, 3D worlds, spatial interaction
-- id: Interactive Entertainment and Streaming
-  description: Streaming platforms, live entertainment, interactive media, creators, digital audiences, and entertainment technology, digital entertainment, live streaming, on-demand video, creator platforms, interactive broadcasts, audience engagement
-- id: Sports and Athletics
-  description: Professional and amateur sports, teams, athletes, leagues, games, scores, standings, playoffs, championships, and sports news, baseball, football, basketball, soccer, hockey, tennis, golf, cricket, Olympics, college athletics, match reports, box scores, MLB, NFL, NBA, NHL, FIFA
-- id: Television and Streaming
-  description: Television shows, series, episodes, networks, streaming originals, actors, season premieres, and TV criticism, broadcast television, cable TV, streaming series, sitcoms, dramas, reality television, TV ratings
-- id: Business and Management
-  description: Corporate strategy, business operations, management decisions, leadership, organizational performance, and company news, enterprise strategy, operations management, corporate governance, organizational planning, executives, business performance
-- id: Entrepreneurship and Startups
-  description: Startups, founders, venture creation, innovation, new businesses, accelerators, and entrepreneurial ecosystems, venture capital, startup funding, seed rounds, scaleups, incubators, innovation ventures
-- id: Marketing and Brand Strategy
-  description: Marketing campaigns, advertising, branding, audience research, customer messaging, and go-to-market strategy, brand positioning, advertising strategy, demand generation, market research, campaign performance, customer segmentation
-- id: Sales and Customer Growth
-  description: Sales, customer acquisition, revenue growth, account management, lead generation, and customer success, business development, pipeline management, conversion, retention, upselling, revenue operations
-- id: Banking and Finance
-  description: Banks, lending, payments, financial services, interest rates, financial regulation, and personal or corporate finance, commercial banking, retail banking, credit, deposits, payment systems, fintech, monetary policy, financial institutions
-- id: Investment and Capital Markets
-  description: Investing, stocks, bonds, funds, trading, asset management, market movements, and capital markets, equities, fixed income, securities, portfolios, asset allocation, brokers, exchanges, market liquidity
-- id: Accounting and Auditing
-  description: Financial reporting, accounting standards, audits, bookkeeping, corporate disclosures, and tax accounting, financial statements, generally accepted accounting principles, GAAP, controls, assurance, compliance audits, revenue recognition
-- id: Logistics and Supply Chain Management
-  description: Supply chains, logistics planning, procurement, distribution, sourcing, shortages, and operational fulfillment, production planning, distribution networks, demand forecasting, supply chain resilience, fulfillment
-- id: Transportation and Mobility
-  description: Transportation systems, mobility services, vehicles, transit, road travel, and future mobility, public transit, shared mobility, passenger transport, automotive mobility, commuting, transportation planning
-- id: Freight, Shipping, and Ports
-  description: Cargo, ocean shipping, freight transport, ports, shipping lanes, maritime trade, and container logistics, container shipping, ocean carriers, bill of lading, port terminals, cargo vessels, maritime logistics, trade routes
-- id: Warehousing and Inventory Systems
-  description: Warehouses, inventory, fulfillment centers, stock management, picking, storage, and distribution operations, warehouse management systems, WMS, stock levels, fulfillment automation, distribution centers, order picking, replenishment
-- id: Fleet Operations and Routing
-  description: Vehicle fleets, route planning, dispatch, telematics, delivery operations, and transportation optimization, fleet management, vehicle tracking, dispatch software, last-mile delivery, route optimization, driver operations
-- id: Aviation and Air Transport
-  description: Airlines, airports, air travel, aviation operations, air cargo, passenger transport, and aviation regulation, commercial aviation, flight operations, air traffic, passenger flights, airline industry
-- id: Aerospace Engineering
-  description: Aircraft and spacecraft design, aerodynamics, propulsion, aerospace materials, and flight engineering, aeronautics, astronautics, propulsion systems, aircraft structures, flight dynamics, aerospace research, spacecraft design
-- id: Aircraft Systems and Maintenance
-  description: Aircraft components, avionics, maintenance, safety inspections, repair, and airline technical operations, MRO, maintenance repair and overhaul, aircraft safety, airworthiness, flight controls, engine maintenance, avionics systems
-- id: Space Industry and Launch Systems
-  description: Space companies, rockets, launches, launch vehicles, space missions, and commercial spaceflight, space launch, launch providers, orbital vehicles, launch services, mission operations, commercial space
-- id: Satellite Systems and Space Operations
-  description: Satellites, orbital operations, satellite communications, Earth observation, space situational awareness, and ground control, spacecraft, satellite constellations, orbital mechanics, telemetry, satellite imagery, remote sensing, ground stations
-- id: Employment and Workplace
-  description: Jobs, workplaces, labor trends, worker conditions, employment policy, remote work, and workplace culture, labor market, employment conditions, occupations, wages, workplace policy, employee experience, hybrid work
-- id: Career Development and Professional Skills
-  description: Career growth, skills training, professional education, job advancement, resumes, and workforce development, career planning, upskilling, reskilling, certifications, mentoring, professional development, job search
-- id: Talent Acquisition and Recruiting
-  description: Hiring, recruiting, candidates, interviews, talent pipelines, staffing, and recruitment technology, recruitment, sourcing, applicant tracking, hiring process, candidate experience, staffing agencies, employer branding
-- id: Human Resources and Workforce Planning
-  description: Human resources, employee benefits, compensation, workforce strategy, HR policy, and people operations, HR, headcount planning, payroll, benefits administration, compensation strategy, employee relations
-- id: Leadership and Organizational Development
-  description: Executive leadership, management training, organizational change, team development, and company culture, organizational behavior, executive development, succession planning, change management, team effectiveness, leadership coaching
-- id: Home and Lifestyle
-  description: Everyday living, household routines, lifestyle trends, personal wellbeing, consumer living, and domestic life, daily living, household management, personal routines, lifestyle choices, domestic wellbeing, consumer habits
-- id: Interior Design and Home Improvement
-  description: Interior decorating, renovations, furniture, DIY home projects, remodeling, and home improvement, home decor, residential interiors, renovation, furnishings, lighting design, DIY projects
-- id: Housing and Real Estate
-  description: Residential property, home buying, rents, real estate markets, mortgages, landlords, and housing policy, property market, residential real estate, home prices, rental housing, housing supply, property investment
-- id: Architecture and Building Design
-  description: Architecture, building plans, urban design, sustainable buildings, architects, and built-environment design, architectural design, building form, floor plans, public buildings, urban planning, sustainable architecture, construction documents
-- id: Construction and Infrastructure
-  description: Construction projects, roads, bridges, utilities, public infrastructure, contractors, and civil works, civil engineering, building projects, infrastructure investment, public works, project delivery, transportation infrastructure
-- id: Physics and Physical Sciences
-  description: Physics, matter, energy, forces, astronomy, experimental physical science, and fundamental natural phenomena, physical science, mechanics, thermodynamics, electromagnetism, quantum physics, astrophysics, experimental physics
+  description: Storing, organizing, transforming, and retrieving digital data. Covers relational and nonrelational
+    databases, SQL, schemas, query optimization, transactions, data warehouses, data lakes, ETL pipelines,
+    streaming data, metadata, data quality, cataloging, and business intelligence. Includes database internals,
+    data platform architecture, analytics workflows, interoperability, records management, and technical
+    methods for making datasets reliable, searchable, and usable.
+- id: Computing Infrastructure and Telecommunications
+  description: Infrastructure that runs computing services and carries digital communications. Covers
+    cloud platforms, servers, data centers, distributed systems, containers, orchestration, site reliability,
+    infrastructure automation, outages, capacity planning, and operational observability. Includes broadband,
+    fiber networks, mobile carriers, cellular standards, radio networks, internet routing, network protocols,
+    connectivity access, spectrum allocation, and the construction and operation of communications and
+    computing facilities.
+- id: Cybersecurity and Digital Privacy
+  description: Protecting computer systems, networks, accounts, and personal information from digital
+    threats and misuse. Covers hacking, malware, ransomware, phishing, software vulnerabilities, exploits,
+    authentication, access controls, cryptography, security patches, threat intelligence, digital forensics,
+    and breach response. Includes surveillance technology, tracking, personal-data collection, privacy
+    engineering, data-protection requirements, and safeguards against unauthorized access, exposure, or
+    manipulation of digital information.
+- id: Semiconductors and Computer Hardware
+  description: The electronic components and architecture inside computing devices. Covers processors,
+    graphics chips, memory, storage, integrated circuits, circuit boards, instruction sets, hardware accelerators,
+    semiconductor design, fabrication, lithography, packaging, and foundries. Includes component benchmarks,
+    chip manufacturing equipment, fabrication capacity, electronic design methods, and research into faster,
+    more efficient, or more reliable computing hardware.
+- id: Consumer Electronics
+  description: Personal electronic devices and their everyday use, features, performance, and value. Covers
+    phones, tablets, laptops, personal computers, televisions, headphones, cameras, smartwatches, wearables,
+    smart-home devices, and accessories. Includes product announcements, hands-on reviews, comparisons,
+    buying advice, device-specific discounts, setup, repairs, firmware updates, connectivity problems,
+    battery life, and the user experience of finished consumer gadgets.
+- id: Robotics and Autonomous Machines
+  description: Robots and physical machines that sense their surroundings and act with partial or full
+    autonomy. Covers robot manipulation, navigation, motion planning, sensors, actuators, human-robot
+    interaction, humanoids, service robots, industrial robots, civilian drones, and autonomous vehicles.
+    Includes robot hardware and control, field trials, operational performance, physical safety, and deployment
+    of machines performing real-world tasks.
+- id: Engineering and Manufacturing
+  description: Designing, building, and operating physical machines, industrial processes, and manufactured
+    products. Covers mechanical, electrical, industrial, and systems engineering; motors, machinery, instrumentation,
+    control systems, industrial automation, fabrication, machining, additive manufacturing, and production
+    lines. Includes engineering calculations, prototypes, quality assurance, reliability, maintenance,
+    process optimization, manufacturing standards, and technical specifications for equipment and industrial
+    facilities.
+- id: Video Games and Gaming
+  description: 'Video games and interactive play: game releases, gameplay, reviews, walkthroughs, updates,
+    downloadable content, and player communities. Covers console, PC, mobile, and virtual-reality games,
+    game design, game engines, development studios, publishing, and gaming services. Includes esports,
+    competitive video-game tournaments, professional gamers, gaming livestreams, and the creative and
+    commercial production of interactive entertainment.'
+- id: Economics and Economic Policy
+  description: Economies as a whole and the policies shaping growth, prices, production, employment, and
+    trade. Covers inflation, recession, GDP, productivity, monetary policy, central-bank interest rates,
+    government budgets, public debt, fiscal stimulus, taxation policy, development economics, and cost-of-living
+    trends. Includes economic forecasts, statistical releases, theoretical models, and analysis of economy-wide
+    causes and consequences.
+- id: Financial Markets and Investing
+  description: Investment assets, securities markets, and decisions about allocating capital. Covers stocks,
+    bonds, funds, ETFs, commodities, foreign exchange, derivatives, alternative investments, market indexes,
+    portfolio construction, valuation, risk, and trading. Includes digital assets, cryptocurrencies, stablecoins,
+    token markets, and decentralized finance. Focuses on asset prices, returns, investor positioning,
+    securities analysis, exchanges, and investment products.
+- id: Banking Insurance and Payments
+  description: Institutions and services that hold, lend, transfer, or insure money. Covers banks, deposits,
+    commercial and consumer credit, underwriting, payment networks, payment processors, remittances, financial
+    technology, insurance policies, claims, and reinsurance. Includes financial-institution operations,
+    solvency, capital requirements, lending standards, financial inclusion, and regulation of banking,
+    insurance, and payment services.
+- id: Personal Finance
+  description: Managing an individual or household budget and long-term financial security. Covers saving,
+    spending, emergency funds, debt repayment, credit scores, borrowing choices, retirement planning,
+    pensions, education savings, estate planning, and household insurance decisions. Includes practical
+    explanations of financial products and benefits, managing living costs, and how economic or tax changes
+    affect a person’s money.
+- id: Business Strategy and Entrepreneurship
+  description: Building and running organizations, from new ventures to established companies. Covers
+    entrepreneurship, startup funding, venture capital, business models, corporate strategy, management,
+    leadership, mergers, acquisitions, restructuring, executive succession, partnerships, and organizational
+    performance. Includes business plans, company earnings narratives, operating results, annual-report
+    discussions, and decisions about how an enterprise competes, grows, or sustains its operations.
+- id: Accounting and Taxation
+  description: Recording, reporting, auditing, and taxing financial activity. Covers financial statements,
+    bookkeeping, revenue recognition, cost accounting, valuation for reporting, internal controls, audit
+    procedures, accounting standards, corporate disclosures, and assurance. Includes tax returns, deductions,
+    tax liabilities, tax administration, compliance guidance, and interpretation of accounting and tax
+    rules for individuals, organizations, and professional practitioners.
+- id: Marketing Advertising and Sales
+  description: How organizations attract customers, communicate value, and sell products or services.
+    Covers branding, advertising campaigns, market research, audience segmentation, pricing strategy,
+    public relations, search marketing, email campaigns, sales processes, account management, and customer
+    retention. Includes marketing measurement, conversion analysis, sponsorship, customer experience,
+    campaign controversies, and practical methods for building demand and customer relationships.
+- id: Employment and Careers
+  description: Working life and the relationship between workers and employers. Covers hiring, job searches,
+    interviews, career development, professional skills, compensation, benefits, human resources, layoffs,
+    working conditions, occupational safety, remote work, unions, strikes, and collective bargaining.
+    Includes employment rights, workplace culture, staffing practices, and the effects of workplace changes
+    on employees and job seekers.
+- id: Politics and Government
+  description: Political power, elections, and the operation of public institutions at national, regional,
+    and local levels. Covers parties, candidates, campaigns, polling, voting, elected officials, legislatures,
+    cabinets, public administration, municipal councils, government accountability, and institutional
+    reform. Includes political debates, legislative procedure, public appointments, election results,
+    and decisions about how governments are organized and governed.
+- id: International Relations and Trade
+  description: Relations among countries and international institutions. Covers diplomacy, treaties, alliances,
+    foreign policy, summits, diplomatic recognition, international cooperation, development assistance,
+    territorial disputes, and geopolitical strategy. Includes cross-border trade agreements, tariffs,
+    customs restrictions, sanctions, export controls, and negotiations. Focuses on how states and international
+    organizations negotiate interests, resolve disputes, and shape global relationships.
+- id: War Military and Defense
+  description: Armed conflict and the institutions, equipment, and strategies of national defense. Covers
+    wars, combat operations, attacks, military casualties, civilian experiences in conflict, ceasefires,
+    peacekeeping, armed groups, and insurgencies. Includes armed forces, recruitment, training, military
+    exercises, weapons, defense procurement, military intelligence, deterrence, and the strategic and
+    humanitarian consequences of warfare.
+- id: Law Courts and Justice
+  description: Legal rules, judicial institutions, and the resolution of disputes through the justice
+    system. Covers civil and criminal proceedings, lawsuits, charges, trials, evidence, judgments, sentencing,
+    appeals, constitutional interpretation, contracts, liability, intellectual property, and legal procedure.
+    Includes court decisions, legal scholarship, statutory interpretation, access to justice, legal representation,
+    and documents explaining rights and obligations under law.
+- id: Crime Policing and Public Safety
+  description: Criminal activity, police investigations, and community safety incidents. Covers homicide,
+    assault, theft, fraud, kidnapping, trafficking, organized crime, missing persons, suspects, arrests,
+    searches, and law-enforcement operations. Includes crime prevention, policing practices, emergency-service
+    responses to local incidents, public safety alerts, and factual accounts centered on victims, alleged
+    offenses, investigations, and immediate protection of the public.
+- id: Civil Rights and Social Inequality
+  description: Equal treatment, civil liberties, and the distribution of rights and opportunities across
+    society. Covers discrimination, racism, gender equality, LGBTQ rights, disability rights, indigenous
+    rights, freedom of expression, freedom of assembly, poverty, exclusion, and social justice. Includes
+    civil-rights advocacy, protest movements, systemic inequality, human-rights monitoring, and policies
+    affecting the dignity and participation of disadvantaged communities.
+- id: Immigration and Migration
+  description: People moving across borders and the rules governing residence, entry, and citizenship.
+    Covers immigration, emigration, visas, work permits, asylum, refugees, displacement, border processing,
+    deportation, naturalization, migrant integration, and diaspora communities. Includes migration patterns,
+    settlement experiences, refugee reception, immigration administration, and debates about who may enter,
+    stay, work, or receive protection in a country.
+- id: Medicine and Clinical Research
+  description: Human diseases, diagnosis, and medical treatment. Covers symptoms, pathology, clinical
+    practice, surgery, medications, vaccines, diagnostics, medical devices, reproductive medicine, and
+    patient outcomes. Includes clinical trials, drug development, treatment efficacy, adverse effects,
+    regulatory approval of therapies, and biomedical research focused on understanding or treating illness.
+    The central subject is a health condition or a medical intervention.
+- id: Public Health and Healthcare Systems
+  description: Health at the population level and the organization of healthcare services. Covers epidemiology,
+    outbreaks, disease surveillance, vaccination programs, prevention campaigns, environmental health
+    risks, health inequities, hospitals, clinics, care access, health insurance systems, medical staffing,
+    and healthcare financing. Includes public-health guidance, health-system performance, service delivery,
+    and policies intended to protect communities or improve access to care.
+- id: Mental Health and Psychology
+  description: Mental health, emotional experience, and psychological functioning. Covers depression,
+    anxiety, trauma, addiction, psychiatric conditions, neurodevelopmental conditions, counseling, psychotherapy,
+    psychiatric care, and mental-health support. Includes cognition, memory, emotion, personality, behavioral
+    psychology, psychological experiments, and coping with distress. Focuses on the mind, behavior, and
+    psychological wellbeing of individuals.
+- id: Fitness Nutrition and Wellbeing
+  description: Everyday practices supporting physical fitness and healthy living. Covers exercise routines,
+    strength and endurance training, mobility, recovery, sleep habits, dietary patterns, nutrition, weight
+    management, and sustainable health habits. Includes practical advice about physical activity, eating
+    well, maintaining energy, and improving daily wellbeing, with the emphasis on personal habits and
+    general physical health.
+- id: Biology and Biotechnology
+  description: Living organisms and biological processes, from molecules and cells to complex life. Covers
+    genetics, genomics, molecular biology, microbiology, physiology, developmental biology, evolution,
+    bioinformatics, synthetic biology, and biological engineering. Includes experiments on biological
+    mechanisms, sequencing methods, laboratory techniques, engineered organisms, biomanufacturing, and
+    biological discoveries whose main contribution concerns how life works or how biological systems can
+    be used.
+- id: Physics
+  description: The fundamental behavior of matter, energy, space, and time. Covers mechanics, thermodynamics,
+    electromagnetism, optics, acoustics, quantum mechanics, relativity, particle physics, nuclear physics,
+    condensed matter, and plasma physics. Includes theoretical models, physical experiments, measurement
+    techniques, laboratory instrumentation, and discoveries about forces, particles, fields, and the laws
+    governing natural phenomena.
 - id: Chemistry and Materials Science
-  description: Chemistry, chemical reactions, materials, polymers, metals, compounds, and material properties, chemical science, molecular structure, synthesis, catalysis, material chemistry, nanomaterials, laboratory chemistry
+  description: Chemical substances, reactions, and the properties of materials. Covers molecular structure,
+    synthesis, catalysis, analytical chemistry, electrochemistry, polymers, metals, ceramics, composites,
+    nanomaterials, and surface science. Includes laboratory methods, characterization, reaction mechanisms,
+    and the development of materials with useful structural, electrical, optical, thermal, or chemical
+    properties for scientific and technological applications.
 - id: Mathematics and Statistics
-  description: Mathematics, statistical analysis, probability, quantitative methods, mathematical models, and data inference, algebra, calculus, linear algebra, regression, statistical modeling, hypothesis testing, quantitative analysis
-- id: Engineering and Applied Systems
-  description: Applied engineering, system design, technical problem solving, mechanical systems, electrical systems, and engineering projects, systems engineering, design engineering, technical analysis, product development, applied technology, reliability, engineering solutions
-- id: Nanotechnology and Nanomaterials
-  description: Nanoscale science, nanomaterials, nanoparticles, nanodevices, molecular engineering, and advanced materials, nanoscience, nanoscale engineering, nanotubes, graphene, quantum dots, nanofabrication, nanoelectronics
-- id: Scientific Research Methods
-  description: Research design, experiments, peer review, reproducibility, scientific evidence, methodology, and study results, research methodology, experimental design, statistical methods, systematic review, scientific validation, replication, evidence quality
-- id: Human Biology and Physiology
-  description: Human body systems, anatomy, physiology, biological processes, metabolism, and human health science, organ systems, cellular processes, human function, homeostasis, biomedical science
-- id: Genetics and Genomics
-  description: Genes, DNA, genomes, genetic testing, heredity, genomics research, and genetic medicine, genetic variation, sequencing, gene expression, mutations, precision medicine, bioinformatics
-- id: Biotechnology and Bioengineering
-  description: Biotechnology, synthetic biology, bioengineering, biomanufacturing, laboratory innovation, and biological products, biotech, genetic engineering, bioprocessing, tissue engineering, biomaterials, fermentation, biological manufacturing
-- id: Medical Research and Healthcare Technology
-  description: Medical studies, clinical innovation, healthcare technology, diagnostics, medical devices, and digital health, clinical research, health informatics, medical imaging, telemedicine, digital therapeutics
-- id: Pharmaceuticals and Drug Development
-  description: Medicines, drug discovery, clinical trials, pharmaceutical companies, therapies, and drug regulation, pharma, therapeutics, pharmacology, clinical development, regulatory approval, medication safety
-- id: Public Health and Epidemiology
-  description: Population health, disease surveillance, health policy, epidemiology, health systems, and community prevention, disease burden, health disparities, surveillance, prevention programs, epidemiological studies
-- id: Infectious Diseases and Immunity
-  description: Infections, pathogens, vaccines, immune systems, outbreaks, antimicrobial resistance, and infectious-disease research, viral disease, bacterial infection, immunology, vaccination, immune response, outbreak investigation
-- id: Nutrition, Food, and Supplements
-  description: Diet, food science, nutrition, dietary supplements, healthy eating, ingredients, and nutrition research, dietary intake, nutrients, vitamins, minerals, food safety, dietary patterns, nutritional supplements
-- id: Body and Health
-  description: Physical health, fitness, exercise, wellness, body care, health habits, and personal health guidance, physical fitness, preventive care, healthy habits, self-care, health behavior
-- id: Elder Care and Aging
-  description: Aging, seniors, elder care, retirement health, dementia care, long-term care, and gerontology, geriatric care, older adults, aging population, assisted living, caregiving, cognitive decline, longevity
-- id: Child and Family Care
-  description: Childcare, parenting, child development, family support, education at home, and child wellbeing, child health, early childhood, family services, caregiving
-- id: Reproductive and Sexual Health
-  description: Reproduction, fertility, pregnancy, contraception, sexual health, maternal care, and reproductive rights, sexual medicine, reproductive medicine, fertility care, prenatal health, birth control, maternal health, family planning
-- id: Climate and Environmental Management
-  description: Climate change, emissions, sustainability, environmental policy, pollution, adaptation, and environmental management, global warming, climate policy, carbon emissions, decarbonization, environmental regulation, climate resilience
-- id: Conservation and Wildlife
-  description: Wildlife, biodiversity, habitats, endangered species, conservation programs, ecology, and nature protection, wildlife conservation, protected areas, habitat restoration, species protection, biodiversity loss, ecological preservation
-- id: Earth Sciences and Natural Resources
-  description: Geology, land, minerals, natural resources, soils, earthquakes, mining, and Earth systems, geoscience, hydrology, mineral resources, fossil fuels, natural hazards, resource extraction
-- id: Ocean and Marine Science
-  description: Oceans, marine ecosystems, fisheries, sea-level change, marine biology, and ocean research, marine science, oceanography, marine habitats, coral reefs, fisheries science, ocean circulation, coastal ecosystems
-- id: Water Resources and Management
-  description: Freshwater, water supply, drought, wastewater, water quality, irrigation, and water policy, water conservation, watershed management, drinking water, water infrastructure, groundwater, sanitation, drought planning
-- id: Energy, Solar, and Renewable Systems
-  description: Renewable energy, solar power, wind power, batteries, clean energy, electricity grids, and energy transition, renewable power, photovoltaics, wind farms, hydropower, energy storage, clean electricity, grid modernization
-- id: Art and Design
-  description: Visual art, graphic design, creative practice, exhibitions, artists, design trends, and aesthetics, fine art, visual communication, illustration, typography, creative direction, art exhibitions, design practice
-- id: Animation and Visual Effects
-  description: Animation, CGI, visual effects, motion graphics, animation studios, and digital visual production, 2D animation, 3D animation, compositing, motion design, digital effects, character animation
-- id: Film and Cinema
-  description: Movies, filmmaking, film releases, directors, actors, cinema industry, and film criticism, motion pictures, feature films, documentaries, film festivals, box office, cinema releases
-- id: Music and Music Industry
-  description: Music, musicians, recordings, concerts, labels, streaming music, and the music business, recorded music, artists, albums, songs, live performance, music business, record labels, music streaming
-- id: Media and Journalism
-  description: News media, reporting, journalism, publishing, media companies, press freedom, and news production, news reporting, newspapers, broadcasters, editorial work, investigative journalism, digital media, news organizations
-- id: Internet Culture and Social Media
-  description: Social media trends, memes, online creators, viral content, influencer culture, and internet culture, online trends, viral posts, influencers, creator economy, social networking, digital discourse
-- id: Digital Communities and Online Platforms
-  description: Online communities, forums, platforms, social networks, moderation, user communities, and digital participation, online networks, community platforms, platform governance, user-generated content
-- id: Languages and Linguistics
-  description: Languages, linguistics, grammar, communication, translation, dialects, language learning, and speech, language structure, phonetics, syntax, semantics, pragmatics, multilingualism, language acquisition
-- id: Philosophy, Religion, and Spirituality
-  description: Philosophy, religious belief, spirituality, ethics, faith communities, theology, and existential thought, philosophical ideas, religious traditions, spiritual practice, belief systems, moral reasoning, meaning
-- id: Anthropology and Cultural Studies
-  description: Human cultures, social customs, cultural identity, anthropology, cultural theory, and community practices, ethnography, cultural anthropology, social identity, customs, communities, cultural practices, human societies
+  description: Mathematical structures, proofs, and methods for reasoning with quantities and uncertainty.
+    Covers algebra, geometry, calculus, number theory, discrete mathematics, logic, probability, statistical
+    inference, optimization, numerical analysis, and mathematical modeling. Includes statistical methodology,
+    experimental design, causal inference, estimation, hypothesis testing, and reproducibility methods
+    when the mathematical or inferential technique itself is the main contribution.
+- id: Earth and Ocean Sciences
+  description: The physical structure, history, and processes of Earth and its oceans. Covers geology,
+    geophysics, tectonics, volcanology, sedimentology, paleoclimate, oceanography, hydrology, glaciers,
+    landforms, and atmospheric science. Includes field observations, geological mapping, scientific models,
+    and research explaining rocks, groundwater, ocean circulation, weather mechanisms, and long-term changes
+    in the planet’s physical systems.
+- id: Space and Astronomy
+  description: The universe beyond Earth and the exploration of space. Covers planets, stars, galaxies,
+    cosmology, astrophysics, telescopes, astronomical observations, planetary science, and the search
+    for extraterrestrial life. Includes rockets, spacecraft, satellites, launch missions, orbital operations,
+    space stations, astronauts, lunar exploration, and engineering or commercial developments centered
+    on spaceflight and space exploration.
+- id: Climate Change
+  description: Long-term climate change and efforts to limit or adapt to its effects. Covers global warming,
+    greenhouse-gas emissions, carbon budgets, climate projections, climate attribution, mitigation, adaptation,
+    net-zero commitments, and climate agreements. Includes carbon capture, carbon dioxide removal, biochar,
+    direct air capture, carbon storage, carbon credits, and measurement or verification of climate benefits
+    and emissions reductions.
+- id: Environment and Conservation
+  description: Protecting ecosystems and managing human impacts on the natural environment. Covers biodiversity,
+    wildlife, habitats, forests, wetlands, marine conservation, endangered species, ecological restoration,
+    air and water pollution, waste, recycling, and environmental assessment. Includes drinking-water quality,
+    wastewater management, resource conservation, ecological field studies, and practical measures to
+    maintain healthy ecosystems and reduce environmental damage.
+- id: Energy and Power
+  description: Producing, storing, distributing, and consuming energy. Covers electricity generation,
+    grids, utilities, solar, wind, hydropower, nuclear power, geothermal energy, batteries, hydrogen,
+    energy efficiency, oil, natural gas, refining, fuels, and pipelines. Includes energy projects, grid
+    reliability, power demand, electricity rates, storage installations, fuel supply, energy technologies,
+    and policies governing energy systems and their operation.
+- id: Mining and Mineral Resources
+  description: Finding, extracting, and processing mineral resources. Covers mineral exploration, ore
+    deposits, assay results, geological resource estimates, mine development, mining equipment, mineral
+    processing, metals, industrial minerals, coal extraction, and critical-mineral supply. Includes mine
+    permits, operating performance, worker conditions at mines, rehabilitation, and the technical and
+    commercial development of mineral deposits.
+- id: Agriculture and Food Production
+  description: Growing crops, raising animals, and producing food and agricultural raw materials. Covers
+    farming, agronomy, soil management, irrigation, fertilizers, pests, harvests, livestock, aquaculture,
+    fisheries, forestry production, and agricultural equipment. Includes farm economics, agricultural
+    policy, food processing, food supply, regenerative farming, and research or practices aimed at improving
+    agricultural yields, resilience, quality, and sustainability.
+- id: Weather Disasters and Emergencies
+  description: Weather conditions, forecasts, natural hazards, and major emergency events. Covers storms,
+    hurricanes, extreme temperatures, flooding, drought emergencies, wildfires, earthquakes, landslides,
+    tsunamis, industrial disasters, evacuations, rescue operations, and disaster recovery. Includes warnings,
+    damage reports, missing people, casualties, emergency preparedness, relief efforts, and practical
+    information about an unfolding hazard or its aftermath.
+- id: Vehicles and Passenger Transportation
+  description: Vehicles and systems that move people by road, rail, air, and water. Covers cars, electric
+    vehicles, motorcycles, buses, trains, passenger aircraft, airlines, airports, transit services, ferries,
+    and transportation operations. Includes vehicle launches, reviews, maintenance, driving, fares, service
+    changes, travel disruptions, transport safety, crashes, and engineering centered on passenger vehicles
+    and mobility.
+- id: Logistics and Supply Chains
+  description: Moving, storing, sourcing, and delivering goods. Covers procurement, inventory, warehouses,
+    distribution, cargo shipping, freight rail, trucking, air cargo, ports, delivery fleets, routing,
+    fulfillment, and last-mile delivery. Includes supply-chain bottlenecks, freight rates, sourcing strategies,
+    shipment tracking, customs logistics, and operational methods for improving the reliability, cost,
+    and efficiency of goods flowing between producers and customers.
+- id: Architecture Construction and Infrastructure
+  description: Planning, designing, building, and maintaining the built environment. Covers architecture,
+    civil engineering, construction projects, building codes, structural design, contractors, building
+    materials, roads, bridges, tunnels, public works, urban planning, and utility infrastructure. Includes
+    architectural criticism, construction methods, engineering specifications, project delivery, land-use
+    design, and how physical places and public facilities are created and maintained.
+- id: Housing and Real Estate
+  description: Property markets and the provision, ownership, and occupancy of buildings and land. Covers
+    home prices, rents, mortgages, home buying, property sales, landlords, tenants, evictions, commercial
+    property, real-estate investment, and housing supply. Includes affordability, homelessness, housing
+    assistance, property development economics, leasing, and policies affecting access to residential
+    or commercial space.
+- id: Education and Learning
+  description: Teaching, learning, and the institutions that support them. Covers schools, universities,
+    vocational education, curricula, instruction, assessment, examinations, admissions, tuition, scholarships,
+    literacy, educational technology, and student life. Includes education policy, school administration,
+    pedagogy, learning resources, academic access, and research into how students acquire knowledge and
+    how educational systems perform.
 - id: History and Archaeology
-  description: Historical events, past civilizations, archaeology, artifacts, historical research, and cultural heritage, historical scholarship, archaeological sites, excavation, ancient civilizations, archives, heritage preservation
-- id: Government and Politics
-  description: Governments, political parties, political leaders, legislatures, public power, and political developments, political institutions, public officials, parties, governance, political campaigns, state power
-- id: Public Policy and Administration
-  description: Public policy, government programs, regulation, public administration, civic services, and policy analysis, policy making, public programs, regulatory agencies, civil service, government administration, implementation, public services
-- id: Elections and Voting
-  description: Elections, campaigns, voting, ballots, electoral systems, poll results, and political participation, electoral politics, voter turnout, polling, campaign finance, election administration, voting rights
-- id: Legal System and Justice
-  description: Courts, judges, lawsuits, legal procedure, justice systems, legislation, and legal decisions, law, litigation, legal rulings, criminal and civil procedure, jurisprudence
-- id: Law Enforcement and Public Safety
-  description: Police, crime prevention, emergency response, public safety, criminal investigations, and policing policy, policing, law enforcement agencies, crime response, emergency services, public security, criminal justice, community safety
-- id: Human Rights and Civil Liberties
-  description: Human rights, civil liberties, discrimination, free speech, due process, equality, and rights advocacy, rights protection, freedom of expression, equality before the law, civil rights, human rights law
-- id: Diversity, Equity, and Inclusion
-  description: DEI, workplace equity, inclusion, representation, anti-discrimination initiatives, and social equity, DEI programs, belonging, workplace inclusion, equal opportunity, accessibility, anti-bias practice
-- id: Gender Studies and Identity
-  description: Gender identity, gender roles, gender equality, feminist studies, identity, and gender-related social issues, gender theory, gender expression, feminism, social inequality, women studies
-- id: LGBTQ+ Issues
-  description: LGBTQ+ communities, queer rights, sexual orientation, transgender issues, equality, and LGBTQ+ policy, LGBTQ rights, queer communities, transgender people, same-sex relationships, sexual identity, gender-affirming care, equality law
-- id: Family and Relationships
-  description: Families, relationships, marriage, dating, interpersonal dynamics, caregiving, and family life, partnerships, parenting, family dynamics, intimacy, interpersonal relationships
-- id: Migration and Immigration
-  description: Immigration, migrants, refugees, border policy, visas, asylum, diaspora, and population movement, cross-border movement, asylum seekers, border controls, citizenship, diaspora communities
-- id: Military and Defense
-  description: Armed forces, defense policy, military operations, national defense, soldiers, and security strategy, armed services, defense strategy, military policy, national security, deployments, armed conflict, defense spending
-- id: Homeland Security and Safety
-  description: Homeland security, emergency preparedness, disaster response, border security, terrorism prevention, and public safety, domestic security, emergency management, disaster preparedness, counterterrorism, border protection, critical infrastructure security
-- id: Weaponry and Military Technology
-  description: Weapons, military equipment, defense technology, missiles, arms procurement, and battlefield systems, arms, firearms, weapons systems, defense procurement, military hardware, battlefield technology
-- id: Geopolitics and International Relations
-  description: International affairs, diplomacy, foreign policy, geopolitical conflict, alliances, trade relations, and global power, foreign affairs, international organizations, strategic competition, treaties, global conflict
-- id: Blockchain and Distributed Ledgers
-  description: Blockchain technology, distributed ledgers, smart contracts, decentralized networks, and enterprise blockchain, DLT, blockchain networks, consensus mechanisms, immutable records, tokenization, decentralized applications
-- id: Cryptocurrency and Digital Assets
-  description: Cryptocurrencies, Bitcoin, tokens, digital assets, crypto markets, exchanges, and blockchain investing, crypto, Ether, digital currencies, crypto exchanges, wallets, blockchain markets
-- id: Decentralized Finance and Web3
-  description: DeFi, Web3, decentralized exchanges, crypto lending, DAOs, decentralized applications, and token economies, DeFi protocols, Web3 applications, decentralized lending, liquidity pools, staking, decentralized ownership
-- id: Academic Research
-  description: Universities, scholars, academic studies, research institutions, higher education research, and scholarly publications, scholarly work, academic papers, faculty, research funding, peer-reviewed studies, higher education
-- id: Accessibility and Disability
-  description: Disability, accessibility, assistive technology, inclusive design, accommodations, and disability rights, disability inclusion, accessible design, assistive devices, universal design, accessibility standards, disability advocacy
-- id: Cannabis and Cannabinoids
-  description: Cannabis, marijuana, CBD, THC, cannabinoids, medical cannabis, legalization, and cannabis industry, cannabis products, medical marijuana, dispensaries, cannabis regulation, cannabinoid science
-- id: Gambling and Betting
-  description: Gambling, sports betting, casinos, wagering, betting regulation, lotteries, and gaming addiction, sportsbooks, online gambling, betting markets, gaming regulation, gambling harm
-- id: Alcohol and Beverages
-  description: Alcohol, beer, wine, spirits, nonalcoholic drinks, beverage industry, drinking culture, and beverage regulation, cocktails, soft drinks, beverage brands, brewing, distilling, alcohol policy
+  description: Human societies and events of the past, studied through records, artifacts, and historical
+    interpretation. Covers ancient civilizations, political and social history, historical biographies,
+    archaeology, excavations, cultural heritage, archives, historical sites, and the interpretation of
+    material remains. Includes accounts of past events, preservation of historical evidence, and scholarship
+    explaining change across historical periods.
+- id: Philosophy Religion and Ethics
+  description: Questions of meaning, belief, values, and moral reasoning. Covers philosophical arguments,
+    ethics, epistemology, metaphysics, theology, religious traditions, scripture, worship, spiritual practice,
+    religious institutions, and interfaith relations. Includes discussions of moral dilemmas, worldviews,
+    rituals, religious communities, and philosophical or spiritual approaches to understanding human existence
+    and how people should live.
+- id: Society Culture and Social Research
+  description: How people live together, form communities, and organize social life. Covers sociology,
+    anthropology, demography, human geography, population change, social norms, cultural traditions, identity,
+    civic participation, and community life. Includes surveys, ethnography, social theory, demographic
+    statistics, and analysis of patterns in human behavior and institutions at the group or societal level.
+- id: Sports and Athletics
+  description: Organized competitive sports, athletes, teams, clubs, leagues, tournaments, and sporting
+    events. Covers football, soccer, cricket, basketball, baseball, hockey, rugby, tennis, golf, athletics,
+    swimming, combat sports, cycling, motorsport, horse racing, and Olympic or Paralympic competition.
+    Includes results, fixtures, scores, records, rankings, transfers, coaching, injuries, team ownership,
+    athlete profiles, sporting rules, and match predictions.
+- id: Film and Television
+  description: Movies, television, and screen entertainment. Covers films, series, documentaries, animation,
+    television programs, streaming shows, directors, acting performances, screenwriting, production, trailers,
+    releases, box office, ratings, and screen awards. Includes reviews, criticism, episode recaps, program
+    renewals, casting announcements, festivals, and the creative work and industry activity involved in
+    making and distributing screen productions.
+- id: Music and Performing Arts
+  description: Music and live performance as creative work and entertainment. Covers songs, albums, musicians,
+    composition, recording, instruments, concerts, tours, opera, theater, dance, comedy performances,
+    and stage productions. Includes performance reviews, artist interviews about their work, ticketing,
+    festivals, music education, and the creation, presentation, and distribution of musical and theatrical
+    works.
+- id: Books Literature and Language
+  description: Written expression, literary works, and human language. Covers novels, poetry, essays,
+    memoirs, authors, literary criticism, publishing, libraries, reading, writing craft, translation,
+    linguistics, and language learning. Includes book reviews, literary prizes, author profiles, interpretation
+    of texts, and research on grammar, meaning, language history, communication, and the structure or
+    use of human languages.
+- id: Visual Arts and Design
+  description: Visual creative work and the practice of design. Covers painting, sculpture, photography,
+    illustration, graphic design, typography, visual communication, product design, museums, galleries,
+    exhibitions, art history, and art criticism. Includes artists’ techniques, portfolios, design processes,
+    creative tools, collections, auctions, and analysis of the form, meaning, and aesthetic qualities
+    of visual works.
+- id: Celebrities and Public Personalities
+  description: The personal lives and public image of entertainers, famous personalities, and royal families.
+    Covers celebrity relationships, marriages, separations, family announcements, social appearances,
+    personal interviews, memoir revelations, public controversies, and royal engagements. Includes personality
+    profiles, tributes, and coverage whose central interest is a well-known person’s private life, reputation,
+    or public persona.
+- id: Media Journalism and Internet Culture
+  description: How information and public conversation are produced, distributed, and consumed. Covers
+    journalism, newsrooms, press freedom, publishing practices, misinformation, media literacy, social
+    networks, online communities, creators, influencers, memes, viral trends, and content moderation.
+    Includes media platforms, audience behavior, online discourse, and changes in the institutions and
+    practices of news and digital communication.
+- id: Food Cooking and Dining
+  description: Preparing, eating, and enjoying food and drink. Covers recipes, cooking techniques, ingredients,
+    baking, chefs, restaurants, cafes, dining reviews, regional cuisines, culinary traditions, wine, beer,
+    coffee, and other beverages. Includes kitchen skills, menus, food discovery, restaurant openings,
+    and practical or cultural writing centered on meals, flavors, hospitality, and culinary experiences.
+- id: Travel and Tourism
+  description: Visiting destinations for leisure and planning the experience of a trip. Covers destination
+    guides, itineraries, sightseeing, hotels, resorts, cruises, tours, attractions, cultural visits, travel
+    budgets, packing, and visitor advice. Includes tourism trends, destination experiences, accommodation
+    reviews, holiday planning, and practical information for people deciding where to visit, stay, and
+    explore.
+- id: Fashion Beauty and Personal Style
+  description: Clothing, appearance, and personal presentation. Covers fashion collections, designers,
+    garments, footwear, accessories, jewelry, styling, cosmetics, skincare, haircare, grooming, and beauty
+    products. Includes fashion shows, trends, product reviews, beauty routines, clothing care, and practical
+    advice or criticism centered on what people wear and how they express or maintain their personal appearance.
+- id: Home Gardening and Household Life
+  description: Caring for and improving a home and its surroundings. Covers decorating, furniture, household
+    organization, cleaning, appliances, do-it-yourself repairs, home renovation, gardening, plants, landscaping,
+    and domestic routines. Includes practical guides, project ideas, household product use, and advice
+    about creating comfortable, functional living spaces and maintaining gardens or everyday household
+    systems.
+- id: Family Parenting and Relationships
+  description: Personal relationships and family life. Covers parenting, child development in everyday
+    life, marriage, dating, friendship, family dynamics, caregiving, eldercare, bereavement, and interpersonal
+    communication. Includes advice and personal accounts about raising children, supporting relatives,
+    resolving relationship difficulties, building connections, and navigating major life transitions within
+    families and close relationships.
+- id: Pets and Animal Care
+  description: Companion animals and their care, behavior, and welfare. Covers dogs, cats, birds, aquarium
+    animals, and other pets; feeding, training, enrichment, adoption, rescue, veterinary care, and responsible
+    ownership. Includes pet health guidance, animal behavior explanations, shelter activity, companion-animal
+    stories, and practical decisions about living with and looking after domesticated animals.
+- id: Hobbies and Outdoor Recreation
+  description: Leisure activities pursued for enjoyment, creativity, and recreation. Covers crafts, woodworking,
+    sewing, collecting, puzzles, tabletop games, amateur making, recreational hiking, camping, fishing,
+    and nature outings. Includes techniques, equipment, project guides, leisure clubs, and practical accounts
+    of recreational activities and outdoor experiences undertaken as personal interests.
+- id: Retail Shopping and Consumer Affairs
+  description: Buying goods and services and the treatment of consumers. Covers stores, supermarkets,
+    online shopping, marketplaces, retail operations, sales events, coupons, pricing practices, product
+    availability, returns, refunds, warranties, recalls, and consumer complaints. Includes general shopping
+    guidance, retailer service changes, product quality disputes, and consumer-protection issues affecting
+    the purchase and use of goods or services.
 sentiments:
-- id: negative
-  description: Negative sentiment expressing unfavorable outcomes, criticism, loss, harm, or dissatisfaction, adverse, unfavorable, pessimistic, critical, disapproving, harmful, disappointing
-- id: angry
-  description: Angry sentiment expressing outrage, hostility, blame, protest, fury, or indignation, outrage, resentment, condemnation
-- id: anxious
-  description: Anxious sentiment expressing worry, uncertainty, fear, nervousness, risk, or apprehension, worry, unease, insecurity, alarm
-- id: ashamed
-  description: Ashamed sentiment expressing guilt, embarrassment, regret, humiliation, or remorse, guilt, self-reproach, disgrace
-- id: disturbed
-  description: Disturbed sentiment expressing alarm, disgust, shock, unease, or emotional distress, alarm, distress, upset, horror, uneasiness
-- id: doubtful
-  description: Doubtful sentiment expressing skepticism, mistrust, uncertainty, questioning, or lack of confidence, skepticism, suspicion, disbelief, reservation
-- id: frustrated
-  description: Frustrated sentiment expressing irritation, disappointment, impediment, delay, or exasperation, irritation, annoyance, thwarted effort, obstruction, dissatisfaction
-- id: neutral
-  description: Neutral sentiment presenting facts or balanced information without a clear emotional stance, factual, impartial, objective, nonpartisan, even-handed, dispassionate
-- id: analytical
-  description: Analytical sentiment emphasizing evidence, reasoning, comparison, assessment, or objective examination, evidence-based, reasoned, evaluative, comparative, systematic, data-driven
-- id: cautious
-  description: Cautious sentiment expressing restraint, warnings, risk awareness, careful judgment, or guarded optimism, guarded, prudent, risk-aware, restrained, warning, conservative assessment
-- id: contemplative
-  description: Contemplative sentiment expressing reflection, consideration, introspection, or thoughtful uncertainty, reflective, thoughtful, introspective, deliberative, meditative, considered
-- id: measured
-  description: Measured sentiment using restrained, calm, balanced, and proportionate language, moderate, restrained, proportionate, even-tempered
-- id: observant
-  description: Observant sentiment noting details, trends, events, or conditions in an attentive factual manner, attentive, detail-oriented, perceptive, descriptive, watchful, noticing patterns
+- id: favorable
+  description: Favorable sentiment that judges a person, event, idea, product, or outcome as beneficial, successful, admirable, welcome, or improving. Use for praise, approval, achievement, gains, good results, and clearly positive assessments. This is a broad evaluative positive tone; use excitement only when the text conveys high energy or celebration, and hope only when the benefit is expected rather than already realized.
 - id: positive
-  description: Positive sentiment expressing favorable outcomes, approval, benefit, success, or satisfaction, favorable, approving, beneficial, successful, encouraging, satisfying
-- id: confident
-  description: Confident sentiment expressing certainty, assurance, conviction, or strong expectations, assured, certain, decisive, convinced, authoritative, optimistic
-- id: enthusiastic
-  description: Enthusiastic sentiment expressing excitement, energy, eagerness, strong interest, or celebration, excited, eager, energetic, passionate, animated, celebratory
-- id: grateful
-  description: Grateful sentiment expressing thanks, appreciation, recognition, or gratitude, thankful, appreciative, indebted, recognizing support, expressing thanks
+  description: Positive sentiment conveying a warm, affirming, constructive, or uplifting overall tone without necessarily judging a specific outcome as successful. Use for encouragement, goodwill, appreciation, supportive messages, pleasant observations, and generally optimistic framing. The defining signal is broad emotional positivity. Use favorable when the text explicitly evaluates a result, decision, product, or performance as beneficial or successful; use excited for high-energy celebration and hopeful for an uncertain desired future.
+- id: excited
+  description: Excited sentiment marked by energetic anticipation, celebration, delight, enthusiasm, or intense interest. Use for cheering, launches greeted with fanfare, triumphant reactions, and language that conveys emotional uplift or eagerness. The defining signal is heightened positive energy, not merely a favorable judgment. A calm report of a success belongs in favorable; an uncertain expectation of a better future belongs in hopeful.
 - id: hopeful
-  description: Hopeful sentiment expressing optimism, promise, expectation of improvement, or encouraging prospects, optimistic, promising, encouraged, forward-looking, expectant, aspirational
-- id: joyful
-  description: Joyful sentiment expressing happiness, delight, celebration, pleasure, or cheerful satisfaction, happy, delighted, cheerful, celebratory, pleased, exuberant
-- id: serene
-  description: Serene sentiment expressing peace, calm, tranquility, contentment, or quiet reassurance, peaceful, tranquil, composed, relaxed, contented
-
+  description: Hopeful sentiment that looks toward a desired future outcome with optimism, encouragement, or confidence that conditions may improve. Use for aspirations, recovery prospects, promising early signs, and forward-looking encouragement when success is not yet established. The defining signal is positive expectation under uncertainty. Use favorable for present success, excited for celebratory energy, and cautious for optimism explicitly tempered by risk.
+- id: negative
+  description: Negative sentiment that evaluates an outcome, decision, condition, product, or performance as harmful, disappointing, poor, unfair, unsuccessful, or deteriorating. Use for criticism, losses, setbacks, unfavorable results, and pessimistic assessments stated without a stronger specific emotion. This is the default unfavorable evaluation; use angry for blame or outrage, fearful for danger or worry, and sad for grief or compassionate sorrow.
+- id: angry
+  description: Angry sentiment expressing outrage, indignation, hostility, blame, condemnation, resentment, or demands for accountability. Use when the writer, speaker, or quoted reaction directs forceful displeasure at a person, institution, action, or injustice. The defining signal is confrontational moral or emotional heat. Use negative for ordinary criticism without outrage, and fearful when the dominant response to an event is alarm rather than blame.
+- id: fearful
+  description: Fearful or anxious sentiment centered on danger, threat, risk, alarm, insecurity, uncertainty, or apprehension about possible harm. Use for warnings, panic, dread, nervousness, and reports framed around what may go wrong. The defining signal is concern about safety or an adverse future. Use cautious for a restrained risk assessment without emotional alarm, and negative for a bad outcome that does not express worry.
+- id: sad
+  description: Sad sentiment expressing grief, sorrow, mourning, loss, regret, heartbreak, compassion for suffering, or a subdued response to tragedy. Use for deaths, bereavement, painful separation, disaster victims, and reflective accounts of hardship when the emotional center is human loss. The defining signal is sorrow rather than anger or fear. Use negative for an impersonal setback and angry when injustice is the primary emotional response.
+- id: neutral
+  description: Neutral sentiment that presents information, description, analysis, or balanced commentary without a clear favorable, unfavorable, excited, hopeful, angry, fearful, or sad emotional stance. Use for factual reporting, explanatory material, measured research summaries, routine notices, and calm observation. Neutral describes the absence of a dominant affect; it does not mean that the subject itself is unimportant, technical, controversial, or serious.
 ideologies:
 - id: right
-  description: Clearly right-wing political direction, conservative, right-of-center, nationalist, populist-right, libertarian-right, traditionalist, law-and-order, free-market, limited-government, anti-tax, anti-regulation, border-restriction, social-conservative, or religious-conservative framing. Use when the article explicitly endorses, advances, celebrates, argues for, or is organized around right-wing political positions, candidates, parties, movements, or policy goals. Example signals include cut taxes and shrink government, strengthen borders and deport undocumented migrants, defend traditional family values, oppose gun restrictions, deregulate businesses, and support a conservative candidate platform. Do not assign solely because the subject is a right-wing politician or because a report neutrally describes a conservative policy dispute.
+  description: Clearly right-wing political direction, conservative, right-of-center, nationalist, populist-right,
+    libertarian-right, traditionalist, law-and-order, free-market, limited-government, anti-tax, anti-regulation,
+    border-restriction, social-conservative, or religious-conservative framing. Use when the article explicitly
+    endorses, advances, celebrates, argues for, or is organized around right-wing political positions,
+    candidates, parties, movements, or policy goals. Example signals include cut taxes and shrink government,
+    strengthen borders and deport undocumented migrants, defend traditional family values, oppose gun
+    restrictions, deregulate businesses, and support a conservative candidate platform. Do not assign
+    solely because the subject is a right-wing politician or because a report neutrally describes a conservative
+    policy dispute.
 - id: left
-  description: Clearly left-wing political direction, progressive, liberal, social-democratic, democratic-socialist, labor-left, environmentalist-left, redistributive, anti-corporate, racial-justice, gender-equality, LGBTQ-rights, immigrant-rights, universal-public-services, or government-intervention framing. Use when the article explicitly endorses, advances, celebrates, argues for, or is organized around left-wing political positions, candidates, parties, movements, or policy goals. Example signals include expand universal health care, raise taxes on wealthy people, strengthen unions, enact climate regulation, protect abortion and LGBTQ rights, reform policing, and increase social welfare spending. Do not assign solely because the subject is a left-wing politician or because a report neutrally describes a progressive policy dispute.
+  description: Clearly left-wing political direction, progressive, liberal, social-democratic, democratic-socialist,
+    labor-left, environmentalist-left, redistributive, anti-corporate, racial-justice, gender-equality,
+    LGBTQ-rights, immigrant-rights, universal-public-services, or government-intervention framing. Use
+    when the article explicitly endorses, advances, celebrates, argues for, or is organized around left-wing
+    political positions, candidates, parties, movements, or policy goals. Example signals include expand
+    universal health care, raise taxes on wealthy people, strengthen unions, enact climate regulation,
+    protect abortion and LGBTQ rights, reform policing, and increase social welfare spending. Do not assign
+    solely because the subject is a left-wing politician or because a report neutrally describes a progressive
+    policy dispute.
 - id: neutral_center
-  description: Balanced, central, centrist, moderate, bipartisan, nonpartisan, or institutionally neutral political direction. Use for political content that fairly presents competing left and right positions, reports facts without advocacy, seeks compromise, emphasizes cross-party agreement, or explicitly supports pragmatic middle-ground policy. Example signals include lawmakers from both parties negotiated a compromise, a report compares conservative and progressive arguments without endorsing either, an independent commission released factual election findings, and a centrist proposal mixes spending restraint with targeted benefits. Do not use merely because an article uses calm language if its reasoning or advocacy clearly favors one political direction.
+  description: Balanced, central, centrist, moderate, bipartisan, nonpartisan, or institutionally neutral
+    political direction. Use for political content that fairly presents competing left and right positions,
+    reports facts without advocacy, seeks compromise, emphasizes cross-party agreement, or explicitly
+    supports pragmatic middle-ground policy. Example signals include lawmakers from both parties negotiated
+    a compromise, a report compares conservative and progressive arguments without endorsing either, an
+    independent commission released factual election findings, and a centrist proposal mixes spending
+    restraint with targeted benefits. Do not use merely because an article uses calm language if its reasoning
+    or advocacy clearly favors one political direction.
 - id: undetermined
-  description: Use when content is non-political or its ideology cannot be responsibly determined. Use for non-political content such as earnings reports, product launches, sports results, weather, science, health, entertainment, technology, crime reporting without political advocacy, lifestyle, or local events. Also use for political-adjacent articles that mention governments, elections, laws, parties, leaders, or policy but do not reveal an endorsed political direction, for ambiguous, mixed, satirical, incomplete, or context-poor text, and for purely descriptive reporting where no left, right, or centrist stance is clear. Example signals include a company reported quarterly revenue, a hurricane made landfall, researchers published a clinical trial, the president attended a ceremony, parliament scheduled a vote with no stated advocacy, and a brief headline names a politician but gives no ideological position. Prefer this label whenever the evidence is insufficient rather than inferring a lean from topic, person, outlet, country, demographic group, or isolated keywords.
+  description: Use when content is non-political or its ideology cannot be responsibly determined. Use
+    for non-political content such as earnings reports, product launches, sports results, weather, science,
+    health, entertainment, technology, crime reporting without political advocacy, lifestyle, or local
+    events. Also use for political-adjacent articles that mention governments, elections, laws, parties,
+    leaders, or policy but do not reveal an endorsed political direction, for ambiguous, mixed, satirical,
+    incomplete, or context-poor text, and for purely descriptive reporting where no left, right, or centrist
+    stance is clear. Example signals include a company reported quarterly revenue, a hurricane made landfall,
+    researchers published a clinical trial, the president attended a ceremony, parliament scheduled a
+    vote with no stated advocacy, and a brief headline names a politician but gives no ideological position.
+    Prefer this label whenever the evidence is insufficient rather than inferring a lean from topic, person,
+    outlet, country, demographic group, or isolated keywords.
