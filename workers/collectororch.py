@@ -69,14 +69,16 @@ BEAN_EXCLUDED_FIELDS = {
     SITE_NAME,
     "subscribers",
 }
+SKIP_KINDS = frozenset({POST})
 is_bean_storable = lambda bean: (
     bean
+    and bean.get(KIND) not in SKIP_KINDS
     and bean.get("content_length", 0) >= WORDS_THRESHOLD_FOR_STORING
-    and not any(tag in (bean.get(TITLE) or "").lower() for tag in IGNORE_WORD_GAMES)
+    and not any(tag in (bean.get(TITLE) or "").lower() for tag in IGNORE_WORD_GAMES)    
 )
 is_bean_scrapable = lambda bean: (
     bean
-    and bean.get(KIND) != POST
+    and bean.get(KIND) not in SKIP_KINDS
     and bean.get('content_length', 0) < WORDS_THRESHOLD_FOR_STORING
     and not any(tag in (bean.get(TITLE) or "").lower() for tag in IGNORE_WORD_GAMES)
 )
@@ -303,7 +305,7 @@ class Collector:
         source_marker, item_count = beans[0][DOMAIN_NAME], len(beans)
         payload = [
             {key: value for key, value in bean.items() if key not in _RESERVED_KIND_KEYS}
-            for bean in beans if bean.get(KIND) not in _SKIP_KINDS
+            for bean in beans
         ]
         cached_count = await self.cache.set(BEANS, COLLECTED, payload)
         beans[:] = []
