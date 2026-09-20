@@ -83,7 +83,6 @@ DIGEST_MODEL_BY_KIND = {
     WHITEPAPER: WhitepaperExtraction,
     TECHNICAL_DOCUMENTATION: TechnicalDocumentationExtraction,
 }
-_SKIP_KINDS = frozenset({POST})
 
 CLASSIFICATION_LIMIT = int(os.getenv("CLASSIFICATION_LIMIT", 2))
 CLASSIFICATION_EPS = float(os.getenv("CLASSIFICATION_EPS", 0.4))
@@ -244,8 +243,7 @@ class Embedder:
                 self.cache, 
                 states=COLLECTED, exclude_states=EMBEDDED, 
                 batch_size=self.batch_size, 
-                log=log, 
-                filter_bean=lambda b: b.get(KIND) not in _SKIP_KINDS
+                log=log
             ):
                 try:
                     updates = self.embed_beans(chunk)
@@ -309,8 +307,7 @@ class Extractor:
                 self.cache, 
                 states=COLLECTED, exclude_states=EMBEDDED, 
                 batch_size=self.batch_size, 
-                log=log, 
-                filter_bean=lambda b: b.get(KIND) not in _SKIP_KINDS
+                log=log
             ):
                 try:
                     updates = self.extract_beans(chunk)
@@ -421,8 +418,7 @@ class Digestor:
                 self.cache, 
                 states=COLLECTED, exclude_states=EMBEDDED, 
                 batch_size=self.batch_size, 
-                log=log, 
-                filter_bean=lambda b: b.get(KIND) not in _SKIP_KINDS
+                log=log
             ):
                 try:
                     updates = self.digest_beans(chunk)

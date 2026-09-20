@@ -47,6 +47,7 @@ from utils.fields import (
 )
 from utils import now_str, get_logger, log_runtime_async
 from processingcache import AsyncStateCacheBase
+from workers.cacheops import _SKIP_KINDS
 from .states import *
 from icecream import ic
 
@@ -300,13 +301,9 @@ class Collector:
         if not beans: return
 
         source_marker, item_count = beans[0][DOMAIN_NAME], len(beans)
-        # rule_counts = Counter(
-        #     getattr(bean.get(KIND_DECISION_KEY), "rule_id", None) or "missing"
-        #     for bean in beans
-        # )
         payload = [
             {key: value for key, value in bean.items() if key not in _RESERVED_KIND_KEYS}
-            for bean in beans
+            for bean in beans if bean.get(KIND) not in _SKIP_KINDS
         ]
         cached_count = await self.cache.set(BEANS, COLLECTED, payload)
         beans[:] = []
