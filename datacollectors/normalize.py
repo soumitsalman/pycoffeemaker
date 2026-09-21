@@ -926,8 +926,23 @@ def with_www(url: str) -> str | None:
 
 extract_source = lambda url: (extract_domain(url) or extract_base_url(url)).strip().lower()
 count_words = lambda text: min(len(text.split()) if text else 0, (1 << 15) - 1)
-cleanup_url = lambda url: url.strip().lower() if url and url.strip() else None
 cleanup_text = lambda text: text.strip() if text and text.strip() else None
+
+
+def cleanup_url(url: str) -> str | None:
+    if not url or not str(url).strip():
+        return None
+    url = str(url).strip().lower()
+    try:
+        parts = urlparse(url)
+        path = parts.path or ""
+        if len(path) > 1 and path.endswith("/"):
+            path = path.rstrip("/")
+        return urlunparse(parts._replace(path=path))
+    except Exception:
+        return url
+
+
 cleanup_author = lambda author: cleanup_text(author) if author and author.lower() not in EXCLUDED_AUTHORS else None
 
 _LANGUAGE_QUOTE_RE = re.compile(r"[\"'`“”‘’]")

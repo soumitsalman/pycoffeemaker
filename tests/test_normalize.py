@@ -276,6 +276,20 @@ def test_strip_tracking_keeps_page_and_drops_share_params():
     assert strip_tracking_params("https://x.com/a?utm_source=reddit") == "https://x.com/a"
 
 
+def test_cleanup_url_strips_trailing_slash():
+    from datacollectors.normalize import cleanup_url
+    assert cleanup_url("https://pocketbasecloud.com/blog/folders/") == "https://pocketbasecloud.com/blog/folders"
+    assert cleanup_url("https://Example.COM/blog/folders/") == "https://example.com/blog/folders"
+    assert cleanup_url("https://example.com/") == "https://example.com/"
+    assert cleanup_url("https://example.com/blog/folders/?page=1") == "https://example.com/blog/folders?page=1"
+    assert cleanup_url("  ") is None
+
+
+def test_cleanup_item_strips_trailing_slash_from_url():
+    item = cleanup_item({TITLE: "Post", "url": "https://pocketbasecloud.com/blog/folders/"})
+    assert item["url"] == "https://pocketbasecloud.com/blog/folders"
+
+
 def test_error_canonical_is_rejected_and_page_query_is_kept():
     from datacollectors.normalize import is_compatible_content_url, resolve_content_url
     retrieval = "https://www.govinfo.gov/content/pkg/uscourts-x/html/x.htm"
