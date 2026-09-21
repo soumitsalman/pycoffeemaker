@@ -34,54 +34,8 @@ PY
 COPY requirements-gpu.txt /tmp/requirements-gpu.txt
 # Do not pip-constraint torch==*+cu130: that wheel is not on PyPI, so ST/GLiNER
 # fail with ResolutionImpossible. Keep the image CUDA stack via only-if-needed.
-RUN python3 - <<'PY'
-import json, os, subprocess, sys, time
-from pathlib import Path
-
-log_path = "/tmp/debug-397e55.log"
-def dlog(hypothesis_id, location, message, data):
-    rec = {
-        "sessionId": "397e55",
-        "runId": "post-fix",
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data,
-        "timestamp": int(time.time() * 1000),
-    }
-    print(json.dumps(rec), flush=True)
-    Path(log_path).open("a").write(json.dumps(rec) + "\n")
-
-def pkg_line(name):
-    freeze = subprocess.check_output([sys.executable, "-m", "pip", "freeze"], text=True)
-    for line in freeze.splitlines():
-        if line.split("==")[0].split("@")[0].lower() == name:
-            return line
-    return None
-
-before_torch = pkg_line("torch")
-dlog("A", "DockerfileGPU:pip", "torch before addon install", {"torch": before_torch})
-cmd = [
-    sys.executable, "-m", "pip", "install", "--no-cache-dir",
-    "--upgrade-strategy", "only-if-needed",
-    "-r", "/tmp/requirements-gpu.txt",
-]
-proc = subprocess.run(cmd)
-dlog(
-    "E",
-    "DockerfileGPU:pip",
-    "pip install without cu130 constraint",
-    {
-        "returncode": proc.returncode,
-        "torch_after": pkg_line("torch"),
-        "sentence_transformers": pkg_line("sentence-transformers"),
-        "gliner": pkg_line("gliner"),
-    },
-)
-if proc.returncode != 0:
-    sys.exit(proc.returncode)
-os.remove("/tmp/requirements-gpu.txt")
-PY
+RUN python3 -m pip install --no-cache-dir --upgrade-strategy only-if-needed -r /tmp/requirements-gpu.txt \
+    && rm -f /tmp/requirements-gpu.txt
 
 # Optional: docker build --build-arg HF_TOKEN=$HF_TOKEN (needed for gated Nemotron).
 # ARG is visible as HF_TOKEN in later RUN steps; huggingface_hub reads it.
