@@ -10152,6 +10152,8 @@ sources:
   - https://globalcomix.com
   - https://www.code4it.dev/index.xml
   - https://www.andrewzigler.com/rss.xml
+  - https://www.oig.dot.gov/taxonomy/term/9/feed
+  - https://www.cisecurity.org/feed/alert
   rss_blogs:
   - http://addyosmani.com/rss.xml
   - http://bastian.rieck.me/blog/index.xml
@@ -13108,6 +13110,9 @@ sources:
   - https://blog.yuo.be/rss.xml
   - https://www.philmckinney.com/blog/rss/
   - https://www.varac-hamradio.com/blog-feed.xml
+  - https://www.cisecurity.org/feed/blog
+  - https://www.commerce.gov/feeds/blog
+  - https://www.fcc.gov/blog/feed/
   rss_press_releases:
   - https://council.nyc.gov/press/feed/
   - https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJdEVhZXw==
@@ -13146,6 +13151,13 @@ sources:
   - https://investor.amctheatres.com/news-events/press-releases/rss
   - https://www.caplibraries.ca/newsroom?format=rss
   - https://www.swansea.ac.uk/press-office/rss.xml
+  - https://www.oig.dot.gov/taxonomy/term/10/feed
+  - https://www.whitehouse.gov/releases/feed/
+  - https://www.whitehouse.gov/briefings-statements/feed/
+  - https://www.whitehouse.gov/presidential-actions/feed/
+  - https://www.whitehouse.gov/fact-sheets/feed/
+  - https://public.govdelivery.com/topics/USTREAS_49/feed.rss
+  - https://api2.fcc.gov/api/exp/v1.0.0/edocspublic/rss/docTypes/News_Release
   rss_news:  # majority news titles/URLs from live collector review
   - http://feeds.bbci.co.uk/news/rss.xml
   - https://laist.com/index.rss
@@ -13994,6 +14006,13 @@ sources:
   - https://www.qpobserver.ca/feed
   - https://elsewhere.news/feed.xml
   - https://digitalitnews.com/feed/
+  - https://www.whitehouse.gov/news/feed/
+  - https://www.commerce.gov/feeds/news
+  - https://www.justice.gov/news/rss
+  - https://api2.fcc.gov/api/exp/v1.0.0/edocspublic/rss
+  - https://www.fcc.gov/events/feed/
+  - https://api2.fcc.gov/api/exp/v1.0.0/edocspublic/rss/docTypes/Public_Notice
+  - https://api2.fcc.gov/api/exp/v1.0.0/edocspublic/rss/docTypes/Fact_Sheet
   sec_edgar:
   - https://www.sec.gov/Archives/edgar/xbrlrss.all.xml
   - https://www.sec.gov/Archives/edgar/usgaap.rss.xml
