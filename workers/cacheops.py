@@ -1,6 +1,4 @@
 from processingcache import StateCacheBase
-from utils.fields import KIND
-from utils.kinds import POST
 from .states import *
 from itertools import batched
 
