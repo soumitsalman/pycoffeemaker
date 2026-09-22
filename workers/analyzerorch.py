@@ -305,7 +305,7 @@ class Extractor:
         with self.extractor:
             for chunk in decache_beans(
                 self.cache, 
-                states=COLLECTED, exclude_states=EMBEDDED, 
+                states=COLLECTED, exclude_states=EXTRACTED, 
                 batch_size=self.batch_size, 
                 log=log
             ):
@@ -416,7 +416,7 @@ class Digestor:
         with self.digestor:
             for chunk in decache_beans(
                 self.cache, 
-                states=COLLECTED, exclude_states=EMBEDDED, 
+                states=COLLECTED, exclude_states=DIGESTED, 
                 batch_size=self.batch_size, 
                 log=log
             ):
