@@ -13114,6 +13114,41 @@ sources:
   - https://www.commerce.gov/feeds/blog
   - https://www.fcc.gov/blog/feed/
   rss_press_releases:
+  # Automotive companies
+  - https://www.kiamedia.com/us/en/rss/PressReleases/feed.rss
+  - https://www.kiamedia.com/us/en/rss/SalesPressReleases/feed.rss
+  - https://www.kiamedia.com/us/en/rss/PressKits/feed.rss
+  - https://www.stellantis.com/en/news/press-releases.rss.xml
+  - https://hondanews.eu/eu/en/cars/rss/pressreleases/feed.rss
+  # Energy companies
+  - https://news.duke-energy.com/releases.xml
+  - https://stories.xcelenergy.com/releases.xml
+  - https://investors.exeloncorp.com/rss/news-releases.xml
+  - https://investors.firstenergycorp.com/rss/pressrelease.aspx
+  - https://investors.dominionenergy.com/rss/pressrelease.aspx
+  - https://investor.phillips66.com/rss/pressrelease.aspx
+  - https://ir.kindermorgan.com/rss/pressrelease.aspx
+  - https://investors.nrg.com/rss/news-releases.xml
+  # Banks
+  - https://pnc.mediaroom.com/news-releases?pagetemplate=rss
+  - https://ir.53.com/rss/pressrelease.aspx
+  - https://ir.huntington.com/news-presentations/press-releases/rss
+  - https://newsroom.bmo.com/us?pagetemplate=rss
+  - http://ir.westshorebank.com/rss/pressrelease.aspx
+  - https://investors.atlanticunionbank.com/news-events/press-releases/rss
+  - https://www.servisfirstbancshares.com/news-events/press-releases/rss
+  - https://ir.rmbi.firstbankrichmond.com/press-releases?pagetemplate=rss
+  - https://pressroom.aboutschwab.com/rss/pressrelease.aspx
+  - https://www.investor.fnf.com/rss/news-releases.xml
+  - https://www.investor.fisglobal.com/rss/news-releases.xml?items=15
+  - https://jpmorganchaseco.gcs-web.com/rss/news-releases.xml
+  - https://newsroom.paypal-corp.com/news?pagetemplate=rss
+  - https://investors.synchrony.com/news-events/financial-news/rss
+  - https://investor.oportun.com/news-events/press-releases/rss
+  # Banking regulators
+  - https://www.federalreserve.gov/feeds/press_all.xml
+  - https://www.occ.gov/rss/occ_news.xml
+  - https://www.consumerfinance.gov/about-us/newsroom/feed/
   - https://council.nyc.gov/press/feed/
   - https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJdEVhZXw==
   - https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeEFpQWA==
@@ -13159,6 +13194,13 @@ sources:
   - https://public.govdelivery.com/topics/USTREAS_49/feed.rss
   - https://api2.fcc.gov/api/exp/v1.0.0/edocspublic/rss/docTypes/News_Release
   rss_news:  # majority news titles/URLs from live collector review
+  # Automotive companies
+  - https://www.hyundai.com/wsvc/ww/rss/newsroom.newsroom.do
+  - https://usa.nissannews.com/en-US/rss
+  # Energy companies
+  - https://news.duke-energy.com/rss.xml
+  # Banks
+  - https://www.bny.com/bin/bnymellon/rssFeedGeneratorServlet.report
   - http://feeds.bbci.co.uk/news/rss.xml
   - https://laist.com/index.rss
   - https://newsfeed.zeit.de/index
