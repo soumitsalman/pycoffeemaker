@@ -124,7 +124,7 @@ jobs:
           IMAGE: docker.io/${{ env.IMAGE_NAME }}:gpu-${{ needs.set-meta.outputs.date }}
         run: |
           curl -fsS -X PATCH \
-            "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-bean-indexer-g2" \
+            "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-beans-indexer" \
             -H "Content-Type: application/merge-patch+json" \
             -H "Salad-Api-Key: ${{ secrets.SALAD_API_KEY }}" \
             --data-binary @- <<EOF

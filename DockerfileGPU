@@ -1,7 +1,12 @@
 # syntax=docker/dockerfile:1.7
-# Analyzer / GPU LLM image. vLLM from the base image; ST + GLiNER from requirements-gpu.txt.
+# Analyzer / GPU LLM image. CUDA 12.4 PyTorch base; vLLM, ST, and GLiNER are
+# installed explicitly to avoid the vLLM base image's startup path on Salad.
 # ENTRYPOINT forwards `docker run ... --embedder 64 --clustering 128` to run_pipeline.sh.
-FROM vllm/vllm-openai:latest
+# Salad Container Engine supports AMD64 images only. Force the platform here so
+# builds from an ARM workstation cannot publish an image that fails before PID 1.
+# This pinned AMD64 CUDA 12.4 runtime matches vLLM 0.8.5's Torch 2.6.0
+# requirement and supports Salad's RTX 3090 / RTX A5000 pool.
+FROM --platform=linux/amd64 pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 USER root
 WORKDIR /worker
@@ -32,14 +37,9 @@ os.chmod(os.path.join(dest, "s5cmd"), 0o755)
 PY
 
 COPY requirements-gpu.txt /tmp/requirements-gpu.txt
-# Do not pip-constraint torch==*+cu130: that wheel is not on PyPI, so ST/GLiNER
-# fail with ResolutionImpossible. Keep the image CUDA stack via only-if-needed.
 RUN python3 -m pip install --no-cache-dir --upgrade-strategy only-if-needed -r /tmp/requirements-gpu.txt \
     && rm -f /tmp/requirements-gpu.txt
 
-# Optional: docker build --build-arg HF_TOKEN=$HF_TOKEN (needed for gated Nemotron).
-# ARG is visible as HF_TOKEN in later RUN steps; huggingface_hub reads it.
-ARG HF_TOKEN=
 ENV HF_HOME=/worker/.models \
     HF_HUB_CACHE=/worker/.models \
     HUGGINGFACE_HUB_CACHE=/worker/.models \
@@ -53,20 +53,25 @@ ENV HF_HOME=/worker/.models \
     COLLECTOR_SOURCES=/worker/factory/feeds.yaml
 
 RUN python3 - <<'PY'
-import os
 from huggingface_hub import snapshot_download
 
-token = os.environ.get("HF_TOKEN") or None
+# Preload only the indexer models. The large DIGESTOR and CONSOLIDATOR vLLM
+# models are downloaded lazily when those modes are explicitly invoked.
 for repo in (
     "codefuse-ai/F2LLM-v2-80M",
     "knowledgator/modern-gliner-bi-base-v1.0",
-    "LiquidAI/LFM2.5-2.6B",
-    "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+    # GLiNER resolves this label-encoder tokenizer at runtime; cache it too so
+    # the startup probe and offline Salad workers never need Hugging Face.
+    "BAAI/bge-small-en-v1.5",
 ):
-    snapshot_download(repo_id=repo, token=token)
+    snapshot_download(repo_id=repo)
 PY
 
 COPY . .
 RUN chmod +x /worker/run_pipeline.sh && mkdir -p /worker/.cache
 
-ENTRYPOINT ["/bin/bash", "/worker/run_pipeline.sh"]
+# Temporary Salad startup probe. Keep the complete runtime and baked indexer
+# models intact while proving that PID 1, Python libraries, and local model files
+# can start on a Salad node. The container-group command is intentionally ignored
+# until this diagnostic image has reached Running and emitted its probe logs.
+ENTRYPOINT ["/bin/bash", "-c", "echo '[salad-probe] PID 1 started'; python3 - <<'PY'\nimport torch\nimport vllm\nfrom sentence_transformers import SentenceTransformer\nfrom gliner import GLiNER\n\nprint(f'[salad-probe] torch={torch.__version__} vllm={vllm.__version__} cuda_available={torch.cuda.is_available()}')\nSentenceTransformer('codefuse-ai/F2LLM-v2-80M', local_files_only=True, device='cpu')\nprint('[salad-probe] embedder model loaded from local cache')\nGLiNER.from_pretrained('knowledgator/modern-gliner-bi-base-v1.0', local_files_only=True)\nprint('[salad-probe] extractor model loaded from local cache')\nPY\nprobe_status=$?\nif [ \"$probe_status\" -ne 0 ]; then echo \"[salad-probe] library/model probe failed (status $probe_status); keeping container alive\"; fi\necho '[salad-probe] complete; waiting for inspection'; exec sleep infinity"]

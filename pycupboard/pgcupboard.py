@@ -101,10 +101,12 @@ RELATION_COLUMNS = [FROM_ID, TO_ID, RELATIONSHIP]
 
 class Cupboard:
     pool: AsyncConnectionPool
+    write_throttle: asyncio.Semaphore
 
     def __init__(self, conn_str: str):
         self.conn_str = conn_str
         self.pool = None
+        self.write_throttle = asyncio.Semaphore(PG_WORKERS)
 
     async def __aenter__(self):
         self.pool = AsyncConnectionPool(
@@ -226,9 +228,10 @@ class Cupboard:
     async def _batch_insert(self, to_store: list[dict[str, Any]]):
         @retry(stop=stop_after_attempt(RETRY_COUNT), wait=wait_fixed(RETRY_DELAY), reraise=True)
         async def _insert_chunk(chunk: dict):
-            async with self.pool.connection() as conn:
-                result = await conn.execute(chunk["expr"], params=chunk["params"], binary=True)
-                return result.rowcount
+            async with self.write_throttle:
+                async with self.pool.connection() as conn:
+                    result = await conn.execute(chunk["expr"], params=chunk["params"], binary=True)
+                    return result.rowcount
         results = await asyncio.gather(*(_insert_chunk(item) for item in to_store))
         return sum(results)
 
