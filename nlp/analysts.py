@@ -345,10 +345,10 @@ class VLLMTextAnalyst(TextAnalystBase):
                 # enable_prefix_caching=True,
                 # enable_chunked_prefill=True,
                 # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,
-                reasoning_config = ReasoningConfig(
-                    reasoning_start_str="<think>",
-                    reasoning_end_str="</think>",
-                )
+                # reasoning_config = ReasoningConfig(
+                #     reasoning_start_str="<think>",
+                #     reasoning_end_str="</think>",
+                # )
             )
         return self
 
@@ -374,9 +374,10 @@ class VLLMTextAnalyst(TextAnalystBase):
         sampling_params = dict(
             **self._initial_sampling_params,
             max_tokens=self.max_new_tokens + self.max_thinking_budget,
-            structured_outputs=StructuredOutputsParams(json=output_model.model_json_schema()),
-            thinking_token_budget=self.max_thinking_budget
+            structured_outputs=StructuredOutputsParams(json=output_model.model_json_schema())
         )
+        if self.enable_thinking:
+            sampling_params["thinking_token_budget"]=self.max_thinking_budget
         params = SamplingParams(**sampling_params)
         cache[output_model] = params
         return params
