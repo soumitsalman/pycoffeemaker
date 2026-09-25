@@ -335,10 +335,10 @@ VLLM_ATTENTION_BACKEND=os.getenv("VLLM_ATTENTION_BACKEND")
 class VLLMTextAnalyst(TextAnalystBase):
     def __enter__(self):
         if not self._llm:
-            from vllm import LLM, SamplingParams
-            from vllm.sampling_params import StructuredOutputsParams
+            from vllm import LLM
+            from vllm.config import ReasoningConfig
 
-            llm_params = dict(
+            self._llm = LLM(
                 model=self.model_name,
                 max_model_len=self.context_len,
                 trust_remote_code=True,
@@ -349,15 +349,11 @@ class VLLMTextAnalyst(TextAnalystBase):
                 # enable_prefix_caching=True,
                 # enable_chunked_prefill=True,
                 # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,
+                reasoning_config = ReasoningConfig(
+                    reasoning_start_str="<think>",
+                    reasoning_end_str="</think>",
+                )
             )
-            # if self.enable_thinking:
-            #     from vllm.config import ReasoningConfig
-
-            #     llm_params["reasoning_config"] = ReasoningConfig(
-            #         reasoning_start_str="<think>",
-            #         reasoning_end_str="</think>",
-            #     )
-            self._llm = LLM(**llm_params)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
