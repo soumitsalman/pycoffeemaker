@@ -1,12 +1,4 @@
-# syntax=docker/dockerfile:1.7
-# Analyzer / GPU LLM image. CUDA 12.4 PyTorch base; vLLM, ST, and GLiNER are
-# installed explicitly to avoid the vLLM base image's startup path on Salad.
-# ENTRYPOINT forwards `docker run ... --embedder 64 --clustering 128` to run_pipeline.sh.
-# Salad Container Engine supports AMD64 images only. Force the platform here so
-# builds from an ARM workstation cannot publish an image that fails before PID 1.
-# This pinned AMD64 CUDA 12.4 runtime matches vLLM 0.8.5's Torch 2.6.0
-# requirement and supports Salad's RTX 3090 / RTX A5000 pool.
-FROM --platform=linux/amd64 pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+FROM runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404
 
 USER root
 WORKDIR /worker
