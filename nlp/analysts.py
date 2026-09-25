@@ -56,11 +56,7 @@ class TextAnalystBase(ABC):
         self.response_mode = "json" if output_model else None
         self.enable_thinking = enable_thinking
         self.max_new_tokens = max_new_tokens
-        self.max_thinking_budget = (
-            min(MAX_THINKING_BUDGET, max_new_tokens)
-            if enable_thinking
-            else 0
-        )
+        self.max_thinking_budget = min(MAX_THINKING_BUDGET, max_new_tokens)
         self.max_prompt_len = (
             context_len
             - max_new_tokens
@@ -349,10 +345,10 @@ class VLLMTextAnalyst(TextAnalystBase):
                 # enable_prefix_caching=True,
                 # enable_chunked_prefill=True,
                 # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,
-                reasoning_config = ReasoningConfig(
-                    reasoning_start_str="<think>",
-                    reasoning_end_str="</think>",
-                )
+                # reasoning_config = ReasoningConfig(
+                #     reasoning_start_str="<think>",
+                #     reasoning_end_str="</think>",
+                # )
             )
         return self
 
