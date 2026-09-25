@@ -345,10 +345,10 @@ class VLLMTextAnalyst(TextAnalystBase):
                 # enable_prefix_caching=True,
                 # enable_chunked_prefill=True,
                 # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,
-                # reasoning_config = ReasoningConfig(
-                #     reasoning_start_str="<think>",
-                #     reasoning_end_str="</think>",
-                # )
+                reasoning_config = ReasoningConfig(
+                    reasoning_start_str="<think>",
+                    reasoning_end_str="</think>",
+                )
             )
         return self
 
