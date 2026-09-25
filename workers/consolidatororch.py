@@ -99,7 +99,7 @@ class Consolidator:
             input_template=f"SYSTEM_DATE={now_str()}\n"+BRIEFING_INST, 
             output_model=Briefing, 
             enable_thinking=True, 
-            max_new_tokens=3072, 
+            max_new_tokens=2048, 
             **model_kwargs
         )
         self.batch_size = batch_size
