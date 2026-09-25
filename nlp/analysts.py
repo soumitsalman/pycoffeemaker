@@ -30,6 +30,12 @@ _DEFAULT_SAMPLING_PARAMS = {
 }
 # DEFAULT_CONTEXT_LEN = 32768
 
+# Thinking tokens and the structured response share the model's completion
+# window.  Keep a fixed reasoning allowance while reserving max_new_tokens for
+# the final JSON response, plus room for chat-template and tokenizer overhead.
+MAX_THINKING_BUDGET = 2048
+PROMPT_TOKEN_MARGIN = 128
+
 class TextAnalystBase(ABC):
     def __init__(
         self,
@@ -50,7 +56,22 @@ class TextAnalystBase(ABC):
         self.response_mode = "json" if output_model else None
         self.enable_thinking = enable_thinking
         self.max_new_tokens = max_new_tokens
-        self.max_prompt_len = context_len - max_new_tokens - TOKEN_MARGIN
+        self.max_thinking_budget = (
+            min(MAX_THINKING_BUDGET, max_new_tokens)
+            if enable_thinking
+            else 0
+        )
+        self.max_prompt_len = (
+            context_len
+            - max_new_tokens
+            - self.max_thinking_budget
+            - PROMPT_TOKEN_MARGIN
+        )
+        if self.max_prompt_len <= 0:
+            raise ValueError(
+                "context_len must leave room for the prompt, structured output, "
+                "thinking budget, and prompt margin"
+            )
         self.sampling_params = sampling_params
         self._initial_sampling_params = sampling_params.copy()
         self._llm = None
@@ -317,18 +338,26 @@ class VLLMTextAnalyst(TextAnalystBase):
             from vllm import LLM, SamplingParams
             from vllm.sampling_params import StructuredOutputsParams
 
-            self._llm = LLM(
+            llm_params = dict(
                 model=self.model_name,
                 max_model_len=self.context_len,
                 trust_remote_code=True,
                 # language_model_only=True,
                 # max_num_seqs=VLLM_MAX_NUM_SEQS if VLLM_MAX_NUM_SEQS > 0 else None,
-                # max_num_batched_tokens=VLLM_MAX_NUM_BATCHED_TOKENS if VLLM_MAX_NUM_BATCHED_TOKENS > 0 else None,
+                max_num_batched_tokens=self.context_len,
                 gpu_memory_utilization=VLLM_GPU_MEMORY_UTILIZATION,
                 # enable_prefix_caching=True,
                 # enable_chunked_prefill=True,
                 # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,
             )
+            # if self.enable_thinking:
+            #     from vllm.config import ReasoningConfig
+
+            #     llm_params["reasoning_config"] = ReasoningConfig(
+            #         reasoning_start_str="<think>",
+            #         reasoning_end_str="</think>",
+            #     )
+            self._llm = LLM(**llm_params)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -350,11 +379,13 @@ class VLLMTextAnalyst(TextAnalystBase):
         from vllm import SamplingParams
         from vllm.sampling_params import StructuredOutputsParams
 
-        params = SamplingParams(
+        sampling_params = dict(
             **self._initial_sampling_params,
-            max_tokens=self.max_new_tokens,
+            max_tokens=self.max_new_tokens + self.max_thinking_budget,
             structured_outputs=StructuredOutputsParams(json=output_model.model_json_schema()),
+            thinking_token_budget=self.max_thinking_budget
         )
+        params = SamplingParams(**sampling_params)
         cache[output_model] = params
         return params
 
@@ -414,9 +445,14 @@ class RemoteTextAnalyst(TextAnalystBase):
         self.api_key = api_key
         self.sampling_params.pop('top_k', None)
         self.sampling_params.pop('repetition_penalty', None)
-        self.sampling_params["max_completion_tokens"] = self.max_new_tokens
+        self.sampling_params["max_completion_tokens"] = (
+            self.max_new_tokens + self.max_thinking_budget
+        )
         if self.enable_thinking:
-            self.sampling_params["extra_body"] = {"reasoning_budget": self.context_len, "chat_template_kwargs": {"enable_thinking": self.enable_thinking}}
+            self.sampling_params["extra_body"] = {
+                "thinking_token_budget": self.max_thinking_budget,
+                "chat_template_kwargs": {"enable_thinking": self.enable_thinking},
+            }
 
 
     def __enter__(self):
