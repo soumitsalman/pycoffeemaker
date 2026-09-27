@@ -73,7 +73,7 @@ class PGSack(Beansack):
         self.pool = ConnectionPool(
             conn_str, 
             min_size=0,
-            max_size=16,
+            max_size=PG_WORKERS,
             timeout=PG_TIMEOUT,
             max_idle=120,
             max_lifetime=180,

@@ -112,7 +112,7 @@ class Cupboard:
         self.pool = AsyncConnectionPool(
             self.conn_str,
             min_size=0,
-            max_size=32,
+            max_size=PG_WORKERS,
             timeout=PG_TIMEOUT,
             max_idle=120,
             max_lifetime=180,

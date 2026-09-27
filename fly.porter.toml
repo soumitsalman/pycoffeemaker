@@ -11,9 +11,9 @@ primary_region = 'iad'
   ignorefile = '.dockerignore'
 
 [env]
-  PG_WORKERS = '16'
+  PG_WORKERS = '32'
   PROCESSING_WINDOW = '7'
-  BATCH_SIZE = '128'
+  BATCH_SIZE = '256'
 
 [[restart]]
   policy = 'never'

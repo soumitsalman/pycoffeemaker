@@ -175,7 +175,15 @@ class TransformerEmbeddings(EmbedderBase):
     def __enter__(self):
         if not self._model:         
             from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(self.model_path, processor_kwargs=self.tokenizer_kwargs, device=self.device)
+            on_cuda = self.device == "cuda"
+            self._model = SentenceTransformer(
+                self.model_path,
+                processor_kwargs=self.tokenizer_kwargs,
+                device=self.device,
+                model_kwargs={"torch_dtype": "float16"} if on_cuda else None,
+            )
+            if on_cuda:
+                self._model.compile(dynamic=True)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
