@@ -58,7 +58,7 @@ class StateCache(StateCacheBase):
         self.pool = ConnectionPool(
             self.conn_str,
             min_size=0,
-            max_size=16,
+            max_size=PG_WORKERS*2,
             timeout=PG_TIMEOUT,
             max_idle=120,
             max_lifetime=180,
