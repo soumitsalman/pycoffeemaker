@@ -12,7 +12,7 @@ primary_region = 'iad'
 
 [env]
   COLLECTOR_TIMEOUT = '150'
-  PG_WORKERS = '4'
+  PG_WORKERS = '8'
   PROCESSING_WINDOW = '2'
 
 [[restart]]
@@ -20,7 +20,7 @@ primary_region = 'iad'
 
 [[vm]]
   size = 'performance-1x'
-  memory = '3072mb'
+  memory = '4096mb'
 
 [processes]
   app = "--collector 64"
