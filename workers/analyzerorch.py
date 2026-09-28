@@ -268,25 +268,18 @@ class Extractor:
         self.batch_size = batch_size
 
     def extract_beans(self, chunk: list[dict]):
+        kinds = [bean.get(KIND) for bean in chunk]
         contents = [b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk]
-        extractions = self.extractor.run_batch_extract(contents)
-        classifications = self.extractor.run_batch_classify(contents)
+        pairs = self.extractor.run_batch(contents)
         # remove ideology for non-news, blog, and post
-        kinds = {bean[URL]: bean.get(KIND) for bean in chunk}
-        for b, cl in zip(chunk, classifications):
-            if cl is None: continue            
-            if (
-                kinds.get(b[URL]) not in (NEWS, BLOG, POST)                
-                or cl.category not in IDEOLOGY_ELIGIBLE_CATEGORIES
-            ):
-                cl.ideology = None
+        exclude_ideology = lambda kind, ents, cl: (kind not in (NEWS, BLOG, POST)) or (cl.category not in IDEOLOGY_ELIGIBLE_CATEGORIES)
         return [
             {
                 URL: b[URL],
-                ENTITIES: ents.model_dump() if ents else None,
-                CLASSIFICATIONS: cl.model_dump() if cl else None,
+                ENTITIES: ents.model_dump(),
+                CLASSIFICATIONS: cl.model_dump(exclude=[IDEOLOGY] if exclude_ideology(kind, ents, cl) else None),
             }
-            for b, ents, cl in zip(chunk, extractions, classifications)
+            for b, kind, (ents, cl) in zip(chunk, kinds, pairs)
         ]
 
     @log_runtime(logger=log)

@@ -105,7 +105,7 @@ def test_extractor():
         threshold=0.4,
     ) as extractor:
         for chunk in tqdm(data_batches, total=len(data_batches), desc="Progress: ", unit="bean chunk"):
-            [ic(r.model_dump()) for r in extractor.run_batch([d["content"] for d in chunk])]
+            [ic(ents.model_dump(), cl.model_dump()) for ents, cl in extractor.run_batch([d["content"] for d in chunk])]
 
 
 if __name__ == "__main__":

@@ -104,7 +104,7 @@ CATEGORIES_LIST = Literal[
 SENTIMENTS_LIST = Literal["highly positive", "positive", "neutral", "negative", "highly negative"]
 IDEOLOGIES_LIST = Literal["left", "right", "center", "undetermined"]
 
-class Classification(_NLPBase):
+class Classifications(_NLPBase):
     category: CATEGORIES_LIST = Field(alias="domain_genre")
     sentiment: SENTIMENTS_LIST = Field(alias="expression_sentiment")
     ideology: IDEOLOGIES_LIST = Field(alias="political_ideology")
