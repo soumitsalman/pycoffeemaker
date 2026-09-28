@@ -1,11 +1,10 @@
 from functools import lru_cache
 import re
 import types
-from typing import Any, Literal, Optional, Type, Union, get_args, get_origin
+from typing import Any, List, Literal, Optional, Type, Union, get_args, get_origin
 from pydantic import BaseModel
 
 
-@lru_cache(maxsize=64)
 def apply_model_json_constraints(schema: dict, list_item_max_len: dict[str, int] = {}) -> dict:
     for name, definition in schema["properties"].items():
         if "anyOf" in definition:
@@ -23,7 +22,6 @@ def model_text_schema(model: BaseModel):
         for fname, finfo in model.model_fields.items()
     )
 
-@lru_cache(maxsize=64)
 def typeinfo(annotation: Any) -> str:
     """Render a readable type name from a Pydantic FieldInfo annotation."""
 
@@ -73,7 +71,6 @@ def typeinfo(annotation: Any) -> str:
     # Fallback for uncommon typing constructs
     return str(annotation).replace("typing.", "")
 
-@lru_cache(maxsize=64)
 def text_value(val, item_delim="|", field_delim="\n") -> str:
     lines = []
     for field_name in val.model_fields:
