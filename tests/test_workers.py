@@ -507,7 +507,7 @@ def test_cache():
 @pytest.mark.integration
 def test_orch_on_lancesack():
     from datacollectors import APICollector
-    from nlp import Digest, create_text_analyst, create_embedder
+    from nlp import NewsDigest, create_text_analyst, create_embedder
     from pybeansack import create_db
     from pybeansack.lancesack import _Bean
     from workers.collectororch import parse_sources
@@ -552,7 +552,7 @@ def test_orch_on_lancesack():
         with create_text_analyst(
             os.getenv("DIGESTOR_PATH"),
             context_len=4096,
-            output_model=Digest,
+            output_model=NewsDigest,
         ) as digestor:
             while beans := db.query_latest_beans(
                 collected=ndays_ago(2),

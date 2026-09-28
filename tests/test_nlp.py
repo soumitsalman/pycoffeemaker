@@ -34,6 +34,26 @@ def _save_json(name, items):
     return filename
 
 
+def test_contained_entity_is_copied_into_containing_field():
+    from nlp.extractors import EntityExtractor
+
+    merged = EntityExtractor._merge_chunks(
+        EntityExtractor,
+        [
+            {
+                "entities": {
+                    "companies": [{"text": "Apple Inc.", "start": 0, "end": 10}],
+                    "products": [{"text": "Apple", "start": 0, "end": 5}],
+                    "people": [{"text": "Tim Cook", "start": 15, "end": 23}],
+                }
+            }
+        ],
+    )
+    assert merged["products"] == ["Apple"]
+    assert merged["people"] == ["Tim Cook"]
+    assert set(merged["companies"]) == {"Apple Inc.", "Apple"}
+
+
 @pytest.mark.integration
 def test_embedder():
     from nlp import InfinityEmbeddings
@@ -52,7 +72,7 @@ def test_embedder():
 
 @pytest.mark.integration
 def test_digestor():
-    from nlp import Digest, create_text_analyst
+    from nlp import NewsDigest, create_text_analyst
 
     logging.basicConfig(
         level=logging.WARNING,
@@ -65,7 +85,7 @@ def test_digestor():
     with create_text_analyst(
         "vllm://LiquidAI/LFM2.5-1.2B-Instruct",
         context_len=32768,
-        output_model=Digest,
+        output_model=NewsDigest,
     ) as digestor:
         for chunk in tqdm(data_batches, desc="Progress: ", unit="bean chunk", total=len(data_batches)):
             result.extend(ic(digestor.run_batch([d["content"] for d in chunk])))

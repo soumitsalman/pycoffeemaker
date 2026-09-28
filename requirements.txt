@@ -2,7 +2,7 @@ accelerate
 vllm
 sentence-transformers
 llama-index
-gliner
+gliner2
 tiktoken
 pyyaml
 tenacity

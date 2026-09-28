@@ -38,14 +38,14 @@ def normalize_stock_tickers(items: list[str]):
 def normalize_impact_or_risk(val: Optional[str]):
     if val and val.lower() in _IMPACT_LEVELS: return val.lower()
 
-def normalize_tags(items: str|list[str]):
-    """Converts the tags into snake_case"""
-    return list(map(_snake, normalize_names(items)))
-
-def normalize_context_tag(tag: str):
-    if tag := _snake(normalize_text(tag)):
+def normalize_tag(tag: str):
+    if tag := normalize_text(tag):
         if len(tag) <= _TAG_MAX_LEN:
-            return tag
+            return _snake(tag)
+
+def normalize_tags(items: list[str]):
+    """Converts the tags into snake_case"""
+    return list(filter(lambda t: t, map(normalize_tag, items)))
 
 def normalize_cross_domain_impacts(impacts: list[str]):
     if not impacts: return impacts
@@ -65,10 +65,13 @@ _NORMALIZE_FUNCTIONS = {
     "products": normalize_tags,
     "companies": normalize_tags,    
     "entities": normalize_tags,
+    "category": normalize_tag,
+    "sentiment": normalize_tag,
+    "ideology": normalize_tag,
     "stock_tickers": normalize_stock_tickers,    
-    "macro_context": normalize_context_tag,
+    "macro_context": normalize_tag,
+    "event_type": normalize_tag,
     "cross_domain_impacts": normalize_cross_domain_impacts,
-    "event_type": normalize_context_tag,
     "impacted_domains": normalize_tags,
     "impact_level": normalize_impact_or_risk,
     "confidence": normalize_impact_or_risk,

@@ -1,6 +1,6 @@
 __all__ = [
     "Entities",
-    "Digest",
+    "NewsDigest",
     "Briefing",
     "create_embedder",
     "EmbedderBase",

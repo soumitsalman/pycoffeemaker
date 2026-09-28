@@ -1,9 +1,11 @@
+from functools import lru_cache
 import re
 import types
-from typing import Any, Optional, Union, get_args, get_origin
+from typing import Any, Literal, Optional, Type, Union, get_args, get_origin
 from pydantic import BaseModel
 
 
+@lru_cache(maxsize=64)
 def apply_model_json_constraints(schema: dict, list_item_max_len: dict[str, int] = {}) -> dict:
     for name, definition in schema["properties"].items():
         if "anyOf" in definition:
@@ -14,12 +16,14 @@ def apply_model_json_constraints(schema: dict, list_item_max_len: dict[str, int]
             items["maxLength"] = item_max
     return schema
 
+@lru_cache(maxsize=64)
 def model_text_schema(model: BaseModel):
     return "\n".join(
         f"{fname}={finfo.description}"
         for fname, finfo in model.model_fields.items()
     )
 
+@lru_cache(maxsize=64)
 def typeinfo(annotation: Any) -> str:
     """Render a readable type name from a Pydantic FieldInfo annotation."""
 
@@ -69,6 +73,7 @@ def typeinfo(annotation: Any) -> str:
     # Fallback for uncommon typing constructs
     return str(annotation).replace("typing.", "")
 
+@lru_cache(maxsize=64)
 def text_value(val, item_delim="|", field_delim="\n") -> str:
     lines = []
     for field_name in val.model_fields:
@@ -77,3 +82,25 @@ def text_value(val, item_delim="|", field_delim="\n") -> str:
             else: value_str = str(value)
             lines.append(f"{field_name}:{value_str}")
     return field_delim.join(lines)
+
+
+@lru_cache(maxsize=64)
+def get_extraction_labels(data_type: Type[BaseModel]) -> dict:
+    return {field: field_info.description for field, field_info in data_type.model_fields.items()}
+
+def _literal_values(annotation) -> list:
+    if get_origin(annotation) is Literal:
+        return list(get_args(annotation))
+    values = []
+    for arg in get_args(annotation):
+        if arg is type(None):
+            continue
+        values.extend(_literal_values(arg))
+    return values
+
+@lru_cache(maxsize=64)
+def get_classification_labels(data_type: Type[BaseModel]) -> dict:
+    return {
+        (field_info.alias or field): _literal_values(field_info.annotation)
+        for field, field_info in data_type.model_fields.items()
+    }

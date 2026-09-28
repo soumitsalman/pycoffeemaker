@@ -490,7 +490,7 @@ def create_text_analyst(
     context_len: int,
     instruction: str = None,
     input_template: str = None,
-    output_model: Type[BaseModel] = Digest,
+    output_model: Type[BaseModel] = NewsDigest,
     enable_thinking: bool = False,
     max_new_tokens: int = 2048,
     **kwargs,
@@ -578,7 +578,7 @@ MARKDOWN_HEADERS = ["# ", "## ", "### ", "#### ", "**"]
 
 
 def parse_markdown(response: str):
-    digest = Digest(raw=response)
+    digest = NewsDigest(raw=response)
     response = response.strip().removeprefix(M_START).removesuffix(M_END).strip()
     last = None
     for line in response.splitlines():
@@ -660,7 +660,7 @@ def parse_compressed(response: str):
             continue
         response += key + "|".join(v.strip() for v in value) + ";"
 
-    return Digest(
+    return NewsDigest(
         raw=response,
         keypoints=results.get("P:") or None,
         keyevents=results.get("E:") or None,

@@ -46,6 +46,10 @@ class BeansackPorter:
                     bean[ENTITIES] = entities
                 if regions := entity_pack.get(REGIONS):
                     bean[REGIONS] = regions
+            if classification_pack := bean.pop(CLASSIFICATIONS, None):
+                bean[CATEGORIES] = [classification_pack['category']]
+                bean[SENTIMENTS] = [classification_pack['sentiment']]
+                if ideology := classification_pack.get(IDEOLOGY): bean[IDEOLOGY] = ideology
             if not usable_created(bean.get(CREATED)):
                 bean[CREATED] = bean.get(COLLECTED)
         return [Bean(**bean) for bean in beans]
@@ -166,26 +170,23 @@ class CupboardPorter:
                     entity_pack.get(STOCK_TICKERS),
                     entity_pack.get(REGIONS),
                 )
-            if tags := merge_lists(                
+            extra_tags = merge_lists(                
                 normalize_tags(bean.get(TAGS) or []),
-                bean[DIGEST].get("impacted_domains"),
                 entity_tags,
-            ):
-                bean[TAGS] = merge_lists(
-                    bean[DIGEST].get("macro_context"),
-                    bean[DIGEST].get("event_type"),
-                    bean.get(CATEGORIES),
-                    random.sample(tags, min(MAX_TAGS, len(tags))),
-                )
+            )
+            bean[TAGS] = merge_lists(
+                bean[DIGEST].get("macro_context"),
+                bean[DIGEST].get("event_type"),
+                bean[DIGEST].get("impacted_domains"),
+                [bean[CLASSIFICATIONS].get('category')],
+                random.sample(extra_tags, min(MAX_TAGS, len(extra_tags))),
+            )
 
             # renaming events fields for consistency
-            if categories := bean[CATEGORIES]:
-                bean[CATEGORIES] = categories
             if briefing := bean[DIGEST].pop("briefing", None):
                 bean[DIGEST][SUMMARY] = briefing
             if event_items := (bean[DIGEST].pop("events", None)):
                 bean[DIGEST]["key_points"] = event_items
-
         return [Sip(**bean) for bean in beans]
 
     async def hydrate_events(self, db: Cupboard, target_state: str):

@@ -9,7 +9,7 @@ import pandas as pd
 from sklearn.neighbors import NearestNeighbors
 from processingcache import StateCacheBase, ClassificationCache
 from nlp import (
-    Digest, 
+    NewsDigest, 
     Entities,
     EntityExtractor, 
     EmbedderBase,
@@ -87,51 +87,29 @@ DIGEST_MODEL_BY_KIND = {
 CLASSIFICATION_LIMIT = int(os.getenv("CLASSIFICATION_LIMIT", 2))
 CLASSIFICATION_EPS = float(os.getenv("CLASSIFICATION_EPS", 0.4))
 
-# Ideology is assigned only when a bean's categories include one of these
-# (political or political-adjacent labels from factory/classifications.yaml).
+# Ideology is retained only for categories that can contain political or
+# policy-focused content. Keep these IDs aligned with nlp.models.CATEGORIES_LIST.
 IDEOLOGY_ELIGIBLE_CATEGORIES = frozenset(normalize_tags([
-    "AI Safety and Regulation",
-    "Data Centers and Digital Infrastructure",
-    "Climate Policy and Emissions",
-    "Clean Energy and Power Grid",
-    "Oil Gas and Fossil Fuels",
-    "Labor Jobs and Unions",
-    "Housing and Real Estate",
-    "Interest Rates and Inflation",
-    "National Politics",
-    "Elections and Campaigns",
-    "Diplomacy and Geopolitics",
-    "War and Armed Conflict",
-    "Immigration and Borders",
-    "Courts and Lawsuits",
-    "Crime and Policing",
-    "Human Rights",
-    "Military and Defense",
-    "Local Government",
-    "Trade Tariffs and Sanctions",
-    "Gender and LGBTQ Rights",
-    "Press Freedom and Journalism",
-    "Hospitals and Healthcare",
-    "Public Health",
-    "Cannabis Industry",
-    "Education and Schools",
-    "Religion and Faith",
-    "Privacy and Surveillance",
-    "Disability and Accessibility",
-    "Humanitarian Aid",
-    "Terrorism and Extremism",
-    "Nuclear Energy",
-    "Banking and Payments",
-    "Construction and Infrastructure",
-    "Public Transit and Roads",
-    "Gambling and Betting",
-    "Alcohol and Beverages",
-    "Pharmaceuticals and Drugs",
-    "Carbon Removal and Capture",
+    "Artificial Intelligence",
+    "Computing Infrastructure and Hardware",
+    "Cybersecurity and Privacy",
+    "Industry and Manufacturing",
+    "Economics, Accounting and Finance",
+    "Business Marketing and Employment",
+    "Politics and Global Affairs",
+    "Law, Crime and Public Safety",
+    "Civil Rights, Migration and Society",
+    "Health and Wellness",
+    "Earth, Space, Climate and Environment",
     "Agriculture and Food Production",
-    "Extreme Weather and Disasters",
+    "Transportation and Logistics",
+    "Construction, Housing and Real Estate",
+    "Education and Humanities",
+    "Arts, Culture, Media and Entertainment",
+    "Fashion, Beauty and Consumer Affairs",
 ]))
 
+# NOTE: disabling classifier her and moving to extractor
 class Embedder:
     cache: StateCacheBase
     embedder: EmbedderBase
@@ -148,62 +126,62 @@ class Embedder:
         self.cache = cache
         self.embedder = create_embedder(model_path=model_path, context_len=context_len)
         self.batch_size = batch_size
-        self.classifications = {key: self._load_label_index(value) for key, value in classification_kwargs.items()}
+        # self.classifications = {key: self._load_label_index(value) for key, value in classification_kwargs.items()}
         
-    @classmethod
-    def _load_label_index(cls, path: Path):
-        df = pd.read_parquet(path)
-        labels = df["id"].tolist()
-        vectors = np.asarray(df[EMBEDDING].tolist(), dtype=np.float32)
-        index = NearestNeighbors(
-            metric="cosine",
-            algorithm="brute",
-            n_jobs=-1,
-        )
-        index.fit(vectors)
-        return {"labels": labels, "index": index}
+    # @classmethod
+    # def _load_label_index(cls, path: Path):
+    #     df = pd.read_parquet(path)
+    #     labels = df["id"].tolist()
+    #     vectors = np.asarray(df[EMBEDDING].tolist(), dtype=np.float32)
+    #     index = NearestNeighbors(
+    #         metric="cosine",
+    #         algorithm="brute",
+    #         n_jobs=-1,
+    #     )
+    #     index.fit(vectors)
+    #     return {"labels": labels, "index": index}
 
-    @classmethod
-    def _label_batch_search(cls, index_pack: dict, embeddings: list[list[float]], top_n: int) -> list[list[str]]:
-        if not embeddings:
-            return []
-        labels = index_pack["labels"]
-        distances, indices = index_pack["index"].kneighbors(
-            np.asarray(embeddings, dtype=np.float32),
-            n_neighbors=min(top_n, len(labels)),
-            return_distance=True,
-        )
-        return [
-            [
-                labels[i]
-                for position, (i, distance) in enumerate(zip(index_row, distance_row))
-                if position == 0 or distance <= CLASSIFICATION_EPS
-            ]
-            for index_row, distance_row in zip(indices, distances)
-        ]
+    # @classmethod
+    # def _label_batch_search(cls, index_pack: dict, embeddings: list[list[float]], top_n: int) -> list[list[str]]:
+    #     if not embeddings:
+    #         return []
+    #     labels = index_pack["labels"]
+    #     distances, indices = index_pack["index"].kneighbors(
+    #         np.asarray(embeddings, dtype=np.float32),
+    #         n_neighbors=min(top_n, len(labels)),
+    #         return_distance=True,
+    #     )
+    #     return [
+    #         [
+    #             labels[i]
+    #             for position, (i, distance) in enumerate(zip(index_row, distance_row))
+    #             if position == 0 or distance <= CLASSIFICATION_EPS
+    #         ]
+    #         for index_row, distance_row in zip(indices, distances)
+    #     ]
 
-    def classify_beans(self, beans: list[dict]):
-        embeddings = [bean[EMBEDDING] for bean in beans]
-        keys = [key for key in self.classifications if key != "ideology"]
-        if "ideology" in self.classifications:
-            keys.append("ideology")
-        for key in keys:
-            labels = self._label_batch_search(
-                self.classifications[key],
-                embeddings,
-                1 if key == "ideology" else CLASSIFICATION_LIMIT,
-            )
-            # NOTE: updating in place for future extension when I put the classifications in the queue for digestion
-            for b, lbl in zip(beans, labels):
-                if not lbl:
-                    continue
-                tags = normalize_tags(lbl)
-                if key == "ideology":
-                    if tags and IDEOLOGY_ELIGIBLE_CATEGORIES.intersection(b.get(CATEGORIES) or []):
-                        b[key] = tags[0]
-                else:
-                    b[key] = tags
-        return beans
+    # def classify_beans(self, beans: list[dict]):
+    #     embeddings = [bean[EMBEDDING] for bean in beans]
+    #     keys = [key for key in self.classifications if key != "ideology"]
+    #     if "ideology" in self.classifications:
+    #         keys.append("ideology")
+    #     for key in keys:
+    #         labels = self._label_batch_search(
+    #             self.classifications[key],
+    #             embeddings,
+    #             1 if key == "ideology" else CLASSIFICATION_LIMIT,
+    #         )
+    #         # NOTE: updating in place for future extension when I put the classifications in the queue for digestion
+    #         for b, lbl in zip(beans, labels):
+    #             if not lbl:
+    #                 continue
+    #             tags = normalize_tags(lbl)
+    #             if key == "ideology":
+    #                 if tags and IDEOLOGY_ELIGIBLE_CATEGORIES.intersection(b.get(CATEGORIES) or []):
+    #                     b[key] = tags[0]
+    #             else:
+    #                 b[key] = tags
+    #     return beans
 
     def embed_beans(self, beans: list[dict]):
         try:
@@ -250,12 +228,12 @@ class Embedder:
                     if not updates:
                         continue
                     log.info(event="embedded", source=chunk[0][BASE_URL], num_items=len(updates))
-                    updates = self.classify_beans(updates)
-                    log.info(event="classified", source=chunk[0][BASE_URL], num_items=len(updates))
-                    kinds_by_url = {bean[URL]: bean.get(KIND) for bean in chunk}
-                    for update in updates:
-                        if kinds_by_url.get(update[URL]) not in (NEWS, BLOG, POST):
-                            update.pop("ideology", None)
+                    # updates = self.classify_beans(updates)
+                    # log.info(event="classified", source=chunk[0][BASE_URL], num_items=len(updates))
+                    # kinds_by_url = {bean[URL]: bean.get(KIND) for bean in chunk}
+                    # for update in updates:
+                    #     if kinds_by_url.get(update[URL]) not in (NEWS, BLOG, POST):
+                    #         update.pop("ideology", None)
                     total += encache_beans(self.cache, EMBEDDED, updates)
                     
                 except Exception:
@@ -284,19 +262,30 @@ class Extractor:
         self.extractor = EntityExtractor(
             model_path=model_path,
             context_len=context_len,
-            threshold=0.31,
+            threshold=0.7,
             batch_size=batch_size,
         )
         self.batch_size = batch_size
 
     def extract_beans(self, chunk: list[dict]):
-        extractions = self.extractor.run_batch([b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk])
+        extractions = self.extractor.run_batch_extract([b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk])
+        classifications = self.extractor.run_batch_classify([b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk])
+        # remove ideology for non-news, blog, and post
+        kinds = {bean[URL]: bean.get(KIND) for bean in chunk}
+        for b, cl in zip(chunk, classifications):
+            if cl is None: continue            
+            if (
+                kinds.get(b[URL]) not in (NEWS, BLOG, POST)                
+                or cl.category not in IDEOLOGY_ELIGIBLE_CATEGORIES
+            ):
+                cl.ideology = None
         return [
             {
                 URL: b[URL],
-                ENTITIES: ents.model_dump() if ents else None
+                ENTITIES: ents.model_dump() if ents else None,
+                CLASSIFICATIONS: cl.model_dump() if cl else None,
             }
-            for b, ents in zip(chunk, extractions)
+            for b, ents, cl in zip(chunk, extractions, classifications)
         ]
 
     @log_runtime(logger=log)
@@ -310,7 +299,7 @@ class Extractor:
                 log=log
             ):
                 try:
-                    updates = self.extract_beans(chunk)
+                    updates = ic(self.extract_beans(chunk))
                     log.info(event="extracted", source=chunk[0][BASE_URL], num_items=len(updates))
                     total += encache_beans(self.cache, EXTRACTED, updates)
                 
@@ -382,7 +371,7 @@ class Digestor:
             context_len=context_len,
             instruction=DIGEST_SYS,
             input_template=f"SYSTEM_DATE={now_str()}\n"+DIGEST_INST,
-            output_model=Digest,                       
+            output_model=NewsDigest,                       
             enable_thinking=False,
             max_new_tokens=2048,
             **model_kwargs
@@ -395,7 +384,7 @@ class Digestor:
 
     @classmethod
     def _output_model_for(cls, bean: dict):
-        return DIGEST_MODEL_BY_KIND.get(bean.get(KIND), Digest)
+        return DIGEST_MODEL_BY_KIND.get(bean.get(KIND), NewsDigest)
 
     def digest_beans(self, beans: list[dict]):
         if not beans: return []
