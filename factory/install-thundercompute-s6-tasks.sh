@@ -32,13 +32,10 @@ if ! "$UP_SCRIPT" --emit-batch-env >"$batch_tmp"; then
 fi
 install -m 644 "$batch_tmp" "$BATCH_ENV"
 
-cat >"$S6_ROOT/$SERVICE/up" <<EOF
-#!/bin/sh
-set -a
-. $BATCH_ENV
-set +a
-exec $UP_SCRIPT
-EOF
+# `up` is an execline command line, not a shell script. A shebang is
+# discarded as a comment, so builtins such as `set` and `exec` are
+# executed as programs and the oneshot fails at boot.
+printf '%s\n' "$UP_SCRIPT --batch-env $BATCH_ENV" >"$S6_ROOT/$SERVICE/up"
 chmod 755 "$S6_ROOT/$SERVICE/up"
 : >"$S6_ROOT/$SERVICE/dependencies.d/sshd"
 : >"$S6_ROOT/user/contents.d/$SERVICE"

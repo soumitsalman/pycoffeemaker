@@ -47,7 +47,21 @@ if [[ "${1:-}" == "--emit-batch-env" ]]; then
     exit 0
 fi
 
-# Install writes these before boot. Manual runs size from the live GPU.
+# Boot invokes: thundercompute-s6-tasks.sh --batch-env <pinned file>
+# Manual runs leave the args unset and size from the live GPU below.
+if [[ "${1:-}" == "--batch-env" ]]; then
+    [[ -n "${2:-}" && -f "$2" ]] || {
+        echo "missing batch env file: ${2:-}" >&2
+        exit 1
+    }
+    set -a
+    # shellcheck disable=SC1090
+    source "$2"
+    set +a
+    shift 2
+fi
+
+# Install pins batches for boot. Manual runs size from the live GPU.
 # No-GPU fallback is the 48GB row.
 if [[ -z "${EMBEDDER_BATCH:-}" ]]; then
     if mib="$(gpu_vram_mib)"; then
