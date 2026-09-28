@@ -208,18 +208,24 @@ class EntityExtractor:
         return res
 
     def run_batch_extract(self, input_messages: list[str], output_type: Type[BaseModel] = Entities):
-        chunks, start_idx, counts = self._create_chunks(input_messages)
+        # chunks, start_idx, counts = self._create_chunks(input_messages)
         entities = self._llm.batch_extract_entities(
-            chunks,
+            # chunks,
+            [msg[:self.context_len<<1] for msg in input_messages],
             get_extraction_labels(output_type),
             threshold=self.threshold,
             batch_size=self.batch_size,
             include_confidence=True,
-            include_spans=True,
-            # nested keeps a shorter span inside a longer one so it can belong to both fields
-            overlap_policy="nested",
+            include_spans=False,            
+            overlap_policy="nested", # nested keeps a shorter span inside a longer one so it can belong to both fields
         )
-        return [output_type(**self._merge_chunks(entities[start:start+count])) for start, count in zip(start_idx, counts)]
+        return [
+            output_type(**{
+                field: [v['text'] for v in values] 
+                for field, values in e['entities'].items()
+            }) 
+            for e in entities
+        ]
 
     def run_batch_classify(self, input_messages: list[str], output_type: Type[BaseModel] = Classification):
         from icecream import ic

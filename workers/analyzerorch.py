@@ -268,8 +268,9 @@ class Extractor:
         self.batch_size = batch_size
 
     def extract_beans(self, chunk: list[dict]):
-        extractions = self.extractor.run_batch_extract([b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk])
-        classifications = self.extractor.run_batch_classify([b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk])
+        contents = [b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk]
+        extractions = self.extractor.run_batch_extract(contents)
+        classifications = self.extractor.run_batch_classify(contents)
         # remove ideology for non-news, blog, and post
         kinds = {bean[URL]: bean.get(KIND) for bean in chunk}
         for b, cl in zip(chunk, classifications):
@@ -299,7 +300,7 @@ class Extractor:
                 log=log
             ):
                 try:
-                    updates = ic(self.extract_beans(chunk))
+                    updates = self.extract_beans(chunk)
                     log.info(event="extracted", source=chunk[0][BASE_URL], num_items=len(updates))
                     total += encache_beans(self.cache, EXTRACTED, updates)
                 
