@@ -334,7 +334,7 @@ class VLLMTextAnalyst(TextAnalystBase):
             from vllm import LLM
             from vllm.config import ReasoningConfig
 
-            self._llm = LLM(
+            llm_params = dict(
                 model=self.model_name,
                 max_model_len=self.context_len,
                 trust_remote_code=True,
@@ -344,12 +344,15 @@ class VLLMTextAnalyst(TextAnalystBase):
                 gpu_memory_utilization=VLLM_GPU_MEMORY_UTILIZATION,
                 # enable_prefix_caching=True,
                 # enable_chunked_prefill=True,
-                # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,
-                # reasoning_config = ReasoningConfig(
-                #     reasoning_start_str="<think>",
-                #     reasoning_end_str="</think>",
-                # )
+                # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,                
             )
+            if self.enable_thinking:
+                self._initial_sampling_params['thinking_token_budget']=self.max_thinking_budget
+                llm_params['reasoning_config'] = ReasoningConfig(
+                    reasoning_start_str="<think>",
+                    reasoning_end_str="</think>",
+                )
+            self._llm = LLM(**llm_params)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -376,8 +379,6 @@ class VLLMTextAnalyst(TextAnalystBase):
             max_tokens=self.max_new_tokens + self.max_thinking_budget,
             structured_outputs=StructuredOutputsParams(json=output_model.model_json_schema())
         )
-        if self.enable_thinking:
-            sampling_params["thinking_token_budget"]=self.max_thinking_budget
         params = SamplingParams(**sampling_params)
         cache[output_model] = params
         return params
