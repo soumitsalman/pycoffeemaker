@@ -124,7 +124,7 @@ class Embedder:
         **classification_kwargs
     ):
         self.cache = cache
-        self.embedder = create_embedder(model_path=model_path, context_len=context_len)
+        self.embedder = create_embedder(model_path=model_path, context_len=context_len, batch_size=batch_size)
         self.batch_size = batch_size
         # self.classifications = {key: self._load_label_index(value) for key, value in classification_kwargs.items()}
         
@@ -293,7 +293,7 @@ class Extractor:
                 log=log
             ):
                 try:
-                    updates = ic(self.extract_beans(chunk))
+                    updates = self.extract_beans(chunk)
                     log.info(event=EXTRACTED, source=chunk[0][BASE_URL], num_items=len(updates))
                     total += encache_beans(self.cache, EXTRACTED, updates)
                 

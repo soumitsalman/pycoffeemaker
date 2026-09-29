@@ -15,13 +15,6 @@ VECTOR = list[float]
 
 is_cuda_usable = lambda: torch.cuda.is_available()
 
-# def is_cuda_usable() -> bool:
-#     if not torch.cuda.is_available():
-#         return False
-#     try:
-#         return torch.cuda.get_device_capability()[0] >= 7
-#     except Exception:
-#         return False
 
 class EmbedderBase(ABC):
     splitter = None
@@ -152,8 +145,9 @@ class TransformerEmbeddings(EmbedderBase):
     _model = None
     model_path = None
     tokenizer_kwargs = None
+    batch_size: int = None
 
-    def __init__(self, model_path: str, context_len: int):
+    def __init__(self, model_path: str, context_len: int, batch_size: int = None):
         from transformers import AutoTokenizer
 
         super().__init__(context_len, tokenizer_fn=AutoTokenizer.from_pretrained(model_path, truncation=False, use_fast=True).encode)
@@ -163,13 +157,14 @@ class TransformerEmbeddings(EmbedderBase):
             "max_length": context_len,
             "padding": True
         }
+        self.batch_size = batch_size
         self.device = "cuda" if is_cuda_usable() else "cpu"
         self._model = None
 
     def _embed(self, texts: str|list[str]):
         if not self._model: self.__enter__()
         with torch.inference_mode(), torch.no_grad():
-            embs = self._model.encode(texts, batch_size=len(texts), convert_to_numpy=True)
+            embs = self._model.encode(texts, batch_size=self.batch_size or len(texts), convert_to_numpy=True)
         return embs    
     
     def __enter__(self):
@@ -344,6 +339,7 @@ class InfinityEmbeddings(EmbedderBase):
 def create_embedder(
     model_path: str, 
     context_len: int = 512,
+    batch_size: int = None,
     base_url: str = None,
     api_key: str = None
 ) -> EmbedderBase:
@@ -354,7 +350,7 @@ def create_embedder(
     if model_path.startswith(ONNX_PREFIX): return ORTEmbeddings(model_path.removeprefix(ONNX_PREFIX), context_len)
     if model_path.startswith(VLLM_PREFIX): return VLLMEmbedder(model_path.removeprefix(VLLM_PREFIX), context_len)
     if model_path.startswith(INFINITY_PREFIX): return InfinityEmbeddings(model_path.removeprefix(INFINITY_PREFIX), context_len)
-    return TransformerEmbeddings(model_path, context_len)
+    return TransformerEmbeddings(model_path, context_len, batch_size)
 
     
 

@@ -4,6 +4,7 @@
 llama-index-core
 sentence-transformers
 gliner2
+peft
 flashdeberta
 vllm
 python-dotenv
