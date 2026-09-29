@@ -1,10 +1,11 @@
 # Add-on deps for DockerfileGPU (FROM vllm/vllm-openai:v0.8.5, CUDA 12.4).
 # Do not install vllm/torch here — they come from the base image.
 # GPU workers no longer import datacollectors (kinds live in utils.kinds).
-vllm
-sentence-transformers
 llama-index-core
+sentence-transformers
 gliner2
+flashdeberta
+vllm
 python-dotenv
 structlog
 msgpack
@@ -21,4 +22,3 @@ tenacity
 icecream
 huggingface_hub
 tiktoken
-flashdeberta
