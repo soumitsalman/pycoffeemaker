@@ -30,13 +30,14 @@ class EntityExtractor:
         if not self._llm:            
             from llama_index.core.text_splitter import TokenTextSplitter
 
-            cuda_config = {"map_location": "cpu"}
+            cuda_config = dict(map_location="cpu")
             if torch.cuda.is_available():
-                cuda_config = {
-                    "map_location": "cuda",
-                    "compile": True,
-                    "quantize": True
-                }
+                cuda_config = dict(
+                    map_location="cuda",
+                    compile=False,
+                    quantize=True,
+                    use_flashdeberta=True,
+                )
 
             self._llm = AutoExtractor.from_pretrained(self.model_name, **cuda_config)
             self._splitter = TokenTextSplitter(
@@ -85,21 +86,51 @@ class EntityExtractor:
         texts = texts if isinstance(texts, list) else [texts]
         
         chunks = list(map(self._split, texts))
-        counts = list[int](map(len, chunks))
+        counts = list(map(len, chunks))
 
         start_idx = [0]*len(chunks)
         for i in range(1,len(counts)):
             start_idx[i] = start_idx[i-1]+counts[i-1]
         return list(chain(*chunks)), start_idx, counts
 
-    def _merge_chunks(self, entities: list[dict]):
+    def _merge_entities(self, chunk_results: list[dict]) -> dict:
         res = defaultdict(list)
-        for e in entities:
-            for field, values in e['entities'].items():
-                res[field].extend(v['text'] for v in values)
-        for k, v in res.items():
-            res[k] = list({item.lower(): item for item in v}.values())
+        for result in chunk_results:
+            for field, values in (result.get("entities") or {}).items():
+                texts = self._texts(values)
+                if texts:
+                    res[field].extend(texts)
+        for field, values in res.items():
+            res[field] = list({item.lower(): item for item in values}.values())
         return res
+
+    def _merge_chunks(self, results, start_idx, counts, entity_type, class_type):
+        class_names = get_classification_labels(class_type)
+        parsed = []
+        for start, count in zip(start_idx, counts):
+            group = results[start:start + count]
+            if not group:
+                parsed.append((entity_type(), class_type.model_construct()))
+                continue
+            raw_entities = self._merge_entities(group)
+            entities = entity_type(**{
+                field: values
+                for field, values in raw_entities.items()
+                if field in entity_type.model_fields
+            })
+            first = group[0]
+            classification = class_type(**{
+                name: self._label(self._first_of(first[name]))
+                for name in class_names
+            })
+            parsed.append((entities, classification))
+        return parsed
+
+    @staticmethod
+    def _first_of(value):
+        if isinstance(value, list):
+            return value[0] if value else None
+        return value
 
     def run_batch(
         self,
@@ -107,8 +138,13 @@ class EntityExtractor:
         entity_type: Type[BaseModel] = Entities,
         class_type: Type[BaseModel] = Classifications,
     ) -> list[tuple[Entities, Classifications]]:
+        if not input_messages:
+            return []
+        chunks, start_idx, counts = self._create_chunks(input_messages)
+        if not chunks:
+            return self._merge_chunks([], start_idx, counts, entity_type, class_type)
         results = self._llm.batch_extract(
-            [msg[:self.context_len<<1] for msg in input_messages],
+            chunks,
             self._joint_schema(entity_type, class_type),
             threshold=self.threshold,
             batch_size=self.batch_size,
@@ -116,18 +152,5 @@ class EntityExtractor:
             include_spans=False,
             overlap_policy="nested", # nested keeps a shorter span inside a longer one so it can belong to both fields
         )
-        class_names = get_classification_labels(class_type)
-        parsed = []
-        for result in results:
-            raw_entities = result.get("entities") or {}
-            entities = entity_type(**{
-                field: self._texts(values)
-                for field, values in raw_entities.items()
-                if field in entity_type.model_fields
-            })
-            classification = class_type(**{
-                name: self._label(result[name]) for name in class_names
-            })
-            parsed.append((entities, classification))
-        return parsed
+        return self._merge_chunks(results, start_idx, counts, entity_type, class_type)
 

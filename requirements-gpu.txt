@@ -21,3 +21,4 @@ tenacity
 icecream
 huggingface_hub
 tiktoken
+flashdeberta

@@ -34,24 +34,56 @@ def _save_json(name, items):
     return filename
 
 
-def test_contained_entity_is_copied_into_containing_field():
+def test_merge_chunks_extends_entities_and_keeps_first_classification():
     from nlp.extractors import EntityExtractor
+    from nlp.models import Classifications, Entities
 
-    merged = EntityExtractor._merge_chunks(
-        EntityExtractor,
+    extractor = EntityExtractor("unused", context_len=512)
+    merged = extractor._merge_chunks(
         [
             {
                 "entities": {
-                    "companies": [{"text": "Apple Inc.", "start": 0, "end": 10}],
-                    "products": [{"text": "Apple", "start": 0, "end": 5}],
-                    "people": [{"text": "Tim Cook", "start": 15, "end": 23}],
-                }
-            }
+                    "companies": [{"text": "Apple Inc."}],
+                    "people": [{"text": "Tim Cook"}],
+                },
+                "domain_genre": ["Economics, Accounting and Finance", "Software and Data Engineering"],
+                "expression_sentiment": "positive",
+                "political_ideology": "right",
+            },
+            {
+                "entities": {
+                    "companies": [{"text": "apple inc."}, {"text": "Microsoft"}],
+                    "products": [{"text": "iPhone"}],
+                },
+                "domain_genre": "Software and Data Engineering",
+                "expression_sentiment": "negative",
+                "political_ideology": "left",
+            },
+            {
+                "entities": {
+                    "people": [{"text": "Satya Nadella"}],
+                },
+                "domain_genre": "Politics and Global Affairs",
+                "expression_sentiment": "neutral",
+                "political_ideology": "center",
+            },
         ],
+        start_idx=[0, 2],
+        counts=[2, 1],
+        entity_type=Entities,
+        class_type=Classifications,
     )
-    assert merged["products"] == ["Apple"]
-    assert merged["people"] == ["Tim Cook"]
-    assert set(merged["companies"]) == {"Apple Inc.", "Apple"}
+    first_ents, first_cl = merged[0]
+    second_ents, second_cl = merged[1]
+    assert first_ents.companies == ["apple_inc", "microsoft"]
+    assert first_ents.people == ["tim_cook"]
+    assert first_ents.products == ["i_phone"]
+    assert first_cl.category == "economics_accounting_and_finance"
+    assert first_cl.sentiment == "positive"
+    assert first_cl.ideology == "right"
+    assert second_ents.people == ["satya_nadella"]
+    assert second_cl.category == "politics_and_global_affairs"
+    assert second_cl.sentiment == "neutral"
 
 
 @pytest.mark.integration
