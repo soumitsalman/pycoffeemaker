@@ -2,9 +2,11 @@
 # s6 oneshot entry: start run_pipeline.sh in the background at container boot.
 set -euo pipefail
 
-# Batch sizes are a linear fit to GPU VRAM (GiB), exact at ~48 and ~80:
-#   embedder     = round(1.5*V + 8)    # 80 @ 48GB, 128 @ 80GB
-#   extractor    = round((36/64)*(0.75*V + 4))  # 23 @ 48GB, 36 @ 80GB
+# Batch sizes are a linear fit to GPU VRAM (GiB).
+# Embedder and extractor are exact at the T4 and A100 benchmarks:
+#   embedder     = round(2.75*V + 36)   # 80 @ 16GB, 256 @ 80GB
+#   extractor    = round(1.25*V - 4)    # 16 @ 16GB, 96 @ 80GB
+# Clustering, digestor, and consolidator are unchanged:
 #   clustering   = 512                  # CPU stage; same at both sizes
 #   digestor     = round(8*V - 192)     # 192 @ 48GB, 448 @ 80GB
 #   consolidator = round(4*V - 64)      # 128 @ 48GB, 256 @ 80GB
@@ -23,8 +25,8 @@ gpu_vram_mib() {
 # Integer rounding of the fit above. mib is nvidia-smi memory.total.
 set_batches_from_vram_mib() {
     local mib="$1" value
-    EMBEDDER_BATCH=$(( (3 * mib + 1024) / 2048 + 8 ))
-    EXTRACTOR_BATCH=$(( (27 * mib + 49152) / 65536 + 2 ))
+    EMBEDDER_BATCH=$(( (11 * mib + 2048) / 4096 + 36 ))
+    EXTRACTOR_BATCH=$(( (5 * mib + 2048) / 4096 - 4 ))
     CLUSTERING_BATCH=512
     DIGESTOR_BATCH=$(( (mib + 64) / 128 - 192 ))
     CONSOLIDATOR_BATCH=$(( (mib + 128) / 256 - 64 ))
@@ -67,8 +69,8 @@ if [[ -z "${EMBEDDER_BATCH:-}" ]]; then
     if mib="$(gpu_vram_mib)"; then
         set_batches_from_vram_mib "$mib"
     else
-        EMBEDDER_BATCH=80
-        EXTRACTOR_BATCH=23
+        EMBEDDER_BATCH=168
+        EXTRACTOR_BATCH=56
         CLUSTERING_BATCH=512
         DIGESTOR_BATCH=192
         CONSOLIDATOR_BATCH=128
@@ -83,9 +85,9 @@ SCRIPT="$WORKDIR/run_pipeline.sh"
 
 ARGS=(
     # --collector "$COLLECTOR_BATCH"
-    --embedder "$EMBEDDER_BATCH"
-    --extractor "$EXTRACTOR_BATCH"
-    --clustering "$CLUSTERING_BATCH"
+    # --embedder "$EMBEDDER_BATCH"
+    # --extractor "$EXTRACTOR_BATCH"
+    # --clustering "$CLUSTERING_BATCH"
     --digestor "$DIGESTOR_BATCH"
     --consolidator "$CONSOLIDATOR_BATCH"
 )
