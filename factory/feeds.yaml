@@ -13201,6 +13201,11 @@ sources:
   - https://news.duke-energy.com/rss.xml
   # Banks
   - https://www.bny.com/bin/bnymellon/rssFeedGeneratorServlet.report
+  # TheStreet
+  - https://www.thestreet.com/.rss/feed/a386f542-9b65-4245-9e22-e3cfd33d7d34.xml
+  - https://www.thestreet.com/.rss/feed/34ba65c7-b523-4609-88a5-808417cd0dcb.xml
+  - https://www.thestreet.com/.rss/feed/70407284-d8ab-4f1c-abd8-74f3d24afc21.xml
+  - https://www.thestreet.com/.rss/feed/0189c085-b1f6-4e4c-be08-989d56d0fa86.xml
   - http://feeds.bbci.co.uk/news/rss.xml
   - https://laist.com/index.rss
   - https://newsfeed.zeit.de/index

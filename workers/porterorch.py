@@ -178,7 +178,8 @@ class CupboardPorter:
                 bean[DIGEST].get("macro_context"),
                 bean[DIGEST].get("event_type"),
                 bean[DIGEST].get("impacted_domains"),
-                [bean[CLASSIFICATIONS].get('category')],
+                bean.get(CLASSIFICATIONS, {}).get('category'),
+                bean.get(CATEGORIES),
                 random.sample(extra_tags, min(MAX_TAGS, len(extra_tags))),
             )
 
