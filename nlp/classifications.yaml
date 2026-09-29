@@ -150,6 +150,7 @@ sentiments:
   description: Unfavorable, critical, disappointed, or pessimistic tone describing a poor outcome, loss, setback, harm, or deteriorating condition. Use when the negative judgment is clear but not strongly emotional or emphatic.
 - id: highly negative
   description: Strongly negative emotional or evaluative tone, including intense condemnation, outrage, despair, alarm, or severe descriptions of harm and failure. Use only when the language or reaction is markedly more intense than ordinary criticism or bad news.
+
 ideologies:
 - id: left
   description: Clearly left-wing political direction, including progressive, liberal, social-democratic, democratic-socialist, labor-left, redistributive, environmentalist-left, racial-justice, gender-equality, LGBTQ-rights, immigrant-rights, universal-public-services, or government-intervention framing. Use when the content advocates, advances, celebrates, or is organized around left-wing political positions, candidates, parties, movements, or policy goals. Do not infer this label solely from the subject being a left-wing politician or from neutral reporting about a progressive policy dispute.
@@ -158,4 +159,4 @@ ideologies:
 - id: center
   description: Explicitly centrist, moderate, bipartisan, nonpartisan, or pragmatic middle-ground political direction. Use when the content advocates compromise or cross-party agreement, or supports a clearly centrist policy position. Balanced reporting that does not endorse a political direction is undetermined, not center.
 - id: undetermined
-  description: Use when content is non-political or its political direction cannot be responsibly determined. This includes factual or descriptive reporting without advocacy, political-adjacent topics without a clear endorsed position, and ambiguous, mixed, satirical, incomplete, or context-poor content. Do not infer ideology from a topic, person, outlet, country, demographic group, or isolated keywords.
+  description: Non-political or undeterminable political direction. Includes factual or descriptive reporting without advocacy, political-adjacent topics without a clear endorsed position, and ambiguous, mixed, satirical, incomplete, or context-poor content. Avoid ideology inference from person, outlet, country, demographic group, or isolated keywords.

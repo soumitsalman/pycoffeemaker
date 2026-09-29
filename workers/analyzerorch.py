@@ -227,7 +227,7 @@ class Embedder:
                     updates = self.embed_beans(chunk)
                     if not updates:
                         continue
-                    log.info(event="embedded", source=chunk[0][BASE_URL], num_items=len(updates))
+                    log.info(event=EMBEDDED, source=chunk[0][BASE_URL], num_items=len(updates))
                     # updates = self.classify_beans(updates)
                     # log.info(event="classified", source=chunk[0][BASE_URL], num_items=len(updates))
                     # kinds_by_url = {bean[URL]: bean.get(KIND) for bean in chunk}
@@ -262,7 +262,7 @@ class Extractor:
         self.extractor = EntityExtractor(
             model_path=model_path,
             context_len=context_len,
-            threshold=0.7,
+            threshold=0.75,
             batch_size=batch_size,
         )
         self.batch_size = batch_size
@@ -272,12 +272,12 @@ class Extractor:
         contents = [b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk]
         pairs = self.extractor.run_batch(contents)
         # remove ideology for non-news, blog, and post
-        exclude_ideology = lambda kind, ents, cl: (kind not in (NEWS, BLOG, POST)) or (cl.category not in IDEOLOGY_ELIGIBLE_CATEGORIES)
+        exclude_ideology = lambda kind, cl: (kind not in (NEWS, BLOG, POST)) or (cl.category not in IDEOLOGY_ELIGIBLE_CATEGORIES)
         return [
             {
                 URL: b[URL],
                 ENTITIES: ents.model_dump(),
-                CLASSIFICATIONS: cl.model_dump(exclude=[IDEOLOGY] if exclude_ideology(kind, ents, cl) else None),
+                CLASSIFICATIONS: cl.model_dump(exclude=[IDEOLOGY] if exclude_ideology(kind, cl) else None),
             }
             for b, kind, (ents, cl) in zip(chunk, kinds, pairs)
         ]
@@ -293,8 +293,8 @@ class Extractor:
                 log=log
             ):
                 try:
-                    updates = self.extract_beans(chunk)
-                    log.info(event="extracted", source=chunk[0][BASE_URL], num_items=len(updates))
+                    updates = ic(self.extract_beans(chunk))
+                    log.info(event=EXTRACTED, source=chunk[0][BASE_URL], num_items=len(updates))
                     total += encache_beans(self.cache, EXTRACTED, updates)
                 
                 except Exception as e:                    
@@ -405,7 +405,7 @@ class Digestor:
             ):
                 try:
                     updates = self.digest_beans(chunk)
-                    log.info(event="digested", source=chunk[0][BASE_URL], num_items=len(updates))
+                    log.info(event=DIGESTED, source=chunk[0][BASE_URL], num_items=len(updates))
                     total += encache_beans(self.cache, DIGESTED, updates)
 
                 except Exception as e:

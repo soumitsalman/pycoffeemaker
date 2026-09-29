@@ -1,9 +1,31 @@
-from typing import List, Literal, Optional
+from pathlib import Path
+from typing import Annotated, List, Literal, Optional
 from functools import cached_property
+import yaml
 from pydantic import BaseModel, Field
 
 from .normalize import normalize_fields, merge_lists
-from .formatters import model_text_schema, text_value, apply_model_json_constraints
+from .formatters import LabelDescriptions, model_text_schema, text_value, apply_model_json_constraints
+
+def _load_classification_lists() -> dict[str, dict[str, str]]:
+    raw = yaml.safe_load(Path(__file__).with_name("classifications.yaml").read_text())
+    return {
+        group: {item["id"]: item["description"].strip() for item in raw[group]}
+        for group in ("categories", "sentiments", "ideologies")
+    }
+
+_CLASSIFICATIONS = _load_classification_lists()
+
+def _label_type(group: str):
+    labels = _CLASSIFICATIONS[group]
+    return Annotated[
+        Literal.__getitem__(tuple(labels)),
+        LabelDescriptions(labels),
+    ]
+
+CATEGORIES_LIST = _label_type("categories")
+SENTIMENTS_LIST = _label_type("sentiments")
+IDEOLOGIES_LIST = _label_type("ideologies")
 
 _TAG_MAX_LEN = 50
 _TAGS_MAX_COUNT = 10
@@ -74,35 +96,6 @@ class _ExtractionBase(_NLPBase):
     def __bool__(self):
         return bool(self.briefing)
 
-
-CATEGORIES_LIST = Literal[
-    "Artificial Intelligence",
-    "Software and Data Engineering",
-    "Computing Infrastructure and Hardware",
-    "Cybersecurity and Privacy",
-    "Consumer Electronics and Robotics",
-    "Industry and Manufacturing",
-    "Economics, Accounting and Finance",
-    "Business Marketing and Employment",
-    "Politics and Global Affairs",
-    "Law, Crime and Public Safety",
-    "Civil Rights, Migration and Society",
-    "Health and Wellness",
-    "Biology and Biotechnology",
-    "Physical Sciences and Mathematics",
-    "Earth, Space, Climate and Environment",
-    "Agriculture and Food Production",
-    "Transportation and Logistics",
-    "Construction, Housing and Real Estate",
-    "Education and Humanities",
-    "Sports and Recreation",
-    "Arts, Culture, Media and Entertainment",
-    "Food, Dining and Travel",
-    "Fashion, Beauty and Consumer Affairs",
-    "Home, Family and Pets",
-]
-SENTIMENTS_LIST = Literal["highly positive", "positive", "neutral", "negative", "highly negative"]
-IDEOLOGIES_LIST = Literal["left", "right", "center", "undetermined"]
 
 class Classifications(_NLPBase):
     category: CATEGORIES_LIST = Field(alias="domain_genre")

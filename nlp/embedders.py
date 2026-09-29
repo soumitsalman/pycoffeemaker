@@ -180,7 +180,7 @@ class TransformerEmbeddings(EmbedderBase):
                 self.model_path,
                 processor_kwargs=self.tokenizer_kwargs,
                 device=self.device,
-                model_kwargs={"torch_dtype": "float16"} if on_cuda else None,
+                model_kwargs={"dtype": "float16",  "attn_implementation": "flash_attention_2"} if on_cuda else None,
             )
             if on_cuda:
                 self._model.compile(dynamic=True)

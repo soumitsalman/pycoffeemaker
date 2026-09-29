@@ -85,6 +85,10 @@ def text_value(val, item_delim="|", field_delim="\n") -> str:
 def get_extraction_labels(data_type: Type[BaseModel]) -> dict:
     return {field: field_info.description for field, field_info in data_type.model_fields.items()}
 
+class LabelDescriptions:
+    def __init__(self, labels: dict[str, str]):
+        self.labels = dict(labels)
+
 def _literal_values(annotation) -> list:
     if get_origin(annotation) is Literal:
         return list(get_args(annotation))
@@ -95,9 +99,17 @@ def _literal_values(annotation) -> list:
         values.extend(_literal_values(arg))
     return values
 
+def _label_descriptions(field_info) -> dict | None:
+    for item in getattr(field_info, "metadata", ()):
+        if isinstance(item, LabelDescriptions):
+            return item.labels
+    return None
+
 @lru_cache(maxsize=64)
 def get_classification_labels(data_type: Type[BaseModel]) -> dict:
-    return {
-        (field_info.alias or field): _literal_values(field_info.annotation)
-        for field, field_info in data_type.model_fields.items()
-    }
+    result = {}
+    for field, field_info in data_type.model_fields.items():
+        name = field_info.alias or field
+        descriptions = _label_descriptions(field_info)
+        result[name] = descriptions if descriptions is not None else _literal_values(field_info.annotation)
+    return result

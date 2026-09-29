@@ -34,6 +34,22 @@ def _save_json(name, items):
     return filename
 
 
+def test_classification_labels_load_descriptions_from_yaml():
+    import yaml
+    from nlp.formatters import get_classification_labels
+    from nlp.models import Classifications
+
+    raw = yaml.safe_load((ROOT / "nlp" / "classifications.yaml").read_text())
+    expected = {item["id"]: item["description"].strip() for item in raw["ideologies"]}
+    assert get_classification_labels(Classifications)["political_ideology"] == expected
+    row = Classifications(
+        domain_genre="Artificial Intelligence",
+        expression_sentiment="positive",
+        political_ideology="left",
+    )
+    assert row.ideology == "left"
+
+
 def test_merge_chunks_extends_entities_and_keeps_first_classification():
     from nlp.extractors import EntityExtractor
     from nlp.models import Classifications, Entities
