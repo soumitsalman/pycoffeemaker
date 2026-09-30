@@ -458,10 +458,10 @@ class VLLMTextAnalyst(TextAnalystBase):
             )
             if self.enable_thinking:
                 self._initial_sampling_params['thinking_token_budget']=self.max_thinking_budget
-                reasoning_start_str, reasoning_end_str = self._reasoning_delimiters
+                # reasoning_start_str, reasoning_end_str = self._reasoning_delimiters
                 llm_params['reasoning_config'] = ReasoningConfig(
-                    reasoning_start_str=reasoning_start_str,
-                    reasoning_end_str=reasoning_end_str,
+                    reasoning_start_str="<think>",
+                    reasoning_end_str="</think>",
                 )
             self._llm = LLM(**llm_params)
         return self
