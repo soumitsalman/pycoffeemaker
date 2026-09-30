@@ -66,8 +66,6 @@ generic_quantities|generic_phrasing|emotive_language
 unsupported_values|labels_not_required_by_schema
 """
 BRIEFING_INST = """
-INTELLIGENCE_BRIEFING=
-{description}
 EVENT_STREAM=
 {input_text}
 """

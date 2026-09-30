@@ -6,6 +6,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from functools import cached_property
 from typing import Optional, Type
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_random
@@ -34,7 +35,7 @@ _DEFAULT_SAMPLING_PARAMS = {
 # window.  Keep a fixed reasoning allowance while reserving max_new_tokens for
 # the final JSON response, plus room for chat-template and tokenizer overhead.
 MAX_THINKING_BUDGET = 2048
-PROMPT_TOKEN_MARGIN = 128
+PROMPT_TOKEN_MARGIN = 64
 
 class TextAnalystBase(ABC):
     def __init__(
@@ -56,7 +57,9 @@ class TextAnalystBase(ABC):
         self.response_mode = "json" if output_model else None
         self.enable_thinking = enable_thinking
         self.max_new_tokens = max_new_tokens
-        self.max_thinking_budget = min(MAX_THINKING_BUDGET, max_new_tokens)
+        self.max_thinking_budget = (
+            min(MAX_THINKING_BUDGET, max_new_tokens) if enable_thinking else 0
+        )
         self.max_prompt_len = (
             context_len
             - max_new_tokens
@@ -85,21 +88,48 @@ class TextAnalystBase(ABC):
             clear_gpu_cache()
         return False
 
+    def _prompt_tokenizer(self):
+        return None
+
+    def _user_text(self, input_text: str) -> str:
+        if not self.input_template:
+            return input_text
+        return self.input_template.format(input_text=input_text)
+
+    def _messages(self, input_text: str) -> list[dict]:
+        messages = []
+        if self.instruction:
+            messages.append({"role": "system", "content": self.instruction})
+        messages.append({"role": "user", "content": self._user_text(input_text)})
+        return messages
+
+    @cached_property
+    def _document_budget(self) -> int:
+        tokenizer = self._prompt_tokenizer()
+        if tokenizer is None:
+            raise RuntimeError("document budget requires a tokenizer")
+        shell = tokenizer.apply_chat_template(
+            self._messages(""),
+            tokenize=True,
+            add_generation_prompt=True,
+            enable_thinking=self.enable_thinking,
+        )
+        return self.max_prompt_len - len(shell)
+
+    def _fit_input_text(self, msg: str) -> str:
+        tokenizer = self._prompt_tokenizer()
+        if tokenizer is None or not msg:
+            return msg or ""
+        budget = self._document_budget
+        if budget <= 0:
+            return ""
+        doc_ids = tokenizer.encode(msg, add_special_tokens=False)
+        if len(doc_ids) <= budget:
+            return msg
+        return tokenizer.decode(doc_ids[:budget], skip_special_tokens=True)
+
     def create_prompt(self, msg: str, output_model: Type[BaseModel] | None = None):
-        output_model = output_model or self.output_model
-        prompt = []
-        input_text = msg[:self.max_prompt_len<<2] # this is a heuristic
-        if self.instruction: prompt.append({"role": "system", "content": self.instruction})
-        prompt.append({
-            "role": "user",
-            "content": self.input_template.format(
-                    description=output_model.model_text_schema(),
-                    input_text=input_text
-                )
-                if self.input_template
-                else input_text
-        })
-        return prompt
+        return self._messages(self._fit_input_text(msg))
 
     def parse_output(self, response: str, output_model: Type[BaseModel] | None = None):
         output_model = output_model or self.output_model
@@ -262,6 +292,11 @@ class TransformerTextAnalyst(TextAnalystBase):
             self._tokenizer = None
         return super().__exit__(exc_type, exc_val, exc_tb)
 
+    def _prompt_tokenizer(self):
+        if not self._tokenizer:
+            return None
+        return self._tokenizer.tokenizer
+
     def _prefix_fn_for(self, output_model: Type[BaseModel]):
         cache = getattr(self, "_prefix_fn_cache", None)
         if cache is None:
@@ -364,6 +399,11 @@ class VLLMTextAnalyst(TextAnalystBase):
                 log.warning("Failed to shutdown vLLM engine cleanly", exc_info=True)
         return super().__exit__(exc_type, exc_val, exc_tb)
 
+    def _prompt_tokenizer(self):
+        if not self._llm:
+            return None
+        return self._llm.get_tokenizer()
+
     def _sampling_params_for_model(self, output_model: Type[BaseModel]):
         cache = getattr(self, "_sampling_params_cache", None)
         if cache is None:
@@ -402,7 +442,6 @@ class VLLMTextAnalyst(TextAnalystBase):
             [self.create_prompt(msg, model) for msg, model in zip(input_messages, output_models)],
             sampling_params=self._sampling_params_for(output_models),
             chat_template_kwargs={"enable_thinking": self.enable_thinking},
-            tokenization_kwargs={"truncate_prompt_tokens": self.max_prompt_len},
             use_tqdm=False,
         )
         return [

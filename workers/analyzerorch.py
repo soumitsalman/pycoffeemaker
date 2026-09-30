@@ -310,7 +310,7 @@ class Extractor:
 
 DIGEST_SYS = """
 TASK:
-Extract TARGET_INFORMATION from CONTENT_TO_ANALYZE
+Extract the structured fields from CONTENT_TO_ANALYZE
 
 OUTPUT:
 json_only|schema_strict|traceable_evidence_only|omit_null_fields
@@ -334,8 +334,6 @@ generic_quantities|generic_phrasing|emotive_language
 unsupported_values|labels_not_required_by_schema
 """
 DIGEST_INST = """
-TARGET_INFORMATION=
-{description}
 CONTENT_TO_ANALYZE=
 {input_text}
 """
@@ -366,7 +364,7 @@ class Digestor:
             instruction=DIGEST_SYS,
             input_template=f"SYSTEM_DATE={now_str()}\n"+DIGEST_INST,
             output_model=NewsDigest,                       
-            enable_thinking=False,
+            enable_thinking=True,
             max_new_tokens=2048,
             **model_kwargs
         )
@@ -374,7 +372,7 @@ class Digestor:
 
     @classmethod
     def _article_to_str(cls, article: dict) -> str:
-        return article[CONTENT][:MAX_DOCUMENT_LEN<<2]
+        return article[CONTENT]
 
     @classmethod
     def _output_model_for(cls, bean: dict):
