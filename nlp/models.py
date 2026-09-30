@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Annotated, List, Literal, Optional
+from typing import Annotated, ClassVar, List, Literal, Optional
 from functools import cached_property
 import yaml
 from pydantic import BaseModel, Field
@@ -479,7 +479,7 @@ class ContractExtraction(_ExtractionBase):
     incorporated_documents: List[str] = Field(default_factory=list, description='List of source-supported incorporated documents.')
 
 
-class ProcurementNoticeExtraction(FlatExtraction):
+class ProcurementNoticeExtraction(_ExtractionBase):
     """One RFP, RFQ, or RFI. Extract only facts the source states. Omit a field when unsupported. Do not compare dates to today, invent a timezone, or copy placeholder contacts."""
     document_class: Optional[str] = Field(None, description="What this text is: live_notice, amendment, glossary, directory, or aggregator. Use the title solicitation when a page lists several bids. Omit if unclear.")
     instrument: Optional[str] = Field(None, description="Labeled ask: RFP (priced proposal), RFQ (qualifications), RFI (information only), or the source's combined label such as RFQ/P. Omit if unlabeled.")
@@ -507,7 +507,7 @@ class ProcurementNoticeExtraction(FlatExtraction):
     related_notices: List[str] = Field(default_factory=list, description="Other solicitations on the same page, each as 'id | buyer | deadline | contact'. Do not copy them into this record's deadline or contact.")
 
 
-class SolicitationEncoderExtraction(_NLPBaseModel):
+class SolicitationEncoderExtraction(_NLPBase):
     """GLiNER2.5 fields. Classify document_class. Copy every other value from the source."""
 
     document_class_labels: ClassVar[dict[str, str]] = {

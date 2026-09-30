@@ -150,16 +150,17 @@ class TransformerEmbeddings(EmbedderBase):
     def __init__(self, model_path: str, context_len: int, batch_size: int = None):
         from transformers import AutoTokenizer
 
-        super().__init__(context_len, tokenizer_fn=AutoTokenizer.from_pretrained(model_path, truncation=False, use_fast=True).encode)
+        super().__init__(context_len, tokenizer_fn=AutoTokenizer.from_pretrained(model_path, truncation=True, max_length=context_len, use_fast=True).encode)
         self.model_path = model_path
-        self.tokenizer_kwargs = {
-            "truncation": True,
-            "max_length": context_len,
-            "padding": True
-        }
+        self.tokenizer_kwargs = {"model_max_length": context_len}
         self.batch_size = batch_size
         self.device = "cuda" if is_cuda_usable() else "cpu"
         self._model = None
+
+    def embed_documents(self, texts: str|list[str]) -> VECTOR|list[VECTOR]:
+        if not texts:
+            return
+        return self._embed(texts).tolist()
 
     def _embed(self, texts: str|list[str]):
         if not self._model: self.__enter__()
@@ -177,6 +178,7 @@ class TransformerEmbeddings(EmbedderBase):
                 device=self.device,
                 model_kwargs={"dtype": "float16",  "attn_implementation": "sdpa"} if on_cuda else None,
             )
+            self._model.max_seq_length = self.context_len
             if on_cuda:
                 self._model.compile(dynamic=True)
         return self

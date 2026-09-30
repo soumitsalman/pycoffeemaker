@@ -126,6 +126,21 @@ class EntityExtractor:
             parsed.append((entities, classification))
         return parsed
 
+    def _parse_result(self, result: dict, entity_type: Type[BaseModel], class_type: Type[BaseModel]):
+        raw_entities = {}
+        for field, values in (result.get("entities") or {}).items():
+            if field not in entity_type.model_fields:
+                continue
+            texts = self._texts(values)
+            if texts:
+                raw_entities[field] = list({item.lower(): item for item in texts}.values())
+        entities = entity_type(**raw_entities)
+        classification = class_type(**{
+            name: self._label(self._first_of(result[name]))
+            for name in get_classification_labels(class_type)
+        })
+        return entities, classification
+
     @staticmethod
     def _first_of(value):
         if isinstance(value, list):
@@ -140,17 +155,18 @@ class EntityExtractor:
     ) -> list[tuple[Entities, Classifications]]:
         if not input_messages:
             return []
-        chunks, start_idx, counts = self._create_chunks(input_messages)
-        if not chunks:
-            return self._merge_chunks([], start_idx, counts, entity_type, class_type)
         results = self._llm.batch_extract(
-            chunks,
+            input_messages,
             self._joint_schema(entity_type, class_type),
             threshold=self.threshold,
             batch_size=self.batch_size,
             include_confidence=False,
             include_spans=False,
             overlap_policy="nested", # nested keeps a shorter span inside a longer one so it can belong to both fields
+            max_len=self.context_len,
         )
-        return self._merge_chunks(results, start_idx, counts, entity_type, class_type)
+        return [
+            self._parse_result(result, entity_type, class_type)
+            for result in results
+        ]
 

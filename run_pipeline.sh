@@ -18,14 +18,14 @@ set -a
 # Pipeline defaults (override via .env)
 PG_TIMEOUT=180
 COLLECTOR_TIMEOUT=120
-MAX_DOCUMENT_LEN=8192
 
 EMBEDDER_PATH=codefuse-ai/F2LLM-v2-80M
 EMBEDDER_CONTEXT_LEN=4096
 VECTOR_LEN=320
 
 EXTRACTOR_PATH=fastino/gliner2.5-multi-v1
-EXTRACTOR_CONTEXT_LEN=2048
+EXTRACTOR_CONTEXT_LEN=3072
+# this is a word len, not a token len
 
 CLUSTER_EPS=0.464
 

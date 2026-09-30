@@ -55,7 +55,6 @@ from icecream import ic
 log = get_logger("analyzerworker")
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count()))
-MAX_DOCUMENT_LEN = int(os.getenv("MAX_DOCUMENT_LEN", 4096)) # 16KB
 
 DIGEST_MODEL_BY_KIND = {
     SITE: SiteExtraction,
@@ -185,9 +184,7 @@ class Embedder:
 
     def embed_beans(self, beans: list[dict]):
         try:
-            vectors = self.embedder.embed_documents(
-                [bean[CONTENT][:MAX_DOCUMENT_LEN << 1] for bean in beans]
-            )
+            vectors = self.embedder.embed_documents([bean[CONTENT] for bean in beans])
         except Exception as e:
             if not is_cuda_oom(e):
                 raise
@@ -269,7 +266,7 @@ class Extractor:
 
     def extract_beans(self, chunk: list[dict]):
         kinds = [bean.get(KIND) for bean in chunk]
-        contents = [b[CONTENT][:MAX_DOCUMENT_LEN<<2] for b in chunk]
+        contents = [b[CONTENT] for b in chunk]
         pairs = self.extractor.run_batch(contents)
         # remove ideology for non-news, blog, and post
         exclude_ideology = lambda kind, cl: (kind not in (NEWS, BLOG, POST)) or (cl.category not in IDEOLOGY_ELIGIBLE_CATEGORIES)
