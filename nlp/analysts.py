@@ -37,6 +37,7 @@ _DEFAULT_SAMPLING_PARAMS = {
 MAX_THINKING_BUDGET = 2048
 PROMPT_TOKEN_MARGIN = 64
 
+
 class TextAnalystBase(ABC):
     def __init__(
         self,
@@ -60,20 +61,94 @@ class TextAnalystBase(ABC):
         self.max_thinking_budget = (
             min(MAX_THINKING_BUDGET, max_new_tokens) if enable_thinking else 0
         )
-        self.max_prompt_len = (
-            context_len
-            - max_new_tokens
+        self.sampling_params = sampling_params
+        self._initial_sampling_params = sampling_params.copy()
+        self._llm = None
+
+    @cached_property
+    def _prompt_window(self) -> int:
+        window = (
+            self.context_len
+            - self.max_new_tokens
             - self.max_thinking_budget
             - PROMPT_TOKEN_MARGIN
         )
-        if self.max_prompt_len <= 0:
+        if window <= 0:
             raise ValueError(
                 "context_len must leave room for the prompt, structured output, "
                 "thinking budget, and prompt margin"
             )
-        self.sampling_params = sampling_params
-        self._initial_sampling_params = sampling_params.copy()
-        self._llm = None
+        return window
+
+    @cached_property
+    def input_token_budget(self) -> int:
+        """Tokens available for the source document inside the prompt window.
+
+        Measured once, on first use. The chat-template shell is subtracted so
+        later messages reuse the same document limit.
+        """
+        window = self._prompt_window
+        tokenizer = self._prompt_tokenizer()
+        if tokenizer is None:
+            return window
+        shell = tokenizer.apply_chat_template(
+            self._messages(""),
+            tokenize=True,
+            add_generation_prompt=True,
+            enable_thinking=self.enable_thinking,
+        )
+        budget = window - len(shell)
+        if budget <= 0:
+            raise ValueError(
+                "prompt shell exceeds the input token budget: "
+                f"shell={len(shell)} window={window}"
+            )
+        return budget
+
+    @cached_property
+    def _reasoning_delimiters(self) -> tuple[str, str]:
+        """Open and close reasoning strings stored in the tokenizer vocabulary."""
+        tokenizer = self._prompt_tokenizer()
+        if tokenizer is None:
+            from transformers import AutoTokenizer
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name,
+                trust_remote_code=True,
+                use_fast=True,
+            )
+        vocab = tokenizer.get_vocab()
+        pairs: list[tuple[str, str]] = []
+        for token in tokenizer.get_added_vocab():
+            if "think" not in token.lower() or token.startswith(("</", "<|/")):
+                continue
+            if token.startswith("<|") and token.endswith("|>"):
+                close = "<|/" + token[2:]
+            elif token.startswith("<"):
+                close = "</" + token[1:]
+            else:
+                continue
+            if close in vocab:
+                pairs.append((token, close))
+        if len(pairs) == 1:
+            return pairs[0]
+        if not pairs:
+            raise ValueError(
+                "model tokenizer has no reasoning start/end tokens in its vocabulary"
+            )
+        rendered = tokenizer.apply_chat_template(
+            [{"role": "user", "content": ""}],
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=True,
+        )
+        for start, end in pairs:
+            if start in rendered:
+                return start, end
+        raise ValueError(
+            "model tokenizer has multiple reasoning delimiter pairs: "
+            + ", ".join(f"{start}/{end}" for start, end in pairs)
+        )
 
     @abstractmethod
     def __enter__(self):
@@ -96,40 +171,27 @@ class TextAnalystBase(ABC):
             return input_text
         return self.input_template.format(input_text=input_text)
 
-    def _messages(self, input_text: str) -> list[dict]:
-        messages = []
-        if self.instruction:
-            messages.append({"role": "system", "content": self.instruction})
-        messages.append({"role": "user", "content": self._user_text(input_text)})
-        return messages
-
-    @cached_property
-    def _document_budget(self) -> int:
+    def _truncate_document(self, msg: str) -> str:
+        if not msg:
+            return msg or ""
         tokenizer = self._prompt_tokenizer()
         if tokenizer is None:
-            raise RuntimeError("document budget requires a tokenizer")
-        shell = tokenizer.apply_chat_template(
-            self._messages(""),
-            tokenize=True,
-            add_generation_prompt=True,
-            enable_thinking=self.enable_thinking,
-        )
-        return self.max_prompt_len - len(shell)
-
-    def _fit_input_text(self, msg: str) -> str:
-        tokenizer = self._prompt_tokenizer()
-        if tokenizer is None or not msg:
-            return msg or ""
-        budget = self._document_budget
-        if budget <= 0:
-            return ""
+            return msg
+        budget = self.input_token_budget
         doc_ids = tokenizer.encode(msg, add_special_tokens=False)
         if len(doc_ids) <= budget:
             return msg
         return tokenizer.decode(doc_ids[:budget], skip_special_tokens=True)
 
+    def _messages(self, input_text: str) -> list[dict]:
+        messages = []
+        if self.instruction:
+            messages.append({"role": "system", "content": self.instruction})
+        messages.append({"role": "user", "content": self._user_text(self._truncate_document(input_text))})
+        return messages
+
     def create_prompt(self, msg: str, output_model: Type[BaseModel] | None = None):
-        return self._messages(self._fit_input_text(msg))
+        return self._messages(msg)
 
     def parse_output(self, response: str, output_model: Type[BaseModel] | None = None):
         output_model = output_model or self.output_model
@@ -260,7 +322,7 @@ class TransformerTextAnalyst(TextAnalystBase):
                 device_map=self.device,
                 trust_remote_code=True,
             )
-            self._tokenizer = LocalTokenizer(self.model_name, self.context_len, self.device, self.max_prompt_len, self.enable_thinking)
+            self._tokenizer = LocalTokenizer(self.model_name, self.context_len, self.device, self._prompt_window(), self.enable_thinking)
             self.sampling_params.update({
                 "max_new_tokens": self.max_new_tokens,
                 "do_sample": True,
@@ -383,9 +445,10 @@ class VLLMTextAnalyst(TextAnalystBase):
             )
             if self.enable_thinking:
                 self._initial_sampling_params['thinking_token_budget']=self.max_thinking_budget
+                reasoning_start_str, reasoning_end_str = self._reasoning_delimiters
                 llm_params['reasoning_config'] = ReasoningConfig(
-                    reasoning_start_str="<think>",
-                    reasoning_end_str="</think>",
+                    reasoning_start_str=reasoning_start_str,
+                    reasoning_end_str=reasoning_end_str,
                 )
             self._llm = LLM(**llm_params)
         return self

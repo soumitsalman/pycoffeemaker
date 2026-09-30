@@ -36,8 +36,8 @@ class _FakeTokenizer:
 
 class _Analyst(TextAnalystBase):
     def __init__(self, tokenizer=None, **kwargs):
-        super().__init__(**kwargs)
         self._tok = tokenizer
+        super().__init__(**kwargs)
 
     def __enter__(self):
         return self
@@ -90,7 +90,12 @@ def test_long_article_fits_prompt_budget():
         add_generation_prompt=True,
         enable_thinking=False,
     )
-    assert len(rendered) <= analyst.max_prompt_len
+    assert len(rendered) <= (
+        analyst.context_len
+        - analyst.max_new_tokens
+        - analyst.max_thinking_budget
+        - PROMPT_TOKEN_MARGIN
+    )
     assert len(prompt[1]["content"]) < len("CONTENT=\n") + 500
     assert prompt[0]["content"] == "SYS"
 
@@ -120,10 +125,43 @@ def test_digestor_enables_thinking(monkeypatch):
     assert "{description}" not in captured["input_template"]
 
 
+class _VocabTokenizer:
+    def __init__(self, added, rendered=""):
+        self._added = added
+        self._rendered = rendered
+
+    def get_vocab(self):
+        return dict(self._added)
+
+    def get_added_vocab(self):
+        return dict(self._added)
+
+    def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=True, enable_thinking=True):
+        return self._rendered
+
+
+def test_reasoning_delimiters_come_from_tokenizer_vocab():
+    standard = _analyst(
+        _VocabTokenizer({"<think>": 1, "</think>": 2, "<|im_end|>": 3}),
+        enable_thinking=True,
+        context_len=400,
+        max_new_tokens=32,
+    )
+    assert standard._reasoning_delimiters == ("<think>", "</think>")
+
+    custom = _analyst(
+        _VocabTokenizer({"<|think|>": 1, "<|/think|>": 2}),
+        enable_thinking=True,
+        context_len=400,
+        max_new_tokens=32,
+    )
+    assert custom._reasoning_delimiters == ("<|think|>", "<|/think|>")
+
+
 def test_thinking_reserve_is_zero_when_disabled():
     off = _analyst(None, enable_thinking=False, context_len=16384, max_new_tokens=2048)
     on = _analyst(None, enable_thinking=True, context_len=16384, max_new_tokens=2048)
     assert off.max_thinking_budget == 0
     assert on.max_thinking_budget == 2048
-    assert off.max_prompt_len == 16384 - 2048 - PROMPT_TOKEN_MARGIN
-    assert off.max_prompt_len > on.max_prompt_len
+    assert off.input_token_budget == 16384 - 2048 - PROMPT_TOKEN_MARGIN
+    assert off.input_token_budget > on.input_token_budget
