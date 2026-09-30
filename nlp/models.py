@@ -479,30 +479,81 @@ class ContractExtraction(_ExtractionBase):
     incorporated_documents: List[str] = Field(default_factory=list, description='List of source-supported incorporated documents.')
 
 
-class ProcurementNoticeExtraction(_ExtractionBase):
-    """Flat schema for `ProcurementNotice` content."""
-    notice_type: Optional[str] = Field(None, description='Source-supported notice type.')
-    notice_id: Optional[str] = Field(None, description='Source-supported notice id.')
-    buyer: Optional[str] = Field(None, description='Source-supported buyer.')
-    status: Optional[str] = Field(None, description='Source-supported status.')
-    performance_period: Optional[str] = Field(None, description='Source-supported performance period.')
-    contract_type: Optional[str] = Field(None, description='Source-supported contract type.')
-    submission_channel: Optional[str] = Field(None, description='Source-supported submission channel.')
-    scope: List[str] = Field(default_factory=list, description='List of source-supported scope.')
-    lots: List[str] = Field(default_factory=list, description='List of source-supported lots.')
-    deliverables: List[str] = Field(default_factory=list, description='List of source-supported deliverables.')
-    performance_location: List[str] = Field(default_factory=list, description='List of source-supported performance location.')
-    estimated_value: List[str] = Field(default_factory=list, description='List of source-supported estimated value.')
-    funding: List[str] = Field(default_factory=list, description='List of source-supported funding.')
-    eligibility: List[str] = Field(default_factory=list, description='List of source-supported eligibility.')
-    submission_requirements: List[str] = Field(default_factory=list, description='List of source-supported submission requirements.')
-    deadlines: List[str] = Field(default_factory=list, description='Source-stated deadline with required action, responsible party, trigger, timezone, and date precision when available.')
-    evaluation_criteria: List[str] = Field(default_factory=list, description='List of source-supported evaluation criteria.')
-    evaluation_weights: List[str] = Field(default_factory=list, description='List of source-supported evaluation weights.')
-    award_process: List[str] = Field(default_factory=list, description='List of source-supported award process.')
-    contact: List[str] = Field(default_factory=list, description='List of source-supported contact.')
-    amendments: List[str] = Field(default_factory=list, description='List of source-supported amendments.')
-    award_details: List[str] = Field(default_factory=list, description='List of source-supported award details.')
+class ProcurementNoticeExtraction(FlatExtraction):
+    """One RFP, RFQ, or RFI. Extract only facts the source states. Omit a field when unsupported. Do not compare dates to today, invent a timezone, or copy placeholder contacts."""
+    document_class: Optional[str] = Field(None, description="What this text is: live_notice, amendment, glossary, directory, or aggregator. Use the title solicitation when a page lists several bids. Omit if unclear.")
+    instrument: Optional[str] = Field(None, description="Labeled ask: RFP (priced proposal), RFQ (qualifications), RFI (information only), or the source's combined label such as RFQ/P. Omit if unlabeled.")
+    notice_id: Optional[str] = Field(None, description="Solicitation, RFP, RFQ, or RFI number exactly as printed. Omit portal tracking ids that are not the buyer's number.")
+    buyer: Optional[str] = Field(None, description="Agency or organization that issued this solicitation. Do not use the website that republished it.")
+    status: Optional[str] = Field(None, description="Source words only: open, closed, extended, cancelled, or awarded. Do not decide status by comparing a date to today.")
+    scope: List[str] = Field(default_factory=list, description="Work requested, in the source's words. One item per distinct service or goods line. Do not add sidebar solicitations.")
+    performance_location: List[str] = Field(default_factory=list, description="Place of performance or service area stated for this solicitation.")
+    performance_period: Optional[str] = Field(None, description="Stated contract term or performance window, with start and end when given. This is not the response deadline.")
+    estimated_value: List[str] = Field(default_factory=list, description="Stated budget, estimate, or ceiling with currency and what it covers. An estimate is not an awarded amount.")
+    response_deadline: Optional[str] = Field(None, description="Controlling submission deadline as 'actor must <action> by <date> <time> <timezone>'. Use the amended deadline when the source says it replaces an earlier one. Omit a bare date with no action.")
+    question_deadline: Optional[str] = Field(None, description="Deadline to submit questions, as 'actor must <action> by <date> <time> <timezone>'. Omit if not stated.")
+    other_deadlines: List[str] = Field(default_factory=list, description="Other labeled clocks: pre-bid, site visit, request-the-notice-by, addendum, interview, award. Each item is 'mandatory|optional: actor must <action> by <date> <time> <timezone>'.")
+    submission_channel: Optional[str] = Field(None, description="The only accepted way to respond: portal name and URL, email plus required subject, or physical address plus copy counts. Include the channel the source says is exclusive.")
+    rejected_channels: List[str] = Field(default_factory=list, description="Paths the source says are invalid, such as fax, mail, late delivery, personal email, or a response not sent through the named portal.")
+    contact_name: Optional[str] = Field(None, description="Name of the person who receives this solicitation's questions or response. Omit meeting hosts and people from other solicitations on the same page.")
+    contact_role: Optional[str] = Field(None, description="Role of contact_name, such as procurement officer or program director.")
+    contact_email: Optional[str] = Field(None, description="Email for this solicitation's submission or questions. Omit video-conference addresses and placeholders such as example.gov.")
+    contact_phone: Optional[str] = Field(None, description="Phone for contact_name. Omit conference dial-ins and placeholder numbers such as 555.")
+    contact_address: Optional[str] = Field(None, description="Mailing or delivery address for this response, including the office name when given.")
+    submission_requirements: List[str] = Field(default_factory=list, description="Required forms, copy counts, file types, subject line, and registration steps. Preserve must versus may.")
+    disqualifiers: List[str] = Field(default_factory=list, description="Conditions that make a response ineligible: mandatory meeting, set-aside, bond, registration, onshore-only, or lobbying ban. Preserve must versus may.")
+    eligibility: List[str] = Field(default_factory=list, description="Who may respond, including set-asides and required qualifications.")
+    amendments: List[str] = Field(default_factory=list, description="Stated changes to scope, channel, or deadlines. Put a superseded deadline here, not in response_deadline.")
+    related_notices: List[str] = Field(default_factory=list, description="Other solicitations on the same page, each as 'id | buyer | deadline | contact'. Do not copy them into this record's deadline or contact.")
+
+
+class SolicitationEncoderExtraction(_NLPBaseModel):
+    """GLiNER2.5 fields. Classify document_class. Copy every other value from the source."""
+
+    document_class_labels: ClassVar[dict[str, str]] = {
+        "live_notice": "A live solicitation that can be answered, not a definition, amendment, directory, or republished listing",
+        "amendment": "An addendum, revision, or deadline extension that changes an issued solicitation",
+        "glossary": "A definition, regulation, or explainer of what an RFP, RFQ, or RFI is",
+        "directory": "An index of many solicitations without one primary notice",
+        "aggregator": "A third-party page republishing a solicitation, often with similar listings",
+    }
+
+    document_class: Optional[Literal["live_notice", "amendment", "glossary", "directory", "aggregator"]] = Field(
+        None,
+        description="Closed page label. Use document_class_labels. Omit when the top label is uncertain.",
+    )
+    notice_id: List[str] = Field(
+        default_factory=list,
+        description="Solicitation, RFP, RFQ, or RFI number exactly as printed. Omit a portal tracking id that is not the buyer's number.",
+    )
+    buyer: List[str] = Field(
+        default_factory=list,
+        description="Agency or organization that issued this solicitation. Do not use the website that republished it.",
+    )
+    performance_location: List[str] = Field(
+        default_factory=list,
+        description="Place of performance or service area stated for this solicitation. Omit a mailing address unless the source says the work happens there.",
+    )
+    contact_name: List[str] = Field(
+        default_factory=list,
+        description="Name of the person who receives this solicitation's questions or response. Omit meeting hosts and people from other solicitations on the same page.",
+    )
+    contact_email: List[str] = Field(
+        default_factory=list,
+        description="Email where this solicitation's response or questions should be sent. Omit video-conference addresses and placeholders such as example.gov.",
+    )
+    rejected_channels: List[str] = Field(
+        default_factory=list,
+        description="Path the source says is invalid, such as fax, mail, late delivery, or a response outside the named portal.",
+    )
+
+    @classmethod
+    def gliner_spans(cls) -> dict[str, str]:
+        return {
+            name: field.description
+            for name, field in cls.model_fields.items()
+            if name != "document_class" and field.description
+        }
 
 
 class FinancialReportExtraction(_ExtractionBase):
