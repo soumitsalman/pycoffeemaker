@@ -19,6 +19,7 @@ __all__ = [
     "merge_tags",
     "clear_gpu_cache",
     "is_cuda_oom",
+    "TextSplitter",
 ]
 
 from .embedders import *
@@ -27,3 +28,4 @@ from .analysts import *
 from .models import *
 from .normalize import merge_tags, merge_lists, normalize_tags
 from .runtime import clear_gpu_cache, is_cuda_oom
+from .splitter import TextSplitter

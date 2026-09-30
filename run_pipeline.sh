@@ -19,13 +19,23 @@ set -a
 PG_TIMEOUT=180
 COLLECTOR_TIMEOUT=120
 
+# BATCH SIZE vs CONTEXT_LEN
+# Tesla T4: 16GB VRAM
+# embedder: ctx_len=4096, batch_size=96
+# extractor: ctx_len=3072, batch_size=15
+# A100: 80GB VRAM
+# embedder: ctx_len=4096, batch_size=256
+# extractor: ctx_len=3072, batch_size=64
+# digestor: ctx_len=16384, batch_size=384
+# consolidator: ctx_len=16384, batch_size=256
+
+TORCH_CUDA_ALLOC_CONF=expandable_segments:True
 EMBEDDER_PATH=codefuse-ai/F2LLM-v2-80M
 EMBEDDER_CONTEXT_LEN=4096
 VECTOR_LEN=320
 
 EXTRACTOR_PATH=fastino/gliner2.5-multi-v1
 EXTRACTOR_CONTEXT_LEN=3072
-# this is a word len, not a token len
 
 CLUSTER_EPS=0.464
 

@@ -2,10 +2,10 @@ from functools import lru_cache
 from typing import Type
 from pydantic import BaseModel
 from .models import Classifications, Entities
-from .runtime import TOKEN_MARGIN, clear_gpu_cache
-from itertools import chain
+from .runtime import *
 from collections import defaultdict
 from .formatters import get_extraction_labels, get_classification_labels
+from .splitter import TextSplitter
 
 try: 
     import torch
@@ -16,44 +16,38 @@ except: print("[WARNING] PyTorch Not Available. `EntityExtractor` will not work.
 class EntityExtractor:
     model_path: str
     confidence = 0.5
-    _splitter = None
 
     def __init__(self, model_path: str, context_len: int, threshold=0.5, batch_size: int = 16) -> None:
         self.model_name = model_path
         self.context_len = context_len
         self.threshold = threshold
         self.batch_size = batch_size
-        self._llm = None
-        self._splitter = None
+        self._llm = None        
     
     def __enter__(self):
-        if not self._llm:            
-            from llama_index.core.text_splitter import TokenTextSplitter
+        if not self._llm:
+            from transformers import AutoTokenizer
 
             cuda_config = dict(map_location="cpu")
-            if torch.cuda.is_available():
+            if is_cuda_usable():
                 cuda_config = dict(
                     map_location="cuda",
-                    compile=False,
+                    # compile=True,
                     quantize=True,
                     use_flashdeberta=True,
                 )
-
             self._llm = AutoExtractor.from_pretrained(self.model_name, **cuda_config)
-            self._splitter = TokenTextSplitter(
-                chunk_size=self.context_len - TOKEN_MARGIN,
-                chunk_overlap=TOKEN_MARGIN<<1,
-                include_metadata=False,
-                include_prev_next_rel=False,
+            self.splitter = TextSplitter(
+                self.context_len,
+                tokenizer=AutoTokenizer.from_pretrained(self.model_name, use_fast=True),
+                margin=TOKEN_MARGIN,
             )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._llm:
             del self._llm
-            self._llm = None    
-            del self._splitter
-            self._splitter = None
+            self._llm = None
             self._joint_schema.cache_clear()
         clear_gpu_cache()
         return False    
@@ -76,22 +70,6 @@ class EntityExtractor:
         if values and isinstance(values, list) and isinstance(values[0], dict):
             return [v.get("text", v) for v in values]
         return values
-
-    def _split(self, text: str):
-        chunks = self._splitter.split_text(text)
-        if len(chunks) > 1 and len(chunks[-1]) < (TOKEN_MARGIN<<2): chunks = chunks[:-1]
-        return chunks
-
-    def _create_chunks(self, texts: list[str]) -> tuple[list[str], list[int], list[int]]:
-        texts = texts if isinstance(texts, list) else [texts]
-        
-        chunks = list(map(self._split, texts))
-        counts = list(map(len, chunks))
-
-        start_idx = [0]*len(chunks)
-        for i in range(1,len(counts)):
-            start_idx[i] = start_idx[i-1]+counts[i-1]
-        return list(chain(*chunks)), start_idx, counts
 
     def _merge_entities(self, chunk_results: list[dict]) -> dict:
         res = defaultdict(list)
@@ -155,6 +133,7 @@ class EntityExtractor:
     ) -> list[tuple[Entities, Classifications]]:
         if not input_messages:
             return []
+        input_messages = self.splitter.truncate(input_messages)
         results = self._llm.batch_extract(
             input_messages,
             self._joint_schema(entity_type, class_type),

@@ -15,6 +15,7 @@ from utils import now_str
 from .models import *
 from .runtime import *
 from .normalize import split_parts
+from .splitter import TextSplitter
 from icecream import ic
 
 log = logging.getLogger("digestor")
@@ -68,6 +69,7 @@ class TextAnalystBase(ABC):
         self.sampling_params = sampling_params
         self._initial_sampling_params = sampling_params.copy()
         self._llm = None
+        self.splitter = None
 
     @cached_property
     def _prompt_window(self) -> int:
@@ -184,14 +186,12 @@ class TextAnalystBase(ABC):
     def _truncate_document(self, msg: str) -> str:
         if not msg:
             return msg or ""
-        tokenizer = self._prompt_tokenizer()
-        if tokenizer is None:
-            return msg
-        budget = self.input_token_budget
-        doc_ids = tokenizer.encode(msg, add_special_tokens=False)
-        if len(doc_ids) <= budget:
-            return msg
-        return tokenizer.decode(doc_ids[:budget], skip_special_tokens=True)
+        if self.splitter is None:
+            tokenizer = self._prompt_tokenizer()
+            if tokenizer is None:
+                return msg
+            self.splitter = TextSplitter(self.input_token_budget, tokenizer)
+        return self.splitter.truncate(msg)
 
     def _messages(self, input_text: str) -> list[dict]:
         messages = []

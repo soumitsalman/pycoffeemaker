@@ -23,6 +23,10 @@ _ALLOWED_SPECIAL_TOKENS = {
     "<|human|>",
 }
 
+try: import torch
+except: print("[WARNING] PyTorch Unavailable.")
+
+is_cuda_usable = lambda: torch.cuda.is_available()
 
 def run_batch(func: Callable, items, num_threads: int = os.cpu_count()):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
@@ -32,10 +36,9 @@ def run_batch(func: Callable, items, num_threads: int = os.cpu_count()):
 def clear_gpu_cache():
     """Clear GPU memory by running garbage collection and clearing CUDA cache if available."""
     import gc
-    import torch
 
     gc.collect()
-    if torch.cuda.is_available():
+    if is_cuda_usable():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
 

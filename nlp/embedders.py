@@ -3,9 +3,9 @@ import os
 import numpy as np
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-from itertools import chain
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_random
 from .runtime import *
+from .splitter import TextSplitter
 from icecream import ic
 
 try: import torch
@@ -13,56 +13,13 @@ except: print("[WARNING] PyTorch Not Available. Only `LlamaCppEmbeddings` and `R
 
 VECTOR = list[float]
 
-is_cuda_usable = lambda: torch.cuda.is_available()
-
 class EmbedderBase(ABC):
-    splitter = None
     context_len: int = None
-    tokenizer_fn = None
-    
-    def __init__(self, context_len: int, tokenizer_fn=None):
+
+    def __init__(self, context_len: int, tokenizer=None):
         self.context_len = context_len
-        self.tokenizer_fn = tokenizer_fn
+        self.splitter = TextSplitter(context_len, tokenizer)
 
-    def _truncate(self, text: str) -> str:
-        """Keep the leading ``self.context_len`` tokens. Unchanged when no tokenizer is set."""
-        if not text or not self.context_len:
-            return text
-        tokenizer = getattr(self.tokenizer_fn, "__self__", self.tokenizer_fn)
-        encode = getattr(tokenizer, "encode", None)
-        decode = getattr(tokenizer, "decode", None)
-        if encode is None or decode is None:
-            return text
-        ids = encode(text, add_special_tokens=False)
-        if len(ids) <= self.context_len:
-            return text
-        return decode(ids[:self.context_len], skip_special_tokens=True)
-
-    def _split(self, text: str):
-        # NOTE: moving the import inside the function so that there is no need to install llama-index if the embedder is used only for small texts
-        from llama_index.core.text_splitter import TokenTextSplitter
-        if not self.splitter:
-            self.splitter = TokenTextSplitter(
-                chunk_size=self.context_len,
-                chunk_overlap=TOKEN_MARGIN<<1,
-                tokenizer=self.tokenizer_fn,
-                include_metadata=False,
-                include_prev_next_rel=False,
-            )
-        chunks = self.splitter.split_text(text)
-        if len(chunks) > 1 and len(chunks[-1]) < (TOKEN_MARGIN<<2): chunks = chunks[:-1]
-        return chunks
-
-    def _create_chunks(self, texts: list[str]) -> tuple[list[str], list[int], list[int]]:
-        texts = texts if isinstance(texts, list) else [texts]
-        
-        chunks = list(map(self._split, texts)) # NOTE: batch running will mess this up
-        counts = list(map(len, chunks))
-        start_idx = [0]*len(chunks)
-        for i in range(1,len(counts)):
-            start_idx[i] = start_idx[i-1]+counts[i-1]
-        return list(chain(*chunks)), start_idx, counts
-    
     def _merge_chunks(self, embeddings, start_idx: list[int], counts: list[int]):
         merged_embeddings = lambda start, count: np.mean(embeddings[start:start+count], axis=0).tolist()
         return list(map(merged_embeddings, start_idx, counts))
@@ -76,7 +33,7 @@ class EmbedderBase(ABC):
         For each document it returns a mean of the embeddings of the chunks."""
         if not texts: return
         
-        chunks, start_idx, counts = self._create_chunks(texts)
+        chunks, start_idx, counts = self.splitter.split(texts)
         embeddings = self._embed(chunks)
         embeddings = self._merge_chunks(embeddings, start_idx, counts)
         return embeddings[0] if isinstance(texts, str) else embeddings
@@ -160,7 +117,7 @@ class TransformerEmbeddings(EmbedderBase):
     def __init__(self, model_path: str, context_len: int, batch_size: int = None):
         from transformers import AutoTokenizer
 
-        super().__init__(context_len, tokenizer_fn=AutoTokenizer.from_pretrained(model_path, use_fast=True).encode)
+        super().__init__(context_len, tokenizer=AutoTokenizer.from_pretrained(model_path, use_fast=True))
         self.model_path = model_path
         self.batch_size = batch_size
         self.device = "cuda" if is_cuda_usable() else "cpu"
@@ -185,11 +142,10 @@ class TransformerEmbeddings(EmbedderBase):
     def __enter__(self):
         if not self._model:         
             from sentence_transformers import SentenceTransformer
-            
             self._model = SentenceTransformer(
                 self.model_path,
                 device=self.device,
-                model_kwargs={"dtype": "float16",  "attn_implementation": "sdpa"} if on_cuda else None,
+                model_kwargs={"dtype": "float16",  "attn_implementation": "sdpa"} if is_cuda_usable() else None,
             )
             self._model.max_seq_length = self.context_len
             if is_cuda_usable(): self._model.compile(dynamic=True)
@@ -210,7 +166,7 @@ class OVEmbeddings(EmbedderBase):
         from transformers import AutoTokenizer
 
         _tokenizer = AutoTokenizer.from_pretrained(model_path, max_length=context_len, use_fast=True)
-        super().__init__(context_len, tokenizer_fn=_tokenizer.encode)
+        super().__init__(context_len, tokenizer=_tokenizer)
         self.model_path = model_path
         self.context_len = context_len
 
@@ -238,7 +194,7 @@ class ORTEmbeddings(EmbedderBase):
     def __init__(self, model_path: str, context_len: int):
         from transformers import AutoTokenizer
 
-        super().__init__(context_len, tokenizer_fn=AutoTokenizer.from_pretrained(model_path, truncation=False, use_fast=True).encode)
+        super().__init__(context_len, tokenizer=AutoTokenizer.from_pretrained(model_path, truncation=False, use_fast=True))
         self.model_path = model_path
         self.tokenizer_kwargs = {
             "truncation": True,
@@ -275,7 +231,7 @@ class VLLMEmbedder(EmbedderBase):
         from transformers import AutoTokenizer
 
         _tokenizer = AutoTokenizer.from_pretrained(model_path, max_length=context_len, use_fast=True)
-        super().__init__(context_len, tokenizer_fn=_tokenizer.encode)
+        super().__init__(context_len, tokenizer=_tokenizer)
         self.model_path = model_path
         self._llm = None
 
@@ -307,9 +263,9 @@ class InfinityEmbeddings(EmbedderBase):
 
         super().__init__(
             context_len,
-            tokenizer_fn=AutoTokenizer.from_pretrained(
+            tokenizer=AutoTokenizer.from_pretrained(
                 model_path, truncation=False, use_fast=True
-            ).encode,
+            ),
         )
         self.model_path = model_path
         self.engine = "torch"
