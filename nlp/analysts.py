@@ -58,9 +58,8 @@ class TextAnalystBase(ABC):
         self.response_mode = "json" if output_model else None
         self.enable_thinking = enable_thinking
         self.max_new_tokens = max_new_tokens
-        self.max_thinking_budget = (
-            min(MAX_THINKING_BUDGET, max_new_tokens) if enable_thinking else 0
-        )
+        # this is default spacing
+        self.max_thinking_budget = min(MAX_THINKING_BUDGET, max_new_tokens)
         self.sampling_params = sampling_params
         self._initial_sampling_params = sampling_params.copy()
         self._llm = None
