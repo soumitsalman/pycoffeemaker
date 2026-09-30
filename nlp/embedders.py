@@ -15,17 +15,28 @@ VECTOR = list[float]
 
 is_cuda_usable = lambda: torch.cuda.is_available()
 
-
 class EmbedderBase(ABC):
     splitter = None
     context_len: int = None
     tokenizer_fn = None
-    # _SPECIAL_TOKEN_MARGIN = 8  # BOS/EOS/CLS/SEP overhead; chunk_size = context_len - this
-    # _OVERLAP_MARGIN = 20  # to ensure that we don't lose important context when merging chunk embeddings
-
+    
     def __init__(self, context_len: int, tokenizer_fn=None):
         self.context_len = context_len
         self.tokenizer_fn = tokenizer_fn
+
+    def _truncate(self, text: str) -> str:
+        """Keep the leading ``self.context_len`` tokens. Unchanged when no tokenizer is set."""
+        if not text or not self.context_len:
+            return text
+        tokenizer = getattr(self.tokenizer_fn, "__self__", self.tokenizer_fn)
+        encode = getattr(tokenizer, "encode", None)
+        decode = getattr(tokenizer, "decode", None)
+        if encode is None or decode is None:
+            return text
+        ids = encode(text, add_special_tokens=False)
+        if len(ids) <= self.context_len:
+            return text
+        return decode(ids[:self.context_len], skip_special_tokens=True)
 
     def _split(self, text: str):
         # NOTE: moving the import inside the function so that there is no need to install llama-index if the embedder is used only for small texts
@@ -144,15 +155,13 @@ class LlamaCppEmbeddings(EmbedderBase):
 class TransformerEmbeddings(EmbedderBase):
     _model = None
     model_path = None
-    tokenizer_kwargs = None
     batch_size: int = None
 
     def __init__(self, model_path: str, context_len: int, batch_size: int = None):
         from transformers import AutoTokenizer
 
-        super().__init__(context_len, tokenizer_fn=AutoTokenizer.from_pretrained(model_path, truncation=True, max_length=context_len, use_fast=True).encode)
+        super().__init__(context_len, tokenizer_fn=AutoTokenizer.from_pretrained(model_path, use_fast=True).encode)
         self.model_path = model_path
-        self.tokenizer_kwargs = {"model_max_length": context_len}
         self.batch_size = batch_size
         self.device = "cuda" if is_cuda_usable() else "cpu"
         self._model = None
@@ -165,22 +174,25 @@ class TransformerEmbeddings(EmbedderBase):
     def _embed(self, texts: str|list[str]):
         if not self._model: self.__enter__()
         with torch.inference_mode(), torch.no_grad():
-            embs = self._model.encode(texts, batch_size=self.batch_size or len(texts), convert_to_numpy=True)
+            embs = self._model.encode(
+                texts,
+                batch_size=self.batch_size or len(texts),
+                convert_to_numpy=True,
+                processing_kwargs={"text": {"max_length": self.context_len, "truncation": True, "padding": True}},
+            )
         return embs    
     
     def __enter__(self):
         if not self._model:         
             from sentence_transformers import SentenceTransformer
-            on_cuda = self.device == "cuda"
+            
             self._model = SentenceTransformer(
                 self.model_path,
-                processor_kwargs=self.tokenizer_kwargs,
                 device=self.device,
                 model_kwargs={"dtype": "float16",  "attn_implementation": "sdpa"} if on_cuda else None,
             )
             self._model.max_seq_length = self.context_len
-            if on_cuda:
-                self._model.compile(dynamic=True)
+            if is_cuda_usable(): self._model.compile(dynamic=True)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
