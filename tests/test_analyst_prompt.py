@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from nlp.analysts import PROMPT_TOKEN_MARGIN, TextAnalystBase
+from nlp.analysts import PROMPT_TOKEN_MARGIN, TextAnalystBase, _NO_THINK
 
 
 class _Schema(BaseModel):
@@ -23,7 +23,9 @@ class _FakeTokenizer:
         messages,
         tokenize=True,
         add_generation_prompt=True,
+        continue_final_message=False,
         enable_thinking=False,
+        **kwargs,
     ):
         ids = []
         for message in messages:
@@ -73,6 +75,8 @@ def test_short_article_is_kept_with_system_prompt():
     assert prompt[0] == {"role": "system", "content": "SYS"}
     assert "hello" in prompt[1]["content"]
     assert prompt[1]["content"].endswith("hello")
+    assert prompt[2] == {"role": "assistant", "content": _NO_THINK}
+    assert "<|im_start|>" not in prompt[2]["content"]
 
 
 def test_long_article_fits_prompt_budget():
@@ -87,8 +91,7 @@ def test_long_article_fits_prompt_budget():
     rendered = tokenizer.apply_chat_template(
         prompt,
         tokenize=True,
-        add_generation_prompt=True,
-        enable_thinking=False,
+        **analyst._generation_kwargs(),
     )
     assert len(rendered) <= (
         analyst.context_len
@@ -120,7 +123,7 @@ def test_digestor_enables_thinking(monkeypatch):
     from workers.analyzerorch import Digestor
 
     Digestor(cache=None, model_path="fake", context_len=16384, batch_size=1)
-    assert captured["enable_thinking"] is True
+    assert captured["enable_thinking"] is False
     assert captured["max_new_tokens"] == 2048
     assert "{description}" not in captured["input_template"]
 
@@ -158,10 +161,21 @@ def test_reasoning_delimiters_come_from_tokenizer_vocab():
     assert custom._reasoning_delimiters == ("<|think|>", "<|/think|>")
 
 
-def test_thinking_reserve_is_zero_when_disabled():
+def test_thinking_on_has_no_prefill():
+    analyst = _analyst(
+        None,
+        enable_thinking=True,
+        context_len=8192,
+        max_new_tokens=32,
+    )
+    prompt = analyst.create_prompt("hello")
+    assert [message["role"] for message in prompt] == ["system", "user"]
+
+
+def test_thinking_reserve_stays_in_the_prompt_window():
     off = _analyst(None, enable_thinking=False, context_len=16384, max_new_tokens=2048)
     on = _analyst(None, enable_thinking=True, context_len=16384, max_new_tokens=2048)
-    assert off.max_thinking_budget == 0
+    assert off.max_thinking_budget == 2048
     assert on.max_thinking_budget == 2048
-    assert off.input_token_budget == 16384 - 2048 - PROMPT_TOKEN_MARGIN
-    assert off.input_token_budget > on.input_token_budget
+    assert off.input_token_budget == 16384 - 2048 - 2048 - PROMPT_TOKEN_MARGIN
+    assert off.input_token_budget == on.input_token_budget

@@ -36,6 +36,11 @@ _DEFAULT_SAMPLING_PARAMS = {
 # the final JSON response, plus room for chat-template and tokenizer overhead.
 MAX_THINKING_BUDGET = 2048
 PROMPT_TOKEN_MARGIN = 64
+_NO_THINK = (
+    "<think>\n"
+    "No unnecessary reasoning. Close thinking and answer immediately.\n"
+    "</think>\n"
+)
 
 
 class TextAnalystBase(ABC):
@@ -93,8 +98,7 @@ class TextAnalystBase(ABC):
         shell = tokenizer.apply_chat_template(
             self._messages(""),
             tokenize=True,
-            add_generation_prompt=True,
-            enable_thinking=self.enable_thinking,
+            **self._generation_kwargs(),
         )
         budget = window - len(shell)
         if budget <= 0:
@@ -162,6 +166,13 @@ class TextAnalystBase(ABC):
             clear_gpu_cache()
         return False
 
+    def _generation_kwargs(self) -> dict:
+        return {
+            "add_generation_prompt": self.enable_thinking,
+            "continue_final_message": not self.enable_thinking,
+            "enable_thinking": self.enable_thinking,
+        }
+
     def _prompt_tokenizer(self):
         return None
 
@@ -187,6 +198,8 @@ class TextAnalystBase(ABC):
         if self.instruction:
             messages.append({"role": "system", "content": self.instruction})
         messages.append({"role": "user", "content": self._user_text(self._truncate_document(input_text))})
+        if not self.enable_thinking:
+            messages.append({"role": "assistant", "content": _NO_THINK})
         return messages
 
     def create_prompt(self, msg: str, output_model: Type[BaseModel] | None = None):
@@ -262,8 +275,9 @@ class LocalTokenizer:
             max_length=self.max_prompt_len,
             return_tensors="pt",
             return_dict=True,
-            add_generation_prompt=True,
-            enable_thinking=self.enable_thinking
+            add_generation_prompt=self.enable_thinking,
+            continue_final_message=not self.enable_thinking,
+            enable_thinking=self.enable_thinking,
         ).to(self.device)
 
     def _strip_after_thinking(self, tokens):
@@ -500,10 +514,13 @@ class VLLMTextAnalyst(TextAnalystBase):
         if not input_messages:
             return []
         output_models = self._output_models_for(input_messages, output_model)
+        generation = self._generation_kwargs()
         responses = self._llm.chat(
             [self.create_prompt(msg, model) for msg, model in zip(input_messages, output_models)],
             sampling_params=self._sampling_params_for(output_models),
-            chat_template_kwargs={"enable_thinking": self.enable_thinking},
+            add_generation_prompt=generation["add_generation_prompt"],
+            continue_final_message=generation["continue_final_message"],
+            chat_template_kwargs={"enable_thinking": generation["enable_thinking"]},
             use_tqdm=False,
         )
         return [
