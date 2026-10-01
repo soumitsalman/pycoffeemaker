@@ -35,6 +35,8 @@ _JSON_HEADERS = {
     'Accept-encoding': 'gzip, deflate',
     'Accept-Language': 'en-US,en;q=0.9',
 }
+_RSS_CONTENT_WORDS = re.compile(r"[\w']+", re.UNICODE)
+_RSS_COMMONALITY_THRESHOLD = 0.85
 
 REDDIT = "reddit"
 HACKERNEWS = "hackernews"
@@ -463,6 +465,31 @@ class APICollectorBase:
             await self.session.close()
             self.session = None
 
+
+def _clear_common_rss_bodies(items: list[dict]) -> list[dict]:
+    word_sets = [
+        set(_RSS_CONTENT_WORDS.findall((item.get(CONTENT) or "").casefold()))
+        for item in items
+    ]
+    matched = set()
+    for i, left in enumerate(word_sets):
+        if not left:
+            continue
+        for j in range(i + 1, len(items)):
+            right = word_sets[j]
+            if not right or items[i].get(URL) == items[j].get(URL):
+                continue
+            if min(len(left), len(right)) < _RSS_COMMONALITY_THRESHOLD * max(len(left), len(right)):
+                continue
+            shared = len(left & right)
+            if shared / (len(left) + len(right) - shared) >= _RSS_COMMONALITY_THRESHOLD:
+                matched.update((i, j))
+
+    for i in matched:
+        items[i].update({SUMMARY: None, CONTENT: None, SUMMARY_LENGTH: 0, CONTENT_LENGTH: 0})
+    return items
+
+
 class RSSFeedCollector(APICollectorBase):
     _STATEMENT_URLS = {
         "https://www.sec.gov/news/statements.rss",
@@ -487,7 +514,7 @@ class RSSFeedCollector(APICollectorBase):
         else:
             items = self._extract_default_rss_entries(feed, url, source_url, legacy_default, policy=policy)
 
-        return _return_collected(extract_source(source_url), items)
+        return _return_collected(extract_source(source_url), _clear_common_rss_bodies(items))
 
     @staticmethod
     def _extract_sec_statements_rss_entries(feed, feed_url: str, site_url: str, *, policy=None, default_kind: str = OFFICIAL_STATEMENT) -> list[dict]:
