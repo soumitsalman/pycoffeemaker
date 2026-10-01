@@ -230,6 +230,11 @@ class Collector:
         if not item:
             return None, None, None
 
+        for field in (URL, BASE_URL):
+            value = item.get(field)
+            if isinstance(value, str):
+                item[field] = value.replace("\x00", "")
+
         chatter = {
             CHATTER_URL: item.get(CHATTER_URL),
             URL: item.get(URL),

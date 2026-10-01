@@ -37,6 +37,16 @@ _JSONLD_TYPE_RE = re.compile(
 PARSE_CONCURRENCY = int(os.getenv("PARSE_CONCURRENCY", min(4, os.cpu_count())))  # max DOM trees in memory at once
 PDF_CONCURRENCY = int(os.getenv("PDF_CONCURRENCY", 4))  # PDF conversion is CPU/native-heavy; keep it isolated from HTML parsing
 
+_FEED_MIME_TYPES = (
+    "application/rss+xml",
+    "application/atom+xml",
+    "application/rdf+xml",
+    "application/xml",
+)
+_FEED_LINK_SELECTOR = ", ".join(
+    f"link[type='{mime_type}']" for mime_type in _FEED_MIME_TYPES
+)
+
 _METADATA_SELECTORS = {
     'site_name': "meta[property='og:site_name'], meta[property='sitename'], meta[itemprop='name']",
     'description': "meta[name='description'], meta[itemprop='description'], meta[property='og:description']",
@@ -46,7 +56,7 @@ _METADATA_SELECTORS = {
     'kind': "meta[property='og:type']",
     'author': "meta[name='author'], meta[name='dc.creator']",    
     'favicon': "link[rel='shortcut icon'], link[rel='icon']",
-    'rss_feed': "link[type='application/rss+xml']",
+    'rss_feed': _FEED_LINK_SELECTOR,
     'language': "meta[http-equiv='content-language'], meta[name='language'], html[lang]",
     'keywords': "meta[name='keywords']",
     'url': "link[rel='canonical'], meta[property='og:url'], meta[itemprop='url']"
@@ -594,7 +604,7 @@ _METADATA_SELECTORS_SCHEMA = {
         {"name": "site_name", "type": "attribute", "selector": "meta[name='og:site_name'], meta[property='og:site_name'], meta[property='sitename']", "attribute": "content"},
         # all link selectors
         {"name": "favicon", "type": "attribute", "selector": "link[rel='shortcut icon'][type='image/png'], link[rel='icon']", "attribute": "href"},
-        {"name": "rss_feed", "type": "attribute", "selector": "link[type='application/rss+xml']", "attribute": "href"},
+        {"name": "rss_feed", "type": "attribute", "selector": _FEED_LINK_SELECTOR, "attribute": "href"},
         {"name": "language", "type": "attribute", "selector": "meta[http-equiv='content-language'], meta[name='language'], html", "attribute": "lang"},
         {"name": "keywords", "type": "attribute", "selector": "meta[name='keywords']", "attribute": "content"},
     ]

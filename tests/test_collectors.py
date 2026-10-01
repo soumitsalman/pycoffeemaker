@@ -8,6 +8,7 @@ import pytest
 from icecream import ic
 
 from pybeansack.models import Bean, Chatter
+from workers.collectororch import is_bean_scrapable
 
 
 def url_to_filename(url: str) -> str:
@@ -133,14 +134,15 @@ def test_rss_feed_collector():
     from datacollectors import RSSFeedCollector
 
     rss_urls = [
-        "https://www.ghacks.net/feed/",
-        "https://thenewstack.io/feed",
-        "https://scitechdaily.com/feed/",
-        "https://www.techradar.com/feeds/articletype/news",
-        "https://www.geekwire.com/feed/",
-        "https://investorplace.com/content-feed/",
-        "https://newatlas.com/index.rss",
-        "https://www.sec.gov/enforcement-litigation/administrative-proceedings/rss",
+        "https://hothardware.com/rss/news.aspx"
+        # "https://www.ghacks.net/feed/",
+        # "https://thenewstack.io/feed",
+        # "https://scitechdaily.com/feed/",
+        # "https://www.techradar.com/feeds/articletype/news",
+        # "https://www.geekwire.com/feed/",
+        # "https://investorplace.com/content-feed/",
+        # "https://newatlas.com/index.rss",
+        # "https://www.sec.gov/enforcement-litigation/administrative-proceedings/rss",
     ]
 
     async def run():
@@ -148,7 +150,7 @@ def test_rss_feed_collector():
         async with collector:
             for url in rss_urls:
                 items = await collector.collect(url)
-                ic(items)
+                ic([(item, is_bean_scrapable(item)) for item in items])
                 ic(url, len(items) if items else 0)
                 if items:
                     assert all(item.get("url") for item in items), f"Missing URL in items from {url}"

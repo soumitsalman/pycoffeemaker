@@ -1041,6 +1041,10 @@ def cleanup_language(value: str | None, content: str | None = None) -> str | Non
 def cleanup_item(item: dict) -> dict:
     if not item: return item
 
+    for field, value in item.items():
+        if isinstance(value, str):
+            item[field] = value.replace("\x00", "")
+
     if not item.get(BASE_URL) and item.get(URL):
         item[BASE_URL] = extract_base_url(item[URL])
 
