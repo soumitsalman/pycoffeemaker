@@ -82,9 +82,13 @@ def test_feeds_yaml_maps_every_item_to_the_right_collector():
     blog = KindPolicy(mode="non_news", kind_hint="blog")
     press = KindPolicy(mode="non_news", kind_hint="press_release")
     reporting = KindPolicy(mode="reporting")
+    podcast = KindPolicy(mode="non_news", kind_hint="podcast")
+    job = KindPolicy(mode="non_news", kind_hint="job")
 
     assert parsed["rss"] == (
         [(url, unknown) for url in raw["rss"]]
+        + [(url, podcast) for url in raw["rss_podcast"]]
+        + [(url, job) for url in raw["rss_job"]]
         + [(url, blog) for url in raw["rss_blogs"]]
         + [(url, press) for url in raw["rss_press_releases"]]
         + [(url, reporting) for url in raw.get("rss_news") or []]
@@ -96,6 +100,8 @@ def test_feeds_yaml_maps_every_item_to_the_right_collector():
     jobs = object.__new__(Collector)._get_collector_funcs("factory/feeds.yaml")
     expected = (
         [("rss", url, unknown) for url in raw["rss"]]
+        + [("rss", url, podcast) for url in raw["rss_podcast"]]
+        + [("rss", url, job) for url in raw["rss_job"]]
         + [("rss", url, reporting) for url in raw.get("rss_news") or []]
         + [("rss", url, blog) for url in raw["rss_blogs"]]
         + [("rss", url, press) for url in raw["rss_press_releases"]]
@@ -528,7 +534,7 @@ def test_feed_config_uses_flat_url_lists():
     import yaml
 
     groups = yaml.safe_load(Path('factory/feeds.yaml').read_text())['sources']
-    for key in ('rss', 'rss_blogs', 'rss_press_releases', 'rss_news'):
+    for key in ('rss', 'rss_blogs', 'rss_press_releases', 'rss_news', 'rss_podcast', 'rss_job'):
         assert isinstance(groups[key], list)
         assert all(isinstance(url, str) for url in groups[key])
     assert 'https://martinfowler.com/feed.atom' in groups['rss_blogs']

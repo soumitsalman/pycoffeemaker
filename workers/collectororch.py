@@ -10,12 +10,13 @@ from datacollectors.normalize import (
     KIND_DECISION_KEY,
     KindPolicy,
     NON_NEWS_KINDS,
+    RSS_GROUP_POLICIES,
     feed_identity,
     normalize_feed_key,
     normalize_policy_host,
     validate_news_path,
 )
-from utils.kinds import BLOG, POST, PRESS_RELEASE
+from utils.kinds import POST
 from utils.fields import (
     ARTICLE_LANGUAGE,
     AUTHOR,
@@ -113,12 +114,7 @@ def validate_source_item(item: dict) -> bool:
     return bool(item.get(DOMAIN_NAME) and item.get(BASE_URL))
 
 
-_RSS_GROUP_POLICIES = {
-    "rss": KindPolicy(mode="unknown"),
-    "rss_news": KindPolicy(mode="reporting"),
-    "rss_blogs": KindPolicy(mode="non_news", kind_hint=BLOG),
-    "rss_press_releases": KindPolicy(mode="non_news", kind_hint=PRESS_RELEASE),
-}
+_RSS_GROUP_POLICIES = RSS_GROUP_POLICIES
 _POLICY_FIELDS = frozenset({"mode", "kind_hint", "hosts", "news_paths"})
 _POLICY_MODES = frozenset({"unknown", "reporting", "mixed", "non_news"})
 _RESERVED_KIND_KEYS = frozenset({KIND_CONTEXT_KEY, KIND_DECISION_KEY})

@@ -1265,7 +1265,6 @@ sources:
   - https://liquidbrain.net/rss/
   - https://listofshame.is/feed/
   - https://lithub.com/feed/
-  - https://liu.se/rss/liu-jobs-sv.rss
   - https://livesys.se/index.xml
   - https://livewirecalgary.com/feed/
   - https://livingideasjournal.com/feed/
@@ -1537,7 +1536,6 @@ sources:
   - https://paddlingmag.com/feed/
   - https://paelladoc.com/feed.xml
   - https://pagedout.institute/rss.xml
-  - https://pages.micahrl.com/ldapenforcer/index.xml
   - https://paolino.me/feed.xml
   - https://papersplease.org/wp/feed/
   - https://paragonie.com/rss/
@@ -1740,7 +1738,6 @@ sources:
   - https://sanjosespotlight.com/feed/
   - https://scansearch.com/feed/
   - https://scholars-stage.org/feed/
-  - https://scholarsarchive.byu.edu/recent.rss
   - https://scitechdaily.com/feed/
   - https://scottjeffrey.com/feed/
   - https://scottnesbitt.online/feed.xml
@@ -3400,8 +3397,6 @@ sources:
   - http://feeds.macrumors.com/MacRumors-Mac
   - http://feeds.mashable.com/Mashable
   - http://feeds.soundcloud.com/users/soundcloud:users:341034518/sounds.rss
-  - http://feeds.thememorypalace.us/thememorypalace
-  - http://feeds.wnyc.org/radiolab
   - http://feeds2.feedburner.com/AndroidPhoneFans
   - http://joythebaker.com/feed/
   - http://ohhappyday.com/feed/
@@ -3459,7 +3454,6 @@ sources:
   - https://design-milk.com/category/architecture/feed/
   - https://design-milk.com/category/interior-design/feed/
   - https://diario.mx/jrz/media/sitemaps/rss.xml
-  - https://ducttape.libsyn.com/rss
   - https://e00-expansion.uecdn.es/rss/portada.xml
   - https://fashionista.com/.rss/excerpt/
   - https://fashionista.com/.rss/excerpt/beauty
@@ -3482,7 +3476,6 @@ sources:
   - https://feeds.megaphone.fm/replyall
   - https://feeds.megaphone.fm/vergecast
   - https://feeds.simplecast.com/LpAGSLnY
-  - https://feeds.simplecast.com/dLRotFGk
   - https://feeds.simplecast.com/gvtxUiIf
   - https://feeds.simplecast.com/y1LF_sn2
   - https://feeds.soundcloud.com/users/soundcloud:users:280353173/sounds.rss
@@ -3525,7 +3518,6 @@ sources:
   - https://pa.tedcdn.com/feeds/talks.rss
   - https://petrolicious.com/feed
   - https://podcasts.files.bbci.co.uk/b00snr0w.rss
-  - https://podcasts.files.bbci.co.uk/p002w557.rss
   - https://podcasts.files.bbci.co.uk/p02gsrmh.rss
   - https://podcasts.files.bbci.co.uk/p02nrsl2.rss
   - https://podcasts.files.bbci.co.uk/p02pcb4w.rss
@@ -3539,7 +3531,6 @@ sources:
   - https://robohub.org/feed/
   - https://robertheaton.com/feed.xml
   - https://rss.art19.com/masters-of-scale
-  - https://rss.art19.com/tim-ferriss-show
   - https://rss.elconfidencial.com/espana/
   - https://rss.whooshkaa.com/rss/podcast/id/1308
   - https://saket.me/feed/
@@ -3548,7 +3539,6 @@ sources:
   - https://slack.engineering/feed
   - https://softwareengineeringdaily.com/category/podcast/feed
   - https://stackabuse.com/rss/
-  - https://startupjunkie.libsyn.com/rss
   - https://store.steampowered.com/feeds/news.xml
   - https://stuckincustoms.com/feed/
   - https://swiftrocks.com/rss.xml
@@ -3933,7 +3923,6 @@ sources:
   - https://vasanth.veeblog.com/feed/rss
   - https://alicehsu.blog/index.xml
   - https://readuncut.com/rss/
-  - https://footballgroundguide.com/feed
   - https://company.overdrive.com/feed/
   - https://wheelfront.com/feed/
   - https://praveenperera.com/rss.xml
@@ -4228,7 +4217,6 @@ sources:
   - https://axel.leroy.sh/rss
   - https://opensourcemalware.com/rss.xml
   - https://dougblack.io/rss.xml
-  - https://rss.simplecast.com/podcasts/7838/rss
   - https://ryansouthgate.com/index.xml
   - https://aworkinglibrary.com/feed/index.xml
   - https://www.npopov.com/rss.xml
@@ -5359,7 +5347,6 @@ sources:
   - https://akismet.com/feed/
   - https://brief.gizmet.dev/rss/
   - https://srijanshukla.com/rss.xml
-  - https://scholar.dominican.edu/recent.rss
   - https://vibe-replay.com/rss.xml
   - https://pieterbakker.com/feed/
   - https://humantransit.org/subscribe
@@ -5590,7 +5577,6 @@ sources:
   - https://geeksandgamers.com/feed/
   - https://www.rockefellerfoundation.org/feed/
   - https://braingem.ai/rss.xml
-  - https://zenmemes.com/?format=rss
   - https://aimemegenerator.io/feed/
   - https://agones.dev/site/index.xml
   - https://tannerlinsley.com/feed.xml
@@ -5827,7 +5813,6 @@ sources:
   - https://granta.com/home/feed/
   - https://www.taskade.com/changelog/feed.xml
   - https://airguide.info/feed/
-  - https://tinygo.org/index.xml
   - https://logoshi.com/articles/rss
   - https://devkernel.io/index.xml
   - https://blueng.dev/index.xml
@@ -6331,7 +6316,6 @@ sources:
   - https://www.torched.la/latest/rss/
   - https://itsalearningcurve.education/feed/
   - https://doujiva.com/rss.xml
-  - https://theamphour.com/feed/podcast/
   - https://chinamotorworld.com/feed/
   - https://www.norths.de/feed/
   - https://d34dl0ck.me/rss.xml
@@ -8264,7 +8248,6 @@ sources:
   - https://marcia.writeas.com/feed/
   - https://financefeeds.com/feed/
   - https://parksb.github.io/feed.xml
-  - https://books.uu.se/uup/gateway/plugin/WebFeedGatewayPlugin/rss2
   - https://www.plakar.io/index.xml
   - https://rss.beehiiv.com/feeds/MTJunJRFxo.xml
   - https://jxmo.io/feed.xml
@@ -9004,7 +8987,6 @@ sources:
   - https://antar.me/feed.xml
   - https://saltandbaker.com/feed/
   - https://jiaqi.dev/index.xml
-  - https://adventuresindevops.com/episodes/rss.xml
   - https://behaviouralinvestment.com/feed/
   - https://www.theculturist.io/feed
   - https://tetramem.com/feed/
@@ -9351,7 +9333,6 @@ sources:
   - https://mastersofscale.com/feed/
   - https://boxofsmallthings.com/feed/
   - https://davefx.com/es/feed/
-  - https://secret-archive.org/feed/
   - https://foursquare.com/feed/
   - https://cdainstitute.ca/feed/
   - https://www.powershelltips.com/feed/
@@ -10146,6 +10127,23 @@ sources:
   - https://www.andrewzigler.com/rss.xml
   - https://www.oig.dot.gov/taxonomy/term/9/feed
   - https://www.cisecurity.org/feed/alert
+  rss_podcast:
+  - http://feeds.thememorypalace.us/thememorypalace
+  - http://feeds.wnyc.org/radiolab
+  - https://adventuresindevops.com/episodes/rss.xml
+  - https://cynicaldeveloper.com/feed/podcast
+  - https://ducttape.libsyn.com/rss
+  - https://feeds.npr.org/510308/podcast.xml
+  - https://feeds.npr.org/510313/podcast.xml
+  - https://feeds.npr.org/510333/podcast.xml
+  - https://feeds.simplecast.com/dLRotFGk
+  - https://podcasts.files.bbci.co.uk/p002w557.rss
+  - https://rss.art19.com/tim-ferriss-show
+  - https://rss.simplecast.com/podcasts/7838/rss
+  - https://startupjunkie.libsyn.com/rss
+  - https://theamphour.com/feed/podcast/
+  rss_job:
+  - https://liu.se/rss/liu-jobs-sv.rss
   rss_blogs:
   - http://addyosmani.com/rss.xml
   - http://bastian.rieck.me/blog/index.xml
@@ -11295,7 +11293,6 @@ sources:
   - https://blog.kotlin-academy.com/feed
   - https://blog.mint.com/feed/
   - https://cnz.to/feed/
-  - https://cynicaldeveloper.com/feed/podcast
   - https://daringfireball.net/feeds/main
   - https://data.xda-developers.com/portal-feed
   - https://developer.apple.com/news/rss/news.rss
@@ -13595,9 +13592,6 @@ sources:
   - https://feeds.breakingnews.ie/bntopstories
   - https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada
   - https://feeds.npr.org/510307/podcast.xml
-  - https://feeds.npr.org/510308/podcast.xml
-  - https://feeds.npr.org/510313/podcast.xml
-  - https://feeds.npr.org/510333/podcast.xml
   - https://finance.yahoo.com/news/rssindex
   - https://hd.stheadline.com/rss/news/daily/
   - https://nationalpost.com/feed/

@@ -506,7 +506,11 @@ class RSSFeedCollector(APICollectorBase):
         if not feed:
             return None
         source_url = _get_site_url(feed.feed.get('link'), url, feed.entries[0].get('link'))
-        legacy_default = default_kind if policy is None else None
+        legacy_default = default_kind if policy is None else (
+            policy.kind_hint
+            if policy.kind_hint in {PODCAST, JOB} and not policy.hosts
+            else None
+        )
         if url in self._STATEMENT_URLS:
             items = self._extract_sec_statements_rss_entries(
                 feed, url, source_url, policy=policy, default_kind=OFFICIAL_STATEMENT if policy is None else legacy_default

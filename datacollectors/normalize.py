@@ -297,6 +297,16 @@ class KindPolicy:
     news_paths: tuple[str, ...] = ()
 
 
+RSS_GROUP_POLICIES = {
+    "rss": KindPolicy(mode="unknown"),
+    "rss_news": KindPolicy(mode="reporting"),
+    "rss_blogs": KindPolicy(mode="non_news", kind_hint=BLOG),
+    "rss_press_releases": KindPolicy(mode="non_news", kind_hint=PRESS_RELEASE),
+    "rss_podcast": KindPolicy(mode="non_news", kind_hint=PODCAST),
+    "rss_job": KindPolicy(mode="non_news", kind_hint=JOB),
+}
+
+
 @dataclass(frozen=True)
 class KindContext:
     origin: str = "unknown"
@@ -625,9 +635,21 @@ def guess_content_type(bean, feed_url=None, default_kind=None, *, context=None, 
     if not bean:
         return None
     ctx = _normalize_context(context, feed_url)
+    rss_default = None
+    if ctx.origin == "rss":
+        policy = ctx.policy
+        if (
+            policy.mode == "non_news"
+            and policy.kind_hint in {PODCAST, JOB}
+            and (not policy.hosts or _policy_host_eligible(bean, ctx))
+        ):
+            rss_default = KindDecision(policy.kind_hint, "rss_category_default", ("policy",))
+        elif default_kind in {PODCAST, JOB}:
+            rss_default = KindDecision(default_kind, "rss_category_default", ("default_kind",))
     decision = (
         _native_item_decision(bean, ctx)
         or _primary_document_decision(bean, ctx)
+        or rss_default
         or _explicit_format_decision(bean, ctx)
         or _source_policy_decision(bean, ctx, default_kind)
     )

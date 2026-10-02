@@ -496,7 +496,11 @@ def test_feeds_yaml_url_multiset_preserved():
     raw = yaml.safe_load(Path("factory/feeds.yaml").read_text())["sources"]
     parsed = parse_sources("factory/feeds.yaml")
     scheduled = [url for url, _policy in parsed["rss"]]
-    expected = (raw["rss"] or []) + (raw.get("rss_news") or []) + raw["rss_blogs"] + raw["rss_press_releases"]
+    expected = (
+        (raw["rss"] or []) + (raw.get("rss_news") or [])
+        + raw["rss_blogs"] + raw["rss_press_releases"]
+        + raw["rss_podcast"] + raw["rss_job"]
+    )
     assert Counter(scheduled) == Counter(expected)
     assert {policy.mode for _, policy in parsed["rss"]} <= {"unknown", "reporting", "mixed", "non_news"}
 
