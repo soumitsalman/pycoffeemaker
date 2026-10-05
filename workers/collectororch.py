@@ -1,6 +1,7 @@
 import asyncio
 import os
 import random
+import re
 import uuid
 import yaml
 from datacollectors import RSSFeedCollector, GovInfoRSSCollector, RedditCollector, HackerNewsCollector, SECFilingCollector, AsyncWebScraper
@@ -12,6 +13,7 @@ from datacollectors.normalize import (
     NON_NEWS_KINDS,
     RSS_GROUP_POLICIES,
     feed_identity,
+    is_image_heavy,
     normalize_feed_key,
     normalize_policy_host,
     validate_news_path,
@@ -53,7 +55,41 @@ from icecream import ic
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count()))
 WORDS_THRESHOLD_FOR_STORING = int(os.getenv("WORDS_THRESHOLD_FOR_STORING", 200))  # min words needed to not download the body
 
-IGNORE_WORD_GAMES = ['hurdle hints', 'nyt strands hints', 'wordle today', 'crossword today', 'crossword hints', 'nyt connections hints', 'spelling bee hints', 'wordle answers']
+_FILLER_TITLE = re.compile(
+    r"(?i)"
+    r"\b(?:wordles?|quordle|nerdle|worldle|heardle|squardle|sudoku|cryptoquote|horoscopes?)\b"
+    r"|"
+    r"\b(?:crosswords?|mini\s+crossword|connections|strands|hurdle|jumble|spelling\s+bee|lottery)\b"
+    r".{0,40}?"
+    r"\b(?:today(?:'s)?|daily|weekly|tonight|this\s+week|hints?|answers?|solutions?|clues?|numbers|results"
+    r"|monday|tuesday|wednesday|thursday|friday|saturday|sunday|[#]\d{2,5})\b"
+    r"|"
+    r"\b(?:today(?:'s)?|daily|weekly|tonight|this\s+week"
+    r"|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
+    r".{0,40}?"
+    r"\b(?:crosswords?|mini\s+crossword|connections|strands|hurdle|jumble|spelling\s+bee|lottery"
+    r"|tarot|zodiac|astrology|horoscopes?)\b"
+    r"|"
+    r"\b(?:tarot|zodiac|astrology)\b"
+    r".{0,48}?"
+    r"\b(?:today(?:'s)?|daily|weekly|tonight|this\s+week|readings?|spreads?"
+    r"|aries|taurus|gemini|cancer|leo|virgo|libra|scorpio|sagittarius|capricorn|aquarius|pisces"
+    r"|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
+    r"|"
+    r"\b(?:aries|taurus|gemini|cancer|leo|virgo|libra|scorpio|sagittarius|capricorn|aquarius|pisces)\b"
+    r".{0,40}?"
+    r"\b(?:horoscopes?|tarot|zodiac|astrology)\b"
+)
+_FILLER_PATH = re.compile(
+    r"(?i)/(?:horoscopes?|tarot|zodiac|astrology|crosswords?|wordle|sudoku)(?:/|$)"
+)
+
+def is_denied_filler(bean: dict) -> bool:
+    return bool(
+        _FILLER_TITLE.search(bean.get(TITLE) or "")
+        or _FILLER_PATH.search(bean.get(URL) or "")
+    )
+
 BEAN_EXCLUDED_FIELDS = {
     ARTICLE_LANGUAGE,
     CHATTER_URL,
@@ -72,14 +108,15 @@ SKIP_KINDS = frozenset({POST})
 is_bean_storable = lambda bean: (
     bean
     and bean.get(KIND) not in SKIP_KINDS
+    and not is_image_heavy(bean.get(CONTENT))
     and bean.get("content_length", 0) >= WORDS_THRESHOLD_FOR_STORING
-    and not any(tag in (bean.get(TITLE) or "").lower() for tag in IGNORE_WORD_GAMES)    
+    and not is_denied_filler(bean)
 )
 is_bean_scrapable = lambda bean: (
     bean
     and bean.get(KIND) not in SKIP_KINDS
     and bean.get('content_length', 0) < WORDS_THRESHOLD_FOR_STORING
-    and not any(tag in (bean.get(TITLE) or "").lower() for tag in IGNORE_WORD_GAMES)
+    and not is_denied_filler(bean)
 )
 is_publisher_storable = lambda publisher: publisher and any(field in publisher for field in [SITE_NAME, FAVICON, DESCRIPTION])
 is_publisher_scrapable = lambda publisher: publisher and not any(field in publisher for field in [SITE_NAME, FAVICON, DESCRIPTION])

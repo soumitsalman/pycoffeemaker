@@ -950,6 +950,21 @@ extract_source = lambda url: (extract_domain(url) or extract_base_url(url)).stri
 count_words = lambda text: min(len(text.split()) if text else 0, (1 << 15) - 1)
 cleanup_text = lambda text: text.strip() if text and text.strip() else None
 
+_MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)|<img\b", re.IGNORECASE)
+ALBUM_MIN_IMAGES = 7
+ALBUM_MAX_WORDS_PER_IMAGE = 20
+
+
+def is_image_heavy(content: str | None) -> bool:
+    """True when the body is a captioned image series rather than prose."""
+    if not content:
+        return False
+    images = len(_MD_IMAGE_RE.findall(content))
+    if images < ALBUM_MIN_IMAGES:
+        return False
+    prose_words = count_words(_MD_IMAGE_RE.sub(" ", content))
+    return prose_words / images < ALBUM_MAX_WORDS_PER_IMAGE
+
 
 def cleanup_url(url: str) -> str | None:
     if not url or not str(url).strip():

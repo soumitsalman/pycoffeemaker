@@ -1,7 +1,7 @@
 import pytest
 
 from datacollectors.apicollectors import _build_hackernews_item, _build_reddit_json_item
-from datacollectors.normalize import cleanup_item, cleanup_language, cleanup_title, guess_content_type, html_to_markdown
+from datacollectors.normalize import cleanup_item, cleanup_language, cleanup_title, guess_content_type, html_to_markdown, is_image_heavy
 from datacollectors.scrapers import AsyncWebScraper, _extract_jsonld_content
 from utils.dates import now
 from utils.fields import ARTICLE_LANGUAGE, CONTENT, LANGUAGE, SUMMARY, TITLE
@@ -339,3 +339,59 @@ def test_release_evidence_is_not_a_prose_substring():
 ])
 def test_rss_precedence(bean, feed, expected):
     assert guess_content_type(bean, feed_url=feed, default_kind='blog') == expected
+
+
+def _album(n, caption="short caption here"):
+    return "\n".join(f"![{caption}](https://cdn.example.com/{i}.jpg)" for i in range(n))
+
+
+def test_is_image_heavy_album():
+    assert is_image_heavy(_album(8) + "\na few words")
+    assert not is_image_heavy(_album(3) + "\n" + " ".join(["word"] * 250))
+    essay = " ".join(["word"] * 400) + "\n" + _album(10)
+    assert not is_image_heavy(essay)
+    assert not is_image_heavy(None)
+    assert not is_image_heavy("")
+
+
+@pytest.mark.parametrize("title,url,denied", [
+    ("Hurdle hints", "", True),
+    ("NYT Strands hints", "", True),
+    ("Wordle today", "", True),
+    ("Crossword today", "", True),
+    ("Crossword hints", "", True),
+    ("NYT Connections hints", "", True),
+    ("Spelling bee hints", "", True),
+    ("Wordle answers", "", True),
+    ("Daily horoscope for Aries — Oct 5", "", True),
+    ("Weekly tarot", "", True),
+    ("Tuesday zodiac", "", True),
+    ("Aries", "https://example.com/horoscopes/aries", True),
+    ("Weekly jobs report", "", False),
+    ("Zodiac killer sentenced", "", False),
+    ("A real story", "", False),
+])
+def test_is_denied_filler(title, url, denied):
+    from workers.collectororch import is_denied_filler
+
+    assert is_denied_filler({"title": title, "url": url}) is denied
+
+
+def test_is_bean_storable_rejects_image_album():
+    from workers.collectororch import is_bean_storable
+
+    album = {
+        "kind": "news",
+        "title": "Photo set",
+        "content_length": 250,
+        "content": _album(8) + "\na few words",
+    }
+    assert not is_bean_storable(album)
+
+    article = {
+        "kind": "news",
+        "title": "A real story",
+        "content_length": 250,
+        "content": " ".join(["word"] * 250) + "\n" + _album(3),
+    }
+    assert is_bean_storable(article)
