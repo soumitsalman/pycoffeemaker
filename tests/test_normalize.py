@@ -366,15 +366,86 @@ def test_is_image_heavy_album():
     ("Daily horoscope for Aries — Oct 5", "", True),
     ("Weekly tarot", "", True),
     ("Tuesday zodiac", "", True),
-    ("Aries", "https://example.com/horoscopes/aries", True),
+    ("Aries", "https://example.com/horoscopes/aries", False),
     ("Weekly jobs report", "", False),
     ("Zodiac killer sentenced", "", False),
     ("A real story", "", False),
+    # Reporting and ambiguous topic mentions must survive collection.
+    ("The New York Times acquires Wordle in major gaming deal", "", False),
+    ("New rail connections today boost regional trade", "", False),
+    ("Lottery results spark investigation into suspected fraud", "", False),
+    ("Police investigate tarot readings scam targeting pensioners", "", False),
+    ("Cancer patients warned against astrology-based treatment advice", "", False),
+    ("Ford Taurus returns with a redesigned sedan", "", False),
+    ("Gemini gains new AI capabilities today", "", False),
+    ("DNA strands reveal clues to cancer", "", False),
+    ("Trade deal faces another hurdle today", "", False),
+    ("National spelling bee results announced today", "", False),
+    ("Research explains why horoscopes feel accurate", "", False),
+    ("Sudoku champion wins international tournament", "", False),
+    ("Lottery results for Tuesday spark an investigation", "", False),
+    ("Police investigate daily horoscope scam", "", False),
+    # Recurring puzzle editions and answer columns remain denied.
+    ("Connections hints and answers for October 6", "", True),
+    ("NYT Connections today", "", True),
+    ("Connections today: hints and answers", "", True),
+    ("Hints and answers for Connections", "", True),
+    ("Strands game #825", "", True),
+    ("Wordle #1201", "", True),
+    ("Quordle October 6, 2026", "", True),
+    ("Today's Sudoku", "", True),
+    ("Daily crossword", "", True),
+    ("Weekly word games", "", True),
+    ("Puzzle of the day", "", True),
+    ("Wordle hints: investigation is today's answer", "", True),
+    # Recurring personal advice and draw-result columns remain denied.
+    ("Taurus weekly horoscope: October 5–11", "", True),
+    ("Horoscope for Taurus today", "", True),
+    ("Tarot reading for today", "", True),
+    ("Taurus prediction for October 6", "", True),
+    ("Today’s horoscope", "", True),
+    ("Powerball results for October 6", "", True),
+    ("Lottery results for 2026-10-06", "", True),
+    ("Mega Millions winning numbers", "", True),
+    ("Tuesday lottery results", "", True),
+    ("Lottery results draw #12345", "", True),
+    # A parsed URL section supports a format; it never vetoes a title alone.
+    ("Today's predictions", "https://example.com/horoscopes/aries", True),
+    ("Aries today", "https://example.com/horoscopes/aries", True),
+    ("Today's answers", "https://example.com/wordle/edition", True),
+    ("Results for October 6", "https://example.com/lottery/draw", True),
+    ("Today's predictions", "https://example.com/news?redirect=/tarot/", False),
+    ("Today's predictions", "https://example.com/news#/tarot/", False),
+    ("Today's predictions", "https://example.com/%74arot/edition", True),
+    ("Today's predictions", "https://example.com/tarot-card-industry", False),
+    ("Horoscopes lose popularity among young adults", "https://example.com/horoscopes/report", False),
+    ("Police investigate today's predictions scam", "https://example.com/tarot/report", False),
+    ("A real story", "https://[invalid", False),
+    ("Wordle today", "https://[invalid", True),
+    (None, None, False),
 ])
 def test_is_denied_filler(title, url, denied):
     from workers.collectororch import is_denied_filler
 
     assert is_denied_filler({"title": title, "url": url}) is denied
+
+
+
+@pytest.mark.parametrize("title,allowed", [
+    ("Ford Taurus returns with a redesigned sedan", True),
+    ("New rail connections today boost regional trade", True),
+    ("Connections hints and answers for October 6", False),
+    ("Daily horoscope for Taurus", False),
+    ("Powerball results for October 6", False),
+])
+def test_filler_filter_applies_to_storage_and_scraping(title, allowed):
+    from workers.collectororch import (
+        WORDS_THRESHOLD_FOR_STORING, is_bean_scrapable, is_bean_storable,
+    )
+
+    bean = {"kind": "news", "title": title, "content": "Article body"}
+    assert bool(is_bean_storable({**bean, "content_length": WORDS_THRESHOLD_FOR_STORING})) is allowed
+    assert bool(is_bean_scrapable({**bean, "content_length": WORDS_THRESHOLD_FOR_STORING - 1})) is allowed
 
 
 def test_is_bean_storable_rejects_image_album():
