@@ -15,6 +15,8 @@ from .logs import (
 from .fields import non_null_fields, clear_null_bytes
 from .kinds import (
     POST,
+    GAME,
+    HOROSCOPE,
     BLOG,
     NEWS,
     SITE,
@@ -64,6 +66,8 @@ __all__ = [
     "now_str",
     "date_str",
     "POST",
+    "GAME",
+    "HOROSCOPE",
     "BLOG",
     "NEWS",
     "SITE",

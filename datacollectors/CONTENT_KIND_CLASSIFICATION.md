@@ -4,12 +4,14 @@ This file describes the classification algorithm currently implemented during co
 
 ## Core rule
 
-Classification is deterministic and first-match-wins. A non-empty item is evaluated in this order:
+Classification is deterministic and first-match-wins. Collection builders normalize items before classification. Scraping merges page evidence and normalizes the Bean before reclassification. A non-empty item is evaluated in this order:
 
 ```python
 decision = (
-    native_item_decision(bean, context)
+    recurring_format_decision(bean)
+    or native_item_decision(bean, context)
     or primary_document_decision(bean, context)
+    or rss_category_default
     or explicit_format_decision(bean, context)
     or source_policy_decision(bean, context, default_kind)
 )
@@ -38,7 +40,19 @@ Site names, descriptions, generic occurrences of the word `news`, and `default_k
 
 ## Ordered algorithm
 
-### 1. Native platform identity
+### 1. Recurring game and horoscope formats
+
+Before any native identity, document evidence, or source policy, inspect the title and, when needed, the decoded URL path:
+
+- puzzle/word-game hints, answers, solutions, clues, or dated editions -> `game`;
+- lottery winning numbers or dated draw results -> `game`;
+- dated horoscope, zodiac, astrology, tarot, or zodiac-sign predictions/forecasts -> `horoscope`.
+
+Topic and format cues must be adjacent in either order. Ambiguous game names need answer cues or explicit game identity for date-only titles. A matching URL section can corroborate a generic edition title; query strings and fragments never count.
+
+Recognized reporting constructions (such as police investigations, research findings, and game acquisitions) bypass this heuristic. Topic mentions alone do not match. Diagnostic rules are `recurring_game`, `recurring_lottery`, and `recurring_horoscope`, with title evidence or title plus URL evidence.
+
+### 2. Native platform identity
 
 Use native provenance when it gives an unambiguous type:
 
@@ -48,7 +62,7 @@ Use native provenance when it gives an unambiguous type:
 
 If none match, continue.
 
-### 2. Primary-document evidence
+### 3. Primary-document evidence
 
 Classify authoritative document types before editorial formats:
 
@@ -62,7 +76,11 @@ Classify authoritative document types before editorial formats:
 
 Ambiguous conflicting authoritative URL matches fall back conservatively to `blog` with rule `conflicting_evidence`.
 
-### 3. Explicit format evidence
+### 4. RSS category defaults
+
+RSS podcast/job defaults apply after primary-document evidence and before explicit format evidence. Explicit policy host restrictions still apply.
+
+### 5. Explicit format evidence
 
 Use tags, URL path segments, and page JSON-LD to identify non-news formats:
 
@@ -73,7 +91,7 @@ Use tags, URL path segments, and page JSON-LD to identify non-news formats:
 
 These decisions run before source reporting policy. Therefore an opinion or podcast from a reviewed news publisher does not become `news` merely because of the publisher.
 
-### 4. Source policy
+### 6. Source policy
 
 RSS groups in `factory/feeds.yaml` establish the default policy:
 
@@ -127,8 +145,10 @@ For an empty Bean, `guess_content_type()` returns `None`.
 1. `workers/collectororch.py` parses the feed group and optional per-feed policy.
 2. The API collector builds `KindContext` and calls `apply_kind_decision()`.
 3. If the page must be scraped, the context travels with the transient Bean.
-4. The scraper adds JSON-LD schema types and article sections, then calls `apply_kind_decision()` again. Stronger page evidence may therefore refine the initial kind.
+4. The scraper adds JSON-LD schema types and article sections, normalizes the merged Bean with `cleanup_item()`, then calls `apply_kind_decision()` again. Stronger page evidence may therefore refine the initial kind.
 5. `_kind_context` and `_kind_decision` are removed before persistence; only `bean.kind` is stored.
+
+The collector excludes `post`, `game`, and `horoscope` from storage and scraping using only the kind allow/deny check. Existing length and image-heavy storage checks remain; the collector does not inspect titles or URLs for recurring formats.
 
 ## Authorities
 

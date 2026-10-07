@@ -27,7 +27,7 @@ Field-name constants come from `utils/fields.py`. A collected item may contain B
 | `image_url` | First image link in `entry.links`; otherwise first `media_content.url`; first `media_thumbnail.url`; then `entry.image.href`. Relative URLs are resolved against the feed site URL. |
 | `rss_feed` | The configured feed URL. |
 | `site_language` | `feed.language`. |
-| `kind` | Assigned by `guess_content_type()` using collection provenance, authoritative document evidence, explicit format evidence, and the configured source policy. |
+| `kind` | Assigned by `guess_content_type()` using normalized title/URL evidence for recurring formats first, followed by collection provenance, authoritative document evidence, RSS category defaults, explicit format evidence, and the configured source policy. |
 
 The site URL used for relative-link resolution is the first HTTP URL among `feed.link`, the configured feed URL, and the first entry link.
 
@@ -86,7 +86,7 @@ The production worker requests Reddit JSON mode. RSS parsing remains an implemen
 - Chatter requiring `chatter_url`, `url`, and at least one engagement value;
 - a Publisher requiring `domain_name` and `base_url`.
 
-Beans with at least `WORDS_THRESHOLD_FOR_STORING` words are cached directly. The current default is `200`. Short non-`post` Beans are deduplicated, scraped with `AsyncWebScraper`, re-normalized and reclassified using page evidence, and cached only if they then meet the threshold. Word-game titles listed in `IGNORE_WORD_GAMES` are neither stored nor scraped.
+Beans with at least `WORDS_THRESHOLD_FOR_STORING` words are cached directly. The current default is `200`. Beans of kind `post`, `game`, or `horoscope` are neither stored nor scraped. Other short Beans are deduplicated, scraped with `AsyncWebScraper`, normalized before reclassification using page evidence, and cached only if they meet the threshold and remain an allowed kind. Image-heavy Beans are excluded from storage. `game` covers puzzle editions/answers and lottery results; `horoscope` covers dated astrology/tarot guidance. Reporting exceptions remain eligible.
 
 Publishers with any of `site_name`, `favicon`, or `description` are cached directly. Incomplete Publishers are deduplicated and scraped first. Transient `_kind_context` and `_kind_decision` fields support scrape-time reclassification and diagnostics but are removed before Bean persistence.
 

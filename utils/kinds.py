@@ -1,6 +1,8 @@
 # Canonical bean `kind` values (JSON `kind` field)
 
 POST = "post"
+GAME = "game"
+HOROSCOPE = "horoscope"
 BLOG = "blog"
 NEWS = "news"
 SITE = "site"

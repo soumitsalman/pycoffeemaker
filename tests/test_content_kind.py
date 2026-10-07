@@ -22,8 +22,188 @@ def _decision(bean, **kwargs):
     return guess_content_type(bean, explain=True, **kwargs)
 
 
+@pytest.mark.parametrize(("title", "kind", "rule_id"), [
+    ("Wordle answers today", "game", "recurring_game"),
+    ("Daily horoscope for Aries", "horoscope", "recurring_horoscope"),
+    ("Powerball winning numbers", "game", "recurring_lottery"),
+])
+@pytest.mark.parametrize("context", [
+    KindContext(origin="reddit", is_self_post=True),
+    KindContext(origin="sec_edgar"),
+    KindContext(origin="rss", policy=KindPolicy(mode="reporting", hosts=("example.com",))),
+    KindContext(origin="rss", policy=KindPolicy(mode="non_news", kind_hint="podcast")),
+    KindContext(schema_types=("BlogPosting",)),
+])
+def test_recurring_formats_take_first_priority(title, kind, rule_id, context):
+    bean = {"title": title, "url": "https://example.com/item"}
+    assert _decision(bean, context=context) == KindDecision(kind, rule_id, ("title",))
+
+
+@pytest.mark.parametrize("kind", ["post", "game", "horoscope"])
+def test_collector_excludes_disallowed_kinds_without_title_evidence(kind):
+    from workers.collectororch import is_bean_scrapable, is_bean_storable
+
+    bean = {"kind": kind, "title": "Ordinary title", "content": "Article text"}
+    assert not is_bean_storable({**bean, "content_length": 10000})
+    assert not is_bean_scrapable({**bean, "content_length": 0})
+
+
+def test_collector_does_not_reclassify_titles():
+    from workers.collectororch import WORDS_THRESHOLD_FOR_STORING, is_bean_scrapable, is_bean_storable
+
+    bean = {"kind": "news", "title": "Wordle answers today", "content": "Article text"}
+    assert is_bean_storable({**bean, "content_length": WORDS_THRESHOLD_FOR_STORING})
+    assert is_bean_scrapable({**bean, "content_length": 0})
+
+
 def _reporting(feed="https://news.example/feed", **kwargs):
     return KindContext(origin="rss", feed_url=feed, policy=KindPolicy(mode="reporting"), **kwargs)
+
+
+def test_recurring_kinds_are_public_and_canonical():
+    import datacollectors
+    import utils
+    from datacollectors.normalize import CANONICAL_KINDS, NON_NEWS_KINDS
+    from utils.kinds import GAME, HOROSCOPE
+
+    for name, value in (("GAME", GAME), ("HOROSCOPE", HOROSCOPE)):
+        assert value in CANONICAL_KINDS & NON_NEWS_KINDS
+        for package in (utils, datacollectors):
+            assert name in package.__all__
+            assert getattr(package, name) == value
+
+
+@pytest.mark.parametrize(("title", "url", "kind", "rule_id"), [
+    ("Today's answers", "https://example.com/wordle/edition", "game", "recurring_game"),
+    ("Aries today", "https://example.com/%68oroscopes/aries", "horoscope", "recurring_horoscope"),
+    ("Results for October 6", "https://example.com/lottery/draw", "game", "recurring_lottery"),
+])
+def test_recurring_section_decisions_include_url_evidence(title, url, kind, rule_id):
+    assert _decision({"title": title, "url": url}) == KindDecision(kind, rule_id, ("title", "url"))
+
+
+@pytest.mark.parametrize("builder", ["rss", "reddit_json", "reddit_rss", "hackernews", "sec"])
+@pytest.mark.parametrize(("title", "expected", "rule_id"), [
+    ("Wordle answers today", "game", "recurring_game"),
+    ("Daily horoscope for Aries", "horoscope", "recurring_horoscope"),
+    ("Powerball winning numbers", "game", "recurring_lottery"),
+    ("Police investigate daily horoscope scam", None, None),
+])
+def test_builders_propagate_recurring_kind(builder, title, expected, rule_id, monkeypatch):
+    import feedparser
+    import ftlangdetect
+    from datacollectors.apicollectors import (
+        SECFilingCollector, _build_hackernews_item, _build_reddit_json_item,
+        _build_reddit_rss_item, _build_rss_item,
+    )
+
+    # HN/Reddit builders have no language input; isolate their classification from model downloads.
+    monkeypatch.setattr(ftlangdetect, "detect", lambda **kwargs: {"lang": "en"})
+    feed = feedparser.FeedParserDict(title="Example", language="en", link="https://example.com")
+    entry = feedparser.FeedParserDict(
+        title=title, link="https://example.com/item", summary="Article body", language="en",
+        content=[{"value": '<a href="https://example.com/item">[link]</a><div class="md">Article body</div>'}],
+    )
+    if builder == "rss":
+        item = _build_rss_item(feed, "https://example.com/feed", "https://example.com", entry,
+                               "news", policy=KindPolicy(mode="reporting"))
+    elif builder == "reddit_json":
+        item = _build_reddit_json_item({
+            "title": title, "url": "https://example.com/item", "is_self": False,
+            "permalink": "/r/example/comments/123/item", "created_utc": now().timestamp(),
+            "selftext": "Article body", "author": "author",
+        }, "example", "news")
+    elif builder == "reddit_rss":
+        item = _build_reddit_rss_item(entry, "example", "news")
+    elif builder == "hackernews":
+        item = _build_hackernews_item({
+            "id": 123, "time": now().timestamp(), "type": "story", "title": title,
+            "url": "https://example.com/item", "text": "Article body",
+        }, "news")
+    else:
+        item = SECFilingCollector._build_filing_item(
+            None, entry, feed, "https://www.sec.gov/feed", "https://www.sec.gov",
+            "Filing body", "10-K", "123",
+        )
+    expected = expected or {"rss": "news", "sec": "sec_filing"}.get(builder, "blog")
+    assert item["kind"] == expected
+    assert item[KIND_DECISION_KEY].kind == expected
+    if rule_id:
+        assert item[KIND_DECISION_KEY] == KindDecision(expected, rule_id, ("title",))
+
+
+def _lifecycle_bean(title="Generic headline"):
+    collected = now()
+    return {
+        "url": "https://news.example/story", "base_url": "https://news.example",
+        "domain_name": "news", "title": title, "kind": "news", "language": "en",
+        "collected": collected, "created": collected, "content_length": 0,
+        "tags": ["live"], "site_name": "News Example", "platform": "example",
+        "chatter_url": "https://example.com/comments", "likes": 1, KIND_CONTEXT_KEY: _reporting(),
+    }
+
+
+@pytest.mark.parametrize("words", [0, 400])
+def test_triage_excludes_recurring_beans_but_preserves_related_units(words):
+    from datacollectors.normalize import apply_kind_decision
+
+    collector = object.__new__(Collector)
+    for method in ("_cache_beans", "_cache_chatters", "_cache_publishers", "_queue_scrape"):
+        setattr(collector, method, AsyncMock())
+    titles = ["Wordle answers today", "Daily horoscope for Aries", "Powerball winning numbers",
+              "Police investigate daily horoscope scam"]
+    items = []
+    for title in titles:
+        bean = _lifecycle_bean(title)
+        bean["content"] = "word " * words
+        bean["content_length"] = words
+        apply_kind_decision(bean, context=bean[KIND_CONTEXT_KEY])
+        items.append(bean)
+    asyncio.run(collector._triage(items))
+    stored = collector._cache_beans.call_args.args[0]
+    queued = next(call.args[1] for call in collector._queue_scrape.call_args_list if call.args[0] == "beans")
+    assert [bean["title"] for bean in stored + queued] == [titles[-1]]
+    assert bool(stored) is (words == 400)
+    assert len(collector._cache_chatters.call_args.args[0]) == 4
+    assert len(collector._cache_publishers.call_args.args[0]) == 4
+
+
+@pytest.mark.parametrize(("page_title", "expected"), [
+    ("<b>Wordle</b> answers today", "game"),
+    ("Daily <b>horoscope</b> for Aries", "horoscope"),
+    ("Powerball <b>winning numbers</b>", "game"),
+    ("Police investigate daily horoscope scam", "news"),
+])
+def test_page_reclassification_filters_before_persistence(page_title, expected):
+    collector = object.__new__(Collector)
+    collector.beans_collected = 0
+    collector.cache = SimpleNamespace(
+        deduplicate=AsyncMock(side_effect=lambda _kind, _state, items: items),
+        set=AsyncMock(return_value=1),
+    )
+
+    async def scrape(items):
+        for bean in items:
+            AsyncWebScraper._prep_page_result(None, bean, {
+                "meta_title": page_title, "content": "word " * 400,
+                "keywords": "page", "schema_types": ("NewsArticle",),
+            })
+            assert bean["kind"] == expected
+            assert bean["tags"] == ["live", "page"]
+            assert bean[KIND_CONTEXT_KEY].feed_url == "https://news.example/feed"
+            assert bean[KIND_CONTEXT_KEY].schema_types == ("NewsArticle",)
+            assert "<b>" not in bean["title"]
+        return items
+
+    collector.webscraper = SimpleNamespace(scrape_beans=AsyncMock(side_effect=scrape))
+    asyncio.run(collector._scrape_beans([_lifecycle_bean()]))
+    if expected in {"game", "horoscope"}:
+        collector.cache.set.assert_not_awaited()
+    else:
+        payload = collector.cache.set.call_args.args[2]
+        assert payload[0]["kind"] == expected
+        assert KIND_CONTEXT_KEY not in payload[0]
+        assert KIND_DECISION_KEY not in payload[0]
 
 
 def _mixed(**kwargs):

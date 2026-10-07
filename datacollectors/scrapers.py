@@ -518,8 +518,9 @@ class AsyncWebScraper:
         schema_types = tuple(result.get("schema_types") or ()) or context.schema_types
         article_sections = tuple(result.get("article_sections") or ()) or context.article_sections
         context = replace(context, schema_types=schema_types, article_sections=article_sections)
+        bean = cleanup_item(bean)
         apply_kind_decision(bean, context=context)
-        return cleanup_item(bean)
+        return bean
 
     async def scrape_page(self, url: str):
         """Scrape a single URL for both bean and publisher data."""

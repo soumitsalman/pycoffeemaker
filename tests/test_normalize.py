@@ -424,10 +424,11 @@ def test_is_image_heavy_album():
     ("Wordle today", "https://[invalid", True),
     (None, None, False),
 ])
-def test_is_denied_filler(title, url, denied):
-    from workers.collectororch import is_denied_filler
+def test_recurring_format_classification(title, url, denied):
+    from utils.kinds import GAME, HOROSCOPE
 
-    assert is_denied_filler({"title": title, "url": url}) is denied
+    kind = guess_content_type({"title": title, "url": url})
+    assert (kind in {GAME, HOROSCOPE}) is denied
 
 
 
@@ -443,7 +444,8 @@ def test_filler_filter_applies_to_storage_and_scraping(title, allowed):
         WORDS_THRESHOLD_FOR_STORING, is_bean_scrapable, is_bean_storable,
     )
 
-    bean = {"kind": "news", "title": title, "content": "Article body"}
+    bean = {"title": title, "content": "Article body"}
+    bean["kind"] = guess_content_type(bean)
     assert bool(is_bean_storable({**bean, "content_length": WORDS_THRESHOLD_FOR_STORING})) is allowed
     assert bool(is_bean_scrapable({**bean, "content_length": WORDS_THRESHOLD_FOR_STORING - 1})) is allowed
 

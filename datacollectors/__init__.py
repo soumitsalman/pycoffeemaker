@@ -17,6 +17,8 @@ from .scrapers import WebCrawler, AsyncWebScraper
 from .settings import MAX_HTML_SIZE, MAX_PDF_SIZE, TIMEOUT
 from utils.kinds import (
     POST,
+    GAME,
+    HOROSCOPE,
     BLOG,
     NEWS,
     SITE,
@@ -69,6 +71,8 @@ __all__ = [
     "HACKERNEWS",
     "HACKERNEWS_STORIES_URLS",
     "POST",
+    "GAME",
+    "HOROSCOPE",
     "BLOG",
     "NEWS",
     "SITE",

@@ -28,12 +28,13 @@ Import from `datacollectors` or `datacollectors.utils`.
 
 **`kind` values:**
 
+- Recurring formats: `game` (puzzle editions/answers and lottery results), `horoscope` (dated astrology/tarot guidance).
 - Editorial: `post`, `blog`, `news`, `site`, `podcast`, `press_release`, `official_statement`.
 - Business: `contract`, `procurement_notice`, `financial_report`, `earnings_report`, `sec_filing`, `enforcement_action`.
 - Government/legal: `legislative_bill`, `legislative_proposal`, `enacted_law`, `regulation`, `rulemaking_notice`, `court_opinion`, `lawsuit`, `government_report`, `budget_document`, `legislative_record`, `hearing`.
 - Knowledge: `research_paper`, `whitepaper`, `technical_documentation`.
 
-`guess_content_type()` is the sole kind authority. It evaluates native provenance, primary-document URL/feed/identity, explicit non-news formats, then reviewed source policy. Unreviewed items fall back to `blog` with `fallback_unresolved`; `default_kind='news'` is not authority. RSS groups supply `KindPolicy` (`rss` unknown, `rss_news` reporting, `rss_blogs`/`rss_press_releases` non-news). A policy accepts only an exact configured feed host, its declared publisher host, or an explicit `hosts` allow-list. Scraping reclassifies with the original context plus JSON-LD types/sections. Transient `_kind_context` and `_kind_decision` never enter the cache.
+`guess_content_type()` is the sole kind authority. On normalized evidence, it evaluates recurring formats first, then native provenance, primary-document URL/feed/identity, RSS podcast/job defaults, explicit non-news formats, and reviewed source policy. The collector excludes `post`, `game`, and `horoscope` from Bean storage and scraping by kind; reporting about those topics remains eligible when it does not match a recurring format. Unreviewed items fall back to `blog` with `fallback_unresolved`; `default_kind='news'` is not authority. RSS groups supply `KindPolicy` (`rss` unknown, `rss_news` reporting, `rss_blogs`/`rss_press_releases` non-news). A policy accepts only an exact configured feed host, its declared publisher host, or an explicit `hosts` allow-list. Scraping reclassifies with the original context plus JSON-LD types/sections. Transient `_kind_context` and `_kind_decision` never enter the cache.
 
 **Derived fields** (added by `cleanup_item`): `title_length`, `summary_length`, `content_length`; `base_url` inferred from `url` if missing.
 

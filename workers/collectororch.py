@@ -1,9 +1,7 @@
 import asyncio
 import os
 import random
-import re
 import uuid
-from urllib.parse import unquote, urlsplit
 import yaml
 from datacollectors import RSSFeedCollector, GovInfoRSSCollector, RedditCollector, HackerNewsCollector, SECFilingCollector, AsyncWebScraper
 from datacollectors.normalize import (
@@ -19,7 +17,7 @@ from datacollectors.normalize import (
     normalize_policy_host,
     validate_news_path,
 )
-from utils.kinds import POST
+from utils.kinds import GAME, HOROSCOPE, POST
 from utils.fields import (
     ARTICLE_LANGUAGE,
     AUTHOR,
@@ -56,101 +54,6 @@ from icecream import ic
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", os.cpu_count() * os.cpu_count()))
 WORDS_THRESHOLD_FOR_STORING = int(os.getenv("WORDS_THRESHOLD_FOR_STORING", 200))  # min words needed to not download the body
 
-# Deny recurring answer/advice formats, not articles mentioning these topics.
-_GAME_TOPIC = (
-    r"(?:wordles?|quordle|nerdle|worldle|heardle|squardle|sudoku|cryptoquote"
-    r"|crosswords?|mini\s+crossword|connections|strands|hurdle|jumble|spelling\s+bee"
-    r"|word\s+games?|puzzles?)"
-)
-# Ambiguous names need an answer cue, or an explicit game identity for date-only titles.
-_DATED_GAME_TOPIC = (
-    r"(?:wordles?|quordle|nerdle|worldle|heardle|squardle|sudoku|cryptoquote"
-    r"|crosswords?|mini\s+crossword|word\s+games?|puzzles?"
-    r"|(?:nyt|new\s+york\s+times)\s+(?:connections|strands|spelling\s+bee)"
-    r"|(?:connections|strands|hurdle|jumble|spelling\s+bee)\s+(?:puzzle|game))"
-)
-_EDITION = (
-    r"(?:today(?:'s)?|yesterday(?:'s)?|daily|weekly|tonight|this\s+week|the\s+day"
-    r"|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
-    r"|(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?"
-    r"|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
-    r"\.?\s+\d{1,2}(?:st|nd|rd|th)?"
-    r"|\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?"
-    r"|\d{4}-\d{2}-\d{2}|(?:game\s*|puzzle\s*|draw\s*)?#\d{2,6})"
-)
-_FORMAT_GAP = r"[\s:,;–—-]*(?:(?:for|on|of)\s+)?"
-_ASTRO_TOPIC = r"(?:horoscopes?|tarot(?:\s+(?:cards?|readings?|spreads?))?|zodiac|astrology)"
-_ZODIAC_SIGN = r"(?:aries|taurus|gemini|cancer|leo|virgo|libra|scorpio|sagittarius|capricorn|aquarius|pisces)"
-_LOTTERY_TOPIC = r"(?:lottery|lotto|powerball|mega\s+millions|euromillions)"
-_GAME_HELP = r"(?:hints?|answers?|solutions?|clues?)"
-_LOTTERY_RESULTS = r"(?:draw\s+)?(?:results?|winning\s+numbers)"
-
-
-def _filler_pair(topic: str, cue: str) -> re.Pattern:
-    """Require adjacent topic/format phrases, in either order."""
-    return re.compile(
-        rf"(?<!\w){topic}(?!\w){_FORMAT_GAP}(?<!\w){cue}(?!\w)"
-        rf"|(?<!\w){cue}(?!\w){_FORMAT_GAP}(?:the\s+)?(?<!\w){topic}(?!\w)",
-        re.IGNORECASE,
-    )
-
-
-_GAME_FORMATS = (
-    _filler_pair(_GAME_TOPIC, _GAME_HELP),
-    _filler_pair(_DATED_GAME_TOPIC, _EDITION),
-    _filler_pair(_GAME_TOPIC, rf"{_EDITION}{_FORMAT_GAP}{_GAME_HELP}"),
-)
-_ASTRO_FORMATS = (
-    _filler_pair(rf"{_ASTRO_TOPIC}(?:\s+for\s+{_ZODIAC_SIGN})?", _EDITION),
-    _filler_pair(rf"{_ASTRO_TOPIC}\s+(?:readings?|predictions?|forecasts?)", _EDITION),
-    _filler_pair(rf"{_ZODIAC_SIGN}\s+(?:predictions?|forecasts?)", _EDITION),
-)
-_LOTTERY_FORMATS = (
-    _filler_pair(_LOTTERY_TOPIC, rf"{_LOTTERY_RESULTS}{_FORMAT_GAP}{_EDITION}"),
-    _filler_pair(rf"{_LOTTERY_TOPIC}\s+{_LOTTERY_RESULTS}", _EDITION),
-    _filler_pair(_LOTTERY_TOPIC, r"winning\s+numbers"),
-)
-_FILLER_PATH = re.compile(
-    r"/(?:"
-    r"(?P<game>crosswords?|wordle|sudoku|connections|strands|puzzles?)"
-    r"|(?P<astro>horoscopes?|tarot|zodiac|astrology)"
-    r"|(?P<lottery>lottery|lotto|powerball|mega-millions)"
-    r")(?:/|$)",
-    re.IGNORECASE,
-)
-# Recognize reporting constructions, not isolated words such as "investigation".
-_REPORTING_TITLE = re.compile(
-    r"\b(?:police|prosecutors?|regulators?|authorities|researchers?|scientists?)\s+"
-    r"(?:investigat(?:e[sd]?|ing)|warn(?:s|ed)?|find(?:s)?|found|report(?:s|ed)?)\b"
-    r"|\b(?:spark(?:s|ed)?|trigger(?:s|ed)?|prompt(?:s|ed)?)\s+(?:an?\s+)?investigation\b"
-    r"|\b(?:patients?|doctors?)\s+(?:are\s+)?warned\s+against\b"
-    r"|\b(?:acquires?|acquired|buys?|bought)\s+(?:the\s+)?" + _GAME_TOPIC + r"\b",
-    re.IGNORECASE,
-)
-
-_SECTION_FORMATS = {
-    "game": _filler_pair(r"(?:hints?|answers?|solutions?|clues?|puzzles?)", _EDITION),
-    "astro": _filler_pair(rf"(?:{_ZODIAC_SIGN}|readings?|predictions?|forecasts?)", _EDITION),
-    "lottery": _filler_pair(_LOTTERY_RESULTS, _EDITION),
-}
-
-
-def is_denied_filler(bean: dict) -> bool:
-    title = " ".join((bean.get(TITLE) or "").replace("’", "'").split())
-    if not title or _REPORTING_TITLE.search(title):
-        return False
-    if any(pattern.search(title) for pattern in (*_GAME_FORMATS, *_ASTRO_FORMATS, *_LOTTERY_FORMATS)):
-        return True
-
-    # Sections support generic edition titles; query strings/fragments never count.
-    try:
-        path = unquote(urlsplit(bean.get(URL) or "").path)
-    except ValueError:
-        return False
-    section = _FILLER_PATH.search(path)
-    if not section:
-        return False
-    return bool(_SECTION_FORMATS[section.lastgroup].search(title))
 
 BEAN_EXCLUDED_FIELDS = {
     ARTICLE_LANGUAGE,
@@ -166,19 +69,17 @@ BEAN_EXCLUDED_FIELDS = {
     SITE_NAME,
     "subscribers",
 }
-SKIP_KINDS = frozenset({POST})
+SKIP_KINDS = frozenset({POST, GAME, HOROSCOPE})
 is_bean_storable = lambda bean: (
     bean
     and bean.get(KIND) not in SKIP_KINDS
     and not is_image_heavy(bean.get(CONTENT))
     and bean.get("content_length", 0) >= WORDS_THRESHOLD_FOR_STORING
-    and not is_denied_filler(bean)
 )
 is_bean_scrapable = lambda bean: (
     bean
     and bean.get(KIND) not in SKIP_KINDS
     and bean.get('content_length', 0) < WORDS_THRESHOLD_FOR_STORING
-    and not is_denied_filler(bean)
 )
 is_publisher_storable = lambda publisher: publisher and any(field in publisher for field in [SITE_NAME, FAVICON, DESCRIPTION])
 is_publisher_scrapable = lambda publisher: publisher and not any(field in publisher for field in [SITE_NAME, FAVICON, DESCRIPTION])
