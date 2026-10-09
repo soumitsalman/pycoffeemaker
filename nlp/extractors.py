@@ -141,7 +141,7 @@ class EntityExtractor:
             batch_size=self.batch_size,
             include_confidence=False,
             include_spans=False,
-            overlap_policy="nested", # nested keeps a shorter span inside a longer one so it can belong to both fields
+            overlap_policy="flat", # nested keeps a shorter span inside a longer one so it can belong to both fields
             max_len=self.context_len,
         )
         return [
