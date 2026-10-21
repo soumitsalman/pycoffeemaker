@@ -6,6 +6,9 @@
 -- 3. Short exclusive cutover: drop old tags, rename tags_v2.
 
 -- Truncated to 2048 characters so to_tsvector never hits the 1 MiB tsvector cap.
+SET maintenance_work_mem = '8GB';
+SET max_parallel_maintenance_workers = 16;
+
 CREATE OR REPLACE FUNCTION immutable_fts_vector_string(
     regions varchar[],
     entities varchar[],
@@ -29,8 +32,6 @@ ALTER TABLE beans ADD COLUMN IF NOT EXISTS fts_vector tsvector
         immutable_fts_vector_string(regions, entities, categories, title)
     ) STORED;
 
-SET maintenance_work_mem = '8GB';
-SET max_parallel_maintenance_workers = 16;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_beans_fts_vector ON beans USING gin (fts_vector);
 
 BEGIN;

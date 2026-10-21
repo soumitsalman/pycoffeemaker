@@ -259,7 +259,7 @@ class Extractor:
         self.extractor = EntityExtractor(
             model_path=model_path,
             context_len=context_len,
-            threshold=0.75,
+            threshold=0.77,
             batch_size=batch_size,
         )
         self.batch_size = batch_size
