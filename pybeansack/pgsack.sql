@@ -1,28 +1,23 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
-CREATE OR REPLACE FUNCTION immutable_tags_to_text(
-    a varchar[],
-    b varchar[],
-    c varchar[]
+-- Truncated to 2048 characters so to_tsvector never hits the 1 MiB tsvector cap.
+CREATE OR REPLACE FUNCTION immutable_fts_vector_string(
+    regions varchar[],
+    entities varchar[],
+    categories varchar[],
+    title varchar
 )
-RETURNS text
+RETURNS tsvector
 LANGUAGE sql
 IMMUTABLE
 PARALLEL SAFE
 AS $$
-    SELECT array_to_string(
-        (
-            SELECT array_agg(elem)
-            FROM unnest(
-                COALESCE(a, '{}') ||
-                COALESCE(b, '{}') ||
-                COALESCE(c, '{}')
-            ) AS elem
-            WHERE elem IS NOT NULL
-        ),
-        ' '
-    );
+    SELECT to_tsvector('simple', left(concat_ws(' ',
+        array_to_string(regions[1:10], ' '),
+        array_to_string(entities[1:10], ' '),
+        array_to_string(categories, ' '),
+        title), 2048))
 $$;
 
 -- CONTENT TABLES
@@ -56,8 +51,8 @@ CREATE TABLE IF NOT EXISTS beans (
     entities VARCHAR[],
 
     -- TEXT SEARCH FIELD
-    tags TSVECTOR GENERATED ALWAYS AS (
-        to_tsvector('simple', immutable_tags_to_text(regions, entities, categories))
+    fts_vector TSVECTOR GENERATED ALWAYS AS (
+      immutable_fts_vector_string(regions, entities, categories, title)
     ) STORED
 );
 
