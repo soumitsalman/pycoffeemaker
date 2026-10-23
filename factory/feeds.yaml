@@ -10127,6 +10127,21 @@ sources:
   - https://www.andrewzigler.com/rss.xml
   - https://www.oig.dot.gov/taxonomy/term/9/feed
   - https://www.cisecurity.org/feed/alert
+  # Healthcare and insurance companies (verified 2026-10-23)
+  - https://news.blueshieldca.com/rss.xml
+  - https://about.kaiserpermanente.org/rss-feeds/main-rss
+  - https://news.regence.com/feed/
+  - https://newsroom.statefarm.com/feed/
+  - https://acadiahealthcare.gcs-web.com/rss/news-releases.xml
+  - https://www.baptistonline.org/news/tagfeed/en-us/tags/news
+  - https://www.cedars-sinai.org/newsroom/tagfeed/en-us/tags/news
+  - https://www.denverhealth.org/rss.xml
+  - https://newsnetwork.mayoclinic.org/feed/
+  - https://news.ohsu.edu/rss.xml
+  - https://randolphhealth.netReturns.biz/RssServices/Rss/randolphhealthNewsReleases.xml
+  - https://www.rileychildrens.org/newsroom/rss
+  - https://www.stqn.org/News/RSS.ashx?sid=3
+  - https://ir.uhs.com/rss/news-releases.xml
   rss_podcast:
   - http://feeds.thememorypalace.us/thememorypalace
   - http://feeds.wnyc.org/radiolab
@@ -13101,6 +13116,12 @@ sources:
   - https://www.cisecurity.org/feed/blog
   - https://www.commerce.gov/feeds/blog
   - https://www.fcc.gov/blog/feed/
+  # Healthcare and insurance companies (verified 2026-10-23)
+  - https://blog.bcbsks.com/feed/
+  - https://www.healthpartners.com/blog/feed/
+  - http://www.straighttalkla.com/feed/
+  - https://healthsource.premera.com/feed/
+  - https://www.thesilverlining.com/west-bend-blog/rss.xml
   rss_press_releases:
   # Automotive companies
   - https://www.kiamedia.com/us/en/rss/PressReleases/feed.rss
@@ -13181,6 +13202,132 @@ sources:
   - https://www.whitehouse.gov/fact-sheets/feed/
   - https://public.govdelivery.com/topics/USTREAS_49/feed.rss
   - https://api2.fcc.gov/api/exp/v1.0.0/edocspublic/rss/docTypes/News_Release
+  # Healthcare and insurance companies (verified 2026-10-23)
+  - https://investors.aflac.com/rss/pressrelease.aspx
+  - https://www.allstatenewsroom.com/news/feed/
+  - https://newsroom.amfam.com/feed/
+  - https://aon.mediaroom.com/news-releases?pagetemplate=rss
+  - https://ir.archgroup.com/rss/pressrelease.aspx
+  - https://www.axa.com/en/rss
+  - https://mediacenter.bcbsal.org/rss.xml
+  - https://newsroom.bluecrossma.com/news-releases?pagetemplate=rss
+  - https://investors.centene.com/press-releases?pagetemplate=rss
+  - https://news.chubb.com/news-releases?pagetemplate=rss
+  - https://investors.cinfin.com/news-releases?pagetemplate=rss
+  - https://news.ehealthinsurance.com/rss.xml
+  - https://ir.elevancehealth.com/rss/pressrelease.aspx
+  - https://ir.equitableholdings.com/rss/pressrelease.aspx
+  - https://ir.gooseheadinsurance.com/rss/news-releases.xml
+  - https://investors.heritagepci.com/news-releases?pagetemplate=rss
+  - https://investors.hippo.com/rss/pressrelease.aspx
+  - https://humana.gcs-web.com/rss/news-releases.xml
+  - https://investors.kemper.com/rss/pressrelease.aspx
+  - https://www.libertymutualgroup.com/rss.xml
+  - https://ir.mklgroup.com/rss/pressrelease.aspx
+  - https://investor.metlife.com/rss/pressrelease.aspx
+  - https://investors.molinahealthcare.com/rss/news-releases.xml
+  - https://www.ms-ad-hd.com/contentFeeds/content/superMulti/en/news/irnews
+  - https://news.nationwide.com/feed/
+  - https://news.northwesternmutual.com/news-releases?pagetemplate=rss
+  - https://progressive.mediaroom.com/news-releases?pagetemplate=rss
+  - https://investor.protective.com/rss/pressrelease.aspx
+  - https://investor.rgare.com/rss/news-releases.xml
+  - https://ir.joinroot.com/rss/news-releases.xml
+  - https://www.simplybusiness.com/feed/
+  - https://sunlife.mediaroom.com/news?pagetemplate=rss
+  - https://newsroom.cigna.com/latest-press-releases?pagetemplate=rss
+  - https://newsroom.thehartford.com/rss/pressrelease.aspx
+  - https://investor.travelers.com/rss/pressrelease.aspx
+  - https://investors.unum.com/rss/pressrelease.aspx
+  - https://investors.voya.com/rss/pressrelease.aspx
+  - https://ir.berkley.com/rss/pressrelease.aspx
+  - https://investors.abbvie.com/rss/news-releases.xml
+  - https://ir.acadia.com/rss/pressrelease.aspx
+  - https://investor.agios.com/rss/news-releases.xml
+  - https://ir.akebia.com/rss/news-releases.xml
+  - https://investor.alkermes.com/rss/news-releases.xml
+  - https://ir.allogene.com/rss/news-releases.xml
+  - https://investors.amgen.com/rss/news-releases.xml
+  - https://investors.amneal.com/rss/pressrelease.aspx
+  - https://investors.arcutis.com/rss/news-releases.xml
+  - https://ir.arrowheadpharma.com/rss/news-releases.xml
+  - https://ir.arvinas.com/rss/news-releases.xml
+  - https://ir.ateapharma.com/rss/news-releases.xml
+  - https://investors.atossatherapeutics.com/news-releases?pagetemplate=rss
+  - https://investors.atyrpharma.com/rss/news-releases.xml
+  - https://ir.bauschhealth.com/site-services/rss/rss-news-releases
+  - https://investors.beamtx.com/rss/news-releases.xml
+  - https://ir.biocryst.com/rss/news-releases.xml
+  - https://investors.biogen.com/rss/news-releases.xml
+  - https://ir.biohaven.com/rss/news-releases.xml
+  - https://investors.biomarin.com/rss/pressrelease.aspx
+  - https://investors.bbotx.com/rss/news-releases.xml
+  - https://news.bms.com/rss/pressrelease.aspx
+  - https://ir.c4therapeutics.com/rss/news-releases.xml
+  - https://investor.corvuspharma.com/rss/news-releases.xml
+  - https://ir.crinetics.com/rss/pressrelease.aspx
+  - https://ir.cytokinetics.com/rss/pressrelease.aspx
+  - https://investors.decoytx.com/rss/news-releases.xml
+  - https://ir.discmedicine.com/rss/news-releases.xml
+  - https://ir.editasmedicine.com/rss/news-releases.xml
+  - https://investor.lilly.com/rss/news-releases.xml
+  - https://ir.enanta.com/rss/news-releases.xml
+  - https://ir.exelixis.com/rss/news-releases.xml
+  - https://investors.fennecpharma.com/rss/news-releases.xml
+  - https://ir.geron.com/rss/news-releases.xml
+  - https://ir.halozyme.com/rss/pressrelease.aspx
+  - https://investor.incyte.com/rss/news-releases.xml
+  - https://investor.inva.com/rss/news-releases.xml
+  - https://investor.insmed.com/releases?pagetemplate=rss
+  - https://investors.invivyd.com/rss/news-releases.xml
+  - https://ir.ionis.com/rss/news-releases.xml
+  - https://www.jnj.com/rss-feed/all.rss
+  - https://investors.karyopharm.com/press-releases?pagetemplate=rss
+  - https://ir.krystalbio.com/rss/news-releases.xml
+  - https://ir.mirumpharma.com/rss/pressrelease.aspx
+  - https://ir.nektar.com/rss/news-releases.xml
+  - https://ir.nucana.com/rss/news-releases.xml
+  - https://ir.prothena.com/rss/pressrelease.aspx
+  - https://ir.ptcbio.com/rss/news-releases.xml
+  - https://investor.pumabiotechnology.com/rss/news-releases.xml
+  - https://ir.pyxisoncology.com/rss/news-releases.xml
+  - https://investor.regeneron.com/rss/news-releases.xml
+  - https://ir.rhythmtx.com/rss/news-releases.xml
+  - https://rocketpharmaceuticals.gcs-web.com/rss/news-releases.xml
+  - https://ir.sana.com/rss/news-releases.xml
+  - https://investor.sangamo.com/rss/news-releases.xml
+  - https://investorrelations.sarepta.com/rss/news-releases.xml
+  - https://investors.scholarrock.com/rss/news-releases.xml
+  - https://ir.tevapharm.com/rss/pressrelease.aspx
+  - https://ir.tyra.bio/rss/news-releases.xml
+  - https://ir.ultragenyx.com/rss/news-releases.xml
+  - https://investors.vaxcyte.com/rss/news-releases.xml
+  - https://ir.veratx.com/rss/news-releases.xml
+  - https://investors.vrtx.com/rss/news-releases.xml
+  - https://ir.vikingtherapeutics.com/press-releases?pagetemplate=rss
+  - https://abbott.mediaroom.com/press-releases?pagetemplate=rss
+  - https://ir.aveanna.com/rss/news-releases.xml
+  - https://investor.baxter.com/rss/pressrelease.aspx
+  - https://news.bostonscientific.com/news-releases?pagetemplate=rss
+  - https://ir.brightspringhealth.com/rss/news-releases.xml
+  - https://investors.danaher.com/press-releases?pagetemplate=rss
+  - https://investors.dexcom.com/rss/pressrelease.aspx
+  - https://www.investors.globusmedical.com/rss/news-releases.xml
+  - https://investor.hcsgcorp.com/rss/pressrelease.aspx
+  - https://investor.illumina.com/rss/news-releases.xml
+  - https://investors.insulet.com/rss/pressrelease.aspx
+  - https://investor.intuitivesurgical.com/rss/news-releases.xml
+  - https://investors.korumedical.com/news-events/press-releases/rss
+  - https://ir.labcorp.com/rss/news-releases.xml
+  - https://news.medtronic.com/press-releases?pagetemplate=rss
+  - https://investors.optioncarehealth.com/rss/news-releases.xml
+  - https://newsroom.questdiagnostics.com/press-releases?pagetemplate=rss
+  - https://investors.soterahealth.com/rss/news-releases.xml
+  - https://investors.stryker.com/rss/pressrelease.aspx
+  - https://ir.teladochealth.com/rss/pressrelease.aspx
+  - https://ir.thermofisher.com/rss/pressrelease.aspx
+  - https://investor.veracyte.com/rss/news-releases.xml
+  - https://newsroom.thecignagroup.com/latest-press-releases?pagetemplate=rss
   rss_news:  # majority news titles/URLs from live collector review
   # Automotive companies
   - https://www.hyundai.com/wsvc/ww/rss/newsroom.newsroom.do
