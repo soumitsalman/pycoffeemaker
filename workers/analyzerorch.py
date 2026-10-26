@@ -243,7 +243,7 @@ class Embedder:
         log.info(event="embedder completed", total_embedded=total)
         return total
 
-
+EXTRACTOR_THRESHOLD = float(os.getenv("EXTRACTOR_THRESHOLD", 0.75))
 class Extractor:
     cache: StateCacheBase
     extractor: EntityExtractor
@@ -259,7 +259,7 @@ class Extractor:
         self.extractor = EntityExtractor(
             model_path=model_path,
             context_len=context_len,
-            threshold=0.77,
+            threshold=EXTRACTOR_THRESHOLD,
             batch_size=batch_size,
         )
         self.batch_size = batch_size
