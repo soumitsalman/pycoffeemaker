@@ -47,14 +47,11 @@ ENV HF_HOME=/worker/.models \
 RUN python3 - <<'PY'
 from huggingface_hub import snapshot_download
 
-# Preload only the indexer models. The large DIGESTOR and CONSOLIDATOR vLLM
-# models are downloaded lazily when those modes are explicitly invoked.
+# Indexer weights only. DIGESTOR and CONSOLIDATOR vLLM models stay lazy.
+# Paths match run_pipeline.sh EMBEDDER_PATH and EXTRACTOR_PATH.
 for repo in (
     "codefuse-ai/F2LLM-v2-80M",
-    "knowledgator/modern-gliner-bi-base-v1.0",
-    # GLiNER resolves this label-encoder tokenizer at runtime; cache it too so
-    # the startup probe and offline Salad workers never need Hugging Face.
-    "BAAI/bge-small-en-v1.5",
+    "fastino/gliner2.5-multi-v1",
 ):
     snapshot_download(repo_id=repo)
 PY
@@ -62,8 +59,6 @@ PY
 COPY . .
 RUN chmod +x /worker/run_pipeline.sh && mkdir -p /worker/.cache
 
-# Temporary Salad startup probe. Keep the complete runtime and baked indexer
-# models intact while proving that PID 1, Python libraries, and local model files
-# can start on a Salad node. The container-group command is intentionally ignored
-# until this diagnostic image has reached Running and emitted its probe logs.
-ENTRYPOINT ["/bin/bash", "-c", "echo '[salad-probe] PID 1 started'; python3 - <<'PY'\nimport torch\nimport vllm\nfrom sentence_transformers import SentenceTransformer\nfrom gliner import GLiNER\n\nprint(f'[salad-probe] torch={torch.__version__} vllm={vllm.__version__} cuda_available={torch.cuda.is_available()}')\nSentenceTransformer('codefuse-ai/F2LLM-v2-80M', local_files_only=True, device='cpu')\nprint('[salad-probe] embedder model loaded from local cache')\nGLiNER.from_pretrained('knowledgator/modern-gliner-bi-base-v1.0', local_files_only=True)\nprint('[salad-probe] extractor model loaded from local cache')\nPY\nprobe_status=$?\nif [ \"$probe_status\" -ne 0 ]; then echo \"[salad-probe] library/model probe failed (status $probe_status); keeping container alive\"; fi\necho '[salad-probe] complete; waiting for inspection'; exec sleep infinity"]
+# Exec form so a RunPod container command is argv for the script:
+#   --embedder 128 --extractor 32
+ENTRYPOINT ["/worker/run_pipeline.sh"]

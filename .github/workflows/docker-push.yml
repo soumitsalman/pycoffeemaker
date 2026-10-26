@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/salad-deploy.yml"
+      - ".github/workflows/docker-push.yml"
       - "datacollectors/**"
       - "factory/feeds.yaml"
       - "nlp/**"
@@ -13,8 +13,10 @@ on:
       - "utils/**"
       - "workers/**"
       - "DockerfileIO"
+      - "DockerfileGPU"
       - ".dockerignore"
       - "requirements-io.txt"
+      - "requirements-gpu.txt"
       - "run.py"
       - "run_pipelines.sh"
   workflow_dispatch:
@@ -92,63 +94,3 @@ jobs:
             ${{ env.IMAGE_NAME }}:gpu
           cache-from: type=gha,scope=gpu
           cache-to: type=gha,mode=max,scope=gpu
-
-  update-collector:
-    name: Update Salad collector
-    needs: [set-meta, build-and-push-io]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Update Salad collector
-        env:
-          SALAD_API_KEY: ${{ secrets.SALAD_API_KEY }}
-          IMAGE: docker.io/${{ env.IMAGE_NAME }}:io-${{ needs.set-meta.outputs.date }}
-        run: |
-          curl -fsS -X PATCH \
-            "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-collector-g2" \
-            -H "Content-Type: application/merge-patch+json" \
-            -H "Salad-Api-Key: ${{ secrets.SALAD_API_KEY }}" \
-            -d @- <<EOF
-          {
-            "container": { "image": "${IMAGE}" }
-          }
-          EOF
-
-  update-bean-indexer:
-    name: Update Salad bean indexer
-    needs: [set-meta, build-and-push-gpu]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Update Salad bean indexer
-        env:
-          SALAD_API_KEY: ${{ secrets.SALAD_API_KEY }}
-          IMAGE: docker.io/${{ env.IMAGE_NAME }}:gpu-${{ needs.set-meta.outputs.date }}
-        run: |
-          curl -fsS -X PATCH \
-            "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-beans-indexer" \
-            -H "Content-Type: application/merge-patch+json" \
-            -H "Salad-Api-Key: ${{ secrets.SALAD_API_KEY }}" \
-            --data-binary @- <<EOF
-          {
-            "container": { "image": "${IMAGE}" }
-          }
-          EOF
-
-  update-porter:
-    name: Update Salad porter
-    needs: [set-meta, build-and-push-io]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Update Salad porter
-        env:
-          SALAD_API_KEY: ${{ secrets.SALAD_API_KEY }}
-          IMAGE: docker.io/${{ env.IMAGE_NAME }}:io-${{ needs.set-meta.outputs.date }}
-        run: |
-          curl -fsS -X PATCH \
-            "https://api.salad.com/api/public/organizations/project-cafecito/projects/coffeemaker/containers/coffeemaker-porter-g2" \
-            -H "Content-Type: application/merge-patch+json" \
-            -H "Salad-Api-Key: ${{ secrets.SALAD_API_KEY }}" \
-            --data-binary @- <<EOF
-          {
-            "container": { "image": "${IMAGE}" }
-          }
-          EOF
