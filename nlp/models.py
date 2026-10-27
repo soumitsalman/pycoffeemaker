@@ -1,31 +1,31 @@
-from pathlib import Path
-from typing import Annotated, ClassVar, List, Literal, Optional
-from functools import cached_property
-import yaml
+# from pathlib import Path
+from typing import ClassVar, List, Literal, Optional
+# from functools import cached_property
+# import yaml
 from pydantic import BaseModel, Field
 
 from .normalize import normalize_fields, merge_lists
-from .formatters import LabelDescriptions, model_text_schema, text_value, apply_model_json_constraints
+from .formatters import model_text_schema, text_value, apply_model_json_constraints
 
-def _load_classification_lists() -> dict[str, dict[str, str]]:
-    raw = yaml.safe_load(Path(__file__).with_name("classifications.yaml").read_text())
-    return {
-        group: {item["id"]: item["description"].strip() for item in raw[group]}
-        for group in ("categories", "sentiments", "ideologies")
-    }
+# def _load_classification_lists() -> dict[str, dict[str, str]]:
+#     raw = yaml.safe_load(Path(__file__).with_name("classifications.yaml").read_text())
+#     return {
+#         group: {item["id"]: item["description"].strip() for item in raw[group]}
+#         for group in ("categories", "sentiments", "ideologies")
+#     }
 
-_CLASSIFICATIONS = _load_classification_lists()
+# _CLASSIFICATIONS = _load_classification_lists()
 
-def _label_type(group: str):
-    labels = _CLASSIFICATIONS[group]
-    return Annotated[
-        Literal.__getitem__(tuple(labels)),
-        LabelDescriptions(labels),
-    ]
+# def _label_type(group: str):
+#     labels = _CLASSIFICATIONS[group]
+#     return Annotated[
+#         Literal.__getitem__(tuple(labels)),
+#         LabelDescriptions(labels),
+#     ]
 
-CATEGORIES_LIST = _label_type("categories")
-SENTIMENTS_LIST = _label_type("sentiments")
-IDEOLOGIES_LIST = _label_type("ideologies")
+# CATEGORIES_LIST = _label_type("categories")
+# SENTIMENTS_LIST = _label_type("sentiments")
+# IDEOLOGIES_LIST = _label_type("ideologies")
 
 _TAG_MAX_LEN = 50
 _TAGS_MAX_COUNT = 10
@@ -98,9 +98,9 @@ class _ExtractionBase(_NLPBase):
 
 
 class Classifications(_NLPBase):
-    category: CATEGORIES_LIST = Field(alias="domain_genre")
-    sentiment: SENTIMENTS_LIST = Field(alias="expression_sentiment")
-    ideology: IDEOLOGIES_LIST = Field(alias="political_ideology")
+    category: str = Field(alias="domain_genre")
+    sentiment: str = Field(alias="expression_sentiment")
+    ideology: str = Field(alias="political_ideology")
 
 class Entities(_NLPBase):
     regions: List[str] = Field(default_factory=list, description="Names of countries, states, provinces, counties, cities, geographic regions, locations, neighborhoods")

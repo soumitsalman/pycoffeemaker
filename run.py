@@ -87,8 +87,8 @@ if __name__ == "__main__":
                 os.getenv("EMBEDDER_CONTEXT_LEN", DEFAULT_EMBEDDER_CONTEXT_LEN)
             ),
             batch_size=batch_size,
-            categories=f"{CURR_DIR}/factory/categories.parquet",
-            sentiments=f"{CURR_DIR}/factory/sentiments.parquet",
+            category=f"{CURR_DIR}/factory/categories.parquet",
+            sentiment=f"{CURR_DIR}/factory/sentiments.parquet",
             ideology=f"{CURR_DIR}/factory/ideologies.parquet",
         ).run()
 

@@ -119,14 +119,13 @@ class TransformerEmbeddings(EmbedderBase):
 
         super().__init__(context_len, tokenizer=AutoTokenizer.from_pretrained(model_path, use_fast=True))
         self.model_path = model_path
-        self.batch_size = batch_size
-        self.device = "cuda" if is_cuda_usable() else "cpu"
+        self.batch_size = batch_size        
         self._model = None
 
-    def embed_documents(self, texts: str|list[str]) -> VECTOR|list[VECTOR]:
-        if not texts:
-            return
-        return self._embed(texts).tolist()
+    # def embed_documents(self, texts: str|list[str]) -> VECTOR|list[VECTOR]:
+    #     if not texts:
+    #         return
+    #     return self._embed(texts).tolist()
 
     def _embed(self, texts: str|list[str]):
         if not self._model: self.__enter__()
@@ -142,13 +141,14 @@ class TransformerEmbeddings(EmbedderBase):
     def __enter__(self):
         if not self._model:         
             from sentence_transformers import SentenceTransformer
+            device = "cuda" if is_cuda_usable() else "cpu"
             self._model = SentenceTransformer(
                 self.model_path,
-                device=self.device,
-                model_kwargs={"dtype": "float16",  "attn_implementation": "sdpa"} if is_cuda_usable() else None,
+                device=device,
+                model_kwargs={"dtype": "float16",  "attn_implementation": "sdpa"} if device == "cuda" else {"dtype": "float32"},
             )
             self._model.max_seq_length = self.context_len
-            if is_cuda_usable(): self._model.compile(dynamic=True)
+            if device == "cuda": self._model.compile(dynamic=True)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

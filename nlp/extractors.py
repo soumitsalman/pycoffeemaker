@@ -55,8 +55,8 @@ class EntityExtractor:
     @lru_cache(maxsize=8)
     def _joint_schema(self, entity_type: Type[BaseModel], class_type: Type[BaseModel]):
         schema = self._llm.create_schema().entities(get_extraction_labels(entity_type))
-        for name, labels in get_classification_labels(class_type).items():
-            schema.classification(name, labels)
+        # for name, labels in get_classification_labels(class_type).items():
+        #     schema.classification(name, labels)
         return schema
 
     @staticmethod
@@ -113,11 +113,12 @@ class EntityExtractor:
             if texts:
                 raw_entities[field] = list({item.lower(): item for item in texts}.values())
         entities = entity_type(**raw_entities)
-        classification = class_type(**{
-            name: self._label(self._first_of(result[name]))
-            for name in get_classification_labels(class_type)
-        })
-        return entities, classification
+        # classification = class_type(**{
+        #     name: self._label(self._first_of(result[name]))
+        #     for name in get_classification_labels(class_type)
+        # })
+        # return entities, classification
+        return entities
 
     @staticmethod
     def _first_of(value):
@@ -130,7 +131,7 @@ class EntityExtractor:
         input_messages: list[str],
         entity_type: Type[BaseModel] = Entities,
         class_type: Type[BaseModel] = Classifications,
-    ) -> list[tuple[Entities, Classifications]]:
+    ) -> list[Entities]:
         if not input_messages:
             return []
         input_messages = self.splitter.truncate(input_messages)
