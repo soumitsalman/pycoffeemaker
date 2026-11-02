@@ -1,143 +1,134 @@
 # 24 broad subject categories for content embeddings.
-# Classify by the central subject, irrespective of news/blog/paper/report format.
-# Descriptions are positive semantic anchors, not classifier instructions.
-# Prefer a subject-specific category when a company, politician, country, or tool
-# is incidental. Mixed-subject documents can legitimately match multiple topics.
-# Editorial boundaries (comments are not embedded):
-# - AI systems -> AI; software and data pipelines -> software/data engineering.
-# - Digital infrastructure/components -> computing infrastructure; finished devices/robots -> consumer electronics/robotics.
-# - Attacks, privacy, and protection -> cybersecurity; industrial production -> industry/manufacturing.
-# - Government and geopolitics -> politics/global affairs; courts and incidents -> law/public safety.
-# - Civil liberties, migration, and social patterns -> civil rights/migration/society.
-# - Clinical, population, and mental health plus everyday fitness -> health/wellness.
-# - Biological mechanisms -> biology; physics, chemistry, materials, and math -> physical sciences.
-# - Earth, space, climate, environment, energy, resources, and hazards -> Earth/climate/environment.
-# - Food production -> agriculture; meals and trip experiences -> food/dining/travel.
-# - Competitive sport and leisure hobbies -> sports/recreation; creative works and media -> arts/culture/media.
-# - Buildings and property -> construction/housing; domestic life and pets -> home/family.
+# factory/setup.py embeds only `description`, as:
+#   Instruct: Identify the main and secondary category of the given article based on the title and abstract.
+#   Query: {description}
+# Sentiments use "Classify the sentiment of the given text."
+# Ideologies use "Classify the political ideology of the given text."
+# Documents are embedded as raw passages (F2LLM-v2-80M). Nearest cosine label wins.
+# Write each description as a concrete passage prototype: headline nouns the right
+# articles actually use. Comments are not embedded.
+# Do not put out-of-scope topics in a description. Negated counterexamples still
+# attract those passages.
+# Editorial boundaries:
+# - AI systems -> AI; apps, operating systems, and data pipelines -> software/data engineering.
+# - Chips, GPUs, graphics APIs, servers, networks -> computing infrastructure.
+# - Finished gadgets, including sale prices, preorders, and gift cards -> consumer electronics.
+# - Malware, phishing, breaches, passwords -> cybersecurity. Home cameras are gadgets.
+# - Factory production -> industry. Race cars, bikes, and championships -> sports.
+# - Markets, inflation, banks, asset prices -> economics. A sticker price is not finance.
+# - Elections, offices, diplomacy, wars, military strikes, and battlefield casualties -> politics.
+# - Courts, police, and criminal cases -> law. A stroke or hospital stay -> health.
+# - Clothing and cosmetics -> fashion. Recipes and trips -> food/dining/travel.
 categories:
 - id: Artificial Intelligence
   description: >-
-    Artificial intelligence and machine learning systems that learn, predict, classify,
-    reason, or generate content. Covers language models, computer vision, speech recognition,
-    generative media, agents, model training and evaluation, AI products, and AI safety.
+    Language models and chatbots. Prompts, tokens, model benchmarks, AI agents, coding
+    assistants, Copilot, Gemini, Claude, and GPT.
 - id: Software and Data Engineering
   description: >-
-    Designing, building, and maintaining software and data systems. Covers programming
-    languages, APIs, applications, operating systems, developer tools, databases, SQL,
-    data warehouses, ETL, streaming, analytics, data quality, testing, and software architecture.
+    Software bug fixes and releases. Windows, browsers, Android, Outlook, VPN client
+    updates, server software, source code, APIs, and developer tools.
 - id: Computing Infrastructure and Hardware
   description: >-
-    The computing equipment and infrastructure that power digital services and networks.
-    Covers processors, semiconductors, memory, storage, servers, data centers, cloud platforms,
-    distributed systems, containers, broadband, mobile networks, internet routing, and reliability.
+    Computing hardware and digital infrastructure. Processors, semiconductors, GPUs,
+    graphics cards, VRAM, ray tracing, DirectX, memory, storage, servers, data centers,
+    cloud platforms, broadband, and mobile networks. GPUs, VRAM, ray tracing, DirectX,
+    semiconductors, data centers, and fiber networks.
 - id: Cybersecurity and Privacy
   description: >-
-    Protecting digital systems, networks, accounts, and personal information from threats
-    and misuse. Covers hacking, malware, ransomware, phishing, vulnerabilities, authentication,
-    encryption, security operations, breach response, surveillance, privacy engineering,
-    and safeguards against unauthorized access or data exposure.
+    Data breaches, phishing, malware, password theft, and software vulnerabilities that
+    attackers exploit. Stolen passwords, phishing emails, ransomware, account hijacking,
+    and exchange hacks.
 - id: Consumer Electronics and Robotics
   description: >-
-    Finished personal electronic devices and robots used by consumers or organizations.
-    Covers phones, computers, wearables, cameras, smart-home devices, autonomous robots,
-    drones, product releases, reviews, repairs, robot control, and real-world deployment.
+    Consumer electronics. Smartphones, laptops, tablets, tablet batteries, headphones,
+    earbuds, OLED televisions, 4K TVs, soundbars, smartwatches, mirrorless cameras,
+    turntables, e-readers, portable chargers, home security cameras, robot vacuums,
+    device preorders, trade-ins, gift cards on phones and laptops, hi-fi turntables,
+    record players, mirrorless cameras, guitar amplifiers, tablet battery capacity, and
+    security cameras. XR glasses, gaming monitors, Fire TV sticks, robot vacuums, travel
+    routers, Garmin watches, mirrorless cameras, OLED MacBook preorders, and gift cards.
 - id: Industry and Manufacturing
   description: >-
-    The design and production of physical goods and industrial systems. Covers engineering,
-    machinery, automation, factory operations, fabrication, machining, additive manufacturing,
-    production lines, quality control, maintenance, and process improvement.
+    Factory production and industrial manufacturing. CNC mills, injection molding,
+    welders, fabrication shops, additive manufacturing, plant maintenance, and quality
+    control on a mass-production line.
 - id: Economics, Accounting and Finance
   description: >-
-    Economies, financial reporting, capital markets, and financial services. Covers growth,
-    inflation, monetary and fiscal policy, taxes, accounting, audits, stocks, bonds, investing,
-    banking, credit, insurance, payments, and personal money management.
+    Inflation, interest rates, central banks, stocks, bonds, ETFs, Bitcoin prices,
+    cryptocurrency exchanges, and banking. Cryptocurrency prices, ETFs, stock markets,
+    and banking.
 - id: Business Marketing and Employment
   description: >-
-    How organizations are created, managed, marketed, and staffed. Covers startups, strategy,
-    venture funding, mergers, leadership, company performance, branding, advertising, sales,
-    hiring, careers, wages, workplace conditions, unions, and labor relations.
+    Companies cutting jobs, hiring workers, executive strategy, and advertising
+    campaigns.
 - id: Politics and Global Affairs
   description: >-
-    Political power and relations among governments and international institutions. Covers
-    elections, parties, public administration, legislation, diplomacy, foreign policy, treaties,
-    alliances, trade negotiations, sanctions, geopolitical disputes, armed forces, defense,
-    and international conflict.
+    Elections, governments, and wars. Senators, midterms, diplomacy, sanctions, armed
+    forces, airstrikes, and military drone strikes. Elections, midterms, senators, wars,
+    military drone strikes, and armed forces.
 - id: Law, Crime and Public Safety
   description: >-
-    Legal rules, justice systems, criminal activity, and community safety. Covers courts,
-    lawsuits, trials, contracts, judgments, police investigations, arrests, fraud, violent crime,
-    emergency responses, crime prevention, and public safety alerts.
+    Police, courts, and crime. Arrests, trials, lawsuits, verdicts, stabbings, raids,
+    and criminal charges. Law, Crime and Public Safety. Lawsuits, criminal trials,
+    police raids, stabbings, arrests, and courtroom verdicts.
 - id: Civil Rights, Migration and Society
   description: >-
-    How people and communities experience rights, identity, inequality, and social change.
-    Covers civil liberties, discrimination, human rights, poverty, protest, migration, visas,
-    asylum, refugees, citizenship, demographics, sociology, anthropology, and cultural traditions.
+    Civil rights, migration, and social inequality. Discrimination, human rights,
+    protests, visas, asylum, refugees, citizenship, immigration rules, poverty, and
+    demographic change.
 - id: Health and Wellness
   description: >-
-    Human health, medical care, psychological wellbeing, and personal health practices.
-    Covers disease, diagnosis, treatment, clinical research, public health, hospitals, care access,
-    mental health, therapy, exercise, nutrition, sleep, and physical wellbeing.
+    Hospitals, illness, and fitness. Strokes, vaccines, cancer treatment, surgery,
+    exercise, sleep, and recovery.
 - id: Biology and Biotechnology
   description: >-
-    Living organisms and biological mechanisms, from molecules and cells to ecosystems.
-    Covers genetics, genomics, microbiology, physiology, evolution, bioinformatics, synthetic
-    biology, laboratory methods, engineered organisms, and biological manufacturing.
+    Biology and biotechnology. Cells, genes, genomes, microbes, physiology, evolution,
+    bioinformatics, synthetic biology, laboratory organisms, and biological
+    manufacturing.
 - id: Physical Sciences and Mathematics
   description: >-
-    Physical and chemical properties of matter and energy, and mathematical methods for
-    describing them. Covers physics, chemistry, materials science, particles, forces, reactions,
-    polymers, nanomaterials, algebra, geometry, statistics, probability, and mathematical modeling.
+    Materials science, chemical reactions, polymers, and physics demonstrations.
 - id: Earth, Space, Climate and Environment
   description: >-
-    Earth's physical systems, space, climate, and the natural environment. Covers geology,
-    oceans, weather, astronomy, space exploration, climate change, conservation, biodiversity,
-    pollution, energy systems, mineral resources, natural hazards, disasters, and recovery.
+    Climate change, global warming, spaceflight, spaceplanes, astronomy, and natural
+    disasters.
 - id: Agriculture and Food Production
   description: >-
-    Growing crops, raising animals, and producing food or agricultural materials. Covers
-    farming, agronomy, soil, irrigation, fertilizers, pests, harvests, livestock, fisheries,
-    aquaculture, forestry, farm equipment, food processing, and agricultural policy.
+    Crop harvests, livestock, fertilizers, and farms.
 - id: Transportation and Logistics
   description: >-
-    Moving people and goods by road, rail, air, and water. Covers cars, electric vehicles,
-    public transit, airlines, passenger safety, freight, shipping, ports, warehousing, procurement,
-    delivery, supply chains, and transportation operations.
+    Vehicles and transit. Cars, electric vehicles, motorcycles, e-bikes, ferries,
+    airlines, and freight.
 - id: Construction, Housing and Real Estate
   description: >-
-    Designing, building, maintaining, owning, and occupying buildings and physical places.
-    Covers architecture, civil engineering, construction, roads, bridges, urban planning,
-    property markets, rents, mortgages, housing supply, affordability, landlords, and tenants.
+    Buildings, construction, and property. Architecture, skyscrapers, bridges, housing
+    construction, rents, mortgages, landlords, tenants, and home affordability.
 - id: Education and Humanities
   description: >-
-    Teaching, learning, and the study of human history, ideas, and beliefs. Covers schools,
-    universities, curricula, pedagogy, admissions, educational policy, historical events,
-    archaeology, cultural heritage, philosophy, ethics, religion, and spiritual traditions.
+    University exams, homework, admissions, and classroom teaching.
 - id: Sports and Recreation
   description: >-
-    Competitive sports and recreational activities pursued for enjoyment. Covers athletes,
-    teams, leagues, tournaments, esports, video games, tabletop games, crafts, outdoor hobbies,
-    hiking, camping, fishing, game releases, sporting results, and recreation equipment.
+    Sports results and recreational games. Formula 1, Grand Prix, world champions,
+    racing drivers, football, tennis tournaments, Olympic athletes, video games,
+    PlayStation games, Xbox games, puzzle games, game consoles, cricket squads, ODI
+    series, and fast bowlers. Formula 1, Grand Prix, football, cricket, AllTrails,
+    PlayStation Plus, World of Warcraft, Diablo, and Steam games.
 - id: Arts, Culture, Media and Entertainment
   description: >-
-    Creative works, entertainment, public personalities, and the media through which culture
-    circulates. Covers film, television, music, books, visual arts, design, theater, journalism,
-    publishing, celebrities, creators, social platforms, online communities, and media criticism.
+    Movies, television, music, books, and celebrities. Films, series, actors, albums,
+    novels, theater, journalism about entertainment, and media criticism. Movies,
+    television series, Netflix, actors, concerts, and entertainment news.
 - id: Food, Dining and Travel
   description: >-
-    Food and drink experiences and leisure travel. Covers recipes, cooking, ingredients,
-    restaurants, cafes, cuisines, chefs, dining reviews, hotels, destinations, sightseeing,
-    itineraries, tours, cruises, and tourism advice.
+    Espresso machines, drip coffee makers, chefs, and vacation travel. Espresso
+    machines, coffee makers, camping trips, and restaurants.
 - id: Fashion, Beauty and Consumer Affairs
   description: >-
-    Personal appearance and consumer purchasing. Covers clothing, fashion, styling, cosmetics,
-    skincare, grooming, stores, online shopping, sales, product quality, pricing, returns,
-    warranties, recalls, and consumer protection.
+    Clothing, outfits, what to wear, skincare, and wardrobe styling.
 - id: Home, Family and Pets
   description: >-
-    Domestic life, household spaces, close relationships, and companion animals. Covers home
-    improvement, decorating, cleaning, gardening, parenting, family dynamics, caregiving,
-    dating, friendship, eldercare, pet health, training, adoption, and responsible pet care.
+    Parenting, pets, family routines, decorating, and living in a tiny house.
 
 sentiments:
 - id: highly positive

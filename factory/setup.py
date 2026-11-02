@@ -21,19 +21,34 @@ def create_classification_embeddings():
     with open(f"{dir_name}/classifications.yaml", "r") as file:
         classifications = yaml.safe_load(file)
 
+    # F2LLM-v2 prompt shape is "Instruct: {task}\nQuery: {text}".
+    # The retrieval task ("Given a question, retrieve passages...") is for search.
+    # Label prototypes use the classification and clustering tasks from the
+    # model's original sentence-transformers prompt map (stripped in HF commit
+    # 35baae5). Category wording follows ArXivHierarchicalClusteringP2P
+    # ("Identify the main and secondary category ... based on the titles and abstracts").
+    # Sentiment wording is the shared MTEB sentiment prompt
+    # ("Classify the sentiment of the given text.").
+    def _prompt(instruction: str, text: str) -> str:
+        return f"Instruct: {instruction}\nQuery: {text}"
+
+    topic = "Identify the main and secondary category of the given article based on the title and abstract."
+    sentiment = "Classify the sentiment of the given text."
+    ideology = "Classify the political ideology of the given text."
+
     with create_embedder(os.getenv('EMBEDDER_PATH'), int(os.getenv('EMBEDDER_CONTEXT_LEN') or 512)) as embedder:
         categories = pd.DataFrame(
             {
                 ID: [category[ID] for category in classifications[CATEGORIES]],
-                EMBEDDING: embedder([f"Instruct: Given a question, retrieve passages that can help answer the question.\nQuery: Content related to {category['description']}" for category in classifications[CATEGORIES]])
+                EMBEDDING: embedder([_prompt(topic, category['description']) for category in classifications[CATEGORIES]])
             }
         )
         ic(categories.sample(n=3))
 
         sentiments = pd.DataFrame(
             {
-                ID: [sentiment[ID] for sentiment in classifications[SENTIMENTS]],
-                EMBEDDING: embedder([f"Instruct: Given a question, retrieve passages that can help answer the question.\nQuery: Content with {sentiment['description']}" for sentiment in classifications[SENTIMENTS]])
+                ID: [item[ID] for item in classifications[SENTIMENTS]],
+                EMBEDDING: embedder([_prompt(sentiment, item['description']) for item in classifications[SENTIMENTS]])
             }
         )
         ic(sentiments.sample(n=3))
@@ -41,7 +56,7 @@ def create_classification_embeddings():
         ideologies = pd.DataFrame(
             {
                 ID: [lean[ID] for lean in classifications["ideologies"]],
-                EMBEDDING: embedder([f"Instruct: Given a question, retrieve passages that can help answer the question.\nQuery: Content with {lean['description']}" for lean in classifications["ideologies"]])
+                EMBEDDING: embedder([_prompt(ideology, lean['description']) for lean in classifications["ideologies"]])
             }
         )
         ic(ideologies.sample(n=3))
