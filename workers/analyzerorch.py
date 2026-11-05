@@ -284,7 +284,46 @@ class Extractor:
 
 DIGEST_SYS = """
 TASK:
-Extract the structured fields from CONTENT_TO_ANALYZE
+CONTENT_TO_ANALYZE->schema fields
+procedure=internal|emit=json_only
+
+IN:
+one raw document
+SYSTEM_DATE=today_anchor_only
+
+ETL:
+1 EXTRACT spans
+  span=actor + verb + object
+  date=explicit YYYY-MM-DD else omit
+  metric=number+unit copied onto the span that states it
+  cause=because|after|produced|caused|led to
+  effect=result already occurred
+  target=affected party
+  next=will|plans|expects|dated next step
+2 LINK spans before any field
+  join spans that share actor|verb|effect|target
+  OR a cause span names the next span actor or verb
+  a span with no join stays only if it has actor+verb
+  driver=cause span joined to its effect span|both required
+  impact=effect span joined to its target|both required
+  outlook=next span joined to the actor and action it continues|else drop
+3 ORDER
+  linked spans by date ascending
+  undated spans keep document order after dated spans
+4 LOAD from linked spans only|fill a field only when the schema asks for it
+  briefing=direct instructive line|<=2 simple sentences
+  form=DATE ACTOR verb OBJECT EFFECT METRIC
+  state what happened|subject=actor|verb=the action
+  key_points<=40 = YYYY-MM-DD Actor verb object metric
+  event_drivers<=10 = Cause produced effect|only a joined driver
+  impacts<=10 = observed effect on the named target
+  impacted_domains<=10 = domains of linked spans
+  impact_level = null when unstated|else max stated|null<low<medium<high<critical<transformative
+  event_type<=3words = one label for the linked chain
+  macro_context<=4words = stated driver context else omit
+  future_outlook = stated next step joined to its actor|else omit
+  other schema fields = exact values from the same spans|omit if unstated
+5 EMIT schema fields only|omit empty
 
 OUTPUT:
 json_only|schema_strict|traceable_evidence_only|omit_null_fields
@@ -306,6 +345,8 @@ markdown|prose|code_fences|newline|angle_brackets|delimited_list
 assumptions|inferences|implied_assessments
 generic_quantities|generic_phrasing|emotive_language
 unsupported_values|labels_not_required_by_schema
+briefing_meta=the article says|the report contains|the content discusses|this piece highlights|according to
+SYSTEM_DATE as an event date
 """
 DIGEST_INST = """
 CONTENT_TO_ANALYZE=

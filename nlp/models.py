@@ -121,7 +121,7 @@ class Entities(_NLPBase):
 class NewsDigest(_ExtractionBase):
     """Main digest/key points of an article/news/blog/report"""        
     
-    drivers: list[str] = Field(
+    event_drivers: list[str] = Field(
         default_factory=list,
         description=(
             "List of event drivers=Traceable causal relationships between initial actions and outcomes/results. "
@@ -178,7 +178,7 @@ class Briefing(_ExtractionBase):
             "format=YYYY-MM-DD Actor verb object/effect with key metric if available."
         )
     )
-    drivers: list[str] = Field(
+    event_drivers: list[str] = Field(
         default_factory=list,
         description=(
             "List of event drivers=Traceable causal relationships between actions and outcomes. "

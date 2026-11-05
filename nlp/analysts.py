@@ -268,7 +268,7 @@ class TransformerTextAnalyst(TextAnalystBase):
                 device_map=self.device,
                 trust_remote_code=True,
             )
-            self._tokenizer = LocalTokenizer(self.model_name, self.context_len, self.device, self._prompt_window(), self.enable_thinking)
+            self._tokenizer = LocalTokenizer(self.model_name, self.context_len, self.device, self._prompt_window, self.enable_thinking)
             self.sampling_params.update({
                 "max_new_tokens": self.max_new_tokens,
                 "do_sample": True,
@@ -454,6 +454,8 @@ class VLLMTextAnalyst(TextAnalystBase):
         ]
 
 
+
+
 class RemoteTextAnalyst(TextAnalystBase):
     def __init__(
         self,
@@ -544,6 +546,36 @@ def create_text_analyst(
         kwargs.pop('api_key', None)
         return VLLMTextAnalyst(
             model_path.removeprefix(VLLM_PREFIX),
+            context_len=context_len,
+            instruction=instruction,
+            input_template=input_template,
+            output_model=output_model,
+            enable_thinking=enable_thinking,
+            max_new_tokens=max_new_tokens,
+            **kwargs,
+        )
+    if model_path.startswith(LLAMACPP_PREFIX):
+        from .llamacppanalyst import LlamaCppTextAnalyst
+
+        kwargs.pop("base_url", None)
+        kwargs.pop("api_key", None)
+        return LlamaCppTextAnalyst(
+            model_path.removeprefix(LLAMACPP_PREFIX),
+            context_len=context_len,
+            instruction=instruction,
+            input_template=input_template,
+            output_model=output_model,
+            enable_thinking=enable_thinking,
+            max_new_tokens=max_new_tokens,
+            **kwargs,
+        )
+    if model_path.startswith(ONNX_PREFIX):
+        from .onnxanalyst import ONNXTextAnalyst
+
+        kwargs.pop("base_url", None)
+        kwargs.pop("api_key", None)
+        return ONNXTextAnalyst(
+            model_path.removeprefix(ONNX_PREFIX),
             context_len=context_len,
             instruction=instruction,
             input_template=input_template,

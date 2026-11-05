@@ -1,10 +1,7 @@
 """NLP embedder / digestor / extractor smoke tests (GPU/network)."""
 
 import json
-import logging
-import os
 import random
-import re
 from itertools import batched
 from pathlib import Path
 
@@ -18,20 +15,9 @@ EMBEDDER_CONTEXT_LEN = 512
 TEXTS_FOR_NLP = TESTS_DIR / "texts-for-nlp.json"
 
 
-def _to_filename(name: str) -> str:
-    return os.path.join(ROOT, ".test", re.sub(r"[^a-zA-Z0-9]", "-", str(name)))
-
-
 def _load_json(path: Path):
     with open(path) as file:
         return json.load(file)
-
-
-def _save_json(name, items):
-    filename = _to_filename(name) + ".json"
-    with open(filename, "w") as file:
-        json.dump(items, file)
-    return filename
 
 
 def test_classification_labels_load_descriptions_from_yaml():
@@ -116,28 +102,6 @@ def test_embedder():
             vecs = embedder.embed_documents(input_texts[i : i + batch_size])
             ic([(vec[:2] + vec[-1:]) for vec in random.sample(vecs, 2)])
             pbar.update(len(input_texts[i : i + batch_size]))
-
-
-@pytest.mark.integration
-def test_digestor():
-    from nlp import NewsDigest, create_text_analyst
-
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-
-    batch_size = 16
-    data_batches = list(batched(_load_json(TEXTS_FOR_NLP), batch_size))
-    result = []
-    with create_text_analyst(
-        "vllm://LiquidAI/LFM2.5-1.2B-Instruct",
-        context_len=32768,
-        output_model=NewsDigest,
-    ) as digestor:
-        for chunk in tqdm(data_batches, desc="Progress: ", unit="bean chunk", total=len(data_batches)):
-            result.extend(ic(digestor.run_batch([d["content"] for d in chunk])))
-    _save_json("digestor-structured-output-results", [r.model_dump() for r in result])
 
 
 @pytest.mark.integration

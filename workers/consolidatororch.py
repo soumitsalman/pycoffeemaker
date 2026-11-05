@@ -31,24 +31,54 @@ CONSOLIDATION_MIN_SIZE = int(os.getenv("CONSOLIDATION_MIN_SIZE", 4))
 
 BRIEFING_SYS = """
 TASK:
-Create INTELLIGENCE_BRIEFING from EVENT_STREAM
+EVENT_STREAM->INTELLIGENCE_BRIEFING
+think=private|emit=json_only
+
+IN:
+blank_line=one record
+keys=reported|related|briefing|key_points|actions|event_drivers|event_type|impacts|impacted_domains|impact_level|macro_context|future_outlook|forecast
+SYSTEM_DATE=today_anchor_only
+
+ETL:
+1 EXTRACT one row per record
+  date=reported else first YYYY-MM-DD else omit
+  actors=related + names in briefing|key_points|actions
+  verb=action verb in briefing|key_points|actions
+  cause,effect=split event_drivers on produced|caused|led to
+  effect+=impacts
+  target=affected party in briefing|impacts
+  domain=impacted_domains|macro_context|event_type
+  metric=copied number+unit else omit
+2 LINK
+  score=shared count among actor|verb|cause|effect|target|domain
+  link if score>=2
+  OR shared actor AND A.effect or A.verb appears in B.cause
+  actor-only without that handoff = no link
+  date-only or domain-only = no link
+3 SELECT
+  start at the row with the most links
+  add a neighbor only if linked
+  stop when no neighbor qualifies
+  keep that chain
+  tie = keep the chain with more causal handoffs
+  drop every unlinked row
+4 ORDER
+  kept rows by date ascending
+  undated rows keep input order after dated rows
+5 LOAD from kept rows only
+  events<=40 = YYYY-MM-DD Actor verb object metric
+  key_points<=40 = action lines from events
+  event_drivers<=10 = both cause and effect present|Cause produced effect
+  impacts<=10 = effects already written as occurred
+  impacted_domains<=10 = domains of kept rows
+  impact_level = max kept level|null<low<medium<high<critical<transformative|omit if all empty
+  future_outlook = stated next step or trajectory in a kept row|else omit
+  confidence = high if >=3 kept rows share actor+effect|medium if 2|low if 1 or conflict|omit if empty
+  briefing = 2 simple sentences: date,actors,sequence,mechanism,affected,effect,metric
+6 EMIT schema fields only|omit empty
 
 OUTPUT:
 json_only|schema_strict|traceable_evidence_only|omit_null_fields
-
-SELECTION: 
-Cluster events by shared actors,actions,causes,impacts,targets 
-Select the largest coherent causally related cluster 
-Exclude outliers and unrelated events 
-Retain only items traceable to the dominant thesis 
-Never combine unrelated items into one narrative 
-
-DERIVATION: 
-Order retained events chronologically 
-Derive drivers only from explicit causal evidence 
-Derive impacts only from observed effects 
-Derive future_outlook/forecast only from traceable trajectories
-Confidence reflects corroboration and consistency
 
 RULES:
 language=en-US
@@ -64,6 +94,7 @@ markdown|prose|code_fences|newline|angle_brackets|delimited_list
 assumptions|inferences|implied_assessments
 generic_quantities|generic_phrasing|emotive_language
 unsupported_values|labels_not_required_by_schema
+unlinked_rows|SYSTEM_DATE as an event date
 """
 BRIEFING_INST = """
 EVENT_STREAM=
