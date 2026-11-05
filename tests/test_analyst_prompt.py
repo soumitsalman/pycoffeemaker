@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from nlp.analysts import PROMPT_TOKEN_MARGIN, TextAnalystBase, _NO_THINK
+from nlp.analysts import PROMPT_TOKEN_MARGIN, TextAnalystBase
 
 
 class _Schema(BaseModel):
@@ -75,8 +75,7 @@ def test_short_article_is_kept_with_system_prompt():
     assert prompt[0] == {"role": "system", "content": "SYS"}
     assert "hello" in prompt[1]["content"]
     assert prompt[1]["content"].endswith("hello")
-    assert prompt[2] == {"role": "assistant", "content": _NO_THINK}
-    assert "<|im_start|>" not in prompt[2]["content"]
+    assert "<|im_start|>" not in prompt[1]["content"]
 
 
 def test_long_article_fits_prompt_budget():
@@ -128,37 +127,24 @@ def test_digestor_enables_thinking(monkeypatch):
     assert "{description}" not in captured["input_template"]
 
 
-class _VocabTokenizer:
-    def __init__(self, added, rendered=""):
-        self._added = added
-        self._rendered = rendered
-
-    def get_vocab(self):
-        return dict(self._added)
-
-    def get_added_vocab(self):
-        return dict(self._added)
-
-    def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=True, enable_thinking=True):
-        return self._rendered
+class _Brief(BaseModel):
+    briefing: str
 
 
-def test_reasoning_delimiters_come_from_tokenizer_vocab():
-    standard = _analyst(
-        _VocabTokenizer({"<think>": 1, "</think>": 2, "<|im_end|>": 3}),
+def test_parse_output_keeps_trailing_json_object():
+    analyst = _analyst(
+        None,
         enable_thinking=True,
         context_len=400,
         max_new_tokens=32,
     )
-    assert standard._reasoning_delimiters == ("<think>", "</think>")
-
-    custom = _analyst(
-        _VocabTokenizer({"<|think|>": 1, "<|/think|>": 2}),
-        enable_thinking=True,
-        context_len=400,
-        max_new_tokens=32,
+    parsed = analyst.parse_output(
+        '<|think|>draft {"a": 1}<|/think|>\n{"briefing": "ok"}',
+        _Brief,
     )
-    assert custom._reasoning_delimiters == ("<|think|>", "<|/think|>")
+    assert parsed.briefing == "ok"
+    parsed = analyst.parse_output('```json\n{"briefing": "fenced"}\n```', _Brief)
+    assert parsed.briefing == "fenced"
 
 
 def test_thinking_on_has_no_prefill():

@@ -24,12 +24,12 @@ try: import torch
 except: print("[WARNING] PyTorch Not Available. Only `RemoteTextAnalyst` will work. Run `pip install torch`.")
 
 
-_DEFAULT_SAMPLING_PARAMS = {
-    "temperature": 0.5,
-    "top_k": 50,
-    "top_p": 1.0,
-    "repetition_penalty": 1.15,
-}
+# _DEFAULT_SAMPLING_PARAMS = {
+#     "temperature": 0.5,
+#     "top_k": 50,
+#     "top_p": 1.0,
+#     "repetition_penalty": 1.15,
+# }
 # DEFAULT_CONTEXT_LEN = 32768
 
 # Thinking tokens and the structured response share the model's completion
@@ -37,12 +37,6 @@ _DEFAULT_SAMPLING_PARAMS = {
 # the final JSON response, plus room for chat-template and tokenizer overhead.
 MAX_THINKING_BUDGET = 2048
 PROMPT_TOKEN_MARGIN = 64
-_NO_THINK = (
-    "<think>\n"
-    "No unnecessary reasoning. Close thinking and answer immediately.\n"
-    "</think>\n"
-)
-
 
 class TextAnalystBase(ABC):
     def __init__(
@@ -110,51 +104,6 @@ class TextAnalystBase(ABC):
             )
         return budget
 
-    @cached_property
-    def _reasoning_delimiters(self) -> tuple[str, str]:
-        """Open and close reasoning strings stored in the tokenizer vocabulary."""
-        tokenizer = self._prompt_tokenizer()
-        if tokenizer is None:
-            from transformers import AutoTokenizer
-
-            tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name,
-                trust_remote_code=True,
-                use_fast=True,
-            )
-        vocab = tokenizer.get_vocab()
-        pairs: list[tuple[str, str]] = []
-        for token in tokenizer.get_added_vocab():
-            if "think" not in token.lower() or token.startswith(("</", "<|/")):
-                continue
-            if token.startswith("<|") and token.endswith("|>"):
-                close = "<|/" + token[2:]
-            elif token.startswith("<"):
-                close = "</" + token[1:]
-            else:
-                continue
-            if close in vocab:
-                pairs.append((token, close))
-        if len(pairs) == 1:
-            return pairs[0]
-        if not pairs:
-            raise ValueError(
-                "model tokenizer has no reasoning start/end tokens in its vocabulary"
-            )
-        rendered = tokenizer.apply_chat_template(
-            [{"role": "user", "content": ""}],
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=True,
-        )
-        for start, end in pairs:
-            if start in rendered:
-                return start, end
-        raise ValueError(
-            "model tokenizer has multiple reasoning delimiter pairs: "
-            + ", ".join(f"{start}/{end}" for start, end in pairs)
-        )
-
     @abstractmethod
     def __enter__(self):
         raise NotImplementedError()
@@ -170,9 +119,8 @@ class TextAnalystBase(ABC):
 
     def _generation_kwargs(self) -> dict:
         return {
-            "add_generation_prompt": self.enable_thinking,
-            "continue_final_message": not self.enable_thinking,
             "enable_thinking": self.enable_thinking,
+            "add_generation_prompt": True,
         }
 
     def _prompt_tokenizer(self):
@@ -198,8 +146,6 @@ class TextAnalystBase(ABC):
         if self.instruction:
             messages.append({"role": "system", "content": self.instruction})
         messages.append({"role": "user", "content": self._user_text(self._truncate_document(input_text))})
-        if not self.enable_thinking:
-            messages.append({"role": "assistant", "content": _NO_THINK})
         return messages
 
     def create_prompt(self, msg: str, output_model: Type[BaseModel] | None = None):
@@ -210,7 +156,7 @@ class TextAnalystBase(ABC):
         response = _strip_fences(response)
         try:
             if self.response_mode == "json":
-                return output_model.model_validate_json(response)
+                return output_model.model_validate_json(_final_json(response))
             if self.response_mode == "compressed":
                 return parse_compressed(response)
             if self.response_mode == "markdown":
@@ -263,7 +209,6 @@ class LocalTokenizer:
         self.device = device
         if not self.tokenizer.pad_token:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.end_think_token_id = self.tokenizer.convert_tokens_to_ids("</think>")
         self.max_prompt_len = max_prompt_len
         self.enable_thinking = enable_thinking
 
@@ -275,32 +220,20 @@ class LocalTokenizer:
             max_length=self.max_prompt_len,
             return_tensors="pt",
             return_dict=True,
-            add_generation_prompt=self.enable_thinking,
-            continue_final_message=not self.enable_thinking,
+            add_generation_prompt=True,
             enable_thinking=self.enable_thinking,
         ).to(self.device)
-
-    def _strip_after_thinking(self, tokens):
-        if not self.end_think_token_id or self.end_think_token_id <= 0:
-            return tokens
-        matches = (tokens == self.end_think_token_id).nonzero(as_tuple=True)[0]
-        if matches.numel():
-            return tokens[matches[0] + 1:]
-        return tokens
 
     def decode(self, tokens, input_tokens = None):
         if input_tokens is not None:
             prompt_len = input_tokens["input_ids"].shape[1]
             tokens = tokens[prompt_len:]
-        tokens = self._strip_after_thinking(tokens)
         return self.tokenizer.decode(tokens, skip_special_tokens=True)
 
     def batch_decode(self, tokens, input_tokens = None):
         if input_tokens is not None:
             prompt_len = input_tokens["input_ids"].shape[1]
             tokens = tokens[:, prompt_len:]
-        if self.end_think_token_id and self.end_think_token_id > 0 and (tokens == self.end_think_token_id).any():
-            tokens = [self._strip_after_thinking(row) for row in tokens]
         return self.tokenizer.batch_decode(tokens, skip_special_tokens=True)
 
     @property
@@ -442,7 +375,6 @@ class VLLMTextAnalyst(TextAnalystBase):
     def __enter__(self):
         if not self._llm:
             from vllm import LLM
-            from vllm.config import ReasoningConfig
 
             llm_params = dict(
                 model=self.model_name,
@@ -457,12 +389,7 @@ class VLLMTextAnalyst(TextAnalystBase):
                 # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,                
             )
             if self.enable_thinking:
-                self._initial_sampling_params['thinking_token_budget']=self.max_thinking_budget
-                # reasoning_start_str, reasoning_end_str = self._reasoning_delimiters
-                llm_params['reasoning_config'] = ReasoningConfig(
-                    reasoning_start_str="<think>",
-                    reasoning_end_str="</think>",
-                )
+                self._initial_sampling_params['thinking_token_budget']=self.max_thinking_budget               
             self._llm = LLM(**llm_params)
         return self
 
@@ -514,13 +441,11 @@ class VLLMTextAnalyst(TextAnalystBase):
         if not input_messages:
             return []
         output_models = self._output_models_for(input_messages, output_model)
-        generation = self._generation_kwargs()
         responses = self._llm.chat(
             [self.create_prompt(msg, model) for msg, model in zip(input_messages, output_models)],
             sampling_params=self._sampling_params_for(output_models),
-            add_generation_prompt=generation["add_generation_prompt"],
-            continue_final_message=generation["continue_final_message"],
-            chat_template_kwargs={"enable_thinking": generation["enable_thinking"]},
+            add_generation_prompt=True,
+            chat_template_kwargs={"enable_thinking": self.enable_thinking},
             use_tqdm=False,
         )
         return [
@@ -657,6 +582,22 @@ def create_text_analyst(
 # ---------------------
 # PARSING UTILITIES
 # ---------------------
+
+def _final_json(text: str) -> str:
+    """Return the JSON object that ends the text, dropping any reasoning before it."""
+    text = text.rstrip()
+    decoder = json.JSONDecoder()
+    pos = text.rfind("{")
+    while pos != -1:
+        try:
+            _, end = decoder.raw_decode(text, pos)
+        except json.JSONDecodeError:
+            end = None
+        if end == len(text):
+            return text[pos:]
+        pos = text.rfind("{", 0, pos)
+    return text
+
 
 def _strip_fences(text: str) -> str:
     return (
