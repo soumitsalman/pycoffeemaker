@@ -138,7 +138,20 @@ class BeansackPorter:
 CUPBOARD_EVENT_KIND = "event"
 CUPBOARD_SIGNAL_KIND = "signal"
 CUPBOARD_SIGNAL_URL_PREFIX = "https://api.cafecito.tech/espresso/signals/"
-MAX_TAGS = 50
+MAX_TAGS = 40
+_TAG_INDEX_BUDGET = 2000
+
+def _fit_tags(tags: list) -> list:
+    fitted, used = [], 24
+    for tag in tags or []:
+        tag = str(tag)[:48]
+        step = 4 + len(tag.encode())
+        if used + step > _TAG_INDEX_BUDGET:
+            break
+        fitted.append(tag)
+        used += step
+    return fitted
+
 _KEEP_DIGEST_EVENT_TYPE = {
     POST, BLOG, NEWS, PODCAST, RESEARCH_PAPER, WHITEPAPER, TECHNICAL_DOCUMENTATION,
 }
@@ -174,14 +187,14 @@ class CupboardPorter:
                 normalize_tags(bean.get(TAGS) or []),
                 entity_tags,
             )
-            bean[TAGS] = merge_lists(
+            bean[TAGS] = _fit_tags(merge_lists(
                 bean[DIGEST].get("macro_context"),
                 bean[DIGEST].get("event_type"),
                 bean[DIGEST].get("impacted_domains"),
                 bean.get(CLASSIFICATIONS, {}).get('category'),
                 bean.get(CATEGORIES),
                 random.sample(extra_tags, min(MAX_TAGS, len(extra_tags))),
-            )
+            ))
 
             # renaming events fields for consistency
             if briefing := bean[DIGEST].pop("briefing", None):
@@ -249,10 +262,10 @@ class CupboardPorter:
                 comp.get(TAGS),                
                 comp[DIGEST].get('impacted_domains')               
             ):
-                comp[TAGS] = merge_lists(
+                comp[TAGS] = _fit_tags(merge_lists(
                     comp.get(CATEGORIES),
                     random.sample(tags, min(len(tags), MAX_TAGS))
-                )
+                ))
 
             # renaming events fields for consistency
             if briefing := comp[DIGEST].pop("briefing", None):
