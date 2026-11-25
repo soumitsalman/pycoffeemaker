@@ -322,7 +322,7 @@ IO jobs: `fly.collector.toml` (`--collector 64`) and `fly.porter.toml` (`--porte
 
 ### ThunderCompute boot pipeline
 
-On [ThunderCompute](https://www.thundercompute.com/) GPU VMs, register a one-shot s6 service so `factory/thundercompute-s6-tasks.sh` starts `run_pipeline.sh` after boot.
+On [ThunderCompute](https://www.thundercompute.com/) GPU VMs, register a boot hook so `factory/thundercompute-s6-tasks.sh` starts `run_pipeline.sh` after boot. VM-root instances boot with systemd and do not start s6; the installer also enables a systemd oneshot for that path.
 
 **One-time setup** (from the repo checkout, typically `/home/ubuntu/pycoffeemaker`):
 
@@ -345,7 +345,8 @@ Collector is commented out in that script. Change stages by editing `thundercomp
 
 **What gets installed:**
 
-- s6 oneshot `thundercompute-tasks` (depends on `sshd`, runs `factory/thundercompute-s6-tasks.sh` at boot)
+- s6 oneshot `thundercompute-tasks` (depends on `sshd`; runs only when the image boots through s6-overlay `/init`)
+- systemd oneshot `thundercompute-tasks.service` (VM-root boots; same script, after `ssh.service` and `thunder-vmroot-setup.service`)
 - Pipeline log: `/home/ubuntu/.logs/pipeline-YYYY-MM-DD-HH-MM-SS.log`
 - Boot exports `PROCESSING_WINDOW=3`
 

@@ -1,5 +1,7 @@
 #!/bin/bash
-# Install thundercompute tasks as an s6 oneshot in the user boot bundle.
+# Install thundercompute tasks to run at the next boot.
+# Container images boot through s6-overlay (/init). Thunder VM-root boots
+# through systemd and never starts s6, so both hooks are installed.
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -40,6 +42,32 @@ chmod 755 "$S6_ROOT/$SERVICE/up"
 : >"$S6_ROOT/$SERVICE/dependencies.d/sshd"
 : >"$S6_ROOT/user/contents.d/$SERVICE"
 
-echo "Installed s6 oneshot '$SERVICE' (runs at next boot)."
+echo "Installed s6 oneshot '$SERVICE' (runs at next boot when /init is PID 1)."
+
+# VM-root never execs /init. A systemd oneshot is what actually runs there.
+# RemainAfterExit keeps the cgroup alive: the tasks script backgrounds the
+# pipeline and exits, and systemd would otherwise kill that child when the
+# oneshot becomes inactive.
+if [[ -d /run/systemd/system ]]; then
+    unit="/etc/systemd/system/${SERVICE}.service"
+    cat >"$unit" <<EOF
+[Unit]
+Description=Start the ThunderCompute pipeline at boot
+After=network.target ssh.service thunder-vmroot-setup.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${UP_SCRIPT} --batch-env ${BATCH_ENV}
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    chmod 644 "$unit"
+    systemctl daemon-reload
+    systemctl enable "$SERVICE.service"
+    echo "Installed systemd oneshot '${SERVICE}.service' (runs at next VM-root boot)."
+fi
+
 echo "Pinned batches from $BATCH_ENV:"
 cat "$BATCH_ENV"
