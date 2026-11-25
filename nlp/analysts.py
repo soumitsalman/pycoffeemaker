@@ -388,8 +388,8 @@ class VLLMTextAnalyst(TextAnalystBase):
                 # enable_chunked_prefill=True,
                 # attention_config={"backend": VLLM_ATTENTION_BACKEND} if VLLM_ATTENTION_BACKEND else None,                
             )
-            if self.enable_thinking:
-                self._initial_sampling_params['thinking_token_budget']=self.max_thinking_budget               
+            # if self.enable_thinking:
+            #     self._initial_sampling_params['thinking_token_budget']=self.max_thinking_budget               
             self._llm = LLM(**llm_params)
         return self
 
@@ -489,7 +489,7 @@ class RemoteTextAnalyst(TextAnalystBase):
         )
         if self.enable_thinking:
             self.sampling_params["extra_body"] = {
-                "thinking_token_budget": self.max_thinking_budget,
+                # "thinking_token_budget": self.max_thinking_budget,
                 "chat_template_kwargs": {"enable_thinking": self.enable_thinking},
             }
 
