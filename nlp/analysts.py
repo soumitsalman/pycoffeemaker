@@ -18,7 +18,7 @@ from .normalize import split_parts
 from .splitter import TextSplitter
 from icecream import ic
 
-log = logging.getLogger("digestor")
+log = logging.getLogger("analyst")
 
 try: import torch
 except: print("[WARNING] PyTorch Not Available. Only `RemoteTextAnalyst` will work. Run `pip install torch`.")
